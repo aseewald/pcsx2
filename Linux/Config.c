@@ -46,11 +46,12 @@
 #define SetValuel(name, var) \
 	fprintf (f,"%s = %x\n", name, var);
 
-int LoadConfig(PcsxConfig *Conf) {
+int LoadConfig() {
 	struct stat buf;
 	FILE *f;
 	int size;
 	char *data,*tmp;
+	char strtemp[255];
 
 	if (stat(cfgfile, &buf) == -1) return -1;
 	size = buf.st_size;
@@ -65,28 +66,33 @@ int LoadConfig(PcsxConfig *Conf) {
 	fclose(f);
 
 	GetValue("Bios", Config.Bios);
+	Config.Lang[0] = 0;
+	GetValue("Lang", Config.Lang);
+	GetValuel("Ps2Out",     Config.PsxOut);
+	GetValuel("ThPriority", Config.ThPriority);
+	GetValue("PluginsDir", Config.PluginsDir);
+	GetValue("BiosDir",    Config.BiosDir);
+	GetValue("Mcd1", Config.Mcd1);
+	GetValue("Mcd2", Config.Mcd2);
+
+	// plugins
 	GetValue("GS",   Config.GS);
-	GetValue("PAD1", Config.PAD1);
-	GetValue("PAD2", Config.PAD2);
 	GetValue("SPU2", Config.SPU2);
 	GetValue("CDVD", Config.CDVD);
+	GetValue("PAD1", Config.PAD1);
+	GetValue("PAD2", Config.PAD2);
 	GetValue("DEV9", Config.DEV9);
 	GetValue("USB",  Config.USB);
 	GetValue("FW",  Config.FW);
-	GetValue("Mcd1", Config.Mcd1);
-	GetValue("Mcd2", Config.Mcd2);
-	GetValue("PluginsDir", Config.PluginsDir);
-	GetValue("BiosDir",    Config.BiosDir);
-	GetValuel("Cpu",        Config.Cpu);
-	GetValuel("PsxOut",     Config.PsxOut);
-	GetValuel("RegCaching", Config.Regcaching);
-	GetValuel("Patch",      Config.Patch);
-	GetValuel("VUrec",      Config.VUrec);
-// 	GetValuel("PadHack",    Config.PadHack);
-	GetValuel("varLog", varLog);
-	Config.Lang[0] = 0;
-	GetValue("Lang", Config.Lang);
+	
+	
+	// cpu
+	GetValuel("Options", Config.Options);
+	GetValuel("SafeCnts", Config.SafeCnts);
 
+	GetValuel("Patch",      Config.Patch);
+	GetValuel("varLog", varLog);
+	
 	free(data);
 
 #ifdef ENABLE_NLS
@@ -109,27 +115,30 @@ void SaveConfig() {
 	f = fopen(cfgfile,"w");
 	if (f == NULL) return;
 
+	// interface
 	SetValue("Bios", Config.Bios);
+	SetValue("Lang",    Config.Lang);
+	SetValue("PluginsDir", Config.PluginsDir);
+	SetValue("BiosDir",    Config.BiosDir);
+	SetValuel("Ps2Out",     Config.PsxOut);
+	SetValuel("ThPriority", Config.ThPriority);
+	SetValue("Mcd1", Config.Mcd1);
+	SetValue("Mcd2", Config.Mcd2);
+	// plugins
 	SetValue("GS",   Config.GS);
-	SetValue("PAD1", Config.PAD1);
-	SetValue("PAD2", Config.PAD2);
 	SetValue("SPU2", Config.SPU2);
 	SetValue("CDVD", Config.CDVD);
+	SetValue("PAD1", Config.PAD1);
+	SetValue("PAD2", Config.PAD2);
 	SetValue("DEV9", Config.DEV9);
 	SetValue("USB",  Config.USB);
 	SetValue("FW",  Config.FW);
-	SetValue("Mcd1", Config.Mcd1);
-	SetValue("Mcd2", Config.Mcd2);
-	SetValue("PluginsDir", Config.PluginsDir);
-	SetValue("BiosDir",    Config.BiosDir);
-	SetValuel("Cpu",        Config.Cpu);
-	SetValuel("PsxOut",     Config.PsxOut);
-	SetValuel("RegCaching", Config.Regcaching);
+	//cpu
+	SetValuel("Options",        Config.Options);
+	SetValuel("SafeCnts", Config.SafeCnts);
+	// misc
 	SetValuel("Patch",      Config.Patch);
-	SetValuel("VUrec",      Config.VUrec);
-// 	SetValuel("PadHack",    Config.PadHack);
 	SetValuel("varLog", varLog);
-	SetValue("Lang",    Config.Lang);
 
 	fclose(f);
 

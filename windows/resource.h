@@ -586,6 +586,8 @@
 #define IDC_ADD                         1714
 #define IDC_LRESULTS                    1715
 #define IDC_STATUS                      1716
+#define IDC_FW                          1716
+#define IDC_FRAMELIMIT                  1716
 #define IDC_UNSIGNED                    1717
 #define IDC_8B                          1718
 #define IDC_16B                         1719
@@ -669,7 +671,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        134
 #define _APS_NEXT_COMMAND_VALUE         40018
-#define _APS_NEXT_CONTROL_VALUE         1274
+#define _APS_NEXT_CONTROL_VALUE         1275
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

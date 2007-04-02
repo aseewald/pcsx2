@@ -27,13 +27,17 @@
 #include "PsxCommon.h"
 #include "CDVDisodrv.h"
 #include "VUmicro.h"
-#ifdef __WIN32__
+#ifdef _WIN32
 #include "RDebug/deci2.h"
 #endif
 
+#include "VU.h"
+#include "iCore.h"
+#include "iVUzerorec.h"
+
 #include "GS.h"
 
-DWORD dwSaveVersion = 0x7a30000e;
+u32 dwSaveVersion = 0x7a30000e;
 extern u32 s_iLastCOP0Cycle;
 extern u32 s_iLastPERFCycle[2];
 extern int g_psxWriteOk;
@@ -437,7 +441,7 @@ void __Log(char *fmt, ...) {
 	static char tmp[2024];	//hm, should be enough
 
 	va_start(list, fmt);
-#ifdef __WIN32__
+#ifdef _WIN32
 	if (connected && logProtocol>=0 && logProtocol<0x10){
 		vsprintf(tmp, fmt, list);
 		sendTTYP(logProtocol, logSource, tmp);
@@ -578,15 +582,15 @@ int SaveState(char *file) {
 }
 
 extern u32 dumplog;
-extern u32 s_vucount;
+u32 s_vucount=0;
 
 int LoadState(char *file) {
 
 	gzFile f;
 	freezeData fP;
 	int i;
-	DWORD OldProtect;
-	DWORD dwVer;
+	u32 OldProtect;
+	u32 dwVer;
 
 #ifdef _DEBUG
 	s_vucount = 0;
@@ -603,7 +607,7 @@ int LoadState(char *file) {
 
 		if( dwVer != 0x7a30000d ) {
 			gzclose(f);
-			MessageBox(NULL, "Save state wrong version", "Error", MB_OK);
+			SysPrintf("Save state wrong version\n");
 			return 0;
 		}
 	}
@@ -614,13 +618,15 @@ int LoadState(char *file) {
 	for (i=0; i<48; i++) ClearTLB(i);
 
 	Cpu->Reset();
+#ifndef PCSX2_NORECBUILD
 	recResetVU0();
 	recResetVU1();
+#endif
 	psxCpu->Reset();
 
 	SysPrintf("Loading memory\n");
 
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
 	// make sure can write
 	VirtualProtect(PS2MEM_ROM, 0x00400000, PAGE_READWRITE, &OldProtect);
 	VirtualProtect(PS2MEM_ROM1, 0x00040000, PAGE_READWRITE, &OldProtect);
@@ -633,7 +639,7 @@ int LoadState(char *file) {
 	gzread(f, PS2MEM_ROM1,0x00040000);         // 256kb rom1 memory
 	gzread(f, PS2MEM_SCRATCH, 0x00004000);         // scratch pad 
 
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
 	VirtualProtect(PS2MEM_ROM, 0x00400000, PAGE_READONLY, &OldProtect);
 	VirtualProtect(PS2MEM_ROM1, 0x00040000, PAGE_READONLY, &OldProtect);
 	VirtualProtect(PS2MEM_ROM2, 0x00080000, PAGE_READONLY, &OldProtect);
@@ -731,11 +737,11 @@ int LoadGSState(char *file)
 	f = gzopen(file, "rb");
 	if (f == NULL) {
 		
-		_snprintf(strfile, 255, "sstates\\%s", file);
+		sprintf(strfile, "sstates/%s", file);
 		// try prefixing with sstates
 		f = gzopen(strfile, "rb");
 		if( f == NULL ) {
-			MessageBox(NULL, "Failed to find gs state\n", "Error", MB_OK);
+			SysPrintf("Failed to find gs state\n");
 			return -1;
 		}
 
@@ -795,6 +801,7 @@ LangDef sLangs[] = {
 	{ "ar_AR", N_("Arabic") },
 	{ "bg_BG", N_("Bulgarian") },
 	{ "ca_CA", N_("Catalan") },
+	{ "cz_CZ", N_("Czech") },
 	{ "du_DU",  N_("Dutch")  },
 	{ "de_DE", N_("German") },
 	{ "el_EL", N_("Greek") },
@@ -804,12 +811,15 @@ LangDef sLangs[] = {
 	{ "hu_HU", N_("Hungarian") },
 	{ "it_IT", N_("Italian") },
 	{ "ja_JA", N_("Japanese") },
+	{ "pe_PE", N_("Persian") },
 	{ "po_PO", N_("Portuguese") },
+	{ "po_BR", N_("Portuguese BR") },
 	{ "pl_PL" , N_("Polish") },
 	{ "ro_RO", N_("Romanian") },
 	{ "ru_RU", N_("Russian") },
 	{ "es_ES", N_("Spanish") },
 	{ "sh_SH" , N_("S-Chinese") },
+    { "sw_SW", N_("Swedish") },
 	{ "tc_TC", N_("T-Chinese") },
 	{ "tr_TR", N_("Turkish") },
 	{ "", "" },
@@ -826,6 +836,150 @@ char *ParseLang(char *id) {
 	}
 
 	return id;
+}
+
+#define NUM_STATES 10
+int StatesC = 0;
+extern void iDumpRegisters(u32 startpc, u32 temp);
+extern void recExecuteVU0Block(void);
+extern void recExecuteVU1Block(void);
+extern void DummyExecuteVU1Block(void);
+extern int  LoadConfig();
+extern void SaveConfig();
+extern char strgametitle[256];
+
+char* mystrlwr( char* string )
+{
+	assert( string != NULL );
+	while ( 0 != ( *string++ = (char)tolower( *string ) ) );
+    return string;
+}
+
+void ProcessFKeys(int fkey, int shift)
+{
+    char Text[256];
+	int ret;
+
+    assert(fkey >= 1 && fkey <= 12 );
+    switch(fkey) {
+        case 1:
+			sprintf(Text, "sstates/%8.8X.%3.3d", ElfCRC, StatesC);
+			ret = SaveState(Text);
+			break;
+		case 2:
+			if( shift )
+				StatesC = (StatesC+NUM_STATES-1)%NUM_STATES;
+			else
+				StatesC = (StatesC+1)%NUM_STATES;
+			SysPrintf("*PCSX2*: Selected State %ld\n", StatesC);
+			if( GSchangeSaveState != NULL ) {
+				sprintf(Text, "sstates/%8.8X.%3.3d", ElfCRC, StatesC);
+				GSchangeSaveState(StatesC, Text);
+			}
+			break;
+		case 3:			
+			sprintf (Text, "sstates/%8.8X.%3.3d", ElfCRC, StatesC);
+			ret = LoadState(Text);
+			break;	
+
+		case 4:
+
+#ifdef PCSX2_NORECBUILD
+            SysPrintf("frame skipping only valid for recompiler build\n");
+#else
+			// cycle
+            if( shift ) {
+                // previous
+                Config.Options = (Config.Options&~PCSX2_FRAMELIMIT_MASK)|(((Config.Options&PCSX2_FRAMELIMIT_MASK)+PCSX2_FRAMELIMIT_VUSKIP)&PCSX2_FRAMELIMIT_MASK);
+            }
+            else {
+                // next
+                Config.Options = (Config.Options&~PCSX2_FRAMELIMIT_MASK)|(((Config.Options&PCSX2_FRAMELIMIT_MASK)+PCSX2_FRAMELIMIT_LIMIT)&PCSX2_FRAMELIMIT_MASK);
+            }
+
+			switch(CHECK_FRAMELIMIT) {
+				case PCSX2_FRAMELIMIT_NORMAL:
+					if( GSsetFrameSkip != NULL ) GSsetFrameSkip(0);
+					Cpu->ExecuteVU1Block = recExecuteVU1Block;
+					SysPrintf("Normal - Frame Limit Mode Changed\n");
+					break;
+				case PCSX2_FRAMELIMIT_LIMIT:
+					if( GSsetFrameSkip != NULL ) GSsetFrameSkip(0);
+					Cpu->ExecuteVU1Block = recExecuteVU1Block;
+					SysPrintf("Limit - Frame Limit Mode Changed\n");
+					break;
+				case PCSX2_FRAMELIMIT_SKIP:
+					Cpu->ExecuteVU1Block = recExecuteVU1Block;
+					SysPrintf("Frame Skip - Frame Limit Mode Changed\n");
+					break;
+				case PCSX2_FRAMELIMIT_VUSKIP:
+					SysPrintf("VU Skip - Frame Limit Mode Changed\n");
+					break;
+			}
+            SaveConfig();
+#endif
+			break;
+		// note: VK_F5-VK_F7 are reserved for GS
+		case 8:
+			GSmakeSnapshot("snap/");
+			break;
+
+#ifdef PCSX2_DEVBUILD
+		case 10:
+		{
+#ifdef PCSX2_NORECBUILD
+            SysPrintf("Block performances times only valid for recompiler builds\n");
+#else
+			int num;
+			FILE* f;
+			BASEBLOCKEX** ppblocks = GetAllBaseBlocks(&num, 0);
+
+			f = fopen("perflog.txt", "w");
+			while(num-- > 0 ) {
+				if( ppblocks[0]->visited > 0 ) {
+					fprintf(f, "%u %u %u %u\n", ppblocks[0]->startpc, (u32)(ppblocks[0]->ltime.QuadPart / ppblocks[0]->visited), ppblocks[0]->visited, ppblocks[0]->size);
+				}
+				ppblocks[0]->visited = 0;
+				ppblocks[0]->ltime.QuadPart = 0;
+				ppblocks++;
+			}
+			fclose(f);
+			SysPrintf("perflog.txt written\n");
+#endif
+			break;
+		}
+		
+		case 11:
+			if( CHECK_MULTIGS ) {
+				SysPrintf("Cannot make gsstates in MTGS mode\n");
+			}
+			else {
+				if( strgametitle[0] != 0 ) {
+					// only take the first two words
+					char name[255], temptitle[255], *tok;
+					sprintf(temptitle, "%s", strgametitle);
+					tok = strtok(strgametitle, " ");
+					sprintf(name, "%s_", mystrlwr(tok));
+					tok = strtok(NULL, " ");
+					if( tok != NULL ) strcat(name, tok);
+
+					sprintf(Text, "sstates/%s.%d.gs", name, StatesC);
+				}
+				else
+					sprintf(Text, "sstates/%8.8X.%d.gs", ElfCRC, StatesC);
+
+				SaveGSState(Text);
+			}
+			break;
+
+		case 12:
+#ifndef PCSX2_NORECBUILD
+			iDumpRegisters(cpuRegs.pc, 0);
+			SysPrintf("hardware registers dumped EE:%x, IOP:%x\n", cpuRegs.pc, psxRegs.pc);
+#endif
+			break;
+#endif
+    }
 }
 
 void injectIRX(char *filename){
@@ -892,3 +1046,63 @@ void injectIRX(char *filename){
 	rd[i].fileSize=filesize;
 	rd[i].extInfoSize=0;
 }
+
+// failed inline calls, this is because of inline hell and gcc syntax
+#ifndef _WIN32
+
+void InterlockedExchangePointer(PVOID volatile* Target, void* Value)
+{
+#ifdef __x86_64__
+	__asm__ __volatile__(".intel_syntax\n"
+						 "lock xchg [%0], %%rax\n"
+						 ".att_syntax\n" : : "r"(Target), "a"(Value) : "memory" );
+#else
+	__asm__ __volatile__(".intel_syntax\n"
+						 "lock xchg [%0], %%eax\n"
+						 ".att_syntax\n" : : "r"(Target), "a"(Value) : "memory" );
+#endif
+}
+
+long InterlockedExchange(long volatile* Target, long Value)
+{
+	__asm__ __volatile__(".intel_syntax\n"
+						 "lock xchg [%0], %%eax\n"
+						 ".att_syntax\n" : : "r"(Target), "a"(Value) : "memory" );
+}
+
+long InterlockedExchangeAdd(long volatile* Addend, long Value)
+{
+	__asm__ __volatile__(".intel_syntax\n"
+						 "lock xadd [%0], %%eax\n"
+						 ".att_syntax\n" : : "r"(Addend), "a"(Value) : "memory" );
+}
+
+u32 timeGetTime()
+{
+	struct timeb t;
+	ftime(&t);
+	return (u32)(t.time*1000+t.millitm);
+}
+
+void* pcsx2_aligned_malloc(size_t size, size_t align)
+{
+    assert( align < 0x10000 );
+	char* p = (char*)malloc(size+align);
+	int off = 2+align - ((int)(uptr)(p+2) % align);
+
+	p += off;
+	*(u16*)(p-2) = off;
+
+	return p;
+}
+
+void pcsx2_aligned_free(void* pmem)
+{
+    if( pmem != NULL ) {
+        char* p = (char*)pmem;
+        free(p - (int)*(u16*)(p-2));
+    }
+}
+
+#endif
+

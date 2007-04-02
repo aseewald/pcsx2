@@ -26,14 +26,14 @@
 #define __VLC_H__
 
 #include "IPU.h"
-#include "pcl/pcl.h"
+#include "coroutine.h"
 
 static u8 data[2];
 static u8 dword[4];
 static void GETWORD(u32 * bit_buf,int bits)
 {
 	while(!getBits16(data,1))
-		co_resume();
+		so_resume();
 	*bit_buf |= ((data[0] << 8) | data[1]) << (bits);
 }
 
@@ -41,7 +41,7 @@ static void bitstream_init (decoder_t * decoder){
     decoder->bitstream_bits = -16;
 
 	while( !getBits32(dword, 1) )
-		co_resume();
+		so_resume();
 
 	decoder->bitstream_buf = (dword[0] << 24) | (dword[1] << 16) | 
 							 (dword[2] <<  8) |dword[3];

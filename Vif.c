@@ -32,7 +32,7 @@ PCSX2_ALIGNED16(u32 g_vifRow0[4]);
 PCSX2_ALIGNED16(u32 g_vifCol0[4]);
 PCSX2_ALIGNED16(u32 g_vifRow1[4]);
 PCSX2_ALIGNED16(u32 g_vifCol1[4]);
-u32* _vifRow = NULL;
+u32* _vifRow = NULL, *_vifCol = NULL;
 
 vifStruct *_vif;
 
@@ -67,8 +67,8 @@ static void _writeX( u32 *dest, u32 data )
 		case 2:  n = 16; break;
 		default: n = 24; break;
 	}
-/*#ifdef VIF_LOG
-	VIF_LOG("_writeX %x = %x (writecycle=%d; mask %x; mode %d)\n", (u32)dest-(u32)VU1.Mem, data, _vif->cl, ( _vifRegs->mask >> n ) & 0x3,_vifRegs->mode);
+/*#ifdef GIF_LOG
+	GIF_LOG("_writeX %x = %x (writecycle=%d; mask %x; mode %d)\n", (u32)dest-(u32)VU1.Mem, data, _vif->cl, ( _vifRegs->mask >> n ) & 0x3,_vifRegs->mode);
 #endif*/
 	switch ( ( _vifRegs->mask >> n ) & 0x3 ) {
 		case 0:
@@ -98,8 +98,8 @@ static void _writeX( u32 *dest, u32 data )
 			break;
 	}
 
-/*#ifdef VIF_LOG
-	VIF_LOG("_writeX-done : Data %x : Row %x\n", *dest, _vifRegs->r0);
+/*#ifdef GIF_LOG
+	GIF_LOG("_writeX-done : Data %x : Row %x\n", *dest, _vifRegs->r0);
 #endif*/
 }
 
@@ -112,8 +112,8 @@ static void _writeY( u32 *dest, u32 data )
 		case 2:  n = 18; break;
 		default: n = 26; break;
 	}
-/*#ifdef VIF_LOG
-	VIF_LOG("_writeY %x = %x (writecycle=%d; mask %x; mode %d)\n", (u32)dest-(u32)VU1.Mem, data, _vif->cl, ( _vifRegs->mask >> n ) & 0x3,_vifRegs->mode);
+/*#ifdef GIF_LOG
+	GIF_LOG("_writeY %x = %x (writecycle=%d; mask %x; mode %d)\n", (u32)dest-(u32)VU1.Mem, data, _vif->cl, ( _vifRegs->mask >> n ) & 0x3,_vifRegs->mode);
 #endif*/
 	switch ( ( _vifRegs->mask >> n ) & 0x3 ) {
 		case 0:
@@ -144,8 +144,8 @@ static void _writeY( u32 *dest, u32 data )
 			break;
 	}
 
-/*#ifdef VIF_LOG
-	VIF_LOG("_writeY-done : Data %x : Row %x\n", *dest, _vifRegs->r1);
+/*#ifdef GIF_LOG
+	GIF_LOG("_writeY-done : Data %x : Row %x\n", *dest, _vifRegs->r1);
 #endif*/
 }
 
@@ -158,8 +158,8 @@ static void _writeZ( u32 *dest, u32 data )
 		case 2:  n = 20; break;
 		default: n = 28; break;
 	}
-/*#ifdef VIF_LOG
-	VIF_LOG("_writeZ %x = %x (writecycle=%d; mask %x; mode %d)\n", (u32)dest-(u32)VU1.Mem, data, _vif->cl, ( _vifRegs->mask >> n ) & 0x3,_vifRegs->mode);
+/*#ifdef GIF_LOG
+	GIF_LOG("_writeZ %x = %x (writecycle=%d; mask %x; mode %d)\n", (u32)dest-(u32)VU1.Mem, data, _vif->cl, ( _vifRegs->mask >> n ) & 0x3,_vifRegs->mode);
 #endif*/
 	switch ( ( _vifRegs->mask >> n ) & 0x3 ) {
 		case 0:
@@ -200,8 +200,8 @@ static void _writeW( u32 *dest, u32 data )
 		case 2:  n = 22; break;
 		default: n = 30; break;
 	}
-/*#ifdef VIF_LOG
-	VIF_LOG("_writeW %x = %x (writecycle=%d; mask %x; mode %d)\n", (u32)dest-(u32)VU1.Mem, data, _vif->cl, ( _vifRegs->mask >> n ) & 0x3,_vifRegs->mode);
+/*#ifdef GIF_LOG
+	GIF_LOG("_writeW %x = %x (writecycle=%d; mask %x; mode %d)\n", (u32)dest-(u32)VU1.Mem, data, _vif->cl, ( _vifRegs->mask >> n ) & 0x3,_vifRegs->mode);
 #endif*/
 	switch ( ( _vifRegs->mask >> n ) & 0x3 ) {
 		case 0:
@@ -248,8 +248,8 @@ static void writeX( u32 *dest, u32 data ) {
 	} else {
 		*dest = data;
 	}
-/*#ifdef VIF_LOG
-	VIF_LOG("writeX %8.8x : Mode %d, r0 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r0,data);
+/*#ifdef GIF_LOG
+	GIF_LOG("writeX %8.8x : Mode %d, r0 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r0,data);
 #endif*/
 }
 
@@ -269,8 +269,8 @@ static void writeY( u32 *dest, u32 data ) {
 	} else {
 		*dest = data;
 	}
-/*#ifdef VIF_LOG
-	VIF_LOG("writeY %8.8x : Mode %d, r1 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r1,data);
+/*#ifdef GIF_LOG
+	GIF_LOG("writeY %8.8x : Mode %d, r1 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r1,data);
 #endif*/
 }
 
@@ -290,8 +290,8 @@ static void writeZ( u32 *dest, u32 data ) {
 	} else {
 		*dest = data;
 	}
-/*#ifdef VIF_LOG
-	VIF_LOG("writeZ %8.8x : Mode %d, r2 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r2,data);
+/*#ifdef GIF_LOG
+	GIF_LOG("writeZ %8.8x : Mode %d, r2 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r2,data);
 #endif*/
 }
 
@@ -311,8 +311,8 @@ static void writeW( u32 *dest, u32 data ) {
 	} else {
 		*dest = data;
 	}
-/*#ifdef VIF_LOG
-	VIF_LOG("writeW %8.8x : Mode %d, r3 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r3,data);
+/*#ifdef GIF_LOG
+	GIF_LOG("writeW %8.8x : Mode %d, r3 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r3,data);
 #endif*/
 }
 
@@ -333,7 +333,7 @@ int  UNPACK_S_32part(u32 *dest, u32 *data, int size) {
 		if (_vifRegs->offset == 4) _vifRegs->offset = 0;
 	}
 
-	return (u32)data - (u32)_data;
+	return (uptr)data - (uptr)_data;
 }
 
 #define _UNPACK_S_16(format) \
@@ -362,7 +362,7 @@ void UNPACK_S_16u( u32 *dest, u32 *data ) {
 		_UNPACKpart(3, writeW(dest++, *sdata++) ); \
 		if (_vifRegs->offset == 4) _vifRegs->offset = 0; \
 	} \
-	return (u32)sdata - (u32)data;
+	return (uptr)sdata - (uptr)data;
 
 int  UNPACK_S_16spart(u32 *dest, u32 *data, int size) {
 	_UNPACK_S_16part(s16);
@@ -398,7 +398,7 @@ void UNPACK_S_8u(u32 *dest, u32 *data) {
 		_UNPACKpart(3, writeW(dest++, *cdata++) ); \
 		if (_vifRegs->offset == 4) _vifRegs->offset = 0; \
 	} \
-	return (u32)cdata - (u32)data;
+	return (uptr)cdata - (uptr)data;
 
 int  UNPACK_S_8spart(u32 *dest, u32 *data, int size) {
 	_UNPACK_S_8part(s8);
@@ -425,7 +425,7 @@ int  UNPACK_V2_32part( u32 *dest, u32 *data, int size ) {
 		_UNPACKpart_nosize(3, writeW(dest++, 0));
 		if (_vifRegs->offset == 4) _vifRegs->offset = 0;
 	}
-	return (u32)data - (u32)_data;
+	return (uptr)data - (uptr)_data;
 }
 
 #define _UNPACK_V2_16(format) \
@@ -456,7 +456,7 @@ void UNPACK_V2_16u(u32 *dest, u32 *data) {
 		_UNPACKpart_nosize(3,writeW(dest++, 0)); \
 		if (_vifRegs->offset == 4) _vifRegs->offset = 0;	\
 	 }	\
-	return (u32)sdata - (u32)data;
+	return (uptr)sdata - (uptr)data;
 
 int  UNPACK_V2_16spart(u32 *dest, u32 *data, int size) {
 	_UNPACK_V2_16part(s16);
@@ -492,7 +492,7 @@ void UNPACK_V2_8u(u32 *dest, u32 *data) {
 		_UNPACKpart_nosize(3,writeW(dest++, 0)); \
 		if (_vifRegs->offset == 4) _vifRegs->offset = 0;	\
 	 }	\
-	return (u32)cdata - (u32)data;
+	return (uptr)cdata - (uptr)data;
 
 int  UNPACK_V2_8spart(u32 *dest, u32 *data, int size) {
 	_UNPACK_V2_8part(s8);
@@ -518,7 +518,7 @@ int  UNPACK_V3_32part(u32 *dest, u32 *data, int size) {
 		_UNPACKpart_nosize(3, writeW(dest++, 0); );
 		if (_vifRegs->offset == 4) _vifRegs->offset = 0;
 	}
-	return (u32)data - (u32)_data;
+	return (uptr)data - (uptr)_data;
 }
 
 #define _UNPACK_V3_16(format) \
@@ -548,7 +548,7 @@ void UNPACK_V3_16u(u32 *dest, u32 *data) {
 		_UNPACKpart_nosize(3,writeW(dest++, 0)); \
 		if (_vifRegs->offset == 4) _vifRegs->offset = 0;	\
 	 }	\
-	return (u32)sdata - (u32)data;
+	return (uptr)sdata - (uptr)data;
 
 int  UNPACK_V3_16spart(u32 *dest, u32 *data, int size) {
 	_UNPACK_V3_16part(s16);
@@ -584,7 +584,7 @@ void UNPACK_V3_8u(u32 *dest, u32 *data) {
 		_UNPACKpart_nosize(3,writeW(dest++, 0)); \
 		if (_vifRegs->offset == 4) _vifRegs->offset = 0;	\
 	 }	\
-	return (u32)cdata - (u32)data;
+	return (uptr)cdata - (uptr)data;
 
 int  UNPACK_V3_8spart(u32 *dest, u32 *data, int size) {
 	_UNPACK_V3_8part(s8);
@@ -610,7 +610,7 @@ int  UNPACK_V4_32part(u32 *dest, u32 *data, int size) {
 		_UNPACKpart(3, writeW(dest++, *data++) );
 		if (_vifRegs->offset == 4) _vifRegs->offset = 0;
 	}
-	return (u32)data - (u32)_data;
+	return (uptr)data - (uptr)_data;
 }
 
 #define _UNPACK_V4_16(format) \
@@ -639,7 +639,7 @@ void UNPACK_V4_16u(u32 *dest, u32 *data) {
 		_UNPACKpart(3, writeW(dest++, *sdata++) ); \
 		if (_vifRegs->offset == 4) _vifRegs->offset = 0; \
 	} \
-	return (u32)sdata - (u32)data;
+	return (uptr)sdata - (uptr)data;
 
 int  UNPACK_V4_16spart(u32 *dest, u32 *data, int size) {
 	_UNPACK_V4_16part(s16);
@@ -675,7 +675,7 @@ void UNPACK_V4_8u(u32 *dest, u32 *data) {
 		_UNPACKpart(3, writeW(dest++, *cdata++) ); \
 		if (_vifRegs->offset == 4) _vifRegs->offset = 0; \
 	} \
-	return (u32)cdata - (u32)data;
+	return (uptr)cdata - (uptr)data;
 
 int  UNPACK_V4_8spart(u32 *dest, u32 *data, int size) {
 	_UNPACK_V4_8part(s8);
@@ -709,47 +709,66 @@ int  UNPACK_V4_5part(u32 *dest, u32 *data, int size) {
 		if (_vifRegs->offset == 4) _vifRegs->offset = 0;
 	}
 
-	return (u32)sdata - (u32)data;
+	return (uptr)sdata - (uptr)data;
 }
 
 static int cycles;
 extern int g_vifCycles;
-static int vifqwc = 0;
+int vifqwc = 0;
 int mfifoVIF1rbTransfer() {
 	u32 maddr = psHu32(DMAC_RBOR);
 	int msize = psHu32(DMAC_RBSR)+16, ret;
 	u32 *src;
+	
+	
 
 	/* Check if the transfer should wrap around the ring buffer */
 	if ((vif1ch->madr+(vif1ch->qwc << 4)) >= (maddr+msize)) {
 		int s1 = (maddr+msize) - vif1ch->madr;
 		int s2 = (vif1ch->qwc << 4) - s1;
 
+		
+/*#ifdef GIF_LOG
+			GIF_LOG("Split\n");
+#endif*/
 		/* it does, so first copy 's1' bytes from 'addr' to 'data' */
 		src = (u32*)PSM(vif1ch->madr);
 		if (src == NULL) return -1;
-		ret = VIF1transfer(src, s1/4, 0); 
-		assert(ret == 0 ); // vif stall code not implemented
-		
+		if(vif1.vifstalled == 1){
+			ret = VIF1transfer(src+vif1.irqoffset, s1/4-vif1.irqoffset, 0);
+		}else
+			ret = VIF1transfer(src, s1>>2, 0); 
+		//assert(ret == 0 ); // vif stall code not implemented
+		if(ret == -2) return ret;
+	
+		if(vif1ch->madr > (maddr+msize)) SysPrintf("Copied too much VIF! %x\n", vif1ch->madr);
 		/* and second copy 's2' bytes from 'maddr' to '&data[s1]' */
 		vif1ch->madr = maddr;
 		src = (u32*)PSM(maddr);
 		if (src == NULL) return -1;
-		ret = VIF1transfer(src, s2/4, 0); 
-		assert(ret == 0 ); // vif stall code not implemented
+		ret = VIF1transfer(src, s2>>2, 0); 
+		//assert(ret == 0 ); // vif stall code not implemented
 	} else {
 		/* it doesn't, so just transfer 'qwc*4' words 
 		   from 'vif1ch->madr' to VIF1 */
+/*#ifdef GIF_LOG
+			GIF_LOG("Straight\n");
+#endif*/
 		src = (u32*)PSM(vif1ch->madr);
 		if (src == NULL) return -1;
-		ret = VIF1transfer(src, vif1ch->qwc << 2, 0); 
-		assert(ret == 0 ); // vif stall code not implemented
+		if(vif1.vifstalled == 1)
+			ret = VIF1transfer(src+vif1.irqoffset, vif1ch->qwc*4-vif1.irqoffset, 0);
+		else
+			ret = VIF1transfer(src, vif1ch->qwc << 2, 0); 
+		if(ret == -2) return ret;
+		vif1ch->madr = psHu32(DMAC_RBOR) + (vif1ch->madr & psHu32(DMAC_RBSR));
+		//assert(ret == 0 ); // vif stall code not implemented
 	}
 
 	//vif1ch->madr+= (vif1ch->qwc << 4);
 	
 
-	return 0;
+	return ret;
 }
 
 int mfifoVIF1chain() {
@@ -759,26 +778,42 @@ int mfifoVIF1chain() {
 	int mfifoqwc = vif1ch->qwc;
 
 	/* Is QWC = 0? if so there is nothing to transfer */
-	if (vif1ch->qwc == 0) return 0;
+	if (vif1ch->qwc == 0 && vif1.vifstalled == 0) return 0;
 
+	
 	if (vif1ch->madr >= maddr &&
 		vif1ch->madr <= (maddr+msize)) {
-		if (mfifoVIF1rbTransfer() == -1) return -1;
+/*#ifdef GIF_LOG
+			GIF_LOG("Ring Buffer\n");
+#endif*/
+		//SysPrintf("MFIFO QWC %x, VIF QWC %x oldqwc %x\n", vifqwc, vif1ch->qwc, mfifoqwc);
+		ret = mfifoVIF1rbTransfer();
+		//vifqwc -= (mfifoqwc - vif1ch->qwc);
+		//SysPrintf("end MFIFO QWC %x, VIF QWC %x oldqwc %x taken from vifqwc %x\n", vifqwc, vif1ch->qwc, mfifoqwc, (mfifoqwc - vif1ch->qwc));
 	} else {
 		pMem = (u32*)dmaGetAddr(vif1ch->madr);
 		if (pMem == NULL) return -1;
-		ret = VIF1transfer(pMem, vif1ch->qwc << 2, 0); 
-		assert(ret == 0 ); // vif stall code not implemented
+/*#ifdef GIF_LOG
+			GIF_LOG("Other src\n");
+#endif*/
+		if(vif1.vifstalled == 1){
+			ret = VIF1transfer(pMem+vif1.irqoffset, vif1ch->qwc*4-vif1.irqoffset, 0);
+		}else
+			ret = VIF1transfer(pMem, vif1ch->qwc << 2, 0); 
 
+		//assert(ret == 0 ); // vif stall code not implemented
 		//vif1ch->madr+= (vif1ch->qwc << 4);
 	}
 
-	cycles+= (mfifoqwc) * BIAS; /* guessing */
-	mfifoqwc = 0;
+	cycles+= (mfifoqwc - vif1ch->qwc) * BIAS; /* guessing */
+	
+	
 	//vif1ch->qwc = 0;
-	if(vif1.vifstalled == 1) SysPrintf("Vif1 MFIFO stalls not implemented\n");
-	vif1ch->madr = psHu32(DMAC_RBOR) + (vif1ch->madr & psHu32(DMAC_RBSR));
-	return 0;
+	//if(vif1.vifstalled == 1) SysPrintf("Vif1 MFIFO stalls not implemented\n");
+	//
+	//vif1.vifstalled = 0;
+
+	return ret;
 }
 
 #define spr0 ((DMACh*)&PS2MEM_HW[0xD000])
@@ -792,34 +827,45 @@ void mfifoVIF1transfer(int qwc) {
 	cycles = 0;
 	vifqwc += qwc;
 	g_vifCycles = 0;
-	if(vifqwc == 0) {
+
+	if(qwc > 0){
+#ifdef GIF_LOG
+			GIF_LOG("Added %x qw to mfifo, total now %x\n", qwc, vifqwc);
+#endif
+	}
+
+	//if(qwc > 0) SysPrintf("Added %x to MFIFO, new total %x\n", qwc, vifqwc);
+	//if(vifqwc == 0) return;
+	//if(vif1.vifstalled == 1 && (vif1Regs->stat & (VIF1_STAT_VSS|VIF1_STAT_VIS|VIF1_STAT_VFS)))return;
+	/*if(vifqwc == 0) {
 	//#ifdef PCSX2_DEVBUILD
 				/*if( vifqwc > 1 )
 					SysPrintf("vif mfifo tadr==madr but qwc = %d\n", vifqwc);*/
 	//#endif
 		
 				//INT(10,50);
-				return;
-			}
+			/*	return;
+			}*/
 	/*if ((psHu32(DMAC_CTRL) & 0xC0)) { 
 			SysPrintf("DMA Stall Control %x\n",(psHu32(DMAC_CTRL) & 0xC0));
 			}*/
-#ifdef VIF_LOG
-	VIF_LOG("mfifoVIF1transfer %x madr %x, tadr %x\n", vif1ch->chcr, vif1ch->madr, vif1ch->tadr);
-#endif
+/*#ifdef GIF_LOG
+	GIF_LOG("mfifoVIF1transfer %x madr %x, tadr %x\n", vif1ch->chcr, vif1ch->madr, vif1ch->tadr);
+#endif*/
 	
- if((vif1ch->chcr & 0x100) == 0)SysPrintf("MFIFO VIF1 not ready!\n");
+ //if((vif1ch->chcr & 0x100) == 0)SysPrintf("MFIFO VIF1 not ready!\n");
 	//while (qwc > 0 && done == 0) {
 	 if(vif1ch->qwc == 0){
 			if(vif1ch->tadr == spr0->madr) {
+		
 	#ifdef PCSX2_DEVBUILD
 				/*if( vifqwc > 1 )
-					SysPrintf("vif mfifo tadr==madr but qwc = %d\n", vifqwc);*/
-	#endif
+					SysPrintf("vif mfifo tadr==madr but qwc = %d\n", vifqwc);*/	
+	#endif	
 				//hwDmacIrq(14);
 				return;
 			}
-			vif1ch->tadr = psHu32(DMAC_RBOR) + (vif1ch->tadr & psHu32(DMAC_RBSR));
+			
 			ptag = (u32*)dmaGetAddr(vif1ch->tadr);
 			
 			id        = (ptag[0] >> 28) & 0x7;
@@ -828,89 +874,119 @@ void mfifoVIF1transfer(int qwc) {
 			cycles += 2;
 			
 			
-			if(vif1ch->chcr & 0x40) {
-				ret = VIF1transfer(ptag+2, 2, 1);
-				assert(ret == 0 ); // vif stall code not implemented
+			//SysPrintf("Tag read MFIFO QWC %x, VIF QWC %x\n", vifqwc, vif1ch->qwc);
+			if (vif1ch->chcr & 0x40) {
+				if(vif1.vifstalled == 1 && vif1.stallontag == 1) ret = VIF1transfer(ptag+(2+vif1.irqoffset), 2-vif1.irqoffset, 1);  //Transfer Tag on Stall
+				else if(vif1.vifstalled == 0)ret = VIF1transfer(ptag+2, 2, 1);  //Transfer Tag
+				if (ret == -2) {
+#ifdef GIF_LOG
+			GIF_LOG("MFIFO Stallon tag\n");
+#endif
+			//SysPrintf("Tag MFIFO QWC %x, VIF QWC %x\n", vifqwc, vif1ch->qwc);
+					//vif1.vifstalled = 1;
+					INT(10,cycles+g_vifCycles);
+					return;        //IRQ set by VIFTransfer
+				} else {
+					vif1.vifstalled = 0;
+					vif1.stallontag = 0;
+				}
 			}
 			
 			vif1ch->chcr = ( vif1ch->chcr & 0xFFFF ) | ( (*ptag) & 0xFFFF0000 );
 			
-	#ifdef VIF_LOG
-			VIF_LOG("dmaChain %8.8x_%8.8x size=%d, id=%d, madr=%lx, tadr=%lx mfifo qwc = %x spr0 madr = %x\n",
+#ifdef GIF_LOG
+			GIF_LOG("dmaChain %8.8x_%8.8x size=%d, id=%d, madr=%lx, tadr=%lx mfifo qwc = %x spr0 madr = %x\n",
 					ptag[1], ptag[0], vif1ch->qwc, id, vif1ch->madr, vif1ch->tadr, vifqwc, spr0->madr);
-	#endif
+#endif	
+			vifqwc--;
 			
-			switch (id) {
+		//	if(vif1.vifstalled == 0){
+				switch (id) {
 				case 0: // Refe - Transfer Packet According to ADDR field
-					if(vifqwc < vif1ch->qwc && (vif1ch->madr & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)) {
-						return;
+					vif1ch->tadr = psHu32(DMAC_RBOR) + ((vif1ch->tadr + 16) & psHu32(DMAC_RBSR));
+					vif1.done = 2;										//End Transfer
+					if((vif1ch->madr & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)) {
+						if(vifqwc < vif1ch->qwc) return;
 					}
-					vif1ch->tadr += 16;
-					vif1.done = 1;										//End Transfer
 					break;
 
 				case 1: // CNT - Transfer QWC following the tag.
-					if(vifqwc < vif1ch->qwc && ((vif1ch->tadr + 16) & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)) {
-						return;
-					}
-					vif1ch->madr = vif1ch->tadr + 16;						//Set MADR to QW after Tag            
-					vif1ch->tadr = vif1ch->madr + (vif1ch->qwc << 4);			//Set TADR to QW following the data
+					vif1ch->madr = psHu32(DMAC_RBOR) + ((vif1ch->tadr + 16) & psHu32(DMAC_RBSR));						//Set MADR to QW after Tag            
+					vif1ch->tadr = psHu32(DMAC_RBOR) + ((vif1ch->madr + (vif1ch->qwc << 4)) & psHu32(DMAC_RBSR));			//Set TADR to QW following the data
 					vif1.done = 0;
+					if((vif1ch->madr & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)) {
+						if(vifqwc < vif1ch->qwc) return;
+					}
 					break;
 
 				case 2: // Next - Transfer QWC following tag. TADR = ADDR
-					if(vifqwc < vif1ch->qwc && ((vif1ch->tadr + 16) & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)) {
-						return;
-					}
 					temp = vif1ch->madr;								//Temporarily Store ADDR
-					vif1ch->madr = vif1ch->tadr + 16; 					  //Set MADR to QW following the tag
+					vif1ch->madr = psHu32(DMAC_RBOR) + ((vif1ch->tadr + 16) & psHu32(DMAC_RBSR)); 					  //Set MADR to QW following the tag
 					vif1ch->tadr = temp;								//Copy temporarily stored ADDR to Tag
 					vif1.done = 0;
+					if((vif1ch->madr & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)) {
+						if(vifqwc < vif1ch->qwc) return;
+					}
 					break;
 
 				case 3: // Ref - Transfer QWC from ADDR field
 				case 4: // Refs - Transfer QWC from ADDR field (Stall Control) 
-					if(vifqwc < vif1ch->qwc && (vif1ch->madr & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)) {
-						return;
-					}
-					vif1ch->tadr += 16;									//Set TADR to next tag
+					vif1ch->tadr = psHu32(DMAC_RBOR) + ((vif1ch->tadr + 16) & psHu32(DMAC_RBSR));							//Set TADR to next tag
 					vif1.done = 0;
+					if((vif1ch->madr & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)) {
+						if(vifqwc < vif1ch->qwc) return;
+					}
 					break;
 
 				case 7: // End - Transfer QWC following the tag
-					if(vifqwc < vif1ch->qwc && ((vif1ch->tadr + 16) & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)) {
-						return;
+					vif1ch->madr = psHu32(DMAC_RBOR) + ((vif1ch->tadr + 16) & psHu32(DMAC_RBSR));		//Set MADR to data following the tag
+					vif1ch->tadr = psHu32(DMAC_RBOR) + ((vif1ch->madr + (vif1ch->qwc << 4)) & psHu32(DMAC_RBSR));			//Set TADR to QW following the data
+					vif1.done = 2;										//End Transfer
+					if((vif1ch->madr & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)) {
+						if(vifqwc < vif1ch->qwc) return;
 					}
-					vif1ch->madr = vif1ch->tadr + 16;						//Set MADR to data following the tag
-					vif1ch->tadr = vif1ch->madr + (vif1ch->qwc << 4);			//Set TADR to QW following the data
-					vif1.done = 1;										//End Transfer
 					break;
-			}
-			vifqwc--;
+				}
+#ifdef GIF_LOG
+			GIF_LOG("dmaChain %8.8x_%8.8x size=%d, id=%d, madr=%lx, tadr=%lx mfifo qwc = %x spr0 madr = %x\n",
+					ptag[1], ptag[0], vif1ch->qwc, id, vif1ch->madr, vif1ch->tadr, vifqwc, spr0->madr);
+	#endif			
 			
 			//SysPrintf("VIF1 MFIFO qwc %d vif1 qwc %d, madr = %x, tadr = %x\n", qwc, vif1ch->qwc, vif1ch->madr, vif1ch->tadr);
-			vif1ch->tadr = psHu32(DMAC_RBOR) + (vif1ch->tadr & psHu32(DMAC_RBSR));
-			if((vif1ch->madr & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)){
-				vif1ch->madr = psHu32(DMAC_RBOR) + (vif1ch->madr & psHu32(DMAC_RBSR));
-				vifqwc -= vif1ch->qwc;
-			}
+			
+				if((vif1ch->madr & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)){
+					vifqwc -= vif1ch->qwc;
+				}
+			//}
+			if ((vif1ch->chcr & 0x80) && (ptag[0] >> 31)) {
+#ifdef GIF_LOG
+			GIF_LOG("dmaIrq Set\n");
+#endif
+			//SysPrintf("mfifoVIF1transfer: dmaIrq Set\n");
+			//vifqwc = 0;
+			vif1.done = 2;
+		}
+			//if(vif1ch->qwc == 0 && vifqwc > 0 && done == 0) mfifoVIF1transfer(0);
 	 }
 
-		if (mfifoVIF1chain() == -1) {
+		ret = mfifoVIF1chain();
+		if (ret == -1) {
 			SysPrintf("dmaChain error %8.8x_%8.8x size=%d, id=%d, madr=%lx, tadr=%lx\n",
 					ptag[1], ptag[0], vif1ch->qwc, id, vif1ch->madr, vif1ch->tadr);
 			vif1.done = 1;
 			INT(10,cycles+g_vifCycles);
 		}
-		
-		if ((vif1ch->chcr & 0x80) && (ptag[0] >> 31)) {
-#ifdef VIF_LOG
-			VIF_LOG("dmaIrq Set\n");
+		if(ret == -2){
+			//SysPrintf("VIF MFIFO Stall\n");
+			//vif1.vifstalled = 1;
+#ifdef GIF_LOG
+			GIF_LOG("MFIFO Stall\n");
 #endif
-			//SysPrintf("mfifoVIF1transfer: dmaIrq Set\n");
-			//vifqwc = 0;
-			vif1.done = 1;
+			INT(10,cycles+g_vifCycles);
+			return;
 		}
+		
+		
 
 //		if( (cpuRegs.interrupt & (1<<1)) && qwc > 0) {
 //			SysPrintf("vif1 mfifo interrupt %d\n", qwc);
@@ -920,12 +996,20 @@ void mfifoVIF1transfer(int qwc) {
 	/*if(vif1.done == 1) {
 		vifqwc = 0;
 	}*/
-	INT(10,cycles+g_vifCycles);
-	if(vifqwc == 0 && tempqwc > 0) hwDmacIrq(14);
+
+	//SysPrintf("vifqwc %x, vif1ch->qwc %x, vifstalled %x, vifdone %x\n", vifqwc, vif1ch->qwc, vif1.vifstalled, vif1.done);
+	if(vif1.done == 2 && vif1ch->qwc == 0) vif1.done = 1;
+	if(vifqwc == 0 && vif1.done == 0 && vif1.vifstalled == 0) hwDmacIrq(14);
+	 INT(10,cycles+g_vifCycles);
 	
+	// if(vifqwc == 0) vif1Regs->stat&= ~0x1F000000; // FQC=0
 	//hwDmacIrq(1);
-#ifdef SPR_LOG
-	SPR_LOG("mfifoVIF1transfer end %x madr %x, tadr %x\n", vif1ch->chcr, vif1ch->madr, vif1ch->tadr);
+	/*if(((spr0->madr - vif1ch->tadr) >> 4) != vifqwc) SysPrintf("oh noes! madr diff %x, qwc %x\n", ((spr0->madr - vif1ch->tadr) >> 4), vifqwc);
+	else SysPrintf("Evens up :)\n");*/
+
+	//if(vifqwc & 0xFFF00000) SysPrintf("Negative QWC?!! %x\n", vifqwc);
+#ifdef GIF_LOG
+	GIF_LOG("mfifoVIF1transfer end %x madr %x, tadr %x vifqwc %x\n", vif1ch->chcr, vif1ch->madr, vif1ch->tadr, vifqwc);
 #endif
 }
 
@@ -933,22 +1017,34 @@ int vifMFIFOInterrupt()
 {
 	
 	if(!(vif1ch->chcr & 0x100)) return 1;
-	else if(vifqwc == 0 && vif1.done == 0) return 1;
-
-	if(vif1.done == 0 && vifqwc != 0) {
-		mfifoVIF1transfer(0);
-		if(vif1ch->qwc > 0) return 1;
-		else return 0;
-	}
-	if(vif1.done == 0 || vif1ch->qwc > 0) {
-		SysPrintf("Shouldnt go here\n");
+	if(vif1.vifstalled == 1 && (vif1Regs->stat & (VIF1_STAT_VSS|VIF1_STAT_VIS|VIF1_STAT_VFS))) {
+		if(vif1.irq) {
+			vif1Regs->stat|= VIF1_STAT_INT;
+			hwIntcIrq(5);
+			--vif1.irq;
+		}
 		return 1;
 	}
+
+	if(vif1.done != 1) {
+		mfifoVIF1transfer(0);
+        FreezeMMXRegs(0);
+	    FreezeXMMRegs(0);
+		if(vifqwc == 0 && vif1.done != 1) return 1;
+		else {
+			if((vif1ch->madr == spr0->madr && vif1ch->tadr == spr0->madr) && vif1.done == 0) return 1;
+			else return 0;
+		}
+	} else if(vif1.done != 1) return 1;
+
 	vif1.done = 0;
 	vif1ch->chcr &= ~0x100;
 	hwDmacIrq(DMAC_VIF1);
+#ifdef GIF_LOG
+			GIF_LOG("vif mfifo dma end\n");
+#endif
 //	vif1ch->chcr &= ~0x100;
-//	vif1Regs->stat&= ~0x1F000000; // FQC=0
+	vif1Regs->stat&= ~0x1F000000; // FQC=0
 //	hwDmacIrq(DMAC_VIF1);
 //
 //	if (vif1.irq > 0) {

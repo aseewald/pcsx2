@@ -15,6 +15,8 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+// stop compiling if NORECBUILD build (only for Visual Studio)
+#if !(defined(_MSC_VER) && defined(PCSX2_NORECBUILD))
 
 #include <stdlib.h>
 #include <string.h>
@@ -25,7 +27,7 @@
 #include "ix86/ix86.h"
 #include "iR5900.h"
 
-#ifdef __WIN32__
+#ifdef _WIN32
 #pragma warning(disable:4244)
 #pragma warning(disable:4761)
 #endif
@@ -353,7 +355,7 @@ void recMULTsuper(int info, int upper, int process)
 
 //void recMULT_process(int info, int process)
 //{
-//	if( EEINST_ISLIVEMMX(XMMGPR_HI) || !(info&PROCESS_EE_MMX) ) {
+//	if( EEINST_ISLIVE64(XMMGPR_HI) || !(info&PROCESS_EE_MMX) ) {
 //		recMULTsuper(info, 0, process);
 //	}
 //	else {
@@ -365,7 +367,7 @@ void recMULTsuper(int info, int upper, int process)
 //			mmregd = _checkMMXreg(MMX_GPR+_Rd_, MODE_WRITE);
 //
 //			if( mmregd < 0 ) {
-//				if( !(process&PROCESS_CONSTS) && ((g_pCurInstInfo->regs[_Rs_]&EEINST_LASTUSE)||!EEINST_ISLIVEMMX(_Rs_)) ) {
+//				if( !(process&PROCESS_CONSTS) && ((g_pCurInstInfo->regs[_Rs_]&EEINST_LASTUSE)||!EEINST_ISLIVE64(_Rs_)) ) {
 //					_freeMMXreg(EEREC_S);
 //					_deleteGPRtoXMMreg(_Rd_, 2);
 //					mmxregs[EEREC_S].inuse = 1;
@@ -373,7 +375,7 @@ void recMULTsuper(int info, int upper, int process)
 //					mmxregs[EEREC_S].mode = MODE_WRITE;
 //					mmregd = EEREC_S;
 //				}
-//				else if( !(process&PROCESS_CONSTT) && ((g_pCurInstInfo->regs[_Rt_]&EEINST_LASTUSE)||!EEINST_ISLIVEMMX(_Rt_)) ) {
+//				else if( !(process&PROCESS_CONSTT) && ((g_pCurInstInfo->regs[_Rt_]&EEINST_LASTUSE)||!EEINST_ISLIVE64(_Rt_)) ) {
 //					_freeMMXreg(EEREC_T);
 //					_deleteGPRtoXMMreg(_Rd_, 2);
 //					mmxregs[EEREC_T].inuse = 1;
@@ -951,3 +953,5 @@ REC_FUNC( MADD1, _Rd_ );
 REC_FUNC( MADDU1, _Rd_ );
 
 #endif
+
+#endif // PCSX2_NORECBUILD

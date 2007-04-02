@@ -36,6 +36,7 @@ typedef struct {
 	u8 usn;
 	u8 done;
 	u8 vifstalled;
+	u8 stallontag;
 	u8 irqoffset; // 32bit offset where next vif code is
 	u32 savedtag;
 } vifStruct;
@@ -99,9 +100,6 @@ int  UNPACK_V4_8spart( u32 *dest, u32 *data, int size );
 
 void UNPACK_V4_5( u32 *dest, u32 *data );
 int  UNPACK_V4_5part( u32 *dest, u32 *data, int size );
-
-// sse1/2
-
 
 void vifDmaInit();
 void vif0Init();

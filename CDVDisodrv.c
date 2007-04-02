@@ -185,7 +185,7 @@ int CDVDFS_read( int fd, char *buffer, int size ){
 #endif
 			return 0;
 		}
-		memcpy(buffer, lb + off_sector, ssize);
+		memcpy_fast(buffer, lb + off_sector, ssize);
 	}
 	if (asize)	if (CdRead(asector, asize >> 11, buffer+ssize, &cdReadMode) != TRUE){
 #ifdef RPC_LOG
@@ -199,7 +199,7 @@ int CDVDFS_read( int fd, char *buffer, int size ){
 #endif
 			return 0;
 		}
-		memcpy(buffer+ssize+asize, lb, esize);
+		memcpy_fast(buffer+ssize+asize, lb, esize);
 	}
 /***********************
 	// Now work out where we want to start reading from
@@ -221,7 +221,7 @@ int CDVDFS_read( int fd, char *buffer, int size ){
 	}
 	//CdSync(0);	hm, a wait function maybe...
 
-	memcpy(buffer,local_buffer+off_sector,size);
+	memcpy_fast(buffer,local_buffer+off_sector,size);
 **************************/
 	fd_table[fd].filePos += size;
 

@@ -24,7 +24,6 @@
 
 //#include <stdlib.h>
 #include "Common.h"
-#include "ix86/ix86.h"
 
 #define W1 2841 /* 2048*sqrt (2)*cos (1*pi/16) */
 #define W2 2676 /* 2048*sqrt (2)*cos (2*pi/16) */
@@ -259,7 +258,7 @@ void mpeg2_idct_mmx_init (void);
 
 void mpeg2_idct_init()
 {
-#ifndef __VCNET2005__
+#if !defined(_MSC_VER) || _MSC_VER < 1400 // ignore vc2005 and beyond
 	int i, j;
 	
 /*	if(hasMultimediaExtensions == 1)

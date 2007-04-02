@@ -15,6 +15,8 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+// stop compiling if NORECBUILD build (only for Visual Studio)
+#if !(defined(_MSC_VER) && defined(PCSX2_NORECBUILD))
 
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +28,7 @@
 #include "iR5900.h"
 
 
-#ifdef __WIN32__
+#ifdef _WIN32
 #pragma warning(disable:4244)
 #pragma warning(disable:4761)
 #endif
@@ -585,7 +587,7 @@ int recSetShiftV(int info, int* rsreg, int* rtreg, int* rdreg, int* rstemp, int 
 		*rsreg = EEREC_S;
 
 		// make sure to take only low 5 bits of *rsreg
-		if( !(g_pCurInstInfo->regs[_Rs_]&EEINST_LASTUSE) && EEINST_ISLIVEMMX(_Rs_)) {
+		if( !(g_pCurInstInfo->regs[_Rs_]&EEINST_LASTUSE) && EEINST_ISLIVE64(_Rs_)) {
 			*rstemp = _allocMMXreg(-1, MMX_TEMP, 0);
 			MOVQRtoR(*rstemp, *rsreg);
 			*rsreg = *rstemp;
@@ -635,7 +637,7 @@ void recSetConstShiftV(int info, int* rsreg, int* rdreg, int* rstemp, int shift6
 		*rsreg = EEREC_S;
 
 		// make sure to take only low 5 bits of *rsreg
-		if( !(g_pCurInstInfo->regs[_Rs_]&EEINST_LASTUSE) && EEINST_ISLIVEMMX(_Rs_) ) {
+		if( !(g_pCurInstInfo->regs[_Rs_]&EEINST_LASTUSE) && EEINST_ISLIVE64(_Rs_) ) {
 			*rstemp = _allocMMXreg(-1, MMX_TEMP, 0);
 			MOVQRtoR(*rstemp, *rsreg);
 			*rsreg = *rstemp;
@@ -1347,3 +1349,5 @@ void recDSRAV( void )
 	SetMMXstate();
 }
 #endif
+
+#endif // PCSX2_NORECBUILD

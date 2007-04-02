@@ -161,7 +161,7 @@ TdisR5900F dis##VU##_UPPER_FD_01_TABLE[32] = { \
 TdisR5900F dis##VU##_UPPER_FD_10_TABLE[32] = { \
 	dis##VU##MI_ADDAz , dis##VU##MI_SUBz  , dis##VU##MI_MADDAz, dis##VU##MI_MSUBAz, \
 	dis##VU##MI_ITOF12, dis##VU##MI_FTOI12, dis##VU##MI_MULAz , dis##VU##MI_MULAi , \
-	dis##VU##MI_MADDAi, dis##VU##MI_SUBAi , dis##VU##MI_MULA  , dis##VU##MI_OPMULA, \
+	dis##VU##MI_ADDAi, dis##VU##MI_SUBAi , dis##VU##MI_MULA  , dis##VU##MI_OPMULA, \
 	disNULL     , disNULL     , disNULL     , disNULL     , \
 	disNULL     , disNULL     , disNULL     , disNULL     , \
 	disNULL     , disNULL     , disNULL     , disNULL     , \

@@ -1,5 +1,5 @@
 /*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2003  Pcsx2 Team
+ *  Copyright (C) 2002-2007  Pcsx2 Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -136,7 +136,7 @@ FILE *_cdvdOpenMechaVer() {
 	
 	// use the bios filename to get the name of the mecha ver file
 	sprintf(file, "%s", Bios);
-	ptr = file; i = strlen(file);
+	ptr = file; i = (int)strlen(file);
 	while (i > 0) { if (ptr[i] == '.') break; i--; }
 	ptr[i+1] = '\0';
 	strcat(file, "MEC");
@@ -180,7 +180,7 @@ FILE *_cdvdOpenNVM() {
 	
 	// use the bios filename to get the name of the nvm file
 	sprintf(file, "%s", Bios);
-	ptr = file; i = strlen(file);
+	ptr = file; i = (int)strlen(file);
 	while (i > 0) { if (ptr[i] == '.') break; i--; }
 	ptr[i+1] = '\0';
 	strcat(file, "NVM");
@@ -310,7 +310,7 @@ s32 cdvdReadConfig(u8* config)
 		((cdvd.COffset == 2) && (cdvd.CBlockIndex >= 7))
 		)
 	{
-		memcpy(config, 0, 16);
+		memset(config, 0, 16);
 		return 0;
 	}
 	
@@ -729,7 +729,7 @@ int cdvdReadSector() {
 		PSXMu8(HW_DMA3_MADR+11) = 0;
 		
 		// normal 2048 bytes of sector data
-		memcpy_amd(PSXM(HW_DMA3_MADR+12), cdr.pTransfer, 2048);
+		memcpy_fast(PSXM(HW_DMA3_MADR+12), cdr.pTransfer, 2048);
 		
 		// 4 bytes of edc (not calculated at present)
 		PSXMu8(HW_DMA3_MADR+2060) = 0;
@@ -738,7 +738,7 @@ int cdvdReadSector() {
 		PSXMu8(HW_DMA3_MADR+2063) = 0;
 	} else {
 		// normal read
-		memcpy_amd(PSXM(HW_DMA3_MADR), cdr.pTransfer, cdvd.BlockSize);
+		memcpy_fast(PSXM(HW_DMA3_MADR), cdr.pTransfer, cdvd.BlockSize);
 	}
 	// decrypt sector's bytes
 	if(cdvd.decSet)
@@ -1369,7 +1369,7 @@ void cdvdWrite16(u8 rt) { // SCOMMAND
 
 		case 0x08: // CdReadRTC (0:8)
 			SetResultSize(8);
-			memcpy_amd(cdvd.Result, (u8*)&cdvd.RTC, 8);
+			memcpy_fast(cdvd.Result, (u8*)&cdvd.RTC, 8);
 			/* do not uncomment this by now, it kinda makes 
 			   things a bit more random for debugging (linuz) */
 /*
@@ -1392,7 +1392,7 @@ void cdvdWrite16(u8 rt) { // SCOMMAND
 		case 0x09: // sceCdWriteRTC (7:1)
 			SetResultSize(1);
 			cdvd.Result[0] = 0;
-			memcpy_amd((u8*)&cdvd.RTC, cdvd.Param, 7);
+			memcpy_fast((u8*)&cdvd.RTC, cdvd.Param, 7);
 			cdvd.RTC.pad = 0;
 			break;
 
@@ -1700,7 +1700,7 @@ void cdvdWrite16(u8 rt) { // SCOMMAND
 			if (cdvd.mg_size + cdvd.ParamC > cdvd.mg_maxsize)
 				cdvd.Result[0] = 0x80;
 			else{
-				memcpy(cdvd.mg_buffer + cdvd.mg_size, cdvd.Param, cdvd.ParamC);
+				memcpy_fast(cdvd.mg_buffer + cdvd.mg_size, cdvd.Param, cdvd.ParamC);
 				cdvd.mg_size += cdvd.ParamC;
 				cdvd.Result[0] = 0; // 0 complete ; 1 busy ; 0x80 error
 			}
@@ -1708,15 +1708,16 @@ void cdvdWrite16(u8 rt) { // SCOMMAND
 
 		case 0x8E: // sceMgReadData
 			SetResultSize(min(16, cdvd.mg_size));
-			memcpy_amd(cdvd.Result, cdvd.mg_buffer, cdvd.ResultC);
+			memcpy_fast(cdvd.Result, cdvd.mg_buffer, cdvd.ResultC);
 			cdvd.mg_size -= cdvd.ResultC;
-			memcpy_amd(cdvd.mg_buffer, cdvd.mg_buffer+cdvd.ResultC, cdvd.mg_size);
+			memcpy_fast(cdvd.mg_buffer, cdvd.mg_buffer+cdvd.ResultC, cdvd.mg_size);
 			break;
 
 		case 0x88: // secrman: __mechacon_auth_0x88	//for now it is the same; so, fall;)
 		case 0x8F: // secrman: __mechacon_auth_0x8F
 			SetResultSize(1);//in:0
 			if (cdvd.mg_datatype == 1){// header data
+                u64* psrc, *pdst;
 				int bit_ofs, i;
 
 				if (cdvd.mg_maxsize != cdvd.mg_size)				goto fail_pol_cal;
@@ -1730,8 +1731,12 @@ void cdvdWrite16(u8 rt) { // SCOMMAND
 						SysPrintf("%s ", mg_zones[i]);
 				SysPrintf("\n");
 				bit_ofs = mg_BIToffset(cdvd.mg_buffer);
-				memcpy(cdvd.mg_kbit, &cdvd.mg_buffer[bit_ofs-0x20], 0x10);
-				memcpy(cdvd.mg_kcon, &cdvd.mg_buffer[bit_ofs-0x10], 0x10);
+                psrc = (u64*)&cdvd.mg_buffer[bit_ofs-0x20];
+                pdst = (u64*)cdvd.mg_kbit;
+                pdst[0] = psrc[0]; pdst[1] = psrc[1];
+                pdst = (u64*)cdvd.mg_kcon;
+                pdst[0] = psrc[2]; pdst[1] = psrc[3];
+
 				if (cdvd.mg_buffer[bit_ofs+5] || cdvd.mg_buffer[bit_ofs+6] || cdvd.mg_buffer[bit_ofs+7])goto fail_pol_cal;
 				if (cdvd.mg_buffer[bit_ofs+4] * 16 + bit_ofs + 8 + 16 != *(u16*)&cdvd.mg_buffer[0x14]){
 fail_pol_cal:
@@ -1756,7 +1761,7 @@ fail_pol_cal:
 			SetResultSize(3);//in:0
 			{
 				int bit_ofs = mg_BIToffset(cdvd.mg_buffer);
-				memcpy(cdvd.mg_buffer, &cdvd.mg_buffer[bit_ofs], 8+16*cdvd.mg_buffer[bit_ofs+4]);
+				memcpy_fast(cdvd.mg_buffer, &cdvd.mg_buffer[bit_ofs], 8+16*cdvd.mg_buffer[bit_ofs+4]);
 			}
 			cdvd.mg_maxsize = 0; // don't allow any write
 			cdvd.mg_size = 8+16*cdvd.mg_buffer[4];//new offset, i just moved the data
@@ -1787,25 +1792,30 @@ fail_pol_cal:
 		case 0x94: // sceMgReadKbit - read first half of BIT key
 			SetResultSize(1+8);//in:0
 			cdvd.Result[0] = 0;
-			memcpy(cdvd.Result+1, cdvd.mg_kbit, 8);
-			break;
+
+            ((int*)(cdvd.Result+1))[0] = ((int*)cdvd.mg_kbit)[0];
+            ((int*)(cdvd.Result+1))[1] = ((int*)cdvd.mg_kbit)[1];
+            break;
 
 		case 0x95: // sceMgReadKbit2 - read second half of BIT key
 			SetResultSize(1+8);//in:0
 			cdvd.Result[0] = 0;
-			memcpy(cdvd.Result+1, cdvd.mg_kbit+8, 8);
+            ((int*)(cdvd.Result+1))[0] = ((int*)(cdvd.mg_kbit+8))[0];
+            ((int*)(cdvd.Result+1))[1] = ((int*)(cdvd.mg_kbit+8))[1];
 			break;
 
 		case 0x96: // sceMgReadKcon - read first half of content key
 			SetResultSize(1+8);//in:0
 			cdvd.Result[0] = 0;
-			memcpy(cdvd.Result+1, cdvd.mg_kcon, 8);
+            ((int*)(cdvd.Result+1))[0] = ((int*)cdvd.mg_kcon)[0];
+            ((int*)(cdvd.Result+1))[1] = ((int*)cdvd.mg_kcon)[1];
 			break;
 
 		case 0x97: // sceMgReadKcon2 - read second half of content key
 			SetResultSize(1+8);//in:0
 			cdvd.Result[0] = 0;
-			memcpy(cdvd.Result+1, cdvd.mg_kcon+8, 8);
+            ((int*)(cdvd.Result+1))[0] = ((int*)(cdvd.mg_kcon+8))[0];
+            ((int*)(cdvd.Result+1))[1] = ((int*)(cdvd.mg_kcon+8))[1];
 			break;
 
 		default:

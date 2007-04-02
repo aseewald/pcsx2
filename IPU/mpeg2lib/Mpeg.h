@@ -171,7 +171,7 @@ int get_macroblock_modes (decoder_t * const decoder);
 int get_motion_delta (decoder_t * const decoder,
 				    const int f_code);
 int get_dmv (decoder_t * const decoder);
-int non_linear_quantizer_scale[]; // JayteeMaster: it is needed in Ipu.c
+extern int non_linear_quantizer_scale[]; // JayteeMaster: it is needed in Ipu.c
 
 void ipu_csc(struct macroblock_8 *mb8, struct macroblock_rgb32 *rgb32, int sgn);
 void ipu_dither(struct macroblock_8 *mb8, struct macroblock_rgb16 *rgb16, int dte);
@@ -182,5 +182,19 @@ void ipu_copy(struct macroblock_8 *mb8, struct macroblock_16 *mb16);
 int slice (decoder_t * const decoder, u8 * buffer);
 /* idct.c */
 void mpeg2_idct_init ();
+
+#ifdef _MSC_VER
+#define BigEndian(out, in) out = _byteswap_ulong(in)
+#else
+//#define BigEndian(out, in)  \
+//	__asm__(".intel_syntax\n"						\
+//		"bswap %0\n"								\
+//			".att_syntax\n" : "=r"(out) : "0"(in) )
+
+#define BigEndian(out, in) \
+	out = (((((in) >> 24) & 0xFF) <<  0) + ((((in) >> 16) & 0xFF) <<  8) + \
+		   ((((in) >>  8) & 0xFF) << 16) + ((((in) >>  0) & 0xFF) << 24));
+
+#endif
 	
 #endif//__MPEG_H__

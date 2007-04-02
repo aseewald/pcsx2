@@ -23,32 +23,55 @@
 #include <malloc.h>
 #include <assert.h>
 
-#include "Debug.h"
+#include "DebugTools/Debug.h"
 #include "R5900.h"
 #include "iR5900.h"
 #include "VUmicro.h"
 #include "VUops.h"
 #include "VUflags.h"
-#include "ivu1micro.h"
+#include "iVU1micro.h"
 
 #include "iVUzerorec.h"
 
 VURegs* g_pVU1;
 
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
 extern PSMEMORYBLOCK s_psVuMem;
 #endif
 
-#ifdef __MSCW32__
+#ifdef _WIN32
 #pragma warning(disable:4113)
 #endif
+
+#ifdef PCSX2_DEVBUILD
+u32 vudump = 0;
+#endif
+
+#define VF_VAL(x) ((x==0x80000000)?0:(x))
+
+void iDumpVU1Registers()
+{
+	int i;
+//	static int icount = 0;
+//	__Log("%x\n", icount);
+	for(i = 1; i < 32; ++i) {
+//		__Log("v%d: w%f(%x) z%f(%x) y%f(%x) x%f(%x), vi: ", i, VU1.VF[i].F[3], VU1.VF[i].UL[3], VU1.VF[i].F[2], VU1.VF[i].UL[2],
+//			VU1.VF[i].F[1], VU1.VF[i].UL[1], VU1.VF[i].F[0], VU1.VF[i].UL[0]);
+		//__Log("v%d: %f %f %f %f, vi: ", i, VU1.VF[i].F[3], VU1.VF[i].F[2], VU1.VF[i].F[1], VU1.VF[i].F[0]);
+		__Log("v%d: %x %x %x %x, vi: ", i, VF_VAL(VU1.VF[i].UL[3]), VF_VAL(VU1.VF[i].UL[2]), VF_VAL(VU1.VF[i].UL[1]), VF_VAL(VU1.VF[i].UL[0]));
+		if( i == REG_Q || i == REG_P ) __Log("%f\n", VU1.VI[i].F);
+		//else __Log("%x\n", VU1.VI[i].UL);
+		else __Log("%x\n", (i==REG_STATUS_FLAG||i==REG_MAC_FLAG||i==REG_CLIP_FLAG)?0:VU1.VI[i].UL);
+	}
+	__Log("vfACC: %f %f %f %f\n", VU1.ACC.F[3], VU1.ACC.F[2], VU1.ACC.F[1], VU1.ACC.F[0]);
+}
 
 int vu1Init()
 {
 	assert( VU0.Mem != NULL );
 	g_pVU1 = (VURegs*)(VU0.Mem + 0x4000);
 
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
 	VU1.Mem = PS2MEM_VU1MEM;
 	VU1.Micro = PS2MEM_VU1MICRO;
 #else
@@ -68,9 +91,11 @@ int vu1Init()
 	VU1.vuExec   = vu1Exec;
 	VU1.vifRegs  = vif1Regs;
 
+#ifndef PCSX2_NORECBUILD
 	if( CHECK_VU1REC ) {
 		recVU1Init();
 	}
+#endif
 
 	vu1Reset();
 
@@ -78,9 +103,11 @@ int vu1Init()
 }
 
 void vu1Shutdown() {
+#ifndef PCSX2_NORECBUILD
 	if( CHECK_VU1REC ) {
 		recVU1Shutdown();
 	}
+#endif
 }
 
 void vu1ResetRegs()
@@ -102,7 +129,9 @@ void vu1Reset() {
 	memset(VU1.Mem, 0, 16*1024);
 	memset(VU1.Micro, 0, 16*1024);
 
+#ifndef PCSX2_NORECBUILD
 	recResetVU1();
+#endif
 }
 
 void vu1Freeze(gzFile f, int Mode) {

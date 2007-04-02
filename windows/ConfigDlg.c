@@ -422,6 +422,9 @@ BOOL CALLBACK ConfigureDlgProc(HWND hW, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			Static_SetText(GetDlgItem(hW, IDC_SOUND), _("Sound"));
 			Static_SetText(GetDlgItem(hW, IDC_CDVDROM), _("Cdvdrom"));
 			Static_SetText(GetDlgItem(hW, IDC_BIOS), _("Bios"));
+			Static_SetText(GetDlgItem(hW, IDC_USB), _("Usb"));
+			Static_SetText(GetDlgItem(hW, IDC_FW), _("FireWire"));
+			Static_SetText(GetDlgItem(hW, IDC_DEV9), _("Dev9"));
 			Button_SetText(GetDlgItem(hW, IDC_BIOSDIR), _("Set Bios Directory"));
 			Button_SetText(GetDlgItem(hW, IDC_PLUGINSDIR), _("Set Plugins Directory"));
 			Button_SetText(GetDlgItem(hW, IDC_CONFIGGS), _("Configure..."));

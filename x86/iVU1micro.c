@@ -15,6 +15,8 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+// stop compiling if NORECBUILD build (only for Visual Studio)
+#if !(defined(_MSC_VER) && defined(PCSX2_NORECBUILD))
 
 #include <stdlib.h>
 #include <string.h>
@@ -39,7 +41,7 @@
 
 // TODO: there's a bug in spyro start menu where release vurec works but debug vurec breaks
 
-#ifdef __MSCW32__
+#ifdef _WIN32
 #pragma warning(disable:4244)
 #pragma warning(disable:4761)
 #endif
@@ -65,22 +67,22 @@ static _vuopinfo _opinfo[256];
 #define _Ftf_ ((VU1.code >> 23) & 0x03)
 
 
-#define VU1_VFx_ADDR(x) (u32)&VU1.VF[x].UL[0]
-#define VU1_VFy_ADDR(x) (u32)&VU1.VF[x].UL[1]
-#define VU1_VFz_ADDR(x) (u32)&VU1.VF[x].UL[2]
-#define VU1_VFw_ADDR(x) (u32)&VU1.VF[x].UL[3]
+#define VU1_VFx_ADDR(x) (uptr)&VU1.VF[x].UL[0]
+#define VU1_VFy_ADDR(x) (uptr)&VU1.VF[x].UL[1]
+#define VU1_VFz_ADDR(x) (uptr)&VU1.VF[x].UL[2]
+#define VU1_VFw_ADDR(x) (uptr)&VU1.VF[x].UL[3]
 
-#define VU1_REGR_ADDR (u32)&VU1.VI[REG_R]
-#define VU1_REGI_ADDR (u32)&VU1.VI[REG_I]
-#define VU1_REGQ_ADDR (u32)&VU1.VI[REG_Q]
-#define VU1_REGMAC_ADDR (u32)&VU1.VI[REG_MAC_FLAG]
+#define VU1_REGR_ADDR (uptr)&VU1.VI[REG_R]
+#define VU1_REGI_ADDR (uptr)&VU1.VI[REG_I]
+#define VU1_REGQ_ADDR (uptr)&VU1.VI[REG_Q]
+#define VU1_REGMAC_ADDR (uptr)&VU1.VI[REG_MAC_FLAG]
 
-#define VU1_VI_ADDR(x)	(u32)&VU1.VI[x].UL
+#define VU1_VI_ADDR(x)	(uptr)&VU1.VI[x].UL
 
-#define VU1_ACCx_ADDR (u32)&VU1.ACC.UL[0]
-#define VU1_ACCy_ADDR (u32)&VU1.ACC.UL[1]
-#define VU1_ACCz_ADDR (u32)&VU1.ACC.UL[2]
-#define VU1_ACCw_ADDR (u32)&VU1.ACC.UL[3]
+#define VU1_ACCx_ADDR (uptr)&VU1.ACC.UL[0]
+#define VU1_ACCy_ADDR (uptr)&VU1.ACC.UL[1]
+#define VU1_ACCz_ADDR (uptr)&VU1.ACC.UL[2]
+#define VU1_ACCw_ADDR (uptr)&VU1.ACC.UL[3]
 
 static void VU1RecompileBlock(void);
 
@@ -101,7 +103,9 @@ void recResetVU1( void ) {
 	}
 
 	vu1recpcold = 0;
+#ifndef __x86_64__
 	x86FpuState = FPU_STATE;
+#endif
 	iCWstate = 0;
 
 	branch = 0;
@@ -114,7 +118,7 @@ static void iDumpBlock()
 	u32 *mem;
 	u32 i;
 
-#ifdef __WIN32__
+#ifdef _WIN32
 	CreateDirectory("dumps", NULL);
 	sprintf( filename, "dumps\\vu%.4X.txt", VU1.VI[ REG_TPC ].UL );
 #else
@@ -137,35 +141,12 @@ static void iDumpBlock()
 	fclose( f );
 }
 
-#define VF_VAL(x) ((x==0x80000000)?0:(x))
-
 u32 g_VUProgramId = 0;
-void iDumpVU1Registers()
-{
-	int i;
-//	static int icount = 0;
-//	__Log("%x\n", icount);
-	for(i = 1; i < 32; ++i) {
-//		__Log("v%d: w%f(%x) z%f(%x) y%f(%x) x%f(%x), vi: ", i, VU1.VF[i].F[3], VU1.VF[i].UL[3], VU1.VF[i].F[2], VU1.VF[i].UL[2],
-//			VU1.VF[i].F[1], VU1.VF[i].UL[1], VU1.VF[i].F[0], VU1.VF[i].UL[0]);
-		//__Log("v%d: %f %f %f %f, vi: ", i, VU1.VF[i].F[3], VU1.VF[i].F[2], VU1.VF[i].F[1], VU1.VF[i].F[0]);
-		__Log("v%d: %x %x %x %x, vi: ", i, VF_VAL(VU1.VF[i].UL[3]), VF_VAL(VU1.VF[i].UL[2]), VF_VAL(VU1.VF[i].UL[1]), VF_VAL(VU1.VF[i].UL[0]));
-		if( i == REG_Q || i == REG_P ) __Log("%f\n", VU1.VI[i].F);
-		//else __Log("%x\n", VU1.VI[i].UL);
-		else __Log("%x\n", (i==REG_STATUS_FLAG||i==REG_MAC_FLAG||i==REG_CLIP_FLAG)?0:VU1.VI[i].UL);
-	}
-	__Log("vfACC: %f %f %f %f\n", VU1.ACC.F[3], VU1.ACC.F[2], VU1.ACC.F[1], VU1.ACC.F[0]);
-}
 
 #ifdef PCSX2_DEVBUILD
-u32 vuprogcount = 0;
-u32 vudump = 0;
+static u32 vuprogcount = 0;
+extern u32 vudump;
 #endif
-
-void DummyExecuteVU1Block(void)
-{
-	VU0.VI[ REG_VPU_STAT ].UL &= ~0x100;
-}
 
 void recExecuteVU1Block(void)
 {
@@ -227,3 +208,5 @@ void recClearVU1( u32 Addr, u32 Size ) {
 		SuperVUClear(Addr, Size*4, 1);
 	}
 }
+
+#endif

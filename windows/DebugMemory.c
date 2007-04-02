@@ -30,14 +30,14 @@ unsigned long data_patch;
 ///MEMORY DUMP 
 unsigned char Debug_Read8(unsigned long addr)//just for anycase..
 {
-#ifdef __MSCW32__	
+#ifdef _WIN32
 	__try
 	{
 #endif
       u8 val8;
       memRead8(addr, &val8);
 		return val8;
-#ifdef __MSCW32__	
+#ifdef _WIN32
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER)
 	{

@@ -18,6 +18,9 @@
 
 // Holds instruction tables for the r5900 recompiler
 
+// stop compiling if NORECBUILD build (only for Visual Studio)
+#if !(defined(_MSC_VER) && defined(PCSX2_NORECBUILD))
+
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -127,76 +130,8 @@ REC_SYS(TNEI);
 //REC_SYS(MTSAB);
 ////////////////////////////////////////////////////
 //REC_SYS(MTSAH);
-
-
 ////////////////////////////////////////////////////
-static void recCACHE( void ) {
-//	MOV32ItoM( (u32)&cpuRegs.code, cpuRegs.code );
-//	MOV32ItoM( (u32)&cpuRegs.pc, pc );
-//	iFlushCall(FLUSH_EVERYTHING);
-//	CALLFunc( (u32)CACHE );
-//	//branch = 2;
-//
-//	CMP32ItoM((int)&cpuRegs.pc, pc);
-//	j8Ptr[0] = JE8(0);
-//	RET();
-//	x86SetJ8(j8Ptr[0]);
-}
-
-
-static void recPREF( void ) 
-{
-}
-
-
-
-////////////////////////////////////////////////////
-static void recSYNC( void )
-{
-}
-
-static void recMFSA( void ) 
-{
-	int mmreg;
-	if (!_Rd_) return;
-
-	mmreg = _checkXMMreg(XMMTYPE_GPRREG, _Rd_, MODE_WRITE);
-	if( mmreg >= 0 ) {
-		SSE_MOVLPS_M64_to_XMM(mmreg, (u32)&cpuRegs.sa);
-	}
-	else if( (mmreg = _checkMMXreg(MMX_GPR+_Rd_, MODE_WRITE)) >= 0 ) {
-		MOVDMtoMMX(mmreg, (u32)&cpuRegs.sa);
-		SetMMXstate();
-	}
-	else {
-		MOV32MtoR(EAX, (u32)&cpuRegs.sa);
-		_deleteEEreg(_Rd_, 0);
-		MOV32RtoM((u32)&cpuRegs.GPR.r[_Rd_].UL[0], EAX);
-		MOV32ItoM((u32)&cpuRegs.GPR.r[_Rd_].UL[1], 0);
-	}
-}
-
-static void recMTSA( void ) 
-{
-	if( GPR_IS_CONST1(_Rs_) ) {
-		MOV32ItoM((u32)&cpuRegs.sa, g_cpuConstRegs[_Rs_].UL[0] );
-	}
-	else {
-		int mmreg;
-		
-		if( (mmreg = _checkXMMreg(XMMTYPE_GPRREG, _Rs_, MODE_READ)) >= 0 ) {
-			SSE_MOVSS_XMM_to_M32((u32)&cpuRegs.sa, mmreg);
-		}
-		else if( (mmreg = _checkMMXreg(MMX_GPR+_Rs_, MODE_READ)) >= 0 ) {
-			MOVDMMXtoM((u32)&cpuRegs.sa, mmreg);
-			SetMMXstate();
-		}
-		else {
-			MOV32MtoR(EAX, (u32)&cpuRegs.GPR.r[_Rs_].UL[0]);
-			MOV32RtoM((u32)&cpuRegs.sa, EAX);
-		}
-	}
-}
+REC_SYS(CACHE);
 
 /*
 void recTGE( void ) 
@@ -248,33 +183,6 @@ void recTNEI( void )
 }
 
 */
-static void recMTSAB( void ) 
-{
-	if( GPR_IS_CONST1(_Rs_) ) {
-		MOV32ItoM((u32)&cpuRegs.sa, ((g_cpuConstRegs[_Rs_].UL[0] & 0xF) ^ (_Imm_ & 0xF)) << 3);
-	}
-	else {
-		_eeMoveGPRtoR(EAX, _Rs_);
-		AND32ItoR(EAX, 0xF);
-		XOR32ItoR(EAX, _Imm_&0xf);
-		SHL32ItoR(EAX, 3);
-		MOV32RtoM((u32)&cpuRegs.sa, EAX);
-	}
-}
-
-static void recMTSAH( void ) 
-{
-	if( GPR_IS_CONST1(_Rs_) ) {
-		MOV32ItoM((u32)&cpuRegs.sa, ((g_cpuConstRegs[_Rs_].UL[0] & 0x7) ^ (_Imm_ & 0x7)) << 4);
-	}
-	else {
-		_eeMoveGPRtoR(EAX, _Rs_);
-		AND32ItoR(EAX, 0x7);
-		XOR32RtoR(EAX, _Imm_&0x7);
-		SHL32ItoR(EAX, 4);
-		MOV32RtoM((u32)&cpuRegs.sa, EAX);
-	}
-}
 
 /////////////////////////////////
 // Foward-Prob Function Tables //
@@ -282,6 +190,12 @@ static void recMTSAH( void )
 extern void recCOP2( void );
 extern void recSYSCALL( void );
 extern void recBREAK( void );
+extern void recPREF( void );
+extern void recSYNC( void );
+extern void recMFSA( void );
+extern void recMTSA( void );
+extern void recMTSAB( void );
+extern void recMTSAH( void );
 
 void (*recBSC[64] )() = {
     recSPECIAL, recREGIMM, recJ,    recJAL,   recBEQ,  recBNE,  recBLEZ,  recBGTZ,
@@ -294,7 +208,7 @@ void (*recBSC[64] )() = {
     recNULL,    recSWC1,   recNULL, recNULL,  recNULL, recNULL, recSQC2,  recSD
 };
 
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
 // coissued insts
 void (*recBSC_co[64] )() = {
     recNULL,	recNULL,   recNULL, recNULL,  recNULL, recNULL, recNULL,  recNULL,
@@ -507,6 +421,7 @@ void (*recMMI3t[32] )() = {
 #define rpropSetFPUWrite(reg, mask) { \
 	rpropSetFPUWrite0(reg, mask, EEINST_LIVE0); \
 } \
+
 
 void rpropBSC(EEINST* prev, EEINST* pinst);
 void rpropSPECIAL(EEINST* prev, EEINST* pinst);
@@ -1366,3 +1281,5 @@ void rpropMMI3(EEINST* prev, EEINST* pinst)
 			break;
 	}
 }
+
+#endif // PCSX2_NORECBUILD

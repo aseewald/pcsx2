@@ -34,7 +34,7 @@
 				OptimizeForProcessor="0"
 				OptimizeForWindowsApplication="FALSE"
 				AdditionalIncludeDirectories="./;../../;../../IPU;../../ZLIB;../../DebugTools;../../x86;&quot;../../x86/ix86-32&quot;;../libs;../../pcl"
-				PreprocessorDefinitions="NDEBUG,WIN32,_WINDOWS,__MSCW32__,__WIN32__,__i386__,ENABLE_NLS,PACKAGE=\&quot;pcsx2\&quot;;WIN32_VIRTUAL_MEM;PCSX2_DEVBUILD"
+				PreprocessorDefinitions="NDEBUG,WIN32,_WINDOWS,__MSCW32__,__WIN32__,__i386__,ENABLE_NLS,PACKAGE=\&quot;pcsx2\&quot;;PCSX2_VIRTUAL_MEM;PCSX2_DEVBUILD"
 				StringPooling="TRUE"
 				MinimalRebuild="FALSE"
 				ExceptionHandling="TRUE"
@@ -49,6 +49,7 @@
 				ProgramDataBaseFileName=".\Release/"
 				WarningLevel="3"
 				SuppressStartupBanner="TRUE"
+				DebugInformationFormat="0"
 				CompileAs="0"/>
 			<Tool
 				Name="VCCustomBuildTool"/>
@@ -105,7 +106,7 @@
 				Optimization="0"
 				OptimizeForProcessor="2"
 				AdditionalIncludeDirectories="./;../../;../../IPU;../../ZLIB;../../DebugTools;../../x86;&quot;../../x86/ix86-32&quot;;../libs;../../pcl"
-				PreprocessorDefinitions="_DEBUG,WIN32,_WINDOWS,__MSCW32__,__WIN32__,__i386__,ENABLE_NLS,PACKAGE=\&quot;pcsx2\&quot;;WIN32_VIRTUAL_MEM;PCSX2_DEVBUILD"
+				PreprocessorDefinitions="_DEBUG,WIN32,_WINDOWS,__MSCW32__,__WIN32__,__i386__,ENABLE_NLS,PACKAGE=\&quot;pcsx2\&quot;;PCSX2_VIRTUAL_MEM;PCSX2_DEVBUILD"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="5"
 				StructMemberAlignment="5"
@@ -326,7 +327,7 @@
 				OptimizeForProcessor="2"
 				OptimizeForWindowsApplication="FALSE"
 				AdditionalIncludeDirectories="./;../../;../../IPU;../../ZLIB;../../DebugTools;../../x86;&quot;../../x86/ix86-32&quot;;../libs;../../pcl"
-				PreprocessorDefinitions="NDEBUG,WIN32,_WINDOWS,__MSCW32__,__WIN32__,__i386__,ENABLE_NLS,PACKAGE=\&quot;pcsx2\&quot;;WIN32_VIRTUAL_MEM"
+				PreprocessorDefinitions="NDEBUG,WIN32,_WINDOWS,__MSCW32__,__WIN32__,__i386__,ENABLE_NLS,PACKAGE=\&quot;pcsx2\&quot;;PCSX2_VIRTUAL_MEM"
 				StringPooling="TRUE"
 				MinimalRebuild="FALSE"
 				ExceptionHandling="TRUE"
@@ -414,9 +415,6 @@
 			</File>
 			<File
 				RelativePath="..\McdsDlg.h">
-			</File>
-			<File
-				RelativePath="..\..\memcpy_amd.cpp">
 			</File>
 			<File
 				RelativePath="..\PatchBrowser.c">
@@ -699,7 +697,7 @@
 					RelativePath="..\..\tinyxml\tinyxmlparser.cpp">
 				</File>
 				<File
-					RelativePath="..\..\tinyxml\xmlpatchloader.cpp">
+					RelativePath="..\..\xmlpatchloader.cpp">
 				</File>
 			</Filter>
 		</Filter>
@@ -833,6 +831,12 @@
 		<Filter
 			Name="IPU"
 			Filter="">
+			<File
+				RelativePath="..\..\Ipu\coroutine.c">
+			</File>
+			<File
+				RelativePath="..\..\Ipu\coroutine.h">
+			</File>
 			<File
 				RelativePath="..\..\Ipu\idct_mmx.obj">
 			</File>
@@ -1001,6 +1005,47 @@
 			Name="x86"
 			Filter="">
 			<File
+				RelativePath="..\..\x86\ix86-32\aVif_proc-32.asm">
+				<FileConfiguration
+					Name="Release|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						CommandLine="ml /nologo /c /Zi /Fo&quot;$(IntDir)\$(InputName).obj&quot; &quot;$(InputPath)&quot;"
+						Outputs="$(IntDir)\$(InputName).obj"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Debug|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						CommandLine="ml /nologo /c /Zi /Fo&quot;$(IntDir)\$(InputName).obj&quot; &quot;$(InputPath)&quot;"
+						Outputs="$(IntDir)\$(InputName).obj"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Debut TLB|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						CommandLine="ml /nologo /c /Zi /Fo&quot;$(IntDir)\$(InputName).obj&quot; &quot;$(InputPath)&quot;"
+						Outputs="$(IntDir)\$(InputName).obj"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release TLB|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						CommandLine="ml /nologo /c /Zi /Fo&quot;$(IntDir)\$(InputName).obj&quot; &quot;$(InputPath)&quot;"
+						Outputs="$(IntDir)\$(InputName).obj"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release (to Public)|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						CommandLine="ml /nologo /c /Zi /Fo&quot;$(IntDir)\$(InputName).obj&quot; &quot;$(InputPath)&quot;"
+						Outputs="$(IntDir)\$(InputName).obj"/>
+				</FileConfiguration>
+			</File>
+			<File
+				RelativePath="..\..\x86\iCOP2.c">
+			</File>
+			<File
 				RelativePath="..\..\x86\iCore.cpp">
 			</File>
 			<File
@@ -1019,10 +1064,22 @@
 				RelativePath="..\..\x86\iFPU.h">
 			</File>
 			<File
+				RelativePath="..\..\x86\iGS.cpp">
+			</File>
+			<File
+				RelativePath="..\..\x86\iHw.c">
+			</File>
+			<File
 				RelativePath="..\..\x86\iMMI.c">
 			</File>
 			<File
 				RelativePath="..\..\x86\iMMI.h">
+			</File>
+			<File
+				RelativePath="..\..\x86\iPsxHw.c">
+			</File>
+			<File
+				RelativePath="..\..\x86\iPsxMem.c">
 			</File>
 			<File
 				RelativePath="..\..\x86\iR3000A.cpp">
@@ -1034,10 +1091,31 @@
 				RelativePath="..\..\x86\iR3000Atables.cpp">
 			</File>
 			<File
-				RelativePath="..\..\x86\iR5900.c">
+				RelativePath="..\..\x86\iR5900.h">
 			</File>
 			<File
-				RelativePath="..\..\x86\iR5900.h">
+				RelativePath="..\..\x86\iR5900Arit.h">
+			</File>
+			<File
+				RelativePath="..\..\x86\iR5900AritImm.h">
+			</File>
+			<File
+				RelativePath="..\..\x86\iR5900Branch.h">
+			</File>
+			<File
+				RelativePath="..\..\x86\iR5900Jump.h">
+			</File>
+			<File
+				RelativePath="..\..\x86\iR5900LoadStore.h">
+			</File>
+			<File
+				RelativePath="..\..\x86\iR5900Move.h">
+			</File>
+			<File
+				RelativePath="..\..\x86\iR5900MultDiv.h">
+			</File>
+			<File
+				RelativePath="..\..\x86\iR5900Shift.h">
 			</File>
 			<File
 				RelativePath="..\..\x86\ir5900tables.c">
@@ -1072,9 +1150,6 @@
 			<File
 				RelativePath="..\..\x86\iVUzerorec.h">
 			</File>
-			<File
-				RelativePath="..\..\x86\recCOP2.c">
-			</File>
 			<Filter
 				Name="ix86"
 				Filter="">
@@ -1104,53 +1179,42 @@
 				Name="ix86-32"
 				Filter="">
 				<File
-					RelativePath="..\..\x86\ix86-32\iR5900Arit.c">
+					RelativePath="..\..\x86\fast_routines.cpp">
 				</File>
 				<File
-					RelativePath="..\..\x86\ix86-32\iR5900Arit.h">
+					RelativePath="..\..\x86\ix86-32\iCore-32.cpp">
+				</File>
+				<File
+					RelativePath="..\..\x86\ix86-32\iR5900-32.c">
+				</File>
+				<File
+					RelativePath="..\..\x86\ix86-32\iR5900Arit.c">
 				</File>
 				<File
 					RelativePath="..\..\x86\ix86-32\iR5900AritImm.c">
 				</File>
 				<File
-					RelativePath="..\..\x86\ix86-32\iR5900AritImm.h">
-				</File>
-				<File
 					RelativePath="..\..\x86\ix86-32\iR5900Branch.c">
-				</File>
-				<File
-					RelativePath="..\..\x86\ix86-32\iR5900Branch.h">
 				</File>
 				<File
 					RelativePath="..\..\x86\ix86-32\iR5900Jump.c">
 				</File>
 				<File
-					RelativePath="..\..\x86\ix86-32\iR5900Jump.h">
-				</File>
-				<File
 					RelativePath="..\..\x86\ix86-32\iR5900LoadStore.c">
-				</File>
-				<File
-					RelativePath="..\..\x86\ix86-32\iR5900LoadStore.h">
 				</File>
 				<File
 					RelativePath="..\..\x86\ix86-32\iR5900Move.c">
 				</File>
 				<File
-					RelativePath="..\..\x86\ix86-32\iR5900Move.h">
-				</File>
-				<File
 					RelativePath="..\..\x86\ix86-32\iR5900MultDiv.c">
-				</File>
-				<File
-					RelativePath="..\..\x86\ix86-32\iR5900MultDiv.h">
 				</File>
 				<File
 					RelativePath="..\..\x86\ix86-32\iR5900Shift.c">
 				</File>
-				<File
-					RelativePath="..\..\x86\ix86-32\iR5900Shift.h">
-				</File>
+			</Filter>
+			<Filter
+				Name="ix86-64"
+				Filter="">
 			</Filter>
 		</Filter>
 		<Filter
@@ -1221,19 +1285,6 @@
 			</File>
 			<File
 				RelativePath="..\..\zlib\zutil.h">
-			</File>
-		</Filter>
-		<Filter
-			Name="PCL"
-			Filter="">
-			<File
-				RelativePath="..\..\pcl\pcl.c">
-			</File>
-			<File
-				RelativePath="..\..\pcl\pcl.h">
-			</File>
-			<File
-				RelativePath="..\..\pcl\pcl_config.h">
 			</File>
 		</Filter>
 		<File

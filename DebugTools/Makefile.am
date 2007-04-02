@@ -1,4 +1,4 @@
-INCLUDES = -I../
+INCLUDES = -I@srcdir@/../
 noinst_LIBRARIES = libDebugTools.a
 
 libDebugTools_a_SOURCES = \

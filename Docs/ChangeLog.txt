@@ -7,6 +7,9 @@
 [ dates are dd/mm/yyyy !!!   ]
 
 ChangeLog:
+ v0.9.3:
+ * 26/11/06 [*] Version 0.9.3 started :)
+			(Refraction)
  v0.9.2:
  * 30/10/06:[*] Improved the way Unpacks are handled slightly, just so its a little quicker (not much)
 			[-] MMI bug causing corrupt characters on Max Payne fixed

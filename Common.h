@@ -26,7 +26,11 @@
 #include <zlib.h>
 #include <string.h>
 
-#if defined(__WIN32__)
+#if defined(__x86_64__)
+#define DONT_USE_GETTEXT
+#endif
+
+#if defined(_WIN32)
 
 #include <windows.h>
 
@@ -79,35 +83,11 @@ extern AppData gApp;
 
 #include <sys/types.h>
 #include <stdlib.h> // posix_memalign()
-#define BOOL int
-
-#undef TRUE
-#define TRUE  1
-#undef FALSE
-#define FALSE 0
-
-#ifndef max
-#define max(a,b)            (((a) > (b)) ? (a) : (b))
-#endif
-
-#ifndef min
-#define min(a,b)            (((a) < (b)) ? (a) : (b))
-#endif
-
-#ifndef strnicmp
-#define strnicmp strncasecmp
-#endif
-
-#ifndef stricmp
-#define stricmp strcasecmp
-#endif
 
 // Definitions added Feb 16, 2006 by efp
-#ifndef __declspec
-#define __declspec(x)
-#endif
-
-#define pthread_mutex__unlock pthread_mutex_unlock
+//#ifndef __declspec
+//#define __declspec(x)
+//#endif
 
 #endif
 
@@ -116,7 +96,8 @@ extern AppData gApp;
 #ifdef __MSCW32__
 #include "libintlmsc.h"
 #else
-#include "libintl.h"
+#include <locale.h>
+#include <libintl.h>
 #endif
 
 #undef _
@@ -135,8 +116,6 @@ extern AppData gApp;
 #endif
 
 #include "PS2Etypes.h"
-
-#ifdef PCSX2_DEVBUILD
 
 typedef struct _TESTRUNARGS
 {
@@ -158,8 +137,6 @@ typedef struct _TESTRUNARGS
 } TESTRUNARGS;
 
 extern TESTRUNARGS g_TestRun;
-
-#endif
 
 #define BIAS 2   // Bus is half of the actual ps2 speed
 //#define PS2CLK   36864000	/* 294.912 mhz */
@@ -230,9 +207,9 @@ extern TESTRUNARGS g_TestRun;
 #include "Sif.h"
 #include "Plugins.h"
 #include "PS2Edefs.h"
+#include "Misc.h"
 #include "Counters.h"
 #include "IPU/IPU.h"
-#include "Misc.h"
 #include "Patch.h"
 #include "COP0.h"
 #include "VifDma.h"
@@ -245,7 +222,7 @@ int cdCaseopen;
 extern void __Log(char *fmt, ...);
 extern u16 logProtocol;
 extern u8  logSource;
-#define PCSX2_VERSION "0.9.2"
+#define PCSX2_VERSION "0.9.3"
 
 // C++ code for sqrtf
 void InitFPUOps();

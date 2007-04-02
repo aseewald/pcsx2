@@ -16,6 +16,9 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+// stop compiling if NORECBUILD build (only for Visual Studio)
+#if !(defined(_MSC_VER) && defined(PCSX2_NORECBUILD))
+
 // recompiler reworked to add dynamic linking zerofrog(@gmail.com) Jan06
 
 #include <stdlib.h>
@@ -27,7 +30,7 @@
 #include "ix86/ix86.h"
 #include "iR5900.h"
 
-#ifdef __WIN32__
+#ifdef _WIN32
 #pragma warning(disable:4244)
 #pragma warning(disable:4761)
 #endif
@@ -129,3 +132,5 @@ void recJALR( void )
 }
 
 #endif
+
+#endif // PCSX2_NORECBUILD

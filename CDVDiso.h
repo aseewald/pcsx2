@@ -12,7 +12,7 @@ int CDVD_findfile(char* fname, struct TocEntry* tocEntry);
 int CDVD_GetDir_RPC_request(char* pathname, char* extensions, unsigned int inc_dirs);
 int CDVD_GetDir_RPC_get_entries(struct TocEntry tocEntry[], int req_entries);
 
-#if defined(__WIN32__)
+#if defined(_MSC_VER)
 #pragma pack(1)
 #endif
 
@@ -27,7 +27,7 @@ struct rootDirTocHeader
 	u8	reserved[6];	//+1A
 	u8	reserved2;		//+20
 	u8	reserved3;		//+21
-#if defined(__WIN32__)
+#if defined(_MSC_VER)
 };						//+22
 #else
 } __attribute__((packed));
@@ -43,7 +43,7 @@ struct asciiDate
 	char	seconds[2];
 	char	hundreths[2];
 	char	terminator[1];
-#if defined(__WIN32__)
+#if defined(_MSC_VER)
 };
 #else
 } __attribute__((packed));
@@ -85,7 +85,7 @@ struct cdVolDesc
 	struct	asciiDate	expirationDate;
 	u8		reserved10;
 	u8		reserved11[1166];
-#if defined(__WIN32__)
+#if defined(_MSC_VER)
 };
 #else
 } __attribute__((packed));
@@ -98,7 +98,7 @@ struct dirTableEntry
 	u32	dirTOCLBA;
 	u16 dirDepth;
 	u8	dirName[32];
-#if defined(__WIN32__)
+#if defined(_MSC_VER)
 };
 #else
 } __attribute__((packed));
@@ -117,14 +117,14 @@ struct dirTocEntry
 	unsigned char	reserved2[6];
 	unsigned char	filenameLength;
 	unsigned char	filename[128];
-#if defined(__WIN32__)
+#if defined(_MSC_VER)
 };
 #else
 } __attribute__((packed));
 #endif	// This is the internal format on the CD
 // TocEntry structure contains only the important stuff needed for export
 
-#if defined(__WIN32__)
+#if defined(_MSC_VER)
 #pragma pack()
 #endif
 

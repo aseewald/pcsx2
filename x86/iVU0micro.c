@@ -15,6 +15,8 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+// stop compiling if NORECBUILD build (only for Visual Studio)
+#if !(defined(_MSC_VER) && defined(PCSX2_NORECBUILD))
 
 #include <stdlib.h>
 #include <string.h>
@@ -34,7 +36,7 @@
 
 #include "iVUzerorec.h"
 
-#ifdef __MSCW32__
+#ifdef _WIN32
 #pragma warning(disable:4244)
 #pragma warning(disable:4761)
 #endif
@@ -48,23 +50,7 @@ static VURegs * const VU = (VURegs*)&VU0;
 extern u32 vudump;
 #endif
 
-#define VF_VAL(x) ((x==0x80000000)?0:(x))
 static u32 vuprogcount = 0;
-void iDumpVU0Registers()
-{
-	int i;
-	
-	for(i = 1; i < 32; ++i) {
-		__Log("v%d: %x %x %x %x, vi: ", i, VF_VAL(VU0.VF[i].UL[3]), VF_VAL(VU0.VF[i].UL[2]),
-			VF_VAL(VU0.VF[i].UL[1]), VF_VAL(VU0.VF[i].UL[0]));
-		if( i == REG_Q || i == REG_P ) __Log("%f\n", VU0.VI[i].F);
-		else if( i == REG_MAC_FLAG ) __Log("%x\n", 0);//VU0.VI[i].UL&0xff);
-		else if( i == REG_STATUS_FLAG ) __Log("%x\n", 0);//VU0.VI[i].UL&0x03);
-		else if( i == REG_CLIP_FLAG ) __Log("0\n");
-		else __Log("%x\n", VU0.VI[i].UL);
-	}
-	__Log("vfACC: %f %f %f %f\n", VU0.ACC.F[3], VU0.ACC.F[2], VU0.ACC.F[1], VU0.ACC.F[0]);
-}
 
 void recExecuteVU0Block( void )
 {
@@ -79,8 +65,8 @@ void recExecuteVU0Block( void )
 //	__Log("VU: %x %x\n", VU0.VI[ REG_TPC ].UL, vuprogcount);
 //	iDumpVU0Registers();
 
-//	vudump |= 0x10;
-//	vudump |= 0x80;
+	//vudump |= 0x10;
+	//vudump |= 0x80;
 
 	if( (vudump&0x80) && !CHECK_VU0REC ) {
 		__Log("tVU: %x\n", VU0.VI[ REG_TPC ].UL);
@@ -91,7 +77,7 @@ void recExecuteVU0Block( void )
 	//while( (VU0.VI[ REG_VPU_STAT ].UL&1) ) {
 		if( CHECK_VU0REC) {
 			FreezeXMMRegs(1);
-			SuperVUExecuteProgram(VU0.VI[ REG_TPC ].UL, 0);
+			SuperVUExecuteProgram(VU0.VI[ REG_TPC ].UL&0xfff, 0);
 		}
 		else {
 			intExecuteVU0Block();
@@ -253,7 +239,7 @@ void (*recVU0_UPPER_FD_01_TABLE[32])() = {
 void (*recVU0_UPPER_FD_10_TABLE[32])() = { 
 	recVU0MI_ADDAz , recVU0MI_SUBAz  , recVU0MI_MADDAz, recVU0MI_MSUBAz, 
 	recVU0MI_ITOF12, recVU0MI_FTOI12, recVU0MI_MULAz , recVU0MI_MULAi , 
-	recVU0MI_MADDAi, recVU0MI_SUBAi , recVU0MI_MULA  , recVU0MI_OPMULA, 
+	recVU0MI_ADDAi, recVU0MI_SUBAi , recVU0MI_MULA  , recVU0MI_OPMULA, 
 	recVU0unknown  , recVU0unknown  , recVU0unknown  , recVU0unknown  , 
 	recVU0unknown  , recVU0unknown  , recVU0unknown  , recVU0unknown  , 
 	recVU0unknown  , recVU0unknown  , recVU0unknown  , recVU0unknown  , 
@@ -788,3 +774,4 @@ void recVU0MI_JALR()    { REC_VUOP(VU0, JALR); }
 
 #endif
 
+#endif // PCSX2_NORECBUILD

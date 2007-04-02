@@ -45,6 +45,7 @@ void patchFunc_gametitle( char * text1, char * text2 );
 void patchFunc_patch( char * text1, char * text2 );
 void patchFunc_fastmemory( char * text1, char * text2 );
 void patchFunc_roundmode( char * text1, char * text2 );
+void patchFunc_zerogs( char * text1, char * text2 );
 
 void inifile_trim( char * buffer );
 
@@ -69,9 +70,8 @@ void resetpatch( void );
 int AddPatch(int Mode, int Place, int Address, int Size, u64 data);
 
 void SetFastMemory(int); // iR5900LoadStore.c
+void SetCPUState(u32 sseMXCSR, u32 sseVUMXCSR);
 
-extern u32 g_sseMXCSR, g_sseVUMXCSR; // iR5900.c
-void SetCPUState();
 void SetRoundMode(u32 ee, u32 vu);
 
 #endif /* __PATCH_H__ */

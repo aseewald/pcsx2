@@ -16,10 +16,19 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+// NOTE: x86-64 recompiler doesn't support mmx
 #ifndef _PCSX2_CORE_RECOMPILER_
 #define _PCSX2_CORE_RECOMPILER_
 
+#include "ix86/ix86.h"
 #include "iVUmicro.h"
+
+#if defined(__x86_64__) && defined(_MSC_VER)
+// xp64 has stack shadow memory
+#define REC_INC_STACK 48
+#else
+#define REC_INC_STACK 0
+#endif
 
 // used to keep block information
 #define BLOCKTYPE_STARTPC	4		// startpc offset
@@ -51,9 +60,6 @@ typedef struct _BASEBLOCKEX
 #define GET_BLOCKTYPE(b) ((b)->Type)
 #define PC_GETBLOCK_(x, reclut) ((BASEBLOCK*)(reclut[((u32)(x)) >> 16] + (sizeof(BASEBLOCK)/4)*((x) & 0xffff)))
 
-#define FPU_STATE 0
-#define MMX_STATE 1
-
 #define X86TYPE_TEMP 0
 #define X86TYPE_GPR 1
 #define X86TYPE_VI 2
@@ -67,6 +73,7 @@ typedef struct _BASEBLOCKEX
 #define X86TYPE_PCWRITEBACK 10
 #define X86TYPE_VUJUMP 12		// jump from random mem (g_recWriteback)
 #define X86TYPE_VITEMP 13
+#define X86TYPE_FNARG 14        // function parameter, max is 4
 
 #define X86TYPE_VU1 0x80
 
@@ -84,6 +91,7 @@ typedef struct {
 
 extern _x86regs x86regs[X86REGS], s_saveX86regs[X86REGS];
 
+uptr _x86GetAddr(int type, int reg);
 void _initX86regs();
 int  _getFreeX86reg(int mode);
 int  _allocX86reg(int x86reg, int type, int reg, int mode);
@@ -92,65 +100,20 @@ int _checkX86reg(int type, int reg, int mode);
 void _addNeededX86reg(int type, int reg);
 void _clearNeededX86regs();
 void _freeX86reg(int x86reg);
+void _flushX86regs();
 void _freeX86regs();
+void _freeX86tempregs();
+u8 _hasFreeX86reg();
 
-void _eeSetLoadStoreReg(int gprreg, u32 offset, int x86reg);
-int _eeGeLoadStoreReg(int gprreg, int* poffset);
-
-void recReset();
+// see MEM_X defines for argX format
+void _callPushArg(u32 arg, uptr argmem, x86IntRegType X86ARG); /// X86ARG is ignored for 32bit recs
+void _callFunctionArg1(uptr fn, u32 arg1, uptr arg1mem);
+void _callFunctionArg2(uptr fn, u32 arg1, u32 arg2, uptr arg1mem, uptr arg2mem);
+void _callFunctionArg3(uptr fn, u32 arg1, u32 arg2, u32 arg3, uptr arg1mem, uptr arg2mem, uptr arg3mem);
 
 // when using mmx/xmm regs, use; 0 is load
 // freezes no matter the state
-void FreezeMMXRegs_(int save);
 void FreezeXMMRegs_(int save);
-void SetFPUstate();
-void SetMMXstate();
-
-#define MODE_READ		1
-#define MODE_WRITE		2
-#define MODE_READHALF	4 // read only low 64 bits
-#define MODE_VUXY		0x8	// vector only has xy valid (real zw are in mem), not the same as MODE_READHALF
-#define MODE_VUZ		0x10 // z only doesn't work for now
-#define MODE_VUXYZ		(MODE_VUZ|MODE_VUXY) // vector only has xyz valid (real w is in memory)
-#define MODE_NOFLUSH	0x20	// can't flush reg to mem
-#define MODE_NOFRAME	0x40	// when allocating x86regs, don't use ebp reg
-#define MODE_8BITREG	0x80	// when allocating x86regs, use only eax, ecx, edx, and ebx
-
-// max is 0x7f, when 0x80 is set, need to flush reg
-#define MMX_GET_CACHE(ptr, index) ((u8*)ptr)[index]
-#define MMX_SET_CACHE(ptr, ind3, ind2, ind1, ind0) ((u32*)ptr)[0] = (ind3<<24)|(ind2<<16)|(ind1<<8)|ind0;
-#define MMX_GPR 0
-#define MMX_HI	32
-#define MMX_LO	33
-#define MMX_FPUACC 34
-#define MMX_FPU	64
-#define MMX_COP0 96
-#define MMX_TEMP 0x7f
-
-#define MMX_IS32BITS(x) (((x)>=MMX_FPU&&(x)<MMX_COP0+32)||(x)==MMX_FPUACC)
-#define MMX_ISGPR(x) ((x) >= MMX_GPR && (x) < MMX_GPR+34)
-
-typedef struct {
-	u8 inuse;
-	u8 reg; // value of 0 - not used
-	u8 mode;
-	u8 needed;
-	u16 counter;
-} _mmxregs;
-
-void _initMMXregs();
-int  _getFreeMMXreg();
-int  _allocMMXreg(int MMXreg, int reg, int mode);
-void _addNeededMMXreg(int reg);
-int _checkMMXreg(int reg, int mode);
-void _clearNeededMMXregs();
-void _deleteMMXreg(int reg, int flush);
-void _freeMMXreg(int mmxreg);
-void _moveMMXreg(int mmxreg); // instead of freeing, moves it to a diff location
-void _flushMMXregs();
-u8 _hasFreeMMXreg();
-void _freeMMXregs();
-int _getNumMMXwrite();
 
 void _flushCachedRegs();
 void _flushConstRegs();
@@ -208,8 +171,8 @@ void _flushConstReg(int reg);
 #define XMMTYPE_GPRREG	5
 
 // lo and hi regs
-#define XMMGPR_LO	MMX_LO
-#define XMMGPR_HI	MMX_HI
+#define XMMGPR_LO	33
+#define XMMGPR_HI	32
 #define XMMFPU_ACC	32
 
 typedef struct {
@@ -254,12 +217,22 @@ int _getNumXMMwrite();
 #define FLUSH_FREE_XMM 4 // both flushes and frees
 #define FLUSH_FLUSH_MMX 8
 #define FLUSH_FREE_MMX 16  // both flushes and frees
+#define FLUSH_FLUSH_ALLX86 32 // flush x86
+#define FLUSH_FREE_TEMPX86 64 // flush and free temporary x86 regs
+#define FLUSH_FREE_ALLX86 128 // free all x86 regs
+#define FLUSH_FREE_VU0 0x100  // free all vu0 related regs
 
-#define FLUSH_EVERYTHING 0xff
+#define FLUSH_EVERYTHING 0xfff
 // no freeing, used when callee won't destroy mmx/xmm regs
-#define FLUSH_NODESTROY (FLUSH_CACHED_REGS|FLUSH_FLUSH_XMM|FLUSH_FLUSH_MMX)
+#define FLUSH_NODESTROY (FLUSH_CACHED_REGS|FLUSH_FLUSH_XMM|FLUSH_FLUSH_MMX|FLUSH_FLUSH_ALLX86)
 // used when regs aren't going to be changed be callee
-#define FLUSH_NOCONST	(FLUSH_FREE_XMM|FLUSH_FREE_MMX)
+#define FLUSH_NOCONST	(FLUSH_FREE_XMM|FLUSH_FREE_MMX|FLUSH_FREE_TEMPX86)
+
+#ifdef __x86_64__
+#define IS_X8664 1
+#else
+#define IS_X8664 0
+#endif
 
 // Note: All functions with _ee prefix are for EE only
 
@@ -276,30 +249,35 @@ void _psxMoveGPRtoRm(x86IntRegType to, int fromgpr);
 void _recPushReg(int mmreg);
 
 void _signExtendSFtoM(u32 mem);
-int _signExtendMtoMMX(x86MMXRegType to, u32 mem);
-int _signExtendGPRMMXtoMMX(x86MMXRegType to, u32 gprreg, x86MMXRegType from, u32 gprfromreg);
 
 // returns new index of reg, lower 32 bits already in mmx
 // shift is used when the data is in the top bits of the mmx reg to begin with
 // a negative shift is for sign extension
-int _signExtendGPRtoMMX(x86MMXRegType to, u32 gprreg, int shift);
 int _signExtendXMMtoM(u32 to, x86SSERegType from, int candestroy); // returns true if reg destroyed
 
 // Defines for passing register info
 
 // only valid during writes. If write128, then upper 64bits are in an mmxreg
 // (mmreg&0xf). Constant is used from gprreg ((mmreg>>16)&0x1f)
-#define MEM_EECONSTTAG 0x0100
+#define MEM_EECONSTTAG 0x0100 // argument is a GPR and comes from g_cpuConstRegs
 #define MEM_PSXCONSTTAG 0x0200
+#define MEM_MEMORYTAG 0x0400
 // mmreg is mmxreg
 #define MEM_MMXTAG 0x0800
 // mmreg is xmmreg
 #define MEM_XMMTAG 0x8000
+#define MEM_X86TAG 0x4000 // ignored most of the time
+#define MEM_GPRTAG 0x2000 // argument is a GPR reg
+#define MEM_CONSTTAG 0x1000 // argument is a const
 
-#define IS_CONSTREG(reg) (reg>=0&&((reg)&MEM_EECONSTTAG))
+#define IS_EECONSTREG(reg) (reg>=0&&((reg)&MEM_EECONSTTAG))
 #define IS_PSXCONSTREG(reg) (reg>=0&&((reg)&MEM_PSXCONSTTAG))
 #define IS_MMXREG(reg) (reg>=0&&((reg)&MEM_MMXTAG))
 #define IS_XMMREG(reg) (reg>=0&&((reg)&MEM_XMMTAG))
+#define IS_X86REG(reg) (reg>=0&&((reg)&MEM_X86TAG))
+#define IS_GPRREG(reg) (reg>=0&&((reg)&MEM_GPRTAG))
+#define IS_CONSTREG(reg) (reg>=0&&((reg)&MEM_CONSTTAG))
+#define IS_MEMORYREG(reg) (reg>=0&&((reg)&MEM_MEMORYTAG))
 
 //////////////////////
 // Instruction Info //
@@ -345,7 +323,7 @@ int _recIsRegWritten(EEINST* pinst, int size, u8 xmmtype, u8 reg);
 int _recIsRegUsed(EEINST* pinst, int size, u8 xmmtype, u8 reg);
 void _recFillRegister(EEINST* pinst, int type, int reg, int write);
 
-#define EEINST_ISLIVEMMX(reg) (g_pCurInstInfo->regs[reg] & (EEINST_LIVE0|EEINST_LIVE1))
+#define EEINST_ISLIVE64(reg) (g_pCurInstInfo->regs[reg] & (EEINST_LIVE0|EEINST_LIVE1))
 #define EEINST_ISLIVEXMM(reg) (g_pCurInstInfo->regs[reg] & (EEINST_LIVE0|EEINST_LIVE1|EEINST_LIVE2))
 #define EEINST_ISLIVE1(reg) (g_pCurInstInfo->regs[reg] & EEINST_LIVE1)
 #define EEINST_ISLIVE2(reg) (g_pCurInstInfo->regs[reg] & EEINST_LIVE2)
@@ -381,21 +359,94 @@ extern u32 g_recWriteback; // used for jumps
 extern u32 g_cpuRegHasLive1, g_cpuPrevRegHasLive1;
 extern u32 g_cpuRegHasSignExt, g_cpuPrevRegHasSignExt;
 
-extern u16 x86FpuState, iCWstate;
-extern u8 g_globalMMXSaved, g_globalXMMSaved;
-extern _mmxregs mmxregs[MMXREGS], s_saveMMXregs[MMXREGS];
+extern u8 g_globalXMMSaved;
 extern _xmmregs xmmregs[XMMREGS], s_saveXMMregs[XMMREGS];
 
 #ifdef _DEBUG
-extern char g_globalMMXLocked, g_globalXMMLocked;
+extern char g_globalXMMLocked;
 #endif
 
 // allocates only if later insts use XMM, otherwise checks
 int _allocCheckGPRtoXMM(EEINST* pinst, int gprreg, int mode);
 int _allocCheckFPUtoXMM(EEINST* pinst, int fpureg, int mode);
-int _allocCheckGPRtoMMX(EEINST* pinst, int reg, int mode);
+
+// allocates only if later insts use this register
+int _allocCheckGPRtoX86(EEINST* pinst, int gprreg, int mode);
+
+// 0 - ee, 1 - iop
+void AddBaseBlockEx(BASEBLOCKEX*, int cpu);
+void RemoveBaseBlockEx(BASEBLOCKEX*, int cpu);
+BASEBLOCKEX* GetBaseBlockEx(u32 startpc, int cpu);
+void ResetBaseBlockEx(int cpu);
+
+BASEBLOCKEX** GetAllBaseBlocks(int* pnum, int cpu);
+
+#define MODE_READ		1
+#define MODE_WRITE		2
+#define MODE_READHALF	4 // read only low 64 bits
+#define MODE_VUXY		0x8	// vector only has xy valid (real zw are in mem), not the same as MODE_READHALF
+#define MODE_VUZ		0x10 // z only doesn't work for now
+#define MODE_VUXYZ		(MODE_VUZ|MODE_VUXY) // vector only has xyz valid (real w is in memory)
+#define MODE_NOFLUSH	0x20	// can't flush reg to mem
+#define MODE_NOFRAME	0x40	// when allocating x86regs, don't use ebp reg
+#define MODE_8BITREG	0x80	// when allocating x86regs, use only eax, ecx, edx, and ebx
+
+void SetMMXstate();
+void cpudetectSSE3(void* pfnCallSSE3);
 
 void _recMove128MtoM(u32 to, u32 from);
+
+#ifndef __x86_64__
+/////////////////////
+// MMX x86-32 only //
+/////////////////////
+
+#define FPU_STATE 0
+#define MMX_STATE 1
+
+void FreezeMMXRegs_(int save);
+void SetFPUstate();
+
+// max is 0x7f, when 0x80 is set, need to flush reg
+#define MMX_GET_CACHE(ptr, index) ((u8*)ptr)[index]
+#define MMX_SET_CACHE(ptr, ind3, ind2, ind1, ind0) ((u32*)ptr)[0] = (ind3<<24)|(ind2<<16)|(ind1<<8)|ind0;
+#define MMX_GPR 0
+#define MMX_HI	XMMGPR_HI
+#define MMX_LO	XMMGPR_LO
+#define MMX_FPUACC 34
+#define MMX_FPU	64
+#define MMX_COP0 96
+#define MMX_TEMP 0x7f
+
+#define MMX_IS32BITS(x) (((x)>=MMX_FPU&&(x)<MMX_COP0+32)||(x)==MMX_FPUACC)
+#define MMX_ISGPR(x) ((x) >= MMX_GPR && (x) < MMX_GPR+34)
+
+typedef struct {
+	u8 inuse;
+	u8 reg; // value of 0 - not used
+	u8 mode;
+	u8 needed;
+	u16 counter;
+} _mmxregs;
+
+void _initMMXregs();
+int  _getFreeMMXreg();
+int  _allocMMXreg(int MMXreg, int reg, int mode);
+void _addNeededMMXreg(int reg);
+int _checkMMXreg(int reg, int mode);
+void _clearNeededMMXregs();
+void _deleteMMXreg(int reg, int flush);
+void _freeMMXreg(int mmxreg);
+void _moveMMXreg(int mmxreg); // instead of freeing, moves it to a diff location
+void _flushMMXregs();
+u8 _hasFreeMMXreg();
+void _freeMMXregs();
+int _getNumMMXwrite();
+
+int _signExtendMtoMMX(x86MMXRegType to, u32 mem);
+int _signExtendGPRMMXtoMMX(x86MMXRegType to, u32 gprreg, x86MMXRegType from, u32 gprfromreg);
+int _allocCheckGPRtoMMX(EEINST* pinst, int reg, int mode);
+
 void _recMove128RmOffsettoM(u32 to, u32 offset);
 void _recMove128MtoRmOffset(u32 offset, u32 from);
 
@@ -405,17 +456,31 @@ void _recMove128MtoRmOffset(u32 offset, u32 from);
 // op = 3, nor (the 32bit versoins only do OR)
 void LogicalOpRtoR(x86MMXRegType to, x86MMXRegType from, int op);
 void LogicalOpMtoR(x86MMXRegType to, u32 from, int op);
-void LogicalOp32RtoM(u32 to, x86IntRegType from, int op);
-void LogicalOp32MtoR(x86IntRegType to, u32 from, int op);
+
+// returns new index of reg, lower 32 bits already in mmx
+// shift is used when the data is in the top bits of the mmx reg to begin with
+// a negative shift is for sign extension
+int _signExtendGPRtoMMX(x86MMXRegType to, u32 gprreg, int shift);
+
+extern u8 g_globalMMXSaved;
+extern _mmxregs mmxregs[MMXREGS], s_saveMMXregs[MMXREGS];
+extern u16 x86FpuState, iCWstate;
+
+#ifdef _DEBUG
+extern char g_globalMMXLocked;
+#endif
+
+#else
+
+void LogicalOp64RtoR(x86IntRegType to, x86IntRegType from, int op);
+void LogicalOp64RtoM(uptr to, x86IntRegType from, int op);
+void LogicalOp64MtoR(x86IntRegType to, uptr from, int op);
+
+#endif // __x86_64__
+
+void LogicalOp32RtoM(uptr to, x86IntRegType from, int op);
+void LogicalOp32MtoR(x86IntRegType to, uptr from, int op);
 void LogicalOp32ItoR(x86IntRegType to, u32 from, int op);
-void LogicalOp32ItoM(u32 to, u32 from, int op);
-
-// 0 - ee, 1 - iop
-void AddBaseBlockEx(BASEBLOCKEX*, int cpu);
-void RemoveBaseBlockEx(BASEBLOCKEX*, int cpu);
-BASEBLOCKEX* GetBaseBlockEx(u32 startpc, int cpu);
-void ResetBaseBlockEx(int cpu);
-
-BASEBLOCKEX** GetAllBaseBlocks(int* pnum, int cpu);
+void LogicalOp32ItoM(uptr to, u32 from, int op);
 
 #endif

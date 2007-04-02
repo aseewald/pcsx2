@@ -19,7 +19,7 @@
 
 #include <stdlib.h>
 #include "Common.h"
-#include "Debug.h"
+#include "DebugTools/Debug.h"
 #include "R5900.h"
 #include "InterTables.h"
 

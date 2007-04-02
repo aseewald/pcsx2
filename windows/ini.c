@@ -100,7 +100,7 @@ int LoadConfig() {
 
 #ifdef ENABLE_NLS
 	sprintf(text, "LANGUAGE=%s", Conf->Lang);
-#ifdef __MSCW32__
+#ifdef _WIN32
 	gettext_putenv(text);
 #else
 	putenv(text);

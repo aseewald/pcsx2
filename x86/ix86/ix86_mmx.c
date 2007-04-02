@@ -1,3 +1,5 @@
+// stop compiling if NORECBUILD build (only for Visual Studio)
+#if !(defined(_MSC_VER) && defined(PCSX2_NORECBUILD))
 
 #include "ix86.h"
 
@@ -10,7 +12,7 @@
 // r64 = mm
 
 /* movq m64 to r64 */
-void MOVQMtoR( x86MMXRegType to, u32 from )
+void MOVQMtoR( x86MMXRegType to, uptr from )
 {
 	write16( 0x6F0F );
 	ModRM( 0, to, DISP32 );
@@ -18,7 +20,7 @@ void MOVQMtoR( x86MMXRegType to, u32 from )
 }
 
 /* movq r64 to m64 */
-void MOVQRtoM( u32 to, x86MMXRegType from ) 
+void MOVQRtoM( uptr to, x86MMXRegType from ) 
 {
 	write16( 0x7F0F );
 	ModRM( 0, from, DISP32 );
@@ -60,7 +62,7 @@ void PSLLQRtoR( x86MMXRegType to, x86MMXRegType from )
 }
 
 /* psllq m64 to r64 */
-void PSLLQMtoR( x86MMXRegType to, u32 from ) 
+void PSLLQMtoR( x86MMXRegType to, uptr from ) 
 {
 	write16( 0xF30F ); 
 	ModRM( 0, to, DISP32 ); 
@@ -83,7 +85,7 @@ void PSRLQRtoR( x86MMXRegType to, x86MMXRegType from )
 }
 
 /* psrlq m64 to r64 */
-void PSRLQMtoR( x86MMXRegType to, u32 from ) 
+void PSRLQMtoR( x86MMXRegType to, uptr from ) 
 {
 	write16( 0xD30F ); 
 	ModRM( 0, to, DISP32 ); 
@@ -106,7 +108,7 @@ void PADDUSBRtoR( x86MMXRegType to, x86MMXRegType from )
 }
 
 /* paddusb m64 to r64 */
-void PADDUSBMtoR( x86MMXRegType to, u32 from ) 
+void PADDUSBMtoR( x86MMXRegType to, uptr from ) 
 {
 	write16( 0xDC0F ); 
 	ModRM( 0, to, DISP32 ); 
@@ -121,7 +123,7 @@ void PADDUSWRtoR( x86MMXRegType to, x86MMXRegType from )
 }
 
 /* paddusw m64 to r64 */
-void PADDUSWMtoR( x86MMXRegType to, u32 from ) 
+void PADDUSWMtoR( x86MMXRegType to, uptr from ) 
 {
 	write16( 0xDD0F ); 
 	ModRM( 0, to, DISP32 ); 
@@ -136,7 +138,7 @@ void PADDBRtoR( x86MMXRegType to, x86MMXRegType from )
 }
 
 /* paddb m64 to r64 */
-void PADDBMtoR( x86MMXRegType to, u32 from ) 
+void PADDBMtoR( x86MMXRegType to, uptr from ) 
 {
 	write16( 0xFC0F ); 
 	ModRM( 0, to, DISP32 ); 
@@ -151,7 +153,7 @@ void PADDWRtoR( x86MMXRegType to, x86MMXRegType from )
 }
 
 /* paddw m64 to r64 */
-void PADDWMtoR( x86MMXRegType to, u32 from ) 
+void PADDWMtoR( x86MMXRegType to, uptr from ) 
 {
 	write16( 0xFD0F ); 
 	ModRM( 0, to, DISP32 ); 
@@ -166,7 +168,7 @@ void PADDDRtoR( x86MMXRegType to, x86MMXRegType from )
 }
 
 /* paddd m64 to r64 */
-void PADDDMtoR( x86MMXRegType to, u32 from ) 
+void PADDDMtoR( x86MMXRegType to, uptr from ) 
 {
 	write16( 0xFE0F ); 
 	ModRM( 0, to, DISP32 ); 
@@ -192,7 +194,7 @@ void PADDSWRtoR( x86MMXRegType to, x86MMXRegType from )
 }
 
 // paddq m64 to r64 (sse2 only?)
-void PADDQMtoR( x86MMXRegType to, u32 from )
+void PADDQMtoR( x86MMXRegType to, uptr from )
 {
 	write16( 0xD40F ); 
 	ModRM( 0, to, DISP32 ); 
@@ -237,7 +239,7 @@ void PSUBDRtoR( x86MMXRegType to, x86MMXRegType from )
 	ModRM( 3, to, from ); 
 }
 
-void PSUBDMtoR( x86MMXRegType to, u32 from )
+void PSUBDMtoR( x86MMXRegType to, uptr from )
 {
 	write16( 0xFA0F ); 
 	ModRM( 0, to, DISP32 ); 
@@ -257,7 +259,7 @@ void PSUBUSWRtoR( x86MMXRegType to, x86MMXRegType from )
 }
 
 // psubq m64 to r64 (sse2 only?)
-void PSUBQMtoR( x86MMXRegType to, u32 from )
+void PSUBQMtoR( x86MMXRegType to, uptr from )
 {
 	write16( 0xFB0F ); 
 	ModRM( 0, to, DISP32 ); 
@@ -272,7 +274,7 @@ void PSUBQRtoR( x86MMXRegType to, x86MMXRegType from )
 }
 
 // pmuludq m64 to r64 (sse2 only?)
-void PMULUDQMtoR( x86MMXRegType to, u32 from )
+void PMULUDQMtoR( x86MMXRegType to, uptr from )
 {
 	write16( 0xF40F ); 
 	ModRM( 0, to, DISP32 ); 
@@ -304,7 +306,7 @@ void PCMPEQDRtoR( x86MMXRegType to, x86MMXRegType from )
 	ModRM( 3, to, from ); 
 }
 
-void PCMPEQDMtoR( x86MMXRegType to, u32 from )
+void PCMPEQDMtoR( x86MMXRegType to, uptr from )
 {
 	write16( 0x760F );
 	ModRM( 0, to, DISP32 ); 
@@ -329,7 +331,7 @@ void PCMPGTDRtoR( x86MMXRegType to, x86MMXRegType from )
 	ModRM( 3, to, from ); 
 }
 
-void PCMPGTDMtoR( x86MMXRegType to, u32 from )
+void PCMPGTDMtoR( x86MMXRegType to, uptr from )
 {
 	write16( 0x660F );
 	ModRM( 0, to, DISP32 ); 
@@ -397,7 +399,7 @@ void PSRADRtoR( x86MMXRegType to, x86MMXRegType from )
 }
 
 /* por m64 to r64 */
-void PORMtoR( x86MMXRegType to, u32 from ) 
+void PORMtoR( x86MMXRegType to, uptr from ) 
 {
 	write16( 0xEB0F );
 	ModRM( 0, to, DISP32 ); 
@@ -405,7 +407,7 @@ void PORMtoR( x86MMXRegType to, u32 from )
 }
 
 /* pxor m64 to r64 */
-void PXORMtoR( x86MMXRegType to, u32 from ) 
+void PXORMtoR( x86MMXRegType to, uptr from ) 
 {
 	write16( 0xEF0F );
 	ModRM( 0, to, DISP32 ); 
@@ -413,7 +415,7 @@ void PXORMtoR( x86MMXRegType to, u32 from )
 }
 
 /* pand m64 to r64 */
-void PANDMtoR( x86MMXRegType to, u32 from ) 
+void PANDMtoR( x86MMXRegType to, uptr from ) 
 {
 	//u64 rip = (u64)x86Ptr + 7;
 	write16( 0xDB0F );
@@ -421,7 +423,7 @@ void PANDMtoR( x86MMXRegType to, u32 from )
 	write32( MEMADDR(from, 4) );
 }
 
-void PANDNMtoR( x86MMXRegType to, u32 from )
+void PANDNMtoR( x86MMXRegType to, uptr from )
 {
 	write16( 0xDF0F );
 	ModRM( 0, to, DISP32 ); 
@@ -434,7 +436,7 @@ void PUNPCKHDQRtoR( x86MMXRegType to, x86MMXRegType from )
 	ModRM( 3, to, from );
 }
 
-void PUNPCKHDQMtoR( x86MMXRegType to, u32 from )
+void PUNPCKHDQMtoR( x86MMXRegType to, uptr from )
 {
 	write16( 0x6A0F );
 	ModRM( 0, to, DISP32 ); 
@@ -447,7 +449,7 @@ void PUNPCKLDQRtoR( x86MMXRegType to, x86MMXRegType from )
 	ModRM( 3, to, from );
 }
 
-void PUNPCKLDQMtoR( x86MMXRegType to, u32 from )
+void PUNPCKLDQMtoR( x86MMXRegType to, uptr from )
 {
 	write16( 0x620F );
 	ModRM( 0, to, DISP32 ); 
@@ -496,7 +498,7 @@ void MOVQRtoRmOffset( x86IntRegType to, x86MMXRegType from, u32 offset )
 }
 
 /* movd m32 to r64 */
-void MOVDMtoMMX( x86MMXRegType to, u32 from ) 
+void MOVDMtoMMX( x86MMXRegType to, uptr from ) 
 {
 	write16( 0x6E0F );
 	ModRM( 0, to, DISP32 );
@@ -504,7 +506,7 @@ void MOVDMtoMMX( x86MMXRegType to, u32 from )
 }
 
 /* movd r64 to m32 */
-void MOVDMMXtoM( u32 to, x86MMXRegType from ) 
+void MOVDMMXtoM( uptr to, x86MMXRegType from ) 
 {
 	write16( 0x7E0F );
 	ModRM( 0, from, DISP32 );
@@ -617,7 +619,7 @@ void PSHUFWRtoR(x86MMXRegType to, x86MMXRegType from, u8 imm8)
 	write8(imm8);
 }
 
-void PSHUFWMtoR(x86MMXRegType to, u32 from, u8 imm8)
+void PSHUFWMtoR(x86MMXRegType to, uptr from, u8 imm8)
 {
 	write16( 0x700f );
 	ModRM( 0, to, DISP32 );
@@ -630,3 +632,5 @@ void MASKMOVQRtoR(x86MMXRegType to, x86MMXRegType from)
 	write16(0xf70f);
 	ModRM( 3, to, from );
 }
+
+#endif

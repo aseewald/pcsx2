@@ -42,7 +42,7 @@ void sprInit() {
 //	} else {
 //		u32 * p = (u32*)&PS2MEM_SCRATCH[spr0->sadr & 0x3fff];
 //		//WriteCodeSSE2(p,data,size >> 4);
-//		memcpy_amd((u8*)data, &PS2MEM_SCRATCH[spr0->sadr & 0x3fff], size);
+//		memcpy_fast((u8*)data, &PS2MEM_SCRATCH[spr0->sadr & 0x3fff], size);
 //	}
 //	spr0->sadr+= size;
 //}
@@ -82,7 +82,7 @@ int  _SPR0chain() {
 		spr0->madr += (spr0->qwc * 16);
 		spr0->madr = psHu32(DMAC_RBOR) + (spr0->madr & psHu32(DMAC_RBSR));
 	} else {
-		memcpy_amd((u8*)pMem, &PS2MEM_SCRATCH[spr0->sadr & 0x3fff], qwc);
+		memcpy_fast((u8*)pMem, &PS2MEM_SCRATCH[spr0->sadr & 0x3fff], qwc);
 
 		Cpu->Clear(spr0->madr, qwc>>2);
 		// clear VU mem also!
@@ -124,7 +124,7 @@ void _SPR0interleave() {
 			// clear VU mem also!
 			TestClearVUs(spr0->madr, spr0->qwc<<2);
 
-			memcpy_amd((u8*)pMem, &PS2MEM_SCRATCH[spr0->sadr & 0x3fff], spr0->qwc<<4);
+			memcpy_fast((u8*)pMem, &PS2MEM_SCRATCH[spr0->sadr & 0x3fff], spr0->qwc<<4);
 		}
 		cycles += tqwc * BIAS;
 		spr0->sadr+= spr0->qwc * 16;
@@ -225,6 +225,7 @@ int SPRFROMinterrupt()
 	hwDmacIrq(8);
 	return 1;
 }
+extern int vifqwc;
 
 extern void mfifoGIFtransfer(int);
 #define gif ((DMACh*)&PS2MEM_HW[0xA000])
@@ -244,7 +245,8 @@ void dmaSPR0() { // fromSPR
 	if ((psHu32(DMAC_CTRL) & 0xC) == 0x8) { // VIF1 MFIFO
 		spr0->madr = psHu32(DMAC_RBOR) + (spr0->madr & psHu32(DMAC_RBSR));
 		//SysPrintf("mfifoVIF1transfer %x madr %x, tadr %x\n", vif1ch->chcr, vif1ch->madr, vif1ch->tadr);
-		if(vif1ch->chcr & 0x100)mfifoVIF1transfer(qwc);
+		//vifqwc+= qwc;
+		mfifoVIF1transfer(qwc);
 	}
 	
 	FreezeMMXRegs(0);
@@ -261,7 +263,7 @@ __inline static void SPR1transfer(u32 *data, int size) {
 		}
 	}*/
 	//Cpu->Clear(spr1->sadr, size); // why?
-	memcpy_amd(&PS2MEM_SCRATCH[spr1->sadr & 0x3fff], (u8*)data, size << 2);
+	memcpy_fast(&PS2MEM_SCRATCH[spr1->sadr & 0x3fff], (u8*)data, size << 2);
 
 	spr1->sadr+= size << 2;
 }
@@ -293,6 +295,8 @@ void _SPR1interleave() {
 	int tqwc = (psHu32(DMAC_SQWC) >> 16) & 0xff;
 	int cycles = 0;
 	u32 *pMem;
+	tqwc = tqwc ? tqwc : 256;
+	sqwc = sqwc ? sqwc : 256;
 
 #ifdef SPR_LOG
 		SPR_LOG("SPR1 interleave size=%d, tqwc=%d, sqwc=%d, addr=%lx sadr=%lx\n",
@@ -301,7 +305,7 @@ void _SPR1interleave() {
 	while (qwc > 0) {
 		spr1->qwc = min(tqwc, qwc); qwc-= spr1->qwc;
 		pMem = (u32*)dmaGetAddr(spr1->madr);
-		memcpy_amd(&PS2MEM_SCRATCH[spr1->sadr & 0x3fff], (u8*)pMem, spr1->qwc <<4);
+		memcpy_fast(&PS2MEM_SCRATCH[spr1->sadr & 0x3fff], (u8*)pMem, spr1->qwc <<4);
 		spr1->sadr += spr1->qwc * 16;
 		cycles += spr1->qwc * BIAS;
 		spr1->madr+= (sqwc + spr1->qwc) * 16; //qwc-= sqwc;

@@ -68,13 +68,13 @@ void SIF0write(u32 *from, int words)
 	if(words > (FIFO_SIF0_W-sif0.fifoWritePos)) {
 		int wP0 = (FIFO_SIF0_W-sif0.fifoWritePos);
 		int wP1 = words - wP0;
-		memcpy_amd(&sif0.fifoData[sif0.fifoWritePos], from, wP0 << 2);
-		memcpy_amd(&sif0.fifoData[0], &from[wP0], wP1 << 2);
+		memcpy_fast(&sif0.fifoData[sif0.fifoWritePos], from, wP0 << 2);
+		memcpy_fast(&sif0.fifoData[0], &from[wP0], wP1 << 2);
 		sif0.fifoWritePos = wP1;
 	}
 	else
 	{
-		memcpy_amd(&sif0.fifoData[sif0.fifoWritePos], from, words << 2);
+		memcpy_fast(&sif0.fifoData[sif0.fifoWritePos], from, words << 2);
 		sif0.fifoWritePos += words;
 	}
 
@@ -94,13 +94,13 @@ void SIF0read(u32 *to, int words)
 	{
 		int wP0 = (FIFO_SIF0_W-sif0.fifoReadPos);
 		int wP1 = words - wP0;
-		memcpy_amd(to, &sif0.fifoData[sif0.fifoReadPos], wP0 << 2);
-		memcpy_amd(&to[wP0], &sif0.fifoData[0], wP1 << 2);
+		memcpy_fast(to, &sif0.fifoData[sif0.fifoReadPos], wP0 << 2);
+		memcpy_fast(&to[wP0], &sif0.fifoData[0], wP1 << 2);
 		sif0.fifoReadPos = wP1;
 	}
 	else
 	{
-		memcpy_amd(to, &sif0.fifoData[sif0.fifoReadPos], words << 2);
+		memcpy_fast(to, &sif0.fifoData[sif0.fifoReadPos], words << 2);
 		sif0.fifoReadPos += words;
 	}
 
@@ -116,13 +116,13 @@ void SIF1write(u32 *from, int words)
 	{
 		int wP0 = (FIFO_SIF1_W-sif1.fifoWritePos);
 		int wP1 = words - wP0;
-		memcpy_amd(&sif1.fifoData[sif1.fifoWritePos], from, wP0 << 2);
-		memcpy_amd(&sif1.fifoData[0], &from[wP0], wP1 << 2);
+		memcpy_fast(&sif1.fifoData[sif1.fifoWritePos], from, wP0 << 2);
+		memcpy_fast(&sif1.fifoData[0], &from[wP0], wP1 << 2);
 		sif1.fifoWritePos = wP1;
 	}
 	else
 	{
-		memcpy_amd(&sif1.fifoData[sif1.fifoWritePos], from, words << 2);
+		memcpy_fast(&sif1.fifoData[sif1.fifoWritePos], from, words << 2);
 		sif1.fifoWritePos += words;
 	}
 
@@ -142,13 +142,13 @@ void SIF1read(u32 *to, int words)
 	{
 		int wP0 = (FIFO_SIF1_W-sif1.fifoReadPos);
 		int wP1 = words - wP0;
-		memcpy_amd(to, &sif1.fifoData[sif1.fifoReadPos], wP0 << 2);
-		memcpy_amd(&to[wP0], &sif1.fifoData[0], wP1 << 2);
+		memcpy_fast(to, &sif1.fifoData[sif1.fifoReadPos], wP0 << 2);
+		memcpy_fast(&to[wP0], &sif1.fifoData[0], wP1 << 2);
 		sif1.fifoReadPos = wP1;
 	}
 	else
 	{
-		memcpy_amd(to, &sif1.fifoData[sif1.fifoReadPos], words << 2);
+		memcpy_fast(to, &sif1.fifoData[sif1.fifoReadPos], words << 2);
 		sif1.fifoReadPos += words;
 	}
 

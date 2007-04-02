@@ -24,9 +24,13 @@
 
 #include "PsxCommon.h"
 
+#ifdef _WIN32
 #include "windows/cheats/cheats.h"
+#endif
 
-#include "patch.h"
+#include "Patch.h"
+
+int g_ZeroGSOptions=0;
 
 //
 // Variables
@@ -42,6 +46,7 @@ PatchTextTable commands[] =
 											// possible values for X,Y: NEAR, DOWN, UP, CHOP
 											// X - EE rounding mode (default is NEAR)
 											// Y - VU rounding mode (default is CHOP)
+   { "zerogs", 6, patchFunc_zerogs }, // zerogs=hex
    { "", 0, NULL }
 };
 
@@ -144,11 +149,13 @@ char strgametitle[256] = {0};
 void patchFunc_gametitle( char * text1, char * text2 )
 {
 	SysPrintf( "gametitle: %s \n", text2 );
-#ifdef __WIN32__
+#ifdef _WIN32
 	sprintf(strgametitle,"%s",text2);
 	if (gApp.hConsole) SetConsoleTitle(strgametitle);
 #endif
 }
+
+extern int RunExe;
 
 void patchFunc_patch( char * cmd, char * param )
 {
@@ -165,7 +172,8 @@ void patchFunc_patch( char * cmd, char * param )
    pText = param;
 //   inifile_trim( pText );
 
-   patch[ patchnumber ].placetopatch   = strtol( pText, (char **)NULL, 0 );
+   if(RunExe == 1) patch[ patchnumber ].placetopatch   = 1;
+   else patch[ patchnumber ].placetopatch   = strtol( pText, (char **)NULL, 0 );
 
    pText = strtok( NULL, "," );
    inifile_trim( pText );
@@ -283,16 +291,33 @@ void inifile_read( char * name )
    char buffer[ 1024 ];
 
    patchnumber = 0;
-#ifdef __WIN32__
+#ifdef _WIN32
    sprintf( buffer, "patches\\%s.pnach", name );
 #else
    sprintf( buffer, "patches/%s.pnach", name );
 #endif
 
    f1 = fopen( buffer, "rt" );
+
+#ifndef _WIN32
+   if( !f1 ) {
+       // try all upper case because linux is case sensitive
+       char* pstart = buffer+8;
+       char* pend = buffer+strlen(buffer);
+       while(pstart != pend ) {
+           // stop at the first . since we only want to update the hex
+           if( *pstart == '.' )
+               break;
+           *pstart++ = toupper(*pstart);
+       }
+
+       f1 = fopen(buffer, "rt");
+   }
+#endif
+
    if( !f1 )
    {
-      SysPrintf( _( "patch file for this game not found. Can't apply any patches\n" ) );
+       SysPrintf( _( "patch file for this game not found. Can't apply any patches\n" ));
       return;
    }
 
@@ -315,7 +340,8 @@ int AddPatch(int Mode, int Place, int Address, int Size, u64 data)
 		return -1;
 	}
 
-	patch[patchnumber].placetopatch = Mode;
+	if(RunExe == 1) patch[patchnumber].placetopatch = 1;
+	else patch[patchnumber].placetopatch = Mode;
 	patch[patchnumber].cpu = Place;
 	patch[patchnumber].addr=Address;
 	patch[patchnumber].type=Size;
@@ -325,7 +351,10 @@ int AddPatch(int Mode, int Place, int Address, int Size, u64 data)
 
 void patchFunc_fastmemory( char * cmd, char * param )
 {
+#ifndef PCSX2_NORECBUILD
+	// only valid for recompilers
 	SetFastMemory(1);
+#endif
 }
 
 void patchFunc_roundmode( char * cmd, char * param )
@@ -334,11 +363,11 @@ void patchFunc_roundmode( char * cmd, char * param )
 	int index;
 	char * pText;
 
-	u32 eetype;
-	u32 vutype;
+	u32 eetype=0x0000;
+	u32 vutype=0x6000;
 	
 	index = 0;
-	pText = strtok( NULL, ", " );
+	pText = strtok( param, ", " );
 	while(pText != NULL) {
 		u32 type = 0xffff;
 		if( stricmp(pText, "near") == 0 ) {
@@ -372,10 +401,15 @@ void patchFunc_roundmode( char * cmd, char * param )
 	SetRoundMode(eetype,vutype);
 }
 
+void patchFunc_zerogs(char* cmd, char* param)
+{
+    sscanf(param, "%x", &g_ZeroGSOptions);
+}
+
 void SetRoundMode(u32 ee, u32 vu)
 {
-	g_sseMXCSR = 0x9f80|ee;
-	g_sseVUMXCSR = 0x9f80|vu;
-
-	SetCPUState();
+	// don't set a state for interpreter only
+#ifndef PCSX2_NORECBUILD
+	SetCPUState(0x9f80|ee, 0x9f80|vu);
+#endif
 }

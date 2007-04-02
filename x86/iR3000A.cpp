@@ -19,10 +19,10 @@
 // recompiler reworked to add dynamic linking Jan06
 // and added reg caching, const propagation, block analysis Jun06
 // zerofrog(@gmail.com)
+// stop compiling if NORECBUILD build (only for Visual Studio)
+#if !(defined(_MSC_VER) && defined(PCSX2_NORECBUILD))
 
-#if 1
-
-#ifdef __MSCW32__
+#ifdef _WIN32
 #pragma warning(disable:4244)
 #pragma warning(disable:4761)
 #endif
@@ -34,8 +34,11 @@ extern "C" {
 #include <assert.h>
 #include <malloc.h>
 
-#if defined(__WIN32__)
+#if defined(_WIN32)
 #include <windows.h>
+#else
+#include <sys/stat.h>
+#include <sys/types.h>
 #endif
 
 #include "PS2Etypes.h"
@@ -52,21 +55,27 @@ extern "C" {
 #include "ix86/ix86.h"
 
 #include "iCore.h"
-#include "ir3000A.h"
+#include "iR3000A.h"
 #include "PsxCounters.h"
 
 extern u32 psxNextCounter, psxNextsCounter;
 u32 g_psxMaxRecMem = 0;
 extern char *disRNameGPR[];
 extern char* disR3000Fasm(u32 code, u32 pc);
+
+void psxRecRecompile(u32 startpc);
+
+uptr *psxRecLUT;
 }
+
 
 #define PSX_NUMBLOCKS (1<<12)
 #define MAPBASE			0x48000000
 #define RECMEM_SIZE		(8*1024*1024)
 
+#define PSX_MEMMASK     0x5fffffff // mask when comparing two pcs
+
 // R3000A statics
-uptr *psxRecLUT;
 int psxreclog = 0;
 
 static u32 s_BranchCount = 0;
@@ -80,8 +89,6 @@ u32 psxpc;			// recompiler psxpc
 int psxbranch;		// set for branch
 static EEINST* s_pInstCache = NULL;
 static u32 s_nInstCacheSize = 0;
-
-u32 g_psxNextBranchCycle = 0;
 
 static BASEBLOCK* s_pCurBlock = NULL;
 static BASEBLOCKEX* s_pCurBlockEx = NULL;
@@ -99,14 +106,15 @@ static u32 s_savenBlockCycles = 0;
 
 static void iPsxBranchTest(u32 newpc, u32 cpuBranch);
 void psxRecompileNextInstruction(int delayslot);
-static void recRecompile(u32 startpc);
 
 extern void (*rpsxBSC[64])();
 extern void (*rpsxBSC_co[64])();
 void rpsxpropBSC(EEINST* prev, EEINST* pinst);
 
 #ifdef _DEBUG
-extern "C" u32 psxdump = 0;
+extern "C" {
+u32 psxdump = 0;
+}
 #else
 #define psxdump 0
 #endif
@@ -134,14 +142,14 @@ BASEBLOCKEX* PSX_GETBLOCKEX(BASEBLOCK* p)
 static void iDumpBlock( int startpc, char * ptr )
 {
 	FILE *f;
-	char filename[ 256 ];
+	char filename[ 256 ], command[256];
 	u32 i, j;
 	EEINST* pcur;
 	u8 used[34];
 	int numused, count;
 
 	SysPrintf( "dump1 %x:%x, %x\n", startpc, psxpc, psxRegs.cycle );
-#ifdef __WIN32__
+#ifdef _WIN32
 	CreateDirectory("dumps", NULL);
 sprintf( filename, "dumps\\psxdump%.8X.txt", startpc);
 #else
@@ -195,6 +203,22 @@ sprintf( filename, "dumps\\psxdump%.8X.txt", startpc);
 		fprintf(f, "\n");
 	}
 	fclose( f );
+
+#ifdef __LINUX__
+    // dump the asm
+    f = fopen( "mydump1", "wb" );
+	fwrite( ptr, 1, (uptr)x86Ptr - (uptr)ptr, f );
+	fclose( f );
+#ifdef __x86_64__
+	sprintf( command, "objdump -D --target=binary --architecture=i386:x86-64 -M intel mydump1 | cat %s - > tempdump", filename );
+#else
+	sprintf( command, "objdump -D --target=binary --architecture=i386 -M intel mydump1 | cat %s - > tempdump", filename );
+#endif
+	system( command );
+    sprintf(command, "mv tempdump %s", filename);
+    system(command);
+    f = fopen( filename, "a+" );
+#endif
 }
 
 u8 _psxLoadWritesRs(u32 tempcode)
@@ -243,7 +267,7 @@ int _psxFlushUnusedConstReg()
 			!_recIsRegWritten(g_pCurInstInfo+1, (s_nEndBlock-psxpc)/4, XMMTYPE_GPRREG, i) ) {
 
 			// check if will be written in the future
-			MOV32ItoM((u32)&psxRegs.GPR.r[i], g_psxConstRegs[i]);
+			MOV32ItoM((uptr)&psxRegs.GPR.r[i], g_psxConstRegs[i]);
 			g_psxFlushedConstReg |= 1<<i;
 			return 1;
 		}
@@ -260,7 +284,7 @@ void _psxFlushCachedRegs()
 void _psxFlushConstReg(int reg)
 {
 	if( PSX_IS_CONST1( reg ) && !(g_psxFlushedConstReg&(1<<reg)) ) {
-		MOV32ItoM((int)&psxRegs.GPR.r[reg], g_psxConstRegs[reg]);
+		MOV32ItoM((uptr)&psxRegs.GPR.r[reg], g_psxConstRegs[reg]);
 		g_psxFlushedConstReg |= (1<<reg);
 	}
 }
@@ -276,16 +300,16 @@ void _psxFlushConstRegs()
 		if( g_psxHasConstReg & (1<<i) ) {
 			
 			if( !(g_psxFlushedConstReg&(1<<i)) ) {
-				MOV32ItoM((u32)&psxRegs.GPR.r[i], g_psxConstRegs[i]);
+				MOV32ItoM((uptr)&psxRegs.GPR.r[i], g_psxConstRegs[i]);
 				g_psxFlushedConstReg |= 1<<i;
 			}
 #if defined(_DEBUG)&&0
 			else {
 				// make sure the const regs are the same
 				u8* ptemp;
-				CMP32ItoM((u32)&psxRegs.GPR.r[i], g_psxConstRegs[i]);
+				CMP32ItoM((uptr)&psxRegs.GPR.r[i], g_psxConstRegs[i]);
 				ptemp = JE8(0);
-				CALLFunc((u32)checkconstreg);
+				CALLFunc((uptr)checkconstreg);
 				x86SetJ8( ptemp );
 			}
 #else
@@ -323,7 +347,7 @@ void psxSaveBranchState()
 	s_saveFlushedConstReg = g_psxFlushedConstReg;
 	s_psaveInstInfo = g_pCurInstInfo;
 
-	// save all mmx regs
+	// save all regs
 	memcpy(s_saveX86regs, x86regs, sizeof(x86regs));
 }
 
@@ -347,7 +371,7 @@ void psxLoadBranchState()
 	g_psxFlushedConstReg = s_saveFlushedConstReg;
 	g_pCurInstInfo = s_psaveInstInfo;
 
-	// restore all mmx regs
+	// restore all regs
 	memcpy(x86regs, s_saveX86regs, sizeof(x86regs));
 }
 
@@ -482,11 +506,28 @@ void psxRecompileCodeConst3(R3000AFNPTR constcode, R3000AFNPTR_INFO constscode, 
 
 static int recInit() {
 	int i;
+	uptr startaddr;
+
+	// can't have upper 4 bits nonzero!
+	startaddr = 0x0f000000;
+	while(!(startaddr & 0xf0000000)) {
+		recMem = (char*)SysMmap(startaddr, RECMEM_SIZE);
+		if( (uptr)recMem & 0xf0000000 ) {
+			SysMunmap((uptr)recMem, RECMEM_SIZE); recMem = NULL;
+			startaddr += 0x00100000;
+			continue;
+		}
+		else break;
+	}
+
+	if( recMem == NULL ) {
+		SysPrintf("R3000A bad rec memory allocation\n");
+		return 1;
+	}
 
 	psxRecLUT = (uptr*) malloc(0x010000 * sizeof(uptr));
 	memset(psxRecLUT, 0, 0x010000 * sizeof(uptr));
 
-	recMem = (char*)SysMmap(0, RECMEM_SIZE);
 	recRAM = (BASEBLOCK*) _aligned_malloc(sizeof(BASEBLOCK)/4*0x200000, 16);
 	recROM = (BASEBLOCK*) _aligned_malloc(sizeof(BASEBLOCK)/4*0x400000, 16);
 	recROM1= (BASEBLOCK*) _aligned_malloc(sizeof(BASEBLOCK)/4*0x040000, 16);
@@ -526,8 +567,6 @@ static void recReset() {
 	ResetBaseBlockEx(1);
 	g_psxMaxRecMem = 0;
 
-	__asm emms
-
 	recPtr = recMem;
 	psxbranch = 0;
 }
@@ -546,9 +585,11 @@ static void recShutdown() {
 }
 
 #pragma warning(disable:4731) // frame pointer register 'ebp' modified by inline assembly code
+
+#if !defined(__x86_64__)
 static u32 s_uSaveESP = 0;
 
-static void execute()
+static void R3000AExecute()
 {
 #ifdef _DEBUG
 	u8* fnptr;
@@ -562,8 +603,8 @@ static void execute()
 	while (EEsCycle > 0) {
 		pblock = PSX_GETBLOCK(psxRegs.pc);
 
-		if ( !pblock->pFnptr || pblock->startpc != psxRegs.pc ) {
-			recRecompile(psxRegs.pc);
+		if ( !pblock->pFnptr || (pblock->startpc&PSX_MEMMASK) != (psxRegs.pc&PSX_MEMMASK) ) {
+			psxRecRecompile(psxRegs.pc);
 		}
 
 		assert( pblock->pFnptr != 0 );
@@ -571,28 +612,48 @@ static void execute()
 #ifdef _DEBUG
 
 		fnptr = (u8*)pblock->pFnptr;
-		__asm {
-			// save data
-			mov oldesi, esi
-			mov s_uSaveESP, esp
-			sub s_uSaveESP, 8
-			push ebp
 
-			call fnptr // jump into function
-			// restore data
-			pop ebp
-			mov esi, oldesi
-		}
+#ifdef _MSC_VER
+
+        __asm {
+            // save data
+            mov oldesi, esi;
+            mov s_uSaveESP, esp;
+            sub s_uSaveESP, 8;
+            push ebp;
+            
+            call fnptr; // jump into function
+            // restore data
+            pop ebp;
+            mov esi, oldesi;
+        }
+        
+#else // linux
+        
+        __asm__("movl %%esi, %0\n"
+                "movl %%esp, %1\n"
+                "sub $8, %%esp\n"
+                "push %%ebp\n"
+                "call *%2\n"
+                "pop %%ebp\n"
+                "movl %0, %%esi\n" : "=m"(oldesi), "=m"(s_uSaveESP) : "c"(fnptr) : );
+#endif // _MSC_VER
+        
 #else
-		pfn = ((R3000AFNPTR)pblock->pFnptr);
-		// use call instead of pfn()
-		__asm call pfn
+        ((R3000AFNPTR)pblock->pFnptr)();
 #endif
 	}
 }
 
+#else
+extern "C" void R3000AExecute();
+#endif
+
 extern u32 g_psxNextBranchCycle;
 u32 g_psxlastpc = 0;
+
+#if defined(_MSC_VER) && !defined(__x86_64__)
+
 static u32 g_temp;
 
 // jumped to when invalid psxpc address
@@ -607,15 +668,17 @@ __declspec(naked,noreturn) void psxDispatcher()
 	__asm {
 		mov eax, s_pDispatchBlock
 
-		// check if startpc == psxRegs.pc
+		// check if startpc&PSX_MEMMASK == psxRegs.pc&PSX_MEMMASK
 		mov ecx, psxRegs.pc
-		//and ecx, 0x5fffffff // remove higher bits
-		cmp ecx, dword ptr [eax+BLOCKTYPE_STARTPC]
+        mov edx, [eax+BLOCKTYPE_STARTPC];
+		and ecx, PSX_MEMMASK // remove higher bits
+        and edx, PSX_MEMMASK
+		cmp ecx, edx
 		je CheckPtr
 
 		// recompile
 		push psxRegs.pc // psxpc
-		call recRecompile
+		call psxRecRecompile
 		add esp, 4 // pop old param
 		mov eax, s_pDispatchBlock
 CheckPtr:
@@ -656,7 +719,7 @@ __declspec(naked,noreturn) void psxDispatcherClear()
 	// calc PSX_GETBLOCK
 	s_pDispatchBlock = PSX_GETBLOCK(psxRegs.pc);
 
-	if( s_pDispatchBlock->startpc == psxRegs.pc ) {
+	if( (s_pDispatchBlock->startpc&PSX_MEMMASK) == (psxRegs.pc&PSX_MEMMASK) ) {
 		assert( s_pDispatchBlock->pFnptr != 0 );
 
 		// already modded the code, jump to the new place
@@ -671,7 +734,7 @@ __declspec(naked,noreturn) void psxDispatcherClear()
 	}
 
 	__asm {
-		call recRecompile
+		call psxRecRecompile
 		add esp, 4 // pop old param
 		mov eax, s_pDispatchBlock
 		mov eax, dword ptr [eax]
@@ -732,7 +795,7 @@ recomp:
 		sub esp, 8
 		mov dword ptr [esp+4], edx
 		mov dword ptr [esp], ecx
-		call recRecompile
+		call psxRecRecompile
 		mov edx, dword ptr [esp+4]
 		add esp, 8
 		
@@ -742,6 +805,22 @@ recomp:
 	}
 }
 
+#else // _MSC_VER
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+    
+void psxDispatcher();
+void psxDispatcherClear();
+void psxDispatcherReg();
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // _MSC_VER
+
 static void recClear(u32 Addr, u32 Size)
 {
 	u32 i;
@@ -750,7 +829,11 @@ static void recClear(u32 Addr, u32 Size)
 	}
 }
 
+#ifdef __x86_64__
+#define EE_MIN_BLOCK_BYTES 16
+#else
 #define EE_MIN_BLOCK_BYTES 15
+#endif
 
 void rpsxMemConstClear(u32 mem)
 {
@@ -758,12 +841,10 @@ void rpsxMemConstClear(u32 mem)
 	if( !psxRecLUT[mem>>16] )
 		return;
 
-	CMP32ItoM((u32)PSX_GETBLOCK(mem), 0);
+	CMP32ItoM((uptr)PSX_GETBLOCK(mem), 0);
 	j8Ptr[6] = JE8(0);
 
-	PUSH32I((u32)PSX_GETBLOCK(mem));
-	CALLFunc((u32)psxRecClearMem);
-	ADD32ItoR(ESP, 4);
+    _callFunctionArg1((uptr)psxRecClearMem, MEM_CONSTTAG, (uptr)PSX_GETBLOCK(mem));
 	x86SetJ8(j8Ptr[6]);
 }
 
@@ -772,10 +853,6 @@ void psxRecClearMem(BASEBLOCK* p)
 	BASEBLOCKEX* pexblock;
 	BASEBLOCK* pstart;
 	int lastdelay;
-
-	// necessary since recompiler doesn't call femms/emms
-	if (cpucaps.has3DNOWInstructionExtensions) __asm femms
-	else __asm emms
 		
 	assert( p != NULL );
 
@@ -784,7 +861,7 @@ void psxRecClearMem(BASEBLOCK* p)
 		if( p->pFnptr == 0 )
 			return;
 	}
-
+ 
 	assert( p->pFnptr != 0 );
 	assert( p->startpc );
 
@@ -792,8 +869,13 @@ void psxRecClearMem(BASEBLOCK* p)
 
 	// there is a small problem: mem can be ored with 0xa<<28 or 0x8<<28, and don't know which
 	MOV32ItoR(EDX, p->startpc);
-	PUSH32I((u32)x86Ptr); // will be replaced by JMP32
-	JMP32((u32)psxDispatcherClear - ( (u32)x86Ptr + 5 ));
+    assert( (uptr)x86Ptr <= 0xffffffff );
+#ifdef __x86_64__
+    MOV32ItoR(R15, (uptr)x86Ptr); // will be replaced by JMP32
+#else
+    PUSH32I((uptr)x86Ptr);
+#endif
+	JMP32((uptr)psxDispatcherClear - ( (uptr)x86Ptr + 5 ));
 	assert( x86Ptr == (s8*)p->pFnptr + EE_MIN_BLOCK_BYTES );
 
 	pstart = PSX_GETBLOCK(p->startpc);
@@ -805,7 +887,7 @@ void psxRecClearMem(BASEBLOCK* p)
 //		x86Ptr = pexblock->pOldFnptr;
 //
 //		MOV32ItoR(EDX, p->startpc);
-//		JMP32((u32)DispatcherClear - ( (u32)x86Ptr + 5 ));
+//		JMP32((uptr)psxDispatcherClear - ( (uptr)x86Ptr + 5 ));
 //	}
 //	else
 //		pexblock->pOldFnptr = (u8*)p->pFnptr;
@@ -839,19 +921,19 @@ void psxSetBranchReg(u32 reg)
 		
 		if( x86regs[ESI].inuse ) {
 			assert( x86regs[ESI].type == X86TYPE_PCWRITEBACK );
-			MOV32RtoM((int)&psxRegs.pc, ESI);
+			MOV32RtoM((uptr)&psxRegs.pc, ESI);
 			x86regs[ESI].inuse = 0;
 		}
 		else {
-			MOV32MtoR(EAX, (u32)&g_recWriteback);
-			MOV32RtoM((int)&psxRegs.pc, EAX);
+			MOV32MtoR(EAX, (uptr)&g_recWriteback);
+			MOV32RtoM((uptr)&psxRegs.pc, EAX);
 		}
 	}
 	
 	_psxFlushCall(FLUSH_EVERYTHING);
 	iPsxBranchTest(0xffffffff, 1);
 
-	JMP32((u32)psxDispatcherReg - ( (u32)x86Ptr + 5 ));
+	JMP32((uptr)psxDispatcherReg - ( (uptr)x86Ptr + 5 ));
 }
 
 void psxSetBranchImm( u32 imm )
@@ -861,13 +943,13 @@ void psxSetBranchImm( u32 imm )
 	assert( imm );
 
 	// end the current block
-	MOV32ItoM( (u32)&psxRegs.pc, imm );
+	MOV32ItoM( (uptr)&psxRegs.pc, imm );
 	_psxFlushCall(FLUSH_EVERYTHING);
 	iPsxBranchTest(imm, imm <= psxpc);
 
 	MOV32ItoR(EDX, 0);
 	ptr = (u32*)(x86Ptr-4);
-	*ptr = (u32)JMP32((u32)psxDispatcher - ( (u32)x86Ptr + 5 ));
+	*ptr = (uptr)JMP32((uptr)psxDispatcher - ( (uptr)x86Ptr + 5 ));
 }
 
 #define USE_FAST_BRANCHES 0
@@ -875,30 +957,32 @@ void psxSetBranchImm( u32 imm )
 static void iPsxBranchTest(u32 newpc, u32 cpuBranch)
 {
 	if( !USE_FAST_BRANCHES || cpuBranch ) {
-		MOV32MtoR(ECX, (int)&psxRegs.cycle);
+		MOV32MtoR(ECX, (uptr)&psxRegs.cycle);
 		ADD32ItoR(ECX, s_psxBlockCycles*17/16); // greater mult factor causes nfsmw to crash
-		MOV32RtoM((int)&psxRegs.cycle, ECX); // update cycles
+		MOV32RtoM((uptr)&psxRegs.cycle, ECX); // update cycles
 	}
 	else {
-		ADD32ItoM((int)&psxRegs.cycle, s_psxBlockCycles*17/16);
+		ADD32ItoM((uptr)&psxRegs.cycle, s_psxBlockCycles*17/16);
 		return;
 	}
 
-	SUB32MtoR(ECX, (int)&g_psxNextBranchCycle);
+	SUB32MtoR(ECX, (uptr)&g_psxNextBranchCycle);
 
 	// check if should branch
 	j8Ptr[0] = JS8( 0 );
 
-	CALLFunc((int)psxBranchTest);
+	CALLFunc((uptr)psxBranchTest);
 
-	CMP32ItoM((int)&EEsCycle, 0);
+	CMP32ItoM((uptr)&EEsCycle, 0);
 	j8Ptr[2] = JG8(0);
+    if( REC_INC_STACK )
+        ADD64ItoR(ESP, REC_INC_STACK);
 	RET2();
 	x86SetJ8( j8Ptr[2] );
 
 	if( newpc != 0xffffffff ) {
-		CMP32ItoM((int)&psxRegs.pc, newpc);
-		JNE32((u32)psxDispatcherReg - ( (u32)x86Ptr + 6 ));
+		CMP32ItoM((uptr)&psxRegs.pc, newpc);
+		JNE32((uptr)psxDispatcherReg - ( (uptr)x86Ptr + 6 ));
 	}
 
 	x86SetJ8( j8Ptr[0] );
@@ -906,29 +990,32 @@ static void iPsxBranchTest(u32 newpc, u32 cpuBranch)
 
 static int *s_pCode;
 
+#if !defined(_MSC_VER) || !defined(__x86_64__)
 static void checkcodefn()
 {
 	int pctemp;
 
-	__asm mov pctemp, eax
+#ifdef _MSC_VER
+	__asm mov pctemp, eax;
+#else
+    __asm__("movl %%eax, %0" : : "m"(pctemp) );
+#endif
 	SysPrintf("iop code changed! %x\n", pctemp);
 }
+#endif
 
 void rpsxSYSCALL()
 {
-	MOV32ItoM( (u32)&psxRegs.code, psxRegs.code );
+	MOV32ItoM( (uptr)&psxRegs.code, psxRegs.code );
 	MOV32ItoM((uptr)&psxRegs.pc, psxpc - 4);
 	_psxFlushCall(FLUSH_NODESTROY);
 
-	PUSH32I(psxbranch == 1 ? 1 : 0);
-	PUSH32I(0x20);
-	CALLFunc ((int)psxException);
-	ADD32ItoR(ESP, 8);
+	_callFunctionArg2((uptr)psxException, MEM_CONSTTAG, MEM_CONSTTAG, 0x20, psxbranch==1);
 
-	CMP32ItoM((int)&psxRegs.pc, psxpc-4);
+	CMP32ItoM((uptr)&psxRegs.pc, psxpc-4);
 	j8Ptr[0] = JE8(0);
-	ADD32ItoM((u32)&psxRegs.cycle, s_psxBlockCycles);
-	JMP32((u32)psxDispatcherReg - ( (u32)x86Ptr + 5 ));
+	ADD32ItoM((uptr)&psxRegs.cycle, s_psxBlockCycles);
+	JMP32((uptr)psxDispatcherReg - ( (uptr)x86Ptr + 5 ));
 	x86SetJ8(j8Ptr[0]);
 
 	//if (!psxbranch) psxbranch = 2;
@@ -960,16 +1047,16 @@ void psxRecompileNextInstruction(int delayslot)
 			assert( PSX_GETBLOCKEX(pblock)->startpc == pblock->startpc );
 			
 			_psxFlushCall(FLUSH_EVERYTHING);
-			MOV32ItoM((u32)&psxRegs.pc, psxpc);
+			MOV32ItoM((uptr)&psxRegs.pc, psxpc);
 				
 //			if( pexblock->pOldFnptr ) {
 //				// code already in place, so jump to it and exit recomp
-//				JMP32((u32)pexblock->pOldFnptr - ((u32)x86Ptr + 5));
+//				JMP32((uptr)pexblock->pOldFnptr - ((uptr)x86Ptr + 5));
 //				branch = 3;
 //				return;
 //			}
 			
-			JMP32((u32)pblock->pFnptr - ((u32)x86Ptr + 5));
+			JMP32((uptr)pblock->pFnptr - ((uptr)x86Ptr + 5));
 			psxbranch = 3;
 			return;
 		}
@@ -1001,10 +1088,10 @@ void psxRecompileNextInstruction(int delayslot)
 	psxpc += 4;
 
 //#ifdef _DEBUG
-//	CMP32ItoM((u32)s_pCode, psxRegs.code);
+//	CMP32ItoM((uptr)s_pCode, psxRegs.code);
 //	j8Ptr[0] = JE8(0);
 //	MOV32ItoR(EAX, psxpc);
-//	CALLFunc((u32)checkcodefn);
+//	CALLFunc((uptr)checkcodefn);
 //	x86SetJ8( j8Ptr[ 0 ] );
 //#endif
 
@@ -1036,26 +1123,25 @@ void psxRecompileNextInstruction(int delayslot)
 }
 
 static void recExecute() {
-	for (;;) execute();
+	for (;;) R3000AExecute();
 }
 
 static void recExecuteBlock() {
-	 
-	execute();
+	R3000AExecute();
 }
 
 extern "C"
 void iDumpPsxRegisters(u32 startpc, u32 temp)
 {
 	int i;
-	char* pstr = temp ? "t" : "";
+	const char* pstr = temp ? "t" : "";
 
-	__Log("%spsxreg: %x\n", pstr, startpc);
+	__Log("%spsxreg: %x %x\n", pstr, startpc, *(u32*)PSXM(0x6cc14));
 	for(i = 0; i < 34; i+=2) __Log("%spsx%d: %x %x\n", pstr, i, psxRegs.GPR.r[i], psxRegs.GPR.r[i+1]);
 	__Log("%scycle: %x %x %x %x; counters %x %x\n", pstr, psxRegs.cycle, g_psxNextBranchCycle, EEsCycle, IOPoCycle,
-		(u32)psxNextsCounter, (u32)psxNextCounter);
+		(uptr)psxNextsCounter, (uptr)psxNextCounter);
 
-	for(i = 0; i < 6; ++i) __Log("%scounter%d: %x %x %x\n", pstr, i, psxCounters[i].count, psxCounters[i].rate, psxCounters[i].sCycleT);
+	for(i = 0; i < 7; ++i) __Log("%scounter%d: %x %x %x\n", pstr, i, psxCounters[i].count, psxCounters[i].rate, psxCounters[i].sCycleT);
 //	for(i = 0; i < 32; ++i) {
 //		__Log("int%d: %x %x\n", i, psxRegs.sCycle[i], psxRegs.eCycle[i]);
 //	}
@@ -1069,7 +1155,7 @@ static void printfn()
 	static int curcount = 0;
 	const int skip = 0;
 
-	if( (psxdump&2) ) {//&& lastrec != g_psxlastpc ) {
+    if( (psxdump&2) ) {//&& lastrec != g_psxlastpc ) {
 		curcount++;
 
 		if( curcount > skip ) {
@@ -1081,9 +1167,9 @@ static void printfn()
 	}
 }
 
-u32 s_recblocks[] = {0};
+u32 s_psxrecblocks[] = {0};
 
-static void recRecompile(u32 startpc)
+void psxRecRecompile(u32 startpc)
 {
 	u32 i;
 	u32 branchTo;
@@ -1141,7 +1227,7 @@ static void recRecompile(u32 startpc)
 	psxbranch = 0;
 
 	s_pCurBlock->startpc = startpc;
-	s_pCurBlock->pFnptr = (u32)x86Ptr;
+	s_pCurBlock->pFnptr = (u32)(uptr)x86Ptr;
 	s_psxBlockCycles = 0;
 
 	// reset recomp state variables
@@ -1153,8 +1239,8 @@ static void recRecompile(u32 startpc)
 
 #ifdef _DEBUG
 	// for debugging purposes
-	MOV32ItoM((u32)&g_psxlastpc, psxpc);
-	CALLFunc((u32)printfn);
+	MOV32ItoM((uptr)&g_psxlastpc, psxpc);
+	CALLFunc((uptr)printfn);
 #endif
 
 	// go until the next branch
@@ -1269,8 +1355,8 @@ StartRecomp:
 
 #ifdef _DEBUG
 	// dump code
-	for(i = 0; i < ARRAYSIZE(s_recblocks); ++i) {
-		if( startpc == s_recblocks[i] ) {
+	for(i = 0; i < ARRAYSIZE(s_psxrecblocks); ++i) {
+		if( startpc == s_psxrecblocks[i] ) {
 			iDumpBlock(startpc, recPtr);
 		}
 	}
@@ -1283,6 +1369,11 @@ StartRecomp:
 	while (!psxbranch && psxpc < s_nEndBlock) {
 		psxRecompileNextInstruction(0);
 	}
+
+#ifdef _DEBUG
+	if( (psxdump & 1) )
+		iDumpBlock(startpc, recPtr);
+#endif
 
 	assert( (psxpc-startpc)>>2 <= 0xffff );
 	s_pCurBlockEx->size = (psxpc-startpc)>>2;
@@ -1309,29 +1400,29 @@ StartRecomp:
 
 		iPsxBranchTest(0xffffffff, 1);	
 
-		JMP32((u32)psxDispatcherReg - ( (u32)x86Ptr + 5 ));
+		JMP32((uptr)psxDispatcherReg - ( (uptr)x86Ptr + 5 ));
 	}
 	else {
 		assert( psxbranch != 3 );
 		if( psxbranch ) assert( !willbranch3 );
-		else ADD32ItoM((int)&psxRegs.cycle, s_psxBlockCycles*17/16);
+		else ADD32ItoM((uptr)&psxRegs.cycle, s_psxBlockCycles*17/16);
 
 		if( willbranch3 ) {
 			BASEBLOCK* pblock = PSX_GETBLOCK(s_nEndBlock);
 			assert( psxpc == s_nEndBlock );
 			_psxFlushCall(FLUSH_EVERYTHING);
-			MOV32ItoM((u32)&psxRegs.pc, psxpc);			
-			JMP32((u32)pblock->pFnptr - ((u32)x86Ptr + 5));
+			MOV32ItoM((uptr)&psxRegs.pc, psxpc);			
+			JMP32((uptr)pblock->pFnptr - ((uptr)x86Ptr + 5));
 			psxbranch = 3;
 		}
 		else if( !psxbranch ) {
 			// didn't branch, but had to stop
-			MOV32ItoM( (u32)&psxRegs.pc, psxpc );
+			MOV32ItoM( (uptr)&psxRegs.pc, psxpc );
 
 			_psxFlushCall(FLUSH_EVERYTHING);
 
 			ptr = JMP32(0);
-			//JMP32((u32)psxDispatcherReg - ( (u32)x86Ptr + 5 ));
+			//JMP32((uptr)psxDispatcherReg - ( (uptr)x86Ptr + 5 ));
 		}
 	}
 
@@ -1349,19 +1440,21 @@ StartRecomp:
 		assert( ptr != NULL );
 		
 		if( s_pCurBlock->startpc != psxpc ) 
- 			recRecompile(psxpc);
+ 			psxRecRecompile(psxpc);
 
 		// could have reset
 		if( pcurblock->startpc == startpc ) {
 			assert( pcurblock->pFnptr );
 			assert( s_pCurBlock->startpc == nEndBlock );
-			*ptr = s_pCurBlock->pFnptr - ( (u32)ptr + 4 );
+			*ptr = (u32)((uptr)s_pCurBlock->pFnptr - ( (uptr)ptr + 4 ));
 		}
 		else {
-			recRecompile(startpc);
+			psxRecRecompile(startpc);
 			assert( pcurblock->pFnptr != 0 );
 		}
 	}
+    else
+        assert( s_pCurBlock->pFnptr != 0 );
 }
 
 R3000Acpu psxRec = {
@@ -1373,4 +1466,4 @@ R3000Acpu psxRec = {
 	recShutdown
 };
 
-#endif
+#endif // PCSX2_NORECBUILD

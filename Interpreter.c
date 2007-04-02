@@ -18,7 +18,7 @@
 
 #include <stdlib.h>
 #include "Common.h"
-#include "Debug.h"
+#include "DebugTools/Debug.h"
 #include "R5900.h"
 #include "InterTables.h"
 #include "VUmicro.h"
@@ -85,21 +85,25 @@ static u32 branchPC;
 
 #ifdef CPU_LOG
 #define debugI() \
-	if (Log) { CPU_LOG("%s\n", disR5900F(cpuRegs.code, pc)); } \
+	if (Log) { CPU_LOG("%s\n", disR5900F(cpuRegs.code, cpuRegs.pc)); } \
  	if (cpuRegs.GPR.n.r0.UD[0] || cpuRegs.GPR.n.r0.UD[1]) SysPrintf("R0 is not zero!!!!\n");
 #else
 #define debugI()
 #endif
 
 void execI() {
-	u32 pc = cpuRegs.pc;
 
 	cpuRegs.cycle++;
 	//cpuRegs.CP0.n.Count++; /*count every cycles.*/
 
-	if (memRead32(cpuRegs.pc, &cpuRegs.code) == -1) return;
-	
+#ifdef _DEBUG
+    if (memRead32(cpuRegs.pc, &cpuRegs.code) == -1) return;
 	debugI();
+#else
+    cpuRegs.code = *(u32 *)PSM(cpuRegs.pc);
+#endif
+	
+	
 	cpuRegs.pc+= 4;
 //	if((cpuRegs.PERF.n.pccr & 0x80000020) == 0x80000020) cpuRegs.PERF.n.pcr0++;
 //	if((cpuRegs.PERF.n.pccr & 0x80008000) == 0x80008000) cpuRegs.PERF.n.pcr1++;
@@ -174,23 +178,23 @@ void SLTU()		{ if (!_Rd_) return; cpuRegs.GPR.r[_Rd_].UD[0] = cpuRegs.GPR.r[_Rs_
 *********************************************************/
 
 void J()   {
-#ifdef EMU_LOG
+#ifdef _DEBUG
 	u32 temp = _JumpTarget_;
 	u32 pc = cpuRegs.pc;
 #endif
 	doBranch(_JumpTarget_);
-#ifdef EMU_LOG
+#ifdef _DEBUG
 	JumpCheckSym(temp, pc);
 #endif
 }
 
 void JAL() {
-#ifdef EMU_LOG
+#ifdef _DEBUG
 	u32 temp = _JumpTarget_;
 	u32 pc = cpuRegs.pc;
 #endif
 	_SetLink(31); doBranch(_JumpTarget_);
-#ifdef EMU_LOG
+#ifdef _DEBUG
 	JumpCheckSym(temp, pc);
 #endif
 }
@@ -200,13 +204,13 @@ void JAL() {
 * Format:  OP rs, rd                                     *
 *********************************************************/
 void JR()   { 
-#ifdef EMU_LOG
+#ifdef _DEBUG
 	u32 temp = cpuRegs.GPR.r[_Rs_].UL[0];
 	u32 pc = cpuRegs.pc;
 	int rs = _Rs_;
 #endif
 	doBranch(cpuRegs.GPR.r[_Rs_].UL[0]); 
-#ifdef EMU_LOG
+#ifdef _DEBUG
 	JumpCheckSym(temp, pc);
 	if (rs == 31) JumpCheckSymRet(pc);
 #endif
@@ -214,13 +218,13 @@ void JR()   {
 
 void JALR() { 
 	u32 temp = cpuRegs.GPR.r[_Rs_].UL[0];
-#ifdef EMU_LOG
+#ifdef _DEBUG
 	u32 pc = cpuRegs.pc;
 #endif
 
 	if (_Rd_) { _SetLink(_Rd_); }
 	doBranch(temp);
-#ifdef EMU_LOG
+#ifdef _DEBUG
 	JumpCheckSym(temp, pc);
 #endif
 }

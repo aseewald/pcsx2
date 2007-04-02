@@ -15,7 +15,7 @@
 
  * OSflags:
 	__LINUX__ (linux OS)
-	__WIN32__ (win32 OS)
+	_WIN32 (win32 OS)
 
  * common return values (for ie. GSinit):
 	 0 - success
@@ -39,7 +39,11 @@
 #include <windows.h>
 #endif
 
+
 /* common defines */
+#ifndef C_ASSERT
+#define C_ASSERT(e) typedef char __C_ASSERT__[(e)?1:-1]
+#endif
 
 #if defined(GSdefs)   || defined(PADdefs)  || defined(SIOdefs)  || \
     defined(SPU2defs) || defined(CDVDdefs) || defined(DEV9defs) || \
@@ -88,6 +92,9 @@ typedef struct {
 	u32 key;
 	u32 event;
 } keyEvent;
+
+// for 64bit compilers
+typedef char __keyEvent_Size__[(sizeof(keyEvent) == 8)?1:-1];
 
 // plugin types
 #define SIO_TYPE_PAD	0x00000001
@@ -173,7 +180,7 @@ typedef struct {
 	void *common;
 } GSdriverInfo;
 
-#ifdef __WIN32__
+#ifdef _WIN32
 typedef struct { // unsupported values must be set to zero
 	HWND hWnd;
 	HMENU hMenu;
@@ -197,6 +204,7 @@ void CALLBACK GSvsync(int field);
 void CALLBACK GSgifTransfer1(u32 *pMem, u32 addr);
 void CALLBACK GSgifTransfer2(u32 *pMem, u32 size);
 void CALLBACK GSgifTransfer3(u32 *pMem, u32 size);
+void CALLBACK GSgetLastTag(u64* ptag); // returns the last tag processed (64 bits)
 void CALLBACK GSgifSoftReset(u32 mask);
 void CALLBACK GSreadFIFO(u64 *mem);
 void CALLBACK GSreadFIFO2(u64 *mem, int qwc);
@@ -211,6 +219,7 @@ void CALLBACK GSmakeSnapshot2(char *pathname, int* snapdone, int savejpg);
 void CALLBACK GSirqCallback(void (*callback)());
 void CALLBACK GSprintf(int timeout, char *fmt, ...);
 void CALLBACK GSsetBaseMem(void*);
+void CALLBACK GSsetGameCRC(int crc, int gameoptions);
 
 // controls frame skipping in the GS, if this routine isn't present, frame skipping won't be done
 void CALLBACK GSsetFrameSkip(int frameskip);
@@ -218,7 +227,7 @@ void CALLBACK GSsetFrameSkip(int frameskip);
 void CALLBACK GSreset();
 void CALLBACK GSwriteCSR(u32 value);
 void CALLBACK GSgetDriverInfo(GSdriverInfo *info);
-#ifdef __WIN32__
+#ifdef _WIN32
 s32  CALLBACK GSsetWindowInfo(winInfo *info);
 #endif
 s32  CALLBACK GSfreeze(int mode, freezeData *data);
@@ -248,6 +257,15 @@ u8   CALLBACK PADpoll(u8 value);
 //			2 if supported pad2
 //			3 if both are supported
 u32  CALLBACK PADquery();
+
+// call to give a hint to the PAD plugin to query for the keyboard state. A
+// good plugin will query the OS for keyboard state ONLY in this function.
+// This function is necessary when multithreading because otherwise
+// the PAD plugin can get into deadlocks with the thread that really owns
+// the window (and input). Note that PADupdate can be called from a different
+// thread than the other functions, so mutex or other multithreading primitives
+// have to be added to maintain data integrity.
+void CALLBACK PADupdate(int pad);
 
 // extended funcs
 
@@ -302,6 +320,11 @@ void CALLBACK SPU2writeDMA4Mem(u16 *pMem, int size);
 void CALLBACK SPU2interruptDMA4();
 void CALLBACK SPU2readDMA7Mem(u16* pMem, int size);
 void CALLBACK SPU2writeDMA7Mem(u16 *pMem, int size);
+
+// all addresses passed by dma will be pointers to the array starting at baseaddr
+// This function is necessary to successfully save and reload the spu2 state
+void CALLBACK SPU2setDMABaseAddr(uptr baseaddr);
+
 void CALLBACK SPU2interruptDMA7();
 u32 CALLBACK SPU2ReadMemAddr(int core);
 void CALLBACK SPU2WriteMemAddr(int core,u32 value);
@@ -325,7 +348,7 @@ s32  CALLBACK SPU2test();
 // basic funcs
 
 s32  CALLBACK CDVDinit();
-s32  CALLBACK CDVDopen();
+s32  CALLBACK CDVDopen(const char* pTitleFilename);
 void CALLBACK CDVDclose();
 void CALLBACK CDVDshutdown();
 s32  CALLBACK CDVDreadTrack(u32 lsn, int mode);
@@ -463,6 +486,7 @@ typedef void (CALLBACK* _GSvsync)(int field);
 typedef void (CALLBACK* _GSgifTransfer1)(u32 *pMem, u32 addr);
 typedef void (CALLBACK* _GSgifTransfer2)(u32 *pMem, u32 size);
 typedef void (CALLBACK* _GSgifTransfer3)(u32 *pMem, u32 size);
+typedef void (CALLBACK* _GSgetLastTag)(u64* ptag); // returns the last tag processed (64 bits)
 typedef void (CALLBACK* _GSgifSoftReset)(u32 mask);
 typedef void (CALLBACK* _GSreadFIFO)(u64 *pMem);
 typedef void (CALLBACK* _GSreadFIFO2)(u64 *pMem, int qwc);
@@ -472,11 +496,12 @@ typedef void (CALLBACK* _GSchangeSaveState)(int, const char* filename);
 typedef void (CALLBACK* _GSirqCallback)(void (*callback)());
 typedef void (CALLBACK* _GSprintf)(int timeout, char *fmt, ...);
 typedef void (CALLBACK* _GSsetBaseMem)(void*);
+typedef void (CALLBACK* _GSsetGameCRC)(int, int);
 typedef void (CALLBACK* _GSsetFrameSkip)(int frameskip);
 typedef void (CALLBACK* _GSreset)();
 typedef void (CALLBACK* _GSwriteCSR)(u32 value);
 typedef void (CALLBACK* _GSgetDriverInfo)(GSdriverInfo *info);
-#ifdef __WIN32__
+#ifdef _WIN32
 typedef s32  (CALLBACK* _GSsetWindowInfo)(winInfo *info);
 #endif
 typedef void (CALLBACK* _GSmakeSnapshot)(char *path);
@@ -495,6 +520,7 @@ typedef keyEvent* (CALLBACK* _PADkeyEvent)();
 typedef u8   (CALLBACK* _PADstartPoll)(int pad);
 typedef u8   (CALLBACK* _PADpoll)(u8 value);
 typedef u32  (CALLBACK* _PADquery)();
+typedef void (CALLBACK* _PADupdate)(int pad);
 
 typedef void (CALLBACK* _PADgsDriverInfo)(GSdriverInfo *info);
 typedef void (CALLBACK* _PADconfigure)();
@@ -528,6 +554,7 @@ typedef void (CALLBACK* _SPU2writeDMA4Mem)(u16 *pMem, int size);
 typedef void (CALLBACK* _SPU2interruptDMA4)();
 typedef void (CALLBACK* _SPU2readDMA7Mem)(u16 *pMem, int size);
 typedef void (CALLBACK* _SPU2writeDMA7Mem)(u16 *pMem, int size);
+typedef void (CALLBACK* _SPU2setDMABaseAddr)(uptr baseaddr);
 typedef void (CALLBACK* _SPU2interruptDMA7)();
 typedef void (CALLBACK* _SPU2irqCallback)(void (*SPU2callback)(),void (*DMA4callback)(),void (*DMA7callback)());
 typedef u32 (CALLBACK* _SPU2ReadMemAddr)(int core);
@@ -542,7 +569,7 @@ typedef void (CALLBACK* _SPU2about)();
 // NOTE: The read/write functions CANNOT use XMM/MMX regs
 // If you want to use them, need to save and restore current ones
 typedef s32  (CALLBACK* _CDVDinit)();
-typedef s32  (CALLBACK* _CDVDopen)();
+typedef s32  (CALLBACK* _CDVDopen)(const char* pTitleFilename);
 typedef void (CALLBACK* _CDVDclose)();
 typedef void (CALLBACK* _CDVDshutdown)();
 typedef s32  (CALLBACK* _CDVDreadTrack)(u32 lsn, int mode);
@@ -633,6 +660,7 @@ _GSvsync           GSvsync;
 _GSgifTransfer1    GSgifTransfer1;
 _GSgifTransfer2    GSgifTransfer2;
 _GSgifTransfer3    GSgifTransfer3;
+_GSgetLastTag      GSgetLastTag;
 _GSgifSoftReset    GSgifSoftReset;
 _GSreadFIFO        GSreadFIFO;
 _GSreadFIFO2       GSreadFIFO2;
@@ -644,11 +672,12 @@ _GSmakeSnapshot2   GSmakeSnapshot2;
 _GSirqCallback 	   GSirqCallback;
 _GSprintf      	   GSprintf;
 _GSsetBaseMem 	   GSsetBaseMem;
+_GSsetGameCRC		GSsetGameCRC;
 _GSsetFrameSkip	   GSsetFrameSkip;
 _GSreset		   GSreset;
 _GSwriteCSR		   GSwriteCSR;
 _GSgetDriverInfo   GSgetDriverInfo;
-#ifdef __WIN32__
+#ifdef _WIN32
 _GSsetWindowInfo   GSsetWindowInfo;
 #endif
 _GSfreeze          GSfreeze;
@@ -665,6 +694,7 @@ _PADkeyEvent       PAD1keyEvent;
 _PADstartPoll      PAD1startPoll;
 _PADpoll           PAD1poll;
 _PADquery          PAD1query;
+_PADupdate         PAD1update;
 
 _PADgsDriverInfo   PAD1gsDriverInfo;
 _PADconfigure      PAD1configure;
@@ -680,6 +710,7 @@ _PADkeyEvent       PAD2keyEvent;
 _PADstartPoll      PAD2startPoll;
 _PADpoll           PAD2poll;
 _PADquery          PAD2query;
+_PADupdate         PAD2update;
 
 _PADgsDriverInfo   PAD2gsDriverInfo;
 _PADconfigure      PAD2configure;
@@ -711,6 +742,7 @@ _SPU2writeDMA4Mem  SPU2writeDMA4Mem;
 _SPU2interruptDMA4 SPU2interruptDMA4;
 _SPU2readDMA7Mem   SPU2readDMA7Mem;
 _SPU2writeDMA7Mem  SPU2writeDMA7Mem;
+_SPU2setDMABaseAddr SPU2setDMABaseAddr;
 _SPU2interruptDMA7 SPU2interruptDMA7;
 _SPU2ReadMemAddr   SPU2ReadMemAddr;
 _SPU2WriteMemAddr   SPU2WriteMemAddr;

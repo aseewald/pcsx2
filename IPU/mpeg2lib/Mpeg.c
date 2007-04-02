@@ -24,8 +24,7 @@
 
 #include "Mpeg.h"
 #include "Vlc.h"
-
-#define BigEndian _byteswap_ulong
+#include "coroutine.h"
 
 extern void (* mpeg2_idct_copy) (s16 * block, u8* dest, int stride);
 /* JayteeMaster: changed dest to 16 bit signed */
@@ -968,7 +967,7 @@ void mpeg2sliceIDEC(void* pdone)
 					while(g_nIPU0Data > 0) {
 						read = FIFOfrom_write((u32*)g_pIPU0Pointer,g_nIPU0Data);
 						if( read == 0 )
-							co_resume();
+							so_resume();
 						else {
 							g_pIPU0Pointer += read*16;
 							g_nIPU0Data -= read;
@@ -985,7 +984,7 @@ void mpeg2sliceIDEC(void* pdone)
 					while(g_nIPU0Data > 0) {
 						read = FIFOfrom_write((u32*)g_pIPU0Pointer,g_nIPU0Data);
 						if( read == 0 ){
-							co_resume();
+							so_resume();
 						}
 						else {
 							g_pIPU0Pointer += read*16;
@@ -1024,7 +1023,7 @@ void mpeg2sliceIDEC(void* pdone)
 							for (i=0; i<2; i++) {
 								u8 byte;
 								while(!getBits8(&byte, 0))
-									co_resume();
+									so_resume();
 								if (byte == 0) break;
 								g_BP.BP+= 8;
 							}
@@ -1039,12 +1038,12 @@ void mpeg2sliceIDEC(void* pdone)
 
 							while(!getBits32((u8*)&ipuRegs->top, 0))
 							{
-								co_resume();
+								so_resume();
 							}
-							ipuRegs->top = BigEndian(ipuRegs->top);
+							BigEndian(ipuRegs->top, ipuRegs->top);
 									
 							*(int*)pdone = 1;
-							co_exit();
+							so_exit();
 						}
 				}
 			}
@@ -1076,12 +1075,12 @@ void mpeg2sliceIDEC(void* pdone)
 
 	while(!getBits32((u8*)&ipuRegs->top, 0))
 	{
-		co_resume();
+		so_resume();
 	}
-	ipuRegs->top = BigEndian(ipuRegs->top);
+	BigEndian(ipuRegs->top, ipuRegs->top);
 
 	*(int*)pdone = 1;
-	co_exit();
+	so_exit();
 }
 
 void mpeg2_slice(void* pdone)
@@ -1163,7 +1162,7 @@ void mpeg2_slice(void* pdone)
 	while(g_nIPU0Data > 0) {
 		size = FIFOfrom_write((u32*)g_pIPU0Pointer,g_nIPU0Data);
 		if( size == 0 )
-			co_resume();
+			so_resume();
 		else {
 			g_pIPU0Pointer += size*16;
 			g_nIPU0Data -= size;
@@ -1173,17 +1172,17 @@ void mpeg2_slice(void* pdone)
 	IPU_LOG("BDEC %x, %d\n",g_BP.BP,g_BP.FP);
 
 	while( !getBits8((u8*)&bit8, 0) )
-		co_resume();
+		so_resume();
 	if (bit8==0) ipuRegs->ctrl.SCD = 1;
 	
 	while(!getBits32((u8*)&ipuRegs->top, 0))
 	{
-		co_resume();
+		so_resume();
 	}
-	ipuRegs->top = BigEndian(ipuRegs->top);
+	BigEndian(ipuRegs->top, ipuRegs->top);
 
 	*(int*)pdone = 1;
-	co_exit();
+	so_exit();
 }
 
 int get_motion_delta (decoder_t * const decoder,

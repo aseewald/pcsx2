@@ -15,11 +15,8 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-
-#if defined (__WIN32__)
-
+#if defined (_WIN32)
 #include <windows.h>
-
 #endif
 
 #include <string.h>
@@ -27,7 +24,7 @@
 
 #include "ix86.h"
 
-#if defined (__VCNET2005__)
+#if defined (_MSC_VER) && _MSC_VER >= 1400
 
    void __cpuid(int* CPUInfo, int InfoType);
    unsigned __int64 __rdtsc();
@@ -40,17 +37,25 @@
 CAPABILITIES cpucaps;
 CPUINFO cpuinfo;
 
+#define cpuid(cmd,a,b,c,d) \
+  __asm__ __volatile__("xchgl %%ebx, %1; cpuid; xchgl %%ebx, %1" \
+		: "=a" (a), "=r" (b), "=c" (c), "=d" (d)  : "0" (cmd))
+
 static s32 iCpuId( u32 cmd, u32 *regs ) 
 {
-   int flag;
+   int flag=1;
 
-#if defined (__VCNET2005__)
+#if defined (_MSC_VER) && _MSC_VER >= 1400
 
    __cpuid( regs, cmd );
 
    return 0;
 
-#elif defined (__MSCW32__) && !defined(__x86_64__)
+#elif defined (_MSC_VER) 
+
+#ifdef __x86_64__
+   assert(0);
+#else // __x86_64__
    __asm 
    {
       push ebx;
@@ -85,16 +90,16 @@ static s32 iCpuId( u32 cmd, u32 *regs )
       pop edi;
       pop ebx;
    }
-
+#endif // __x86_64__
    return 0;
 
 
 #else
 
+#ifndef __x86_64__
+   // see if we can use cpuid
    __asm__ __volatile__ (
-#ifdef __x86_64__
-	"sub $0x18, %%rsp\n"
-#endif
+      "sub $0x18, %%esp\n"
       "pushf\n"
       "pop %%eax\n"
       "mov %%eax, %%edx\n"
@@ -105,40 +110,22 @@ static s32 iCpuId( u32 cmd, u32 *regs )
       "pop %%eax\n"
       "xor %%edx, %%eax\n"
       "mov %%eax, %0\n"
-#ifdef __x86_64__
-	"add $0x18, %%rsp\n"
-#endif
+	  "add $0x18, %%esp\n"
       : "=r"(flag) :
    );
-   
-   if ( ! flag )
-   {
-      return -1;
-   }
-
-   __asm__ __volatile__ (
-      "push %%ebx\n"
-      "push %%edx\n"
-      "mov %4, %%eax\n"
-      "cpuid\n"
-      "mov %%eax, %0\n"
-      "mov %%ebx, %1\n"
-      "mov %%ecx, %2\n"
-      "mov %%edx, %3\n"
-      "pop %%edx\n"
-      "pop %%ebx\n"
-      : "=m" (regs[0]), "=m" (regs[1]), "=m" (regs[2]), "=m" (regs[3])
-      : "m"(cmd)
-      : "eax", "ecx"//, "edx", "ebx"
-   );
-
-   return 0;
 #endif
+   
+   if ( !flag )
+       return -1;
+
+   cpuid(cmd, regs[0], regs[1], regs[2], regs[3]);
+
+#endif // _MSC_VER
 }
 
 u64 GetCPUTick( void ) 
 {
-#if defined (__VCNET2005__)
+#if defined (_MSC_VER) && _MSC_VER >= 1400
 
    return __rdtsc();
 
@@ -159,13 +146,6 @@ u64 GetCPUTick( void )
 
 #include <sys/time.h>
 #include <errno.h>
-
-u32 timeGetTime( void ) 
-{
-	struct timeval tv;
-	gettimeofday( &tv, 0 );
-	return tv.tv_sec * 1000 + tv.tv_usec / 1000;
-}
 
 #endif
 

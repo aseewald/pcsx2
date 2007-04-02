@@ -16,14 +16,10 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifdef __MSCW32__
-#pragma warning(disable:4244)
-#endif
-
 #include <math.h>
 #include <stdlib.h>
 #include "Common.h"
-#include "Debug.h"
+#include "DebugTools/Debug.h"
 #include "R5900.h"
 #include "VUmicro.h"
 #include "VUflags.h"
@@ -334,7 +330,7 @@ void _vuAddLowerStalls(VURegs * VU, _VURegsNum *VUregsn) {
 /******************************/
 static u32 d;
 
-static float vuDouble(u32 f)
+float vuDouble(u32 f)
 {
 	switch(f & 0x7f800000){
 		case 0x0:

@@ -32,7 +32,7 @@ extern "C" {
 /* TWO IS HARDLY POSSIBLE */
 #undef  USE_GETTEXT_DLL
 #undef  USE_GETTEXT_STATIC
-#undefd USE_SAFE_GETTEXT_DLL
+#undef USE_SAFE_GETTEXT_DLL
 #endif  /* MORE THAN ONE - OR NONE AT ALL */
 
 #if !defined USE_GETTEXT_DLL && !defined USE_SAFE_GETTEXT_DLL && !defined USE_GETTEXT_STATIC && !defined DONT_USE_GETTEXT

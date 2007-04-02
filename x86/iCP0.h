@@ -26,7 +26,6 @@
 
 void recMFC0( void );
 void recMTC0( void );
-void recCOP0( void );
 void recBC0F( void );
 void recBC0T( void );
 void recBC0FL( void );

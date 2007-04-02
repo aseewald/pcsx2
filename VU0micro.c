@@ -24,7 +24,7 @@
 #include <assert.h>
 
 #include "Common.h"
-#include "Debug.h"
+#include "DebugTools/Debug.h"
 #include "R5900.h"
 #include "iR5900.h"
 #include "VUmicro.h"
@@ -33,20 +33,38 @@
 
 #include "iVUzerorec.h"
 
-#ifdef __MSCW32__
+#ifdef _WIN32
 #pragma warning(disable:4113)
 #endif
 
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
 extern PSMEMORYBLOCK s_psVuMem;
 extern PSMEMORYMAP *memLUT;
 #endif
 
+#define VF_VAL(x) ((x==0x80000000)?0:(x))
+
+void iDumpVU0Registers()
+{
+	int i;
+	
+	for(i = 1; i < 32; ++i) {
+		__Log("v%d: %x %x %x %x, vi: ", i, VF_VAL(VU0.VF[i].UL[3]), VF_VAL(VU0.VF[i].UL[2]),
+			VF_VAL(VU0.VF[i].UL[1]), VF_VAL(VU0.VF[i].UL[0]));
+		if( i == REG_Q || i == REG_P ) __Log("%f\n", VU0.VI[i].F);
+		else if( i == REG_MAC_FLAG ) __Log("%x\n", 0);//VU0.VI[i].UL&0xff);
+		else if( i == REG_STATUS_FLAG ) __Log("%x\n", 0);//VU0.VI[i].UL&0x03);
+		else if( i == REG_CLIP_FLAG ) __Log("0\n");
+		else __Log("%x\n", VU0.VI[i].UL);
+	}
+	__Log("vfACC: %f %f %f %f\n", VU0.ACC.F[3], VU0.ACC.F[2], VU0.ACC.F[1], VU0.ACC.F[0]);
+}
+
 int  vu0Init()
 {
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
 	// unmap all vu0 pages
-	SysMapUserPhysicalPages(PS2MEM_VU0MICRO, 16, NULL);
+	SysMapUserPhysicalPages(PS2MEM_VU0MICRO, 16, NULL, 0);
 
 	// mirror 4 times
 	VU0.Micro = PS2MEM_VU0MICRO;
@@ -69,7 +87,7 @@ int  vu0Init()
 	memLUT[0x11007].aPFNs = &s_psVuMem.aPFNs[1]; memLUT[0x11007].aVFNs = &s_psVuMem.aVFNs[1];
 
 	// map only registers
-	SysMapUserPhysicalPages(VU0.Mem+0x4000, 1, &s_psVuMem.aPFNs[2]);
+	SysMapUserPhysicalPages(VU0.Mem+0x4000, 1, s_psVuMem.aPFNs, 2);
 #else
 	VU0.Mem = (u8*)_aligned_malloc(0x4000+sizeof(VURegs), 16); // for VU1
 	VU0.Micro = (u8*)_aligned_malloc(4*1024, 16);
@@ -95,9 +113,11 @@ int  vu0Init()
 	VU0.vuExec = vu0Exec;
 	VU0.vifRegs = vif0Regs;
 
+#ifndef PCSX2_NORECBUILD
 	if( CHECK_VU0REC ) {
 		SuperVUInit(0);
 	}
+#endif
 
 	vu0Reset();
 
@@ -106,12 +126,14 @@ int  vu0Init()
 
 void vu0Shutdown()
 {
+#ifndef PCSX2_NORECBUILD
 	if( CHECK_VU0REC ) {
 		SuperVUDestroy(0);
 	}
+#endif
 
-#ifdef WIN32_VIRTUAL_MEM
-	if( !SysMapUserPhysicalPages(VU0.Mem, 16, NULL) )
+#ifdef PCSX2_VIRTUAL_MEM
+	if( !SysMapUserPhysicalPages(VU0.Mem, 16, NULL, 0) )
 		SysPrintf("err releasing vu0 mem %d\n", GetLastError());
 	if( VirtualFree(VU0.Mem, 0, MEM_RELEASE) == 0 )
 		SysPrintf("err freeing vu0 %d\n", GetLastError());
@@ -151,9 +173,11 @@ void vu0Reset()
 
 void recResetVU0( void )
 {
+#ifndef PCSX2_NORECBUILD
 	if( CHECK_VU0REC ) {
 		SuperVUReset(0);
 	}
+#endif
 }
 
 void vu0Freeze(gzFile f, int Mode) {

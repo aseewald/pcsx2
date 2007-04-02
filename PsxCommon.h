@@ -18,7 +18,7 @@
 #ifndef __PSXCOMMON_H__
 #define __PSXCOMMON_H__
 
-#ifdef __WIN32__
+#ifdef _WIN32
 #include <windows.h>
 #endif
 

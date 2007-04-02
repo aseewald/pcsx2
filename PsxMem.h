@@ -19,7 +19,7 @@
 #ifndef __PSXMEMORY_H__
 #define __PSXMEMORY_H__
 
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
 
 // VM
 #define psxM PS2MEM_PSX

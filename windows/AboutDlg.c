@@ -23,13 +23,7 @@
 #include "AboutDlg.h"
 #include "Common.h"
 
-#ifdef __MINGW32__
 #define IDC_STATIC	(-1)
-#endif
-
-#ifdef __MSCW32__
-#define IDC_STATIC	(-1)
-#endif
 
 HWND hW;
 HBITMAP hBMP, hSilverBMP;

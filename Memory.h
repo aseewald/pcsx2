@@ -25,19 +25,21 @@
 
 //#define ENABLECACHE
 
-#ifdef WIN32_VIRTUAL_MEM
+#define PS2MEM_BASE_	0x18000000
+#define PS2MEM_PSX_		(PS2MEM_BASE_+0x1c000000)
 
+#ifdef PCSX2_VIRTUAL_MEM
+
+#ifdef _WIN32
 typedef struct _PSMEMORYMAP
 {
-	ULONG_PTR* aPFNs, *aVFNs;
+	uptr* aPFNs, *aVFNs;
 } PSMEMORYMAP;
+#endif
 
 #define TRANSFORM_ADDR(memaddr) ( ((u32)(memaddr)>=0x40000000) ? ((memaddr)&~0xa0000000) : (memaddr) )
 
 //new memory model
-#define PS2MEM_BASE_	0x18000000
-#define PS2MEM_PSX_		(PS2MEM_BASE_+0x1c000000)
-
 #define PS2MEM_BASE		((u8*)PS2MEM_BASE_)
 #define PS2MEM_HW		((u8*)((u32)PS2MEM_BASE+0x10000000))
 #define PS2MEM_ROM		((u8*)((u32)PS2MEM_BASE+0x1fc00000))
@@ -200,7 +202,7 @@ void recMemWrite64();
 void recMemWrite128();
 
 // VM only functions
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
 
 void _eeReadConstMem8(int mmreg, u32 mem, int sign);
 void _eeReadConstMem16(int mmreg, u32 mem, int sign);

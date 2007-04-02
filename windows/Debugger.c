@@ -373,8 +373,6 @@ BOOL APIENTRY DebuggerProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
     switch (message)
     {
         case WM_INITDIALOG:
-		//	if (OpenPlugins() == -1) return TRUE;//moved to WinMain.c
-
 			ShowCursor(TRUE);
 
 			SetWindowText(hDlg, "R5900 Debugger");

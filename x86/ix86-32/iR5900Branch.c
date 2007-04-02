@@ -16,6 +16,9 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+// stop compiling if NORECBUILD build (only for Visual Studio)
+#if !(defined(_MSC_VER) && defined(PCSX2_NORECBUILD))
+
 // recompiler reworked to add dynamic linking zerofrog(@gmail.com) Jan06
 
 #include <stdlib.h>
@@ -28,7 +31,7 @@
 #include "iR5900.h"
 
 
-#ifdef __WIN32__
+#ifdef _WIN32
 #pragma warning(disable:4244)
 #pragma warning(disable:4761)
 #endif
@@ -68,7 +71,7 @@ void recSetBranchEQ(int info, int bne, int process)
 		SetMMXstate();
 
 		if( process & PROCESS_CONSTS ) {
-			if( (g_pCurInstInfo->regs[_Rt_] & EEINST_LASTUSE) || !EEINST_ISLIVEMMX(_Rt_) ) {
+			if( (g_pCurInstInfo->regs[_Rt_] & EEINST_LASTUSE) || !EEINST_ISLIVE64(_Rt_) ) {
 				_deleteMMXreg(_Rt_, 1);
 				mmxregs[EEREC_T].inuse = 0;
 				t0reg = EEREC_T;
@@ -84,7 +87,7 @@ void recSetBranchEQ(int info, int bne, int process)
 			if( t0reg != EEREC_T ) _freeMMXreg(t0reg);
 		}
 		else if( process & PROCESS_CONSTT ) {
-			if( (g_pCurInstInfo->regs[_Rs_] & EEINST_LASTUSE) || !EEINST_ISLIVEMMX(_Rs_) ) {
+			if( (g_pCurInstInfo->regs[_Rs_] & EEINST_LASTUSE) || !EEINST_ISLIVE64(_Rs_) ) {
 				_deleteMMXreg(_Rs_, 1);
 				mmxregs[EEREC_S].inuse = 0;
 				t0reg = EEREC_S;
@@ -101,13 +104,13 @@ void recSetBranchEQ(int info, int bne, int process)
 		}
 		else {
 			
-			if( (g_pCurInstInfo->regs[_Rs_] & EEINST_LASTUSE) || !EEINST_ISLIVEMMX(_Rs_) ) {
+			if( (g_pCurInstInfo->regs[_Rs_] & EEINST_LASTUSE) || !EEINST_ISLIVE64(_Rs_) ) {
 				_deleteMMXreg(_Rs_, 1);
 				mmxregs[EEREC_S].inuse = 0;
 				t0reg = EEREC_S;
 				PCMPEQDRtoR(t0reg, EEREC_T);
 			}
-			else if( (g_pCurInstInfo->regs[_Rt_] & EEINST_LASTUSE) || !EEINST_ISLIVEMMX(_Rt_) ) {
+			else if( (g_pCurInstInfo->regs[_Rt_] & EEINST_LASTUSE) || !EEINST_ISLIVE64(_Rt_) ) {
 				_deleteMMXreg(_Rt_, 1);
 				mmxregs[EEREC_T].inuse = 0;
 				t0reg = EEREC_T;
@@ -743,6 +746,7 @@ void recBLTZAL( void )
 ////////////////////////////////////////////////////
 void recBGEZAL( void ) 
 {
+    SysPrintf("BGEZAL\n");
 	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
 	MOV32ItoM( (int)&cpuRegs.pc, pc );
 	iFlushCall(FLUSH_EVERYTHING);
@@ -1085,3 +1089,5 @@ void recBGEZL( void )
 }
 
 #endif
+
+#endif // PCSX2_NORECBUILD

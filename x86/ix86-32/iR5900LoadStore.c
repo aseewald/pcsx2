@@ -16,6 +16,9 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+// stop compiling if NORECBUILD build (only for Visual Studio)
+#if !(defined(_MSC_VER) && defined(PCSX2_NORECBUILD))
+
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -24,7 +27,7 @@
 #include "ix86/ix86.h"
 #include "iR5900.h"
 
-#ifdef __WIN32__
+#ifdef _WIN32
 #pragma warning(disable:4244)
 #pragma warning(disable:4761)
 #endif
@@ -61,6 +64,8 @@ REC_FUNC(SWC1);
 REC_FUNC(LQC2);
 REC_FUNC(SQC2);
 
+void SetFastMemory(int bSetFast) {}
+
 #else
 
 PCSX2_ALIGNED16(u64 retValues[2]);
@@ -90,7 +95,7 @@ void _eeOnLoadWrite(int reg)
 	}
 }
 
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
 
 extern void iMemRead32Check();
 
@@ -1234,6 +1239,7 @@ void recLQ( void )
 	_flushConstReg(_Rs_);
 #else
 	if( cpucaps.hasStreamingSIMDExtensions && GPR_IS_CONST1( _Rs_ ) ) {
+        // malice hits this
 		assert( (g_cpuConstRegs[_Rs_].UL[0]+_Imm_) % 16 == 0 );
 
 		if( _Rt_ ) {
@@ -1255,7 +1261,7 @@ void recLQ( void )
 			mmreg = _allocTempXMMreg(XMMT_INT, -1);
 		}
 
-		recMemConstRead128(g_cpuConstRegs[_Rs_].UL[0]+_Imm_, mmreg);
+		recMemConstRead128((g_cpuConstRegs[_Rs_].UL[0]+_Imm_)&~15, mmreg);
 
 		if( !_Rt_ ) _freeXMMreg(mmreg);
 		if( IS_MMXREG(mmreg) ) {
@@ -3428,7 +3434,7 @@ void recLQC2( void )
 
 		if( _Ft_ ) mmreg = _allocVFtoXMMreg(&VU0, -1, _Ft_, MODE_WRITE);
 		else mmreg = _allocTempXMMreg(XMMT_FPS, -1);
-		recMemConstRead128(g_cpuConstRegs[_Rs_].UL[0]+_Imm_, mmreg);
+		recMemConstRead128((g_cpuConstRegs[_Rs_].UL[0]+_Imm_)&~15, mmreg);
 
 		if( !_Ft_ ) _freeXMMreg(mmreg);
 	}
@@ -3503,11 +3509,11 @@ void recLQC2_co( void )
 
 		if( _Ft_ ) mmreg1 = _allocVFtoXMMreg(&VU0, -1, _Ft_, MODE_WRITE);
 		else t0reg = _allocTempXMMreg(XMMT_FPS, -1);
-		recMemConstRead128(g_cpuConstRegs[_Rs_].UL[0]+_Imm_, mmreg1 >= 0 ? mmreg1 : t0reg);
+		recMemConstRead128((g_cpuConstRegs[_Rs_].UL[0]+_Imm_)&~15, mmreg1 >= 0 ? mmreg1 : t0reg);
 
 		if( nextrt ) mmreg2 = _allocVFtoXMMreg(&VU0, -1, nextrt, MODE_WRITE);
 		else if( t0reg < 0 ) t0reg = _allocTempXMMreg(XMMT_FPS, -1);
-		recMemConstRead128(g_cpuConstRegs[_Rs_].UL[0]+_Imm_co_, mmreg2 >= 0 ? mmreg2 : t0reg);
+		recMemConstRead128((g_cpuConstRegs[_Rs_].UL[0]+_Imm_co_)&~15, mmreg2 >= 0 ? mmreg2 : t0reg);
 
 		if( t0reg >= 0 ) _freeXMMreg(t0reg);
 	}
@@ -3572,7 +3578,7 @@ void recSQC2( void )
 		assert( (g_cpuConstRegs[_Rs_].UL[0]+_Imm_)%16 == 0 );
 
 		mmreg = _allocVFtoXMMreg(&VU0, -1, _Ft_, MODE_READ)|MEM_XMMTAG;
-		recMemConstWrite128(g_cpuConstRegs[_Rs_].UL[0]+_Imm_, mmreg);
+		recMemConstWrite128((g_cpuConstRegs[_Rs_].UL[0]+_Imm_)&~15, mmreg);
 	}
 	else
 #endif
@@ -3658,8 +3664,8 @@ void recSQC2_co( void )
 
 		mmreg1 = _allocVFtoXMMreg(&VU0, -1, _Ft_, MODE_READ)|MEM_XMMTAG;
 		mmreg2 = _allocVFtoXMMreg(&VU0, -1, nextrt, MODE_READ)|MEM_XMMTAG;
-		recMemConstWrite128(g_cpuConstRegs[_Rs_].UL[0]+_Imm_, mmreg1);
-		recMemConstWrite128(g_cpuConstRegs[_Rs_].UL[0]+_Imm_co_, mmreg2);
+		recMemConstWrite128((g_cpuConstRegs[_Rs_].UL[0]+_Imm_)&~15, mmreg1);
+		recMemConstWrite128((g_cpuConstRegs[_Rs_].UL[0]+_Imm_co_)&~15, mmreg2);
 	}
 	else
 #endif
@@ -3993,6 +3999,7 @@ void recLD( void )
 {
 	_deleteEEreg(_Rs_, 1);
 	_eeOnLoadWrite(_Rt_);
+    EEINST_RESETSIGNEXT(_Rt_); // remove the sign extension
 	_deleteEEreg(_Rt_, 0);
 
 	MOV32MtoR( EAX, (int)&cpuRegs.GPR.r[ _Rs_ ].UL[ 0 ] );
@@ -4019,6 +4026,7 @@ void recLDL( void )
 {
 	_deleteEEreg(_Rs_, 1);
 	_eeOnLoadWrite(_Rt_);
+    EEINST_RESETSIGNEXT(_Rt_); // remove the sign extension
 	_deleteEEreg(_Rt_, 0);
 	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
 	MOV32ItoM( (int)&cpuRegs.pc, pc );
@@ -4030,6 +4038,7 @@ void recLDR( void )
 {
 	_deleteEEreg(_Rs_, 1);
 	_eeOnLoadWrite(_Rt_);
+    EEINST_RESETSIGNEXT(_Rt_); // remove the sign extension
 	_deleteEEreg(_Rt_, 0);
 	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
 	MOV32ItoM( (int)&cpuRegs.pc, pc );
@@ -4041,6 +4050,7 @@ void recLQ( void )
 {
 	_deleteEEreg(_Rs_, 1);
 	_eeOnLoadWrite(_Rt_);
+    EEINST_RESETSIGNEXT(_Rt_); // remove the sign extension
 	_deleteEEreg(_Rt_, 0);
 
 	MOV32MtoR( EAX, (int)&cpuRegs.GPR.r[ _Rs_ ].UL[ 0 ] );
@@ -4283,3 +4293,5 @@ void recSQC2( void )
 #endif
 
 #endif
+
+#endif // PCSX2_NORECBUILD

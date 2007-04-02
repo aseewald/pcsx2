@@ -28,6 +28,7 @@ extern u8 psxhblankgate;
 int hblankend = 0;
 Counter counters[6];
 u32 nextCounter, nextsCounter;
+static void (*s_prevExecuteVU1Block)() = NULL;
 
 // its so it doesnt keep triggering an interrupt once its reached its target
 // if it doesnt reset the counter it needs stopping
@@ -64,7 +65,7 @@ void rcntSet() {
 			}
 		
 		// the + 10 is just in case of overflow
-			if(eecntmask & (1<<i) || !(counters[i].mode & 0x100)) continue;
+			if(!(counters[i].mode & 0x100)) continue;
 			 c = (counters[i].target - rcntCycle(i)) * counters[i].rate;
 			if (c < nextCounter) {
 			nextCounter = c;
@@ -109,6 +110,9 @@ void rcntInit() {
 	
 	for (i=0; i<4; i++) rcntUpd(i);
 	rcntSet();
+
+	assert(Cpu != NULL && Cpu->ExecuteVU1Block != NULL );
+	s_prevExecuteVU1Block = Cpu->ExecuteVU1Block;
 }
 
 void UpdateVSyncRate() {
@@ -142,12 +146,12 @@ void FrameLimiter()
 
 	// do over 4 frames instead of 1
 	if( (iFrame&3) == 0 ) {
-		u32 frames = (Config.PsxType&1) ? (4000 / 50 - 1) : (4000 / 60 - 1);
+		u32 frames = (Config.PsxType&1) ? (4000 / 50 - 4) : (4000 / 60 - 4);
 		dwEndTime = timeGetTime();
 
 		if( dwEndTime < dwStartTime + frames ) {
-			if( dwEndTime < dwStartTime + frames - 2 )
-				Sleep(frames-(dwEndTime-dwStartTime)-2);
+			if( dwEndTime < dwStartTime + frames - 3 )
+				Sleep(frames-(dwEndTime-dwStartTime)-3);
 
 			while(dwEndTime < dwStartTime + frames) dwEndTime = timeGetTime();
 		}
@@ -160,7 +164,6 @@ extern u32 CSRw;
 extern u32 SuperVUGetRecTimes(int clear);
 extern u32 vu0time;
 
-extern void recExecuteVU1Block(void);
 extern void DummyExecuteVU1Block(void);
 
 #include "VU.h"
@@ -181,6 +184,10 @@ void VSync() {
 		}
 		else {
 			GSvsync(newfield);
+
+            // update here on single thread mode
+            if( PAD1update != NULL ) PAD1update(0);
+            if( PAD2update != NULL ) PAD2update(1);
 		}
 
 		counters[5].mode&= ~0x10000;
@@ -336,6 +343,7 @@ void VSync() {
 										(uTotalTime >= uExpectedTime + (uDeltaTime/4))) ) {
 
 						if( CHECK_FRAMELIMIT == PCSX2_FRAMELIMIT_VUSKIP ) {
+							
 							Cpu->ExecuteVU1Block = DummyExecuteVU1Block;
 						}
 
@@ -350,7 +358,7 @@ void VSync() {
 					else {
 
 						if( CHECK_FRAMELIMIT == PCSX2_FRAMELIMIT_VUSKIP ) {
-							Cpu->ExecuteVU1Block = recExecuteVU1Block;
+							Cpu->ExecuteVU1Block = s_prevExecuteVU1Block;
 						}
 
 						if( nConsecutiveSkip ) {
@@ -408,8 +416,7 @@ void rcntUpdate()
 {
 	int i;
 	for (i=0; i<=3; i++) {
-		if (!(counters[i].mode & 0x80)) continue; // Stopped
-		counters[i].count += (int)((cpuRegs.cycle - counters[i].sCycleT) / counters[i].rate);
+		if ((counters[i].mode & 0x80)) counters[i].count += (int)((cpuRegs.cycle - counters[i].sCycleT) / counters[i].rate);
 		counters[i].sCycleT = cpuRegs.cycle - (cpuRegs.cycle % counters[i].rate);
 	}
 	for (i=0; i<=3; i++) {
@@ -423,8 +430,9 @@ void rcntUpdate()
 					SysPrintf("rcntcycle = %d, target = %d, cyclet = %d\n", rcntCycle(i), counters[i].target, counters[i].sCycleT);
 				}*/
 				//if ((eecntmask & (1 << i)) == 0) {
-				counters[i].mode|= 0x0400; // Target flag
-				if(counters[i].mode & 0x100) {
+				
+				if(counters[i].mode & 0x100 && !(counters[i].mode & 0x400)) {
+					counters[i].mode|= 0x0400; // Target flag
 					hwIntcIrq(counters[i].interrupt);
 					
 				}
@@ -441,9 +449,9 @@ void rcntUpdate()
 		
 		if (counters[i].count >= 0xffff) {
 			eecntmask &= ~(1 << i);
-			counters[i].mode|= 0x0800; // Overflow flag
-			if (counters[i].mode & 0x0200) { // Overflow interrupt
-				
+			
+			if (counters[i].mode & 0x0200 && !(counters[i].mode & 0x800)) { // Overflow interrupt
+				counters[i].mode|= 0x0800; // Overflow flag
 				hwIntcIrq(counters[i].interrupt);
 //				SysPrintf("counter[%d] overflow interrupt (%x)\n", i, cpuRegs.cycle);
 			}
@@ -512,12 +520,13 @@ void rcntWmode(int index, u32 value)
 
 
 	if (value & 0xc00) { //Clear status flags, the ps2 only clears what is given in the value
-		eecntmask &= ~(1 << index);
-		counters[index].mode &= ~((value & 0xc00));
+		//eecntmask &= ~(1 << index);
+		counters[index].mode &= ~(value & 0xc00);
 	}
 
+	if((value & 0x80) && !(counters[index].mode & 0x80)) rcntUpd(index); //Counter wasnt started, so set the start cycle
 		
-	//if((value & 0x3ff) != (counters[index].mode & 0x3ff))eecntmask &= ~(1 << index);
+//	if((value & 0x3ff) != (counters[index].mode & 0x3ff))eecntmask &= ~(1 << index);
 	counters[index].mode = (counters[index].mode & 0xc00) | (value & 0x3ff);
 
 #ifdef EECNT_LOG
@@ -607,7 +616,7 @@ void rcntEndGate(int mode){
 }
 void rcntWtarget(int index, u32 value) {
 
-	eecntmask &= ~(1 << index);
+	//eecntmask &= ~(1 << index);
 	counters[index].target = value & 0xffff;
 	
 #ifdef EECNT_LOG

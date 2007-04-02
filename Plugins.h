@@ -25,7 +25,7 @@
 
 int  LoadPlugins();
 void ReleasePlugins();
-int  OpenPlugins();
+int  OpenPlugins(const char* pTitleFilename);
 void ClosePlugins();
 void ResetPlugins();
 

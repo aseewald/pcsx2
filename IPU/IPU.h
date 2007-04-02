@@ -20,8 +20,7 @@
 #define __IPU_H__
 
 #include "Common.h"
-
-#ifdef __WIN32__
+#ifdef _MSC_VER
 #pragma pack(1)
 #endif
 
@@ -112,7 +111,7 @@ typedef struct {
 	u8 bufferhasnew;
 } tIPU_BP;
 
-#ifdef __WIN32__
+#ifdef _WIN32
 #pragma pack()
 #endif
 

@@ -21,8 +21,8 @@
 extern void __Log(char *fmt, ...);
 
 // to be consistent with EE
-#define PSX_HI MMX_HI
-#define PSX_LO MMX_LO
+#define PSX_HI XMMGPR_HI
+#define PSX_LO XMMGPR_LO
 
 extern uptr *psxRecLUT;
 

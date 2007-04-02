@@ -16,7 +16,8 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#if 1
+// stop compiling if NORECBUILD build (only for Visual Studio)
+#if !(defined(_MSC_VER) && defined(PCSX2_NORECBUILD))
 
 extern "C" {
 #include <stdlib.h>
@@ -25,7 +26,7 @@ extern "C" {
 #include <assert.h>
 #include <malloc.h>
 
-#if defined(__WIN32__)
+#if defined(_WIN32)
 #include <windows.h>
 #endif
 
@@ -42,7 +43,7 @@ extern "C" {
 #include "ix86/ix86.h"
 
 #include "iCore.h"
-#include "ir3000A.h"
+#include "iR3000A.h"
 
 extern void psxLWL();
 extern void psxLWR();
@@ -57,10 +58,10 @@ extern u32 g_psxMaxRecMem;
 #define REC_FUNC(f) \
 void psx##f(); \
 static void rpsx##f() { \
-	MOV32ItoM((u32)&psxRegs.code, (u32)psxRegs.code); \
+	MOV32ItoM((uptr)&psxRegs.code, (u32)psxRegs.code); \
 	_psxFlushCall(FLUSH_EVERYTHING); \
 	/*MOV32ItoM((u32)&psxRegs.pc, (u32)pc);*/ \
-	CALLFunc((u32)psx##f); \
+	CALLFunc((uptr)psx##f); \
 	PSX_DEL_CONST(_Rt_); \
 /*	branch = 2; */\
 }
@@ -180,8 +181,8 @@ void rpsxORconst(int info, int dreg, int sreg, u32 imm)
 	}
 	else {
 		if( dreg != sreg ) {
-			MOV32MtoR(ECX, (u32)&psxRegs.GPR.r[sreg]);
-			MOV32RtoM((u32)&psxRegs.GPR.r[dreg], ECX);
+			MOV32MtoR(ECX, (uptr)&psxRegs.GPR.r[sreg]);
+			MOV32RtoM((uptr)&psxRegs.GPR.r[dreg], ECX);
 		}
 	}
 }
@@ -199,7 +200,7 @@ void rpsxXORconst(int info, int dreg, int sreg, u32 imm)
 {
 	if( imm == 0xffffffff ) {
 		if( dreg == sreg ) {
-			NOT32M((u32)&psxRegs.GPR.r[dreg]);
+			NOT32M((uptr)&psxRegs.GPR.r[dreg]);
 		}
 		else {
 			MOV32MtoR(ECX, (uptr)&psxRegs.GPR.r[sreg]);
@@ -279,7 +280,7 @@ void rpsxSUBU_const()
 void rpsxSUBU_consts(int info)
 {
 	MOV32ItoR(EAX, g_psxConstRegs[_Rs_]);
-	SUB32MtoR(EAX, (u32)&psxRegs.GPR.r[_Rt_]);
+	SUB32MtoR(EAX, (uptr)&psxRegs.GPR.r[_Rt_]);
 	MOV32RtoM((uptr)&psxRegs.GPR.r[_Rd_], EAX);
 }
 
@@ -309,17 +310,17 @@ void rpsxLogicalOp(int info, int op)
 {
 	if( _Rd_ == _Rs_ || _Rd_ == _Rt_ ) {
 		int vreg = _Rd_ == _Rs_ ? _Rt_ : _Rs_;
-		MOV32MtoR(ECX, (u32)&psxRegs.GPR.r[vreg]);
-		LogicalOp32RtoM((u32)&psxRegs.GPR.r[_Rd_], ECX, op);
+		MOV32MtoR(ECX, (uptr)&psxRegs.GPR.r[vreg]);
+		LogicalOp32RtoM((uptr)&psxRegs.GPR.r[_Rd_], ECX, op);
 		if( op == 3 )
-			NOT32M((u32)&psxRegs.GPR.r[_Rd_]);
+			NOT32M((uptr)&psxRegs.GPR.r[_Rd_]);
 	}
 	else {
-		MOV32MtoR(ECX, (u32)&psxRegs.GPR.r[_Rs_]);
-		LogicalOp32MtoR(ECX, (u32)&psxRegs.GPR.r[_Rt_], op);
+		MOV32MtoR(ECX, (uptr)&psxRegs.GPR.r[_Rs_]);
+		LogicalOp32MtoR(ECX, (uptr)&psxRegs.GPR.r[_Rt_], op);
 		if( op == 3 )
 			NOT32R(ECX);
-		MOV32RtoM((u32)&psxRegs.GPR.r[_Rd_], ECX);
+		MOV32RtoM((uptr)&psxRegs.GPR.r[_Rd_], ECX);
 	}
 }
 
@@ -367,24 +368,24 @@ void rpsxNORconst(int info, int dreg, int sreg, u32 imm)
 {
 	if( imm ) {
 		if( dreg == sreg ) {
-			OR32ItoM((u32)&psxRegs.GPR.r[dreg], imm);
-			NOT32M((u32)&psxRegs.GPR.r[dreg]);
+			OR32ItoM((uptr)&psxRegs.GPR.r[dreg], imm);
+			NOT32M((uptr)&psxRegs.GPR.r[dreg]);
 		}
 		else {
-			MOV32MtoR(ECX, (u32)&psxRegs.GPR.r[sreg]);
+			MOV32MtoR(ECX, (uptr)&psxRegs.GPR.r[sreg]);
 			OR32ItoR(ECX, imm);
 			NOT32R(ECX);
-			MOV32RtoM((u32)&psxRegs.GPR.r[dreg], ECX);
+			MOV32RtoM((uptr)&psxRegs.GPR.r[dreg], ECX);
 		}
 	}
 	else {
 		if( dreg == sreg ) {
-			NOT32M((u32)&psxRegs.GPR.r[dreg]);
+			NOT32M((uptr)&psxRegs.GPR.r[dreg]);
 		}
 		else {
-			MOV32MtoR(ECX, (u32)&psxRegs.GPR.r[sreg]);
+			MOV32MtoR(ECX, (uptr)&psxRegs.GPR.r[sreg]);
 			NOT32R(ECX);
-			MOV32RtoM((u32)&psxRegs.GPR.r[dreg], ECX);
+			MOV32RtoM((uptr)&psxRegs.GPR.r[dreg], ECX);
 		}
 	}
 }
@@ -455,8 +456,8 @@ void rpsxMULT_const()
 {
 	u64 res = (s64)((s64)*(int*)&g_psxConstRegs[_Rs_] * (s64)*(int*)&g_psxConstRegs[_Rt_]);
 
-	MOV32ItoM((u32)&psxRegs.GPR.n.hi, (u32)((res >> 32) & 0xffffffff));
-	MOV32ItoM((u32)&psxRegs.GPR.n.lo, (u32)(res & 0xffffffff));
+	MOV32ItoM((uptr)&psxRegs.GPR.n.hi, (u32)((res >> 32) & 0xffffffff));
+	MOV32ItoM((uptr)&psxRegs.GPR.n.lo, (u32)(res & 0xffffffff));
 }
 
 void rpsxMULTsuperconst(int info, int sreg, int imm, int sign)
@@ -490,8 +491,8 @@ void rpsxMULTU_const()
 {
 	u64 res = (u64)((u64)g_psxConstRegs[_Rs_] * (u64)g_psxConstRegs[_Rt_]);
 
-	MOV32ItoM((u32)&psxRegs.GPR.n.hi, (u32)((res >> 32) & 0xffffffff));
-	MOV32ItoM((u32)&psxRegs.GPR.n.lo, (u32)(res & 0xffffffff));
+	MOV32ItoM((uptr)&psxRegs.GPR.n.hi, (u32)((res >> 32) & 0xffffffff));
+	MOV32ItoM((uptr)&psxRegs.GPR.n.lo, (u32)(res & 0xffffffff));
 }
 
 void rpsxMULTU_consts(int info) { rpsxMULTsuperconst(info, _Rt_, g_psxConstRegs[_Rs_], 0); }
@@ -508,8 +509,8 @@ void rpsxDIV_const()
 	if (g_psxConstRegs[_Rt_] != 0) {
 		lo = *(int*)&g_psxConstRegs[_Rs_] / *(int*)&g_psxConstRegs[_Rt_];
 		hi = *(int*)&g_psxConstRegs[_Rs_] % *(int*)&g_psxConstRegs[_Rt_];
-		MOV32ItoM((u32)&psxRegs.GPR.n.hi, hi);
-		MOV32ItoM((u32)&psxRegs.GPR.n.lo, lo);
+		MOV32ItoM((uptr)&psxRegs.GPR.n.hi, hi);
+		MOV32ItoM((uptr)&psxRegs.GPR.n.lo, lo);
 	}
 }
 
@@ -541,8 +542,8 @@ void rpsxDIVsuperconsts(int info, int sign)
 	}
 	else {
 		XOR32RtoR(EAX, EAX);
-		MOV32RtoM((u32)&psxRegs.GPR.n.hi, EAX);
-		MOV32RtoM((u32)&psxRegs.GPR.n.lo, EAX);
+		MOV32RtoM((uptr)&psxRegs.GPR.n.hi, EAX);
+		MOV32RtoM((uptr)&psxRegs.GPR.n.lo, EAX);
 	}
 }
 
@@ -551,7 +552,7 @@ void rpsxDIVsuperconstt(int info, int sign)
 	u32 imm = g_psxConstRegs[_Rt_];
 
 	if( imm ) {
-		MOV32MtoR(EAX, (u32)&psxRegs.GPR.r[_Rs_]);
+		MOV32MtoR(EAX, (uptr)&psxRegs.GPR.r[_Rs_]);
 		MOV32ItoR(ECX, imm);
 		//CDQ();
 		
@@ -606,8 +607,8 @@ void rpsxDIVU_const()
 	if (g_psxConstRegs[_Rt_] != 0) {
 		lo = g_psxConstRegs[_Rs_] / g_psxConstRegs[_Rt_];
 		hi = g_psxConstRegs[_Rs_] % g_psxConstRegs[_Rt_];
-		MOV32ItoM((u32)&psxRegs.GPR.n.hi, hi);
-		MOV32ItoM((u32)&psxRegs.GPR.n.lo, lo);
+		MOV32ItoM((uptr)&psxRegs.GPR.n.hi, hi);
+		MOV32ItoM((uptr)&psxRegs.GPR.n.lo, lo);
 	}
 }
 
@@ -618,7 +619,7 @@ void rpsxDIVU_(int info) { rpsxDIVsuper(info, 0); }
 PSXRECOMPILE_CONSTCODE3(DIVU, 1);
 
 //// LoadStores
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
 
 // VM load store functions (fastest)
 
@@ -785,7 +786,7 @@ void recStore(int bit)
 
 		if( !(addr & 0x10000000) ) {
 			// check g_psxWriteOk
-			CMP32ItoM((u32)&g_psxWriteOk, 0);
+			CMP32ItoM((uptr)&g_psxWriteOk, 0);
 			pjmpok = JE8(0);
 		}
 
@@ -832,7 +833,7 @@ void recStore(int bit)
 		int mmregs = _psxPrepareReg(_Rs_);
 		dohw = rpsxSetMemLocation(_Rs_, mmregs);
 
-		CMP32ItoM((u32)&g_psxWriteOk, 0);
+		CMP32ItoM((uptr)&g_psxWriteOk, 0);
 		u8* pjmpok = JE8(0);
 
 		if( PSX_IS_CONST1( _Rt_ ) ) {
@@ -862,7 +863,7 @@ void recStore(int bit)
 		}
 
 		if( s_nAddMemOffset ) ADD32ItoR(ECX, s_nAddMemOffset);
-		CMP32MtoR(ECX, (u32)&g_psxMaxRecMem);
+		CMP32MtoR(ECX, (uptr)&g_psxMaxRecMem);
 		
 		j8Ptr[1] = JAE8(0);
 
@@ -929,15 +930,13 @@ static void rpsxLB()
 	_psxOnWriteReg(_Rt_);
 	_psxDeleteReg(_Rt_, 0);
 
-	MOV32MtoR(EAX, (uptr)&psxRegs.GPR.r[_Rs_]);
-	if (_Imm_) ADD32ItoR(EAX, _Imm_);
-	PUSH32R  (EAX);
-	CALLFunc((int)psxMemRead8);
+	MOV32MtoR(X86ARG1, (uptr)&psxRegs.GPR.r[_Rs_]);
+	if (_Imm_) ADD32ItoR(X86ARG1, _Imm_);
+    _callFunctionArg1((uptr)psxMemRead8, X86ARG1|MEM_X86TAG, 0);
 	if (_Rt_) {
 		MOVSX32R8toR(EAX, EAX);
 		MOV32RtoM((uptr)&psxRegs.GPR.r[_Rt_], EAX);
 	}
-	ADD32ItoR(ESP, 4);
 	PSX_DEL_CONST(_Rt_);
 }
 
@@ -947,15 +946,13 @@ static void rpsxLBU()
 	_psxOnWriteReg(_Rt_);
 	_psxDeleteReg(_Rt_, 0);
 
-	MOV32MtoR(EAX, (uptr)&psxRegs.GPR.r[_Rs_]);
-	if (_Imm_) ADD32ItoR(EAX, _Imm_);
-	PUSH32R  (EAX);
-	CALLFunc((int)psxMemRead8);
+	MOV32MtoR(X86ARG1, (uptr)&psxRegs.GPR.r[_Rs_]);
+	if (_Imm_) ADD32ItoR(X86ARG1, _Imm_);
+	_callFunctionArg1((uptr)psxMemRead8, X86ARG1|MEM_X86TAG, 0);
 	if (_Rt_) {
 		MOVZX32R8toR(EAX, EAX);
 		MOV32RtoM((uptr)&psxRegs.GPR.r[_Rt_], EAX);
 	}
-	ADD32ItoR(ESP, 4);
 	PSX_DEL_CONST(_Rt_);
 }
 
@@ -965,15 +962,13 @@ static void rpsxLH()
 	_psxOnWriteReg(_Rt_);
 	_psxDeleteReg(_Rt_, 0);
 
-	MOV32MtoR(EAX, (uptr)&psxRegs.GPR.r[_Rs_]);
-	if (_Imm_) ADD32ItoR(EAX, _Imm_);
-	PUSH32R  (EAX);
-	CALLFunc((int)psxMemRead16);
+	MOV32MtoR(X86ARG1, (uptr)&psxRegs.GPR.r[_Rs_]);
+	if (_Imm_) ADD32ItoR(X86ARG1, _Imm_);
+	_callFunctionArg1((uptr)psxMemRead16, X86ARG1|MEM_X86TAG, 0);
 	if (_Rt_) {
 		MOVSX32R16toR(EAX, EAX);
 		MOV32RtoM((uptr)&psxRegs.GPR.r[_Rt_], EAX);
 	}
-	ADD32ItoR(ESP, 4);
 	PSX_DEL_CONST(_Rt_);
 }
 
@@ -983,15 +978,13 @@ static void rpsxLHU()
 	_psxOnWriteReg(_Rt_);
 	_psxDeleteReg(_Rt_, 0);
 
-	MOV32MtoR(EAX, (uptr)&psxRegs.GPR.r[_Rs_]);
-	if (_Imm_) ADD32ItoR(EAX, _Imm_);
-	PUSH32R  (EAX);
-	CALLFunc((int)psxMemRead16);
+	MOV32MtoR(X86ARG1, (uptr)&psxRegs.GPR.r[_Rs_]);
+	if (_Imm_) ADD32ItoR(X86ARG1, _Imm_);
+	_callFunctionArg1((uptr)psxMemRead16, X86ARG1|MEM_X86TAG, 0);
 	if (_Rt_) {
 		MOVZX32R16toR(EAX, EAX);
 		MOV32RtoM((uptr)&psxRegs.GPR.r[_Rt_], EAX);
 	}
-	ADD32ItoR(ESP, 4);
 	PSX_DEL_CONST(_Rt_);
 }
 
@@ -1002,28 +995,26 @@ static void rpsxLW()
 	_psxDeleteReg(_Rt_, 0);
 
 	_psxFlushCall(FLUSH_EVERYTHING);
-	MOV32MtoR(EAX, (uptr)&psxRegs.GPR.r[_Rs_]);
-	if (_Imm_) ADD32ItoR(EAX, _Imm_);
+	MOV32MtoR(X86ARG1, (uptr)&psxRegs.GPR.r[_Rs_]);
+	if (_Imm_) ADD32ItoR(X86ARG1, _Imm_);
 
-	TEST32ItoR(EAX, 0x10000000);
+	TEST32ItoR(X86ARG1, 0x10000000);
 	j8Ptr[0] = JZ8(0);
 
-	PUSH32R  (EAX);
-	CALLFunc((int)psxMemRead32);
+	_callFunctionArg1((uptr)psxMemRead32, X86ARG1|MEM_X86TAG, 0);
 	if (_Rt_) {
 		MOV32RtoM((uptr)&psxRegs.GPR.r[_Rt_], EAX);
 	}
-	ADD32ItoR(ESP, 4);
 
 	j8Ptr[1] = JMP8(0);
 	x86SetJ8(j8Ptr[0]);
 
 	// read from psM directly
-	AND32ItoR(EAX, 0x0fffffff);
-	ADD32ItoR(EAX, (u32)psxM);
+	AND32ItoR(X86ARG1, 0x0fffffff);
+	ADD32ItoR(X86ARG1, (uptr)psxM);
 
-	MOV32RmtoR( EAX, EAX );
-	MOV32RtoM( (uptr)&psxRegs.GPR.r[_Rt_], EAX);
+	MOV32RmtoR( X86ARG1, X86ARG1 );
+	MOV32RtoM( (uptr)&psxRegs.GPR.r[_Rt_], X86ARG1);
 
 	x86SetJ8(j8Ptr[1]);
 	PSX_DEL_CONST(_Rt_);
@@ -1034,12 +1025,9 @@ static void rpsxSB()
 	_psxDeleteReg(_Rs_, 1);
 	_psxDeleteReg(_Rt_, 1);
 
-	PUSH32M  ((uptr)&psxRegs.GPR.r[_Rt_]);
-	MOV32MtoR(EAX, (uptr)&psxRegs.GPR.r[_Rs_]);
-	if (_Imm_) ADD32ItoR(EAX, _Imm_);
-	PUSH32R  (EAX);
-	CALLFunc((int)psxMemWrite8);
-	ADD32ItoR(ESP, 8);
+	MOV32MtoR(X86ARG1, (uptr)&psxRegs.GPR.r[_Rs_]);
+	if (_Imm_) ADD32ItoR(X86ARG1, _Imm_);
+	_callFunctionArg2((uptr)psxMemWrite8, X86ARG1|MEM_X86TAG, MEM_MEMORYTAG, 0, (uptr)&psxRegs.GPR.r[_Rt_]);
 }
 
 static void rpsxSH()
@@ -1047,12 +1035,9 @@ static void rpsxSH()
 	_psxDeleteReg(_Rs_, 1);
 	_psxDeleteReg(_Rt_, 1);
 
-	PUSH32M  ((uptr)&psxRegs.GPR.r[_Rt_]);
-	MOV32MtoR(EAX, (uptr)&psxRegs.GPR.r[_Rs_]);
-	if (_Imm_) ADD32ItoR(EAX, _Imm_);
-	PUSH32R  (EAX);
-	CALLFunc((int)psxMemWrite16);
-	ADD32ItoR(ESP, 8);
+	MOV32MtoR(X86ARG1, (uptr)&psxRegs.GPR.r[_Rs_]);
+	if (_Imm_) ADD32ItoR(X86ARG1, _Imm_);
+	_callFunctionArg2((uptr)psxMemWrite16, X86ARG1|MEM_X86TAG, MEM_MEMORYTAG, 0, (uptr)&psxRegs.GPR.r[_Rt_]);
 }
 
 static void rpsxSW()
@@ -1060,12 +1045,9 @@ static void rpsxSW()
 	_psxDeleteReg(_Rs_, 1);
 	_psxDeleteReg(_Rt_, 1);
 
-	PUSH32M  ((uptr)&psxRegs.GPR.r[_Rt_]);
-	MOV32MtoR(EAX, (uptr)&psxRegs.GPR.r[_Rs_]);
-	if (_Imm_) ADD32ItoR(EAX, _Imm_);
-	PUSH32R  (EAX);
-	CALLFunc((int)psxMemWrite32);
-	ADD32ItoR(ESP, 8);
+	MOV32MtoR(X86ARG1, (uptr)&psxRegs.GPR.r[_Rs_]);
+	if (_Imm_) ADD32ItoR(X86ARG1, _Imm_);
+	_callFunctionArg2((uptr)psxMemWrite32, X86ARG1|MEM_X86TAG, MEM_MEMORYTAG, 0, (uptr)&psxRegs.GPR.r[_Rt_]);
 }
 
 #endif // end load store
@@ -1083,9 +1065,9 @@ void rpsxShiftConst(int info, int rdreg, int rtreg, int imm, int shifttype)
 	if (imm) {
 		if( rdreg == rtreg ) {
 			switch(shifttype) {
-				case 0: SHL32ItoM((u32)&psxRegs.GPR.r[rdreg], imm); break;
-				case 1: SHR32ItoM((u32)&psxRegs.GPR.r[rdreg], imm); break;
-				case 2: SAR32ItoM((u32)&psxRegs.GPR.r[rdreg], imm); break;
+				case 0: SHL32ItoM((uptr)&psxRegs.GPR.r[rdreg], imm); break;
+				case 1: SHR32ItoM((uptr)&psxRegs.GPR.r[rdreg], imm); break;
+				case 2: SAR32ItoM((uptr)&psxRegs.GPR.r[rdreg], imm); break;
 			}
 		}
 		else {
@@ -1100,8 +1082,8 @@ void rpsxShiftConst(int info, int rdreg, int rtreg, int imm, int shifttype)
 	}
 	else {
 		if( rdreg != rtreg ) {
-			MOV32MtoR(EAX, (u32)&psxRegs.GPR.r[rtreg]);
-			MOV32RtoM((u32)&psxRegs.GPR.r[rdreg], EAX);
+			MOV32MtoR(EAX, (uptr)&psxRegs.GPR.r[rtreg]);
+			MOV32RtoM((uptr)&psxRegs.GPR.r[rdreg], EAX);
 		}
 	}
 }
@@ -1288,12 +1270,12 @@ void rpsxJALR()
 	
 	if( x86regs[ESI].inuse ) {
 		assert( x86regs[ESI].type == X86TYPE_PCWRITEBACK );
-		MOV32RtoM((int)&psxRegs.pc, ESI);
+		MOV32RtoM((uptr)&psxRegs.pc, ESI);
 		x86regs[ESI].inuse = 0;
 	}
 	else {
-		MOV32MtoR(EAX, (u32)&g_recWriteback);
-		MOV32RtoM((int)&psxRegs.pc, EAX);
+		MOV32MtoR(EAX, (uptr)&g_recWriteback);
+		MOV32RtoM((uptr)&psxRegs.pc, EAX);
 	}
 
 	psxSetBranchReg(0xffffffff);
@@ -1308,18 +1290,18 @@ static u32 s_do32 = 0;
 void rpsxSetBranchEQ(int info, int process)
 {
 	if( process & PROCESS_CONSTS ) {
-		CMP32ItoM( (int)&psxRegs.GPR.r[ _Rt_ ], g_psxConstRegs[_Rs_] );
+		CMP32ItoM( (uptr)&psxRegs.GPR.r[ _Rt_ ], g_psxConstRegs[_Rs_] );
 		if( s_do32 ) s_pbranchjmp = JNE32( 0 );
 		else s_pbranchjmp = JNE8( 0 );
 	}
 	else if( process & PROCESS_CONSTT ) {
-		CMP32ItoM( (int)&psxRegs.GPR.r[ _Rs_ ], g_psxConstRegs[_Rt_] );
+		CMP32ItoM( (uptr)&psxRegs.GPR.r[ _Rs_ ], g_psxConstRegs[_Rt_] );
 		if( s_do32 ) s_pbranchjmp = JNE32( 0 );
 		else s_pbranchjmp = JNE8( 0 );
 	}
 	else {
-		MOV32MtoR( EAX, (int)&psxRegs.GPR.r[ _Rs_ ] );
-		CMP32MtoR( EAX, (int)&psxRegs.GPR.r[ _Rt_ ] );
+		MOV32MtoR( EAX, (uptr)&psxRegs.GPR.r[ _Rs_ ] );
+		CMP32MtoR( EAX, (uptr)&psxRegs.GPR.r[ _Rt_ ] );
 		if( s_do32 ) s_pbranchjmp = JNE32( 0 );
 		else s_pbranchjmp = JNE8( 0 );
 	}
@@ -1467,7 +1449,7 @@ void rpsxBLTZ()
 		return;
 	}
 
-	CMP32ItoM((u32)&psxRegs.GPR.r[_Rs_], 0);
+	CMP32ItoM((uptr)&psxRegs.GPR.r[_Rs_], 0);
 	s8* prevx86 = x86Ptr;
 	u8* pjmp = JL8(0);
 
@@ -1514,7 +1496,7 @@ void rpsxBGEZ()
 		return;
 	}
 
-	CMP32ItoM((u32)&psxRegs.GPR.r[_Rs_], 0);
+	CMP32ItoM((uptr)&psxRegs.GPR.r[_Rs_], 0);
 	s8* prevx86 = x86Ptr;
 	u8* pjmp = JGE8(0);
 
@@ -1568,7 +1550,7 @@ void rpsxBLTZAL()
 		return;
 	}
 
-	CMP32ItoM((u32)&psxRegs.GPR.r[_Rs_], 0);
+	CMP32ItoM((uptr)&psxRegs.GPR.r[_Rs_], 0);
 	s8* prevx86 = x86Ptr;
 	u8* pjmp = JL8(0);
 
@@ -1621,7 +1603,7 @@ void rpsxBGEZAL()
 		return;
 	}
 
-	CMP32ItoM((u32)&psxRegs.GPR.r[_Rs_], 0);
+	CMP32ItoM((uptr)&psxRegs.GPR.r[_Rs_], 0);
 	s8* prevx86 = x86Ptr;
 	u8* pjmp = JGE8(0);
 
@@ -2066,4 +2048,4 @@ void rpsxpropCP0(EEINST* prev, EEINST* pinst)
 	}
 }
 
-#endif
+#endif // PCSX2_NORECBUILD

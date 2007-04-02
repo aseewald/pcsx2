@@ -25,7 +25,9 @@ typedef struct
 	u32 LBLID;
 } GSRegSIGBLID;
 
-#ifdef WIN32_VIRTUAL_MEM
+#define GSPATH3FIX
+
+#ifdef PCSX2_VIRTUAL_MEM
 #define GSCSRr *((u64*)(PS2MEM_GS+0x1000))
 #define GSIMR *((u32*)(PS2MEM_GS+0x1010))
 #define GSSIGLBLID ((GSRegSIGBLID*)(PS2MEM_GS+0x1080))
@@ -37,7 +39,7 @@ extern u8 g_RealGSMem[0x2000];
 #endif
 
 #define GS_RINGBUFFERBASE	(u8*)(0x10200000)
-#define GS_RINGBUFFERSIZE	0x00300000 // 2Mb
+#define GS_RINGBUFFERSIZE	0x00300000 // 3Mb
 #define GS_RINGBUFFEREND	(u8*)(GS_RINGBUFFERBASE+GS_RINGBUFFERSIZE)
 
 #define GS_RINGTYPE_RESTART 0
@@ -67,7 +69,7 @@ extern u32 g_MTGSDebug, g_MTGSId;
 	if( g_MTGSDebug & 1 ) { \
 		u32* pstart = (u32*)(start); \
 		u32 cursize = (u32)(size); \
-		fprintf(g_fMTGSWrite, "*%x-%x (%d)\n", (u32)(start), (u32)(size), ++g_MTGSId); \
+		fprintf(g_fMTGSWrite, "*%x-%x (%d)\n", (u32)(uptr)(start), (u32)(size), ++g_MTGSId); \
 		/*while(cursize > 0) { \
 			fprintf(g_fMTGSWrite, "%x %x %x %x\n", pstart[0], pstart[1], pstart[2], pstart[3]); \
 			pstart += 4; \
@@ -81,7 +83,7 @@ extern u32 g_MTGSDebug, g_MTGSId;
 	if( g_MTGSDebug & 1 ) { \
 		u32* pstart = (u32*)(start); \
 		u32 cursize = (u32)(size); \
-		fprintf(g_fMTGSRead, "*%x-%x (%d)\n", (u32)(start), (u32)(size), ++g_MTGSId); \
+		fprintf(g_fMTGSRead, "*%x-%x (%d)\n", (u32)(uptr)(start), (u32)(size), ++g_MTGSId); \
 		/*while(cursize > 0) { \
 			fprintf(g_fMTGSRead, "%x %x %x %x\n", pstart[0], pstart[1], pstart[2], pstart[3]); \
 			pstart += 4; \
@@ -104,8 +106,17 @@ extern u32 g_MTGSDebug, g_MTGSId;
 	assert( temp <= GS_RINGBUFFEREND); \
 	MTGS_RECWRITE(mem, size); \
 	if( temp == GS_RINGBUFFEREND ) temp = GS_RINGBUFFERBASE; \
-	InterlockedExchangePointer(&g_pGSWritePos, temp); \
+	InterlockedExchangePointer((void**)&g_pGSWritePos, temp);	\
 }
+
+#if defined(_WIN32) && !defined(WIN32_PTHREADS)
+#define GS_SETEVENT() SetEvent(g_hGsEvent)
+#else
+#include <pthread.h>
+#include <semaphore.h>
+extern sem_t g_semGsThread;
+#define GS_SETEVENT() sem_post(&g_semGsThread)
+#endif
 
 u32 GSgifTransferDummy(int path, u32 *pMem, u32 size);
 

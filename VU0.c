@@ -28,7 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "Common.h"
-#include "Debug.h"
+#include "DebugTools/Debug.h"
 #include "R5900.h"
 #include "InterTables.h"
 #include "VUops.h"
@@ -104,6 +104,11 @@ void _vu0WaitMicro() {
 	FreezeXMMRegs(1);
 	do {
 		Cpu->ExecuteVU0Block();
+        // knockout kings 2002 loops here
+        if( VU0.cycle-startcycle > 0x1000 ) {
+            SysPrintf("VU0 wait stall (email zero if gfx are bad)\n");
+            break;
+        }
 	} while ((VU0.VI[REG_VPU_STAT].UL & 0x1) && (VU0.flags & VUFLAG_MFLAGSET) == 0);
 
 	FreezeXMMRegs(0);
@@ -381,3 +386,16 @@ void VCALLMSR() {
 	FreezeXMMRegs(0);
 	FreezeMMXRegs(0);
 }  
+
+#ifndef _MSC_VER
+
+u32* GET_VU_MEM(VURegs* VU, u32 addr)
+{
+	if( VU == g_pVU1 ) return (u32*)(VU1.Mem+(addr&0x3fff));
+	
+	if( addr >= 0x4200 ) return &VU1.VI[(addr>>2)&0x1f].UL;
+	
+	return (u32*)(VU0.Mem+(addr&0x0fff));	
+}
+
+#endif

@@ -25,7 +25,7 @@
 #include "PsxCommon.h"
 #include "GS.h"
 
-#ifdef __MSCW32__
+#ifdef _WIN32
 #pragma warning(disable:4244)
 #endif
 
@@ -96,6 +96,7 @@ int LoadGSplugin(char *filename) {
 	LoadGSsym1(gifTransfer2, "GSgifTransfer2");
 	LoadGSsym1(gifTransfer3, "GSgifTransfer3");
 	LoadGSsym1(readFIFO,     "GSreadFIFO");
+    LoadGSsymN(getLastTag,   "GSgetLastTag");
 	LoadGSsymN(readFIFO2,    "GSreadFIFO2"); // optional
 	LoadGSsym1(vsync,        "GSvsync");
 
@@ -106,6 +107,7 @@ int LoadGSplugin(char *filename) {
 	LoadGSsym0(irqCallback,  "GSirqCallback");
 	LoadGSsym0(printf,       "GSprintf");
 	LoadGSsym1(setBaseMem,	"GSsetBaseMem");
+	LoadGSsymN(setGameCRC,	"GSsetGameCRC");
 	LoadGSsym1(reset,       "GSreset");
 	LoadGSsym1(writeCSR,       "GSwriteCSR");
 	LoadGSsymN(makeSnapshot2,"GSmakeSnapshot2");
@@ -113,7 +115,7 @@ int LoadGSplugin(char *filename) {
 
 	LoadGSsymN(setFrameSkip, "GSsetFrameSkip");
 
-#ifdef __WIN32__
+#ifdef _WIN32
 	LoadGSsymN(setWindowInfo,"GSsetWindowInfo");
 #endif
 	LoadGSsym0(freeze,       "GSfreeze");
@@ -155,6 +157,7 @@ int LoadPAD1plugin(char *filename) {
 	LoadPAD1sym1(startPoll,    "PADstartPoll");
 	LoadPAD1sym1(poll,         "PADpoll");
 	LoadPAD1sym1(query,        "PADquery");
+    LoadPAD1symN(update,       "PADupdate");
 
 	LoadPAD1symN(gsDriverInfo, "PADgsDriverInfo");
 	LoadPAD1sym0(configure,    "PADconfigure");
@@ -195,6 +198,7 @@ int LoadPAD2plugin(char *filename) {
 	LoadPAD2sym1(startPoll,    "PADstartPoll");
 	LoadPAD2sym1(poll,         "PADpoll");
 	LoadPAD2sym1(query,        "PADquery");
+    LoadPAD2symN(update,       "PADupdate");
 
 	LoadPAD2symN(gsDriverInfo, "PADgsDriverInfo");
 	LoadPAD2sym0(configure,    "PADconfigure");
@@ -240,6 +244,7 @@ int LoadSPU2plugin(char *filename) {
     LoadSPU2sym1(readDMA7Mem,  "SPU2readDMA7Mem");     
     LoadSPU2sym1(writeDMA7Mem, "SPU2writeDMA7Mem");  
 	LoadSPU2sym1(interruptDMA7,"SPU2interruptDMA7");
+    LoadSPU2symN(setDMABaseAddr, "SPU2setDMABaseAddr");
 	LoadSPU2sym1(ReadMemAddr,  "SPU2ReadMemAddr");
 	LoadSPU2sym1(WriteMemAddr,  "SPU2WriteMemAddr");
 	LoadSPU2sym1(irqCallback,  "SPU2irqCallback");
@@ -493,22 +498,45 @@ int LoadPlugins() {
 	return 0;
 }
 
-long pDsp;
+uptr pDsp;
 static pluginsopened = 0;
 extern void spu2DMA4Irq();
 extern void spu2DMA7Irq();
 extern void spu2Irq();
+
+#if defined(_WIN32) && !defined(WIN32_PTHREADS)
 extern HANDLE g_hGSOpen, g_hGSDone;
-int OpenPlugins() {
+#else
+extern pthread_mutex_t g_mutexGsThread;
+extern pthread_cond_t g_condGsEvent;
+extern sem_t g_semGsThread;
+#endif
+
+int OpenPlugins(const char* pTitleFilename) {
 	GSdriverInfo info;
 	int ret;
 
 	if (loadp == 0) return -1;
 
+#ifndef _WIN32
+    // change dir so that CDVD can find its config file
+    char file[255], pNewTitle[255];
+    getcwd(file, ARRAYSIZE(file));
+    chdir(Config.PluginsDir);
+
+    if( pTitleFilename != NULL && pTitleFilename[0] != '/' ) {
+        // because we are changing the dir, we have to set a new title if it is a relative dir
+        sprintf(pNewTitle, "%s/%s", file, pTitleFilename);
+        pTitleFilename = pNewTitle;
+    }
+#endif
+
 	//first we need the data
 	if (CDVDnewDiskCB) CDVDnewDiskCB(cdvdNewDiskCB);
-	ret = CDVDopen();
-	if (ret != 0) { SysMessage (_("Error Opening CDVD Plugin")); return -1; }
+
+    ret = CDVDopen(pTitleFilename);
+
+	if (ret != 0) { SysMessage (_("Error Opening CDVD Plugin")); goto OpenError; }
 	cdvdNewDiskCB();
 
 	//video
@@ -517,12 +545,19 @@ int OpenPlugins() {
 	// make sure only call open once per instance
 	if( !pluginsopened ) {
 		if( CHECK_MULTIGS ) {
+#if defined(_WIN32) && !defined(WIN32_PTHREADS)
 			SetEvent(g_hGSOpen);
 			WaitForSingleObject(g_hGSDone, INFINITE);
+#else
+			pthread_cond_signal(&g_condGsEvent);
+            sem_wait(&g_semGsThread);
+            pthread_mutex_lock(&g_mutexGsThread);
+            pthread_mutex_unlock(&g_mutexGsThread);           SysPrintf("MTGS thread unlocked\n");
+#endif
 		}
 		else {
 			ret = GSopen((void *)&pDsp, "PCSX2", 0);
-			if (ret != 0) { SysMessage (_("Error Opening GS Plugin")); return -1; }
+			if (ret != 0) { SysMessage (_("Error Opening GS Plugin")); goto OpenError; }
 		}
 	}
 
@@ -533,34 +568,46 @@ int OpenPlugins() {
 		if (PAD2gsDriverInfo) PAD2gsDriverInfo(&info);
 	}
 	ret = PAD1open((void *)&pDsp);
-	if (ret != 0) { SysMessage (_("Error Opening PAD1 Plugin")); return -1; }
+	if (ret != 0) { SysMessage (_("Error Opening PAD1 Plugin")); goto OpenError; }
 	ret = PAD2open((void *)&pDsp);
-	if (ret != 0) { SysMessage (_("Error Opening PAD2 Plugin")); return -1; }
+	if (ret != 0) { SysMessage (_("Error Opening PAD2 Plugin")); goto OpenError; }
 
 	//the sound
 
 	SPU2irqCallback(spu2Irq,spu2DMA4Irq,spu2DMA7Irq);
+    if( SPU2setDMABaseAddr != NULL )
+        SPU2setDMABaseAddr((uptr)PSXM(0));
 	ret = SPU2open((void*)&pDsp);
-	if (ret != 0) { SysMessage (_("Error Opening SPU2 Plugin")); return -1; }
+	if (ret != 0) { SysMessage (_("Error Opening SPU2 Plugin")); goto OpenError; }
 
 	//and last the dev9
 	DEV9irqCallback(dev9Irq);
 	dev9Handler = DEV9irqHandler();
 	ret = DEV9open((void *)&pDsp);
-	if (ret != 0) { SysMessage (_("Error Opening DEV9 Plugin")); return -1; }
+	if (ret != 0) { SysMessage (_("Error Opening DEV9 Plugin")); goto OpenError; }
 
 	USBirqCallback(usbIrq);
 	usbHandler = USBirqHandler();
 	USBsetRAM(psxM);
 	ret = USBopen((void *)&pDsp);
-	if (ret != 0) { SysMessage (_("Error Opening USB Plugin")); return -1; }
+	if (ret != 0) { SysMessage (_("Error Opening USB Plugin")); goto OpenError; }
 
 	FWirqCallback(fwIrq);
 	ret = FWopen((void *)&pDsp);
-	if (ret != 0) { SysMessage (_("Error Opening FW Plugin")); return -1; }
+	if (ret != 0) { SysMessage (_("Error Opening FW Plugin")); goto OpenError; }
 
 	pluginsopened = 1;
+#ifdef __LINUX__
+    chdir(file);
+#endif
 	return 0;
+
+OpenError:
+#ifdef __LINUX__
+    chdir(file);
+#endif
+
+    return -1;
 }
 
 extern void gsWaitGS();

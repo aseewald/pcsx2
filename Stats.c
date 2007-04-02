@@ -37,7 +37,7 @@ void statsClose() {
 	FILE *f;
 
 	t = time(NULL) - stats.vsyncTime;
-#ifdef __WIN32__
+#ifdef _WIN32
 	f = fopen("logs\\stats.txt", "w");
 #else
 	f = fopen("logs/stats.txt", "w");

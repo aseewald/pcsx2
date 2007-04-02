@@ -16,30 +16,27 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifdef __MSCW32__
+#ifdef _WIN32
 #pragma warning(disable:4244)
 #endif
 
 #define REC_VUOP(VU, f) { \
 	_freeXMMregs(&VU); \
-	_freeMMXregs(); \
-	SetFPUstate(); \
+    X86_32CODE(_freeMMXregs(); SetFPUstate();) \
 	MOV32ItoM((u32)&VU.code, (u32)VU.code); \
 	CALLFunc((u32)VU##MI_##f); \
 }
 
 #define REC_VUOPFLAGS(VU, f) { \
 	_freeXMMregs(&VU); \
-	_freeMMXregs(); \
-	SetFPUstate(); \
+	X86_32CODE(_freeMMXregs(); SetFPUstate();) \
 	MOV32ItoM((u32)&VU.code, (u32)VU.code); \
 	CALLFunc((u32)VU##MI_##f); \
 }
 
 #define REC_VUBRANCH(VU, f) { \
 	_freeXMMregs(&VU); \
-	_freeMMXregs(&VU0); \
-	SetFPUstate(); \
+	X86_32CODE(_freeMMXregs(); SetFPUstate();) \
 	MOV32ItoM((u32)&VU.code, (u32)VU.code); \
 	MOV32ItoM((u32)&VU.VI[REG_TPC].UL, (u32)pc); \
 	CALLFunc((u32)VU##MI_##f); \

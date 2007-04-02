@@ -228,26 +228,24 @@ void eeRecompileCodeConstSPECIAL(R5900FNPTR constcode, R5900FNPTR_INFO multicode
     { \
 		int info = eeRecompileCodeXMM(xmminfo); \
 
-#define CPU_FPUSSE_XMMCACHE_START(xmminfo) \
-	if (cpucaps.hasStreamingSIMDExtensions) \
-    { \
-		int info = eeFPURecompileCodeXMM(xmminfo); \
-
-#define CPU_FPUSSE2_XMMCACHE_START(xmminfo) \
-	if (cpucaps.hasStreamingSIMD2Extensions) \
-    { \
-		int info = eeFPURecompileCodeXMM(xmminfo); \
-
 #define CPU_SSE_XMMCACHE_END \
 		_clearNeededXMMregs(); \
 		return; \
 	}  \
 
+#ifdef __x86_64__
+#define FPURECOMPILE_CONSTCODE(fn, xmminfo) \
+void rec##fn(void) \
+{ \
+	eeFPURecompileCode(rec##fn##_xmm, NULL, xmminfo); \
+}
+#else
 #define FPURECOMPILE_CONSTCODE(fn, xmminfo) \
 void rec##fn(void) \
 { \
 	eeFPURecompileCode(rec##fn##_xmm, rec##fn##_, xmminfo); \
-} \
+}
+#endif
 
 // rd = rs op rt (all regs need to be in xmm)
 int eeRecompileCodeXMM(int xmminfo);

@@ -33,12 +33,19 @@ void SysCloseLibrary(void *lib);		// Closes Library
 void *SysMmap(uptr base, u32 size);
 void SysMunmap(uptr base, u32 size);
 
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
+
 typedef struct _PSMEMORYBLOCK
 {
-	ULONG_PTR NumberPages;
-	ULONG_PTR* aPFNs;
-	ULONG_PTR* aVFNs; // virtual pages that own the physical pages
+#ifdef _WIN32
+    int NumberPages;
+	uptr* aPFNs;
+	uptr* aVFNs; // virtual pages that own the physical pages
+#else
+    int fd; // file descriptor
+    char* pname; // given name
+    int size; // size of allocated region
+#endif
 } PSMEMORYBLOCK;
 
 int SysPhysicalAlloc(u32 size, PSMEMORYBLOCK* pblock);
@@ -46,13 +53,11 @@ void SysPhysicalFree(PSMEMORYBLOCK* pblock);
 int SysVirtualPhyAlloc(void* base, u32 size, PSMEMORYBLOCK* pblock);
 void SysVirtualFree(void* lpMemReserved, u32 size);
 
-void SysVirtualProtectAlloc(void* base, u32 size, PSMEMORYBLOCK* pblock);
-void SysVirtualProtectFree(void* lpMemReserved, u32 size);
-
-BOOL SysMapUserPhysicalPages(PVOID Addr, ULONG_PTR NumPages, PULONG_PTR PageArray);
+// returns 1 if successful, 0 otherwise
+int SysMapUserPhysicalPages(void* Addr, uptr NumPages, uptr* pblock, int pageoffset);
 
 // call to enable physical page allocation
-BOOL SysLoggedSetLockPagesPrivilege ( HANDLE hProcess, BOOL bEnable);
+//BOOL SysLoggedSetLockPagesPrivilege ( HANDLE hProcess, BOOL bEnable);
 
 #endif
 

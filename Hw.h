@@ -22,7 +22,7 @@
 #include "PS2Etypes.h"
 #include <assert.h>
 
-#ifndef WIN32_VIRTUAL_MEM
+#ifndef PCSX2_VIRTUAL_MEM
 extern u8  *psH; // hw mem
 extern u16 *psHW;
 extern u32 *psHL;
@@ -304,12 +304,15 @@ typedef struct {
 	ptr = (u32*)dmaGetAddr(addr); \
 	if (ptr == NULL) DMAerror(dma, num);
 
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
 
 #define dmaGetAddrBase(addr) (((addr) & 0x80000000) ? (void*)&PS2MEM_SCRATCH[(addr) & 0x3ff0] : (void*)(PS2MEM_BASE+TRANSFORM_ADDR(addr)))
 
-extern PSMEMORYMAP *memLUT;
-__forceinline u8* dmaGetAddr(u32 mem)
+#ifdef _WIN32
+extern PSMEMORYMAP* memLUT;
+#endif
+
+extern __forceinline u8* dmaGetAddr(u32 mem)
 {
 	u8* p, *pbase;
 	mem &= ~0xf;
@@ -322,7 +325,10 @@ __forceinline u8* dmaGetAddr(u32 mem)
 		return NULL;
 
 	p = (u8*)dmaGetAddrBase(mem), *pbase;
-	// do manual LUT since IPU/SPR seems to use addrs 0x3000xxxx quite often
+	
+#ifdef _WIN32
+    // do manual LUT since IPU/SPR seems to use addrs 0x3000xxxx quite often
+    // linux doesn't suffer from this because it has better vm support
 #ifndef PCSX2_RELEASE
 	if( memLUT[ (p-PS2MEM_BASE)>>12 ].aPFNs == NULL ) {
 		SysPrintf("*PCSX2*: DMA error: %8.8x\n", mem);
@@ -332,12 +338,17 @@ __forceinline u8* dmaGetAddr(u32 mem)
 	pbase = (u8*)memLUT[ (p-PS2MEM_BASE)>>12 ].aVFNs[0];
 	if( pbase != NULL )
 		p = pbase + ((u32)p&0xfff);
+#endif
+
 	return p;
 }
 
 #else
 
-__forceinline void *dmaGetAddr(u32 addr) {
+extern u8  *psS; //0.015 mb, scratch pad
+extern uptr *memLUTR;
+
+extern __forceinline void *dmaGetAddr(u32 addr) {
 	u8 *ptr;
 
 /*#ifdef DMA_LOG

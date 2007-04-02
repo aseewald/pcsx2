@@ -25,15 +25,15 @@
 #include <time.h>
 
 #include "iR5900.h"
-#include "pcl/pcl.h"
+#include "coroutine.h"
 
-#ifdef __WIN32__
+#ifdef _WIN32
 #define FASTCALL	__fastcall
 #else
 #define FASTCALL
 #endif
 
-#ifndef WIN32_VIRTUAL_MEM
+#ifndef PCSX2_VIRTUAL_MEM
 IPUregisters g_ipuRegsReal;
 #endif
 
@@ -74,22 +74,22 @@ u16 FillInternalBuffer(u32 * pointer, u32 advance);
 tIPU_BP g_BP;
 static coroutine_t s_routine; // used for executing BDEC/IDEC
 static int s_RoutineDone = 0;
-static u32 s_tempstack[0x1000]; // 16k
+static u32 s_tempstack[0x4000]; // 64k
 
 void IPUCMD_WRITE(u32 val);
 void IPUWorker();
 int IPU0dma();
 int IPU1dma();
 
-#define BigEndian _byteswap_ulong
-//__forceinline u32 FASTCALL BigEndian(u32 a){
-//	return ((((a >> 24) & 0xFF) <<  0) + (((a >> 16) & 0xFF) <<  8) +
-//		(((a >>  8) & 0xFF) << 16) + (((a >>  0) & 0xFF) << 24));
-//}
-
-// Color conversion stuff
+// Color conversion stuff, the memory layout is a total hack
+// convert_data_buffer is a pointer to the internal rgb struct (the first param in convert_init_t)
+//char convert_data_buffer[sizeof(convert_rgb_t)];
+#ifdef __x86_64__
+char convert_data_buffer[0x24];
+#else
 char convert_data_buffer[0x1C];
-convert_init_t convert_init={convert_data_buffer, 0x1C};
+#endif
+convert_init_t convert_init={convert_data_buffer, sizeof(convert_data_buffer)};
 convert_t *convert;
 
 // Quantization matrix
@@ -254,6 +254,52 @@ u32 ipuRead32(u32 mem)
 	return *(u32*)(((u8*)ipuRegs)+(mem&0xff)); // ipu repeats every 0x100
 }
 
+u64 ipuRead64(u32 mem)
+{
+	IPUProcessInterrupt();
+
+#ifdef PCSX2_DEVBUILD
+	if( mem == 0x10002010 ) {
+		SysPrintf("reading 64bit IPU ctrl\n");
+	}
+	if( mem == 0x10002020 ) {
+		SysPrintf("reading 64bit IPU top\n");
+	}
+#endif
+
+	switch (mem){
+		case 0x10002000: // IPU_CMD
+#ifdef IPU_LOG
+			//if(!ipuRegs->cmd.BUSY){
+			if( ipuRegs->cmd.DATA&0xffffff ) {
+				IPU_LOG("Ipu read64: IPU_CMD=BUSY=%x, DATA=%08X\n", ipuRegs->cmd.BUSY?1:0,ipuRegs->cmd.DATA);
+			}
+#endif
+			//return *(u64*)&ipuRegs->cmd;
+			break;
+
+		case 0x10002030: // IPU_TOP
+#ifdef IPU_LOG
+			IPU_LOG("Ipu read64: IPU_TOP=%x,  bp = %d\n",ipuRegs->top,g_BP.BP);
+#endif
+
+			//return *(u64*)&ipuRegs->top;
+			break;
+
+		default:
+#ifdef IPU_LOG
+			IPU_LOG("Ipu read64: Unknown=%x\n", mem);
+#endif
+			break;
+
+	}
+	return *(u64*)(((u8*)ipuRegs)+(mem&0xff));
+}
+
+#ifndef PCSX2_NORECBUILD
+
+#ifndef __x86_64__
+
 int ipuConstRead32(u32 x86reg, u32 mem)
 {
 	int workingreg, tempreg, tempreg2;
@@ -344,48 +390,6 @@ int ipuConstRead32(u32 x86reg, u32 mem)
 	return 0;
 }
 
-u64 ipuRead64(u32 mem)
-{
-	IPUProcessInterrupt();
-
-#ifdef PCSX2_DEVBUILD
-	if( mem == 0x10002010 ) {
-		SysPrintf("reading 64bit IPU ctrl\n");
-	}
-	if( mem == 0x10002020 ) {
-		SysPrintf("reading 64bit IPU top\n");
-	}
-#endif
-
-	switch (mem){
-		case 0x10002000: // IPU_CMD
-#ifdef IPU_LOG
-			//if(!ipuRegs->cmd.BUSY){
-			if( ipuRegs->cmd.DATA&0xffffff ) {
-				IPU_LOG("Ipu read64: IPU_CMD=BUSY=%x, DATA=%08X\n", ipuRegs->cmd.BUSY?1:0,ipuRegs->cmd.DATA);
-			}
-#endif
-			//return *(u64*)&ipuRegs->cmd;
-			break;
-
-		case 0x10002030: // IPU_TOP
-#ifdef IPU_LOG
-			IPU_LOG("Ipu read64: IPU_TOP=%x,  bp = %d\n",ipuRegs->top,g_BP.BP);
-#endif
-
-			//return *(u64*)&ipuRegs->top;
-			break;
-
-		default:
-#ifdef IPU_LOG
-			IPU_LOG("Ipu read64: Unknown=%x\n", mem);
-#endif
-			break;
-
-	}
-	return *(u64*)(((u8*)ipuRegs)+(mem&0xff));
-}
-
 void ipuConstRead64(u32 mem, int mmreg)
 {
 	iFlushCall(0);
@@ -397,6 +401,22 @@ void ipuConstRead64(u32 mem, int mmreg)
 		SetMMXstate();
 	}
 }
+
+#else
+
+int ipuConstRead32(u32 x86reg, u32 mem)
+{
+	assert(0);
+}
+
+void ipuConstRead64(u32 mem, int mmreg)
+{
+	assert(0);
+}
+
+#endif // __x86_64__
+
+#endif // !defined(PCSX2_NORECBUILD)
 
 void ipuSoftReset()
 {
@@ -460,6 +480,31 @@ void ipuWrite32(u32 mem,u32 value)
 	}
 }
 
+void ipuWrite64(u32 mem, u64 value)
+{
+	IPUProcessInterrupt();
+
+	switch (mem){
+		case 0x10002000:
+#ifdef IPU_LOG
+	        IPU_LOG("Ipu write64: IPU_CMD=0x%08X\n",value);
+#endif
+			IPUCMD_WRITE((u32)value);
+			break;
+
+		default:
+#ifdef IPU_LOG
+			IPU_LOG("Ipu write64: Unknown=%x\n", mem);
+#endif
+			*(u64*)((u8*)ipuRegs + (mem&0xfff)) = value;
+			break;
+	}
+}
+
+#ifndef PCSX2_NORECBUILD
+
+#ifndef __x86_64__
+
 void ipuConstWrite32(u32 mem, int mmreg)
 {
 	iFlushCall(0);
@@ -512,27 +557,6 @@ void ipuConstWrite32(u32 mem, int mmreg)
 	}
 }
 
-void ipuWrite64(u32 mem, u64 value)
-{
-	IPUProcessInterrupt();
-
-	switch (mem){
-		case 0x10002000:
-#ifdef IPU_LOG
-	        IPU_LOG("Ipu write64: IPU_CMD=0x%08X\n",value);
-#endif
-			IPUCMD_WRITE((u32)value);
-			break;
-
-		default:
-#ifdef IPU_LOG
-			IPU_LOG("Ipu write64: Unknown=%x\n", mem);
-#endif
-			*(u64*)((u8*)ipuRegs + (mem&0xfff)) = value;
-			break;
-	}
-}
-
 void ipuConstWrite64(u32 mem, int mmreg)
 {
 	iFlushCall(0);
@@ -550,6 +574,22 @@ void ipuConstWrite64(u32 mem, int mmreg)
 			break;
 	}
 }
+
+#else
+
+void ipuConstWrite32(u32 mem, int mmreg)
+{
+	assert(0);
+}
+
+void ipuConstWrite64(u32 mem, int mmreg)
+{
+	assert(0);
+}
+
+#endif
+
+#endif
 
 ///////////////////////////////////////////
 // IPU Commands (exec on worker thread only)
@@ -602,9 +642,9 @@ static BOOL ipuIDEC(u32 val)
 	//other stuff
 	g_decoder.dcr				  =1;//resets DC prediction value
 
-	s_routine = co_create(mpeg2sliceIDEC, &s_RoutineDone, s_tempstack, sizeof(s_tempstack));
+	s_routine = so_create(mpeg2sliceIDEC, &s_RoutineDone, s_tempstack, sizeof(s_tempstack));
 	assert( s_routine != NULL );
-	co_call(s_routine);
+	so_call(s_routine);
 	return s_RoutineDone;
 }
 
@@ -652,9 +692,9 @@ static BOOL ipuBDEC(u32 val)
 	memset(&mb8, 0, sizeof(struct macroblock_8));
 	memset(&mb16, 0, sizeof(struct macroblock_16));
 	
-	s_routine = co_create(mpeg2_slice, &s_RoutineDone, s_tempstack, sizeof(s_tempstack));
+	s_routine = so_create(mpeg2_slice, &s_RoutineDone, s_tempstack, sizeof(s_tempstack));
 	assert( s_routine != NULL );
-	co_call(s_routine);
+	so_call(s_routine);
 	return s_RoutineDone;
 }
 
@@ -667,7 +707,7 @@ static BOOL ipuVDEC(u32 val) {
 				return FALSE;
 			
 			g_decoder.bitstream_bits = -16;	 
-			g_decoder.bitstream_buf=BigEndian(g_decoder.bitstream_buf);
+			BigEndian(g_decoder.bitstream_buf, g_decoder.bitstream_buf);
 		 
 			//value = BigEndian(value);
 			switch((val >> 26) & 3){
@@ -706,7 +746,7 @@ static BOOL ipuVDEC(u32 val) {
 				return FALSE;
 			}
 	
-			ipuRegs->top = BigEndian(ipuRegs->top);
+			BigEndian(ipuRegs->top, ipuRegs->top);
 
 #ifdef IPU_LOG
 			IPU_LOG("IPU VDEC command data 0x%x(0x%x). Skip 0x%X bits/Table=%d (%s), pct %d\n",
@@ -726,7 +766,7 @@ static BOOL ipuFDEC(u32 val)
 	if( !getBits32((u8*)&ipuRegs->cmd.DATA, 0) )
         return FALSE;
 
-	ipuRegs->cmd.DATA = BigEndian(ipuRegs->cmd.DATA);
+	BigEndian(ipuRegs->cmd.DATA, ipuRegs->cmd.DATA);
 	ipuRegs->top = ipuRegs->cmd.DATA;
 	return TRUE;
 }
@@ -1125,7 +1165,7 @@ void IPUWorker()
 
 		case SCE_IPU_IDEC:
 			FreezeMMXRegs(1);
-			co_call(s_routine);
+			so_call(s_routine);
 			if( !s_RoutineDone ) {
 				FreezeMMXRegs(0);
 				return;
@@ -1142,7 +1182,7 @@ void IPUWorker()
 			return;
 		case SCE_IPU_BDEC:
 			FreezeMMXRegs(1);
-			co_call(s_routine);
+            so_call(s_routine);
 			if(!s_RoutineDone)
 			{
 				//hwIntcIrq(INTC_IPU);
@@ -1408,7 +1448,9 @@ int getBits(u8 *address, u32 size, u32 advance)
 				case 1: address[0] = readmem[0];
 				case 0:
 					break;
+#ifdef _MSC_VER
 				default: __assume(0);
+#endif
 			}
 
 			address += howmuch;
@@ -1828,7 +1870,7 @@ void FIFOfrom_read(void *value,int size)
 		((u32*)value)[1] = fifo_output[FOreadpos+1]; fifo_output[FOreadpos+1] = 0;
 		((u32*)value)[2] = fifo_output[FOreadpos+2]; fifo_output[FOreadpos+2] = 0;
 		((u32*)value)[3] = fifo_output[FOreadpos+3]; fifo_output[FOreadpos+3] = 0;
-		(u32*)value += 4;
+		value = (u32*)value + 4;
 		FOreadpos = (FOreadpos + 4) & 31;
 		size--;
 	}

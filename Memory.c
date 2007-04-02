@@ -54,18 +54,28 @@ BIOS
 #include <sys/stat.h>
 
 #include "Common.h"
+
+#ifdef PCSX2_NORECBUILD
+#define REC_CLEARM(mem)
+#else
 #include "iR5900.h"
+#endif
+
 #include "PsxMem.h"
 #include "R3000A.h"
 #include "PsxHw.h"
 #include "VUmicro.h"
 #include "GS.h"
 
+#ifdef ENABLECACHE
+#include "Cache.h"
+#endif
+
 #include <assert.h>
 
 extern u32 maxrecmem;
 
-extern void * memcpy_amd(void *dest, const void *src, size_t n);
+extern void * memcpy_fast(void *dest, const void *src, size_t n);
 
 //#define FULLTLB
 int MemMode = 0;		// 0 is Kernel Mode, 1 is Supervisor Mode, 2 is User Mode
@@ -75,7 +85,7 @@ u16 ba0R16(u32 mem) {
 	//MEM_LOG("ba00000 Memory read16 address %x\n", mem);
 #endif
 
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
 	if (mem == 0x1a000006) {
 #else
 	if (mem == 0xba000006) {
@@ -91,31 +101,23 @@ u16 ba0R16(u32 mem) {
 /////////////////////////////
 // VIRTUAL MEM START 
 /////////////////////////////
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
 
-//#define VM_RETRANSLATE(mem) (PS2MEM_BASE_+mem)
+PSMEMORYBLOCK s_psM = {0}, s_psHw = {0}, s_psS = {0}, s_psxM = {0}, s_psVuMem = {0};
 
-// Some games read/write between different addrs but same physical memory
-// this causes major slowdowns because it goes into the exception handler, so use this (zerofrog)
-u32 VM_RETRANSLATE(u32 mem)
-{
-	u8* p, *pbase;
-	if( (mem&0xffff0000) == 0x50000000 ) // reserved scratch pad mem
-		return PS2MEM_BASE_+mem;
+#define PHYSICAL_ALLOC(ptr, size, block) { \
+	if(SysPhysicalAlloc(size, &block) == -1 ) \
+		goto eCleanupAndExit; \
+	if(SysVirtualPhyAlloc((void*)ptr, size, &block) == -1) \
+		goto eCleanupAndExit; \
+} \
 
-	p = (u8*)dmaGetAddrBase(mem), *pbase;
-	
-	// do manual LUT since IPU/SPR seems to use addrs 0x3000xxxx quite often
-	if( memLUT[ (p-PS2MEM_BASE)>>12 ].aPFNs == NULL ) {
-		return PS2MEM_BASE_+mem;
-	}
+#define PHYSICAL_FREE(ptr, size, block) { \
+	SysVirtualFree(ptr, size); \
+	SysPhysicalFree(&block); \
+} \
 
-	pbase = (u8*)memLUT[ (p-PS2MEM_BASE)>>12 ].aVFNs[0];
-	if( pbase != NULL )
-		p = pbase + ((u32)p&0xfff);
-
-	return (u32)p;
-}
+#ifdef _WIN32 // windows implementation of vm
 
 PSMEMORYMAP initMemoryMap(ULONG_PTR* aPFNs, ULONG_PTR* aVFNs)
 {
@@ -133,27 +135,7 @@ PSMEMORYMAP initMemoryMap(ULONG_PTR* aPFNs, ULONG_PTR* aVFNs)
 static int XmmExtendedRegOffset = 160;
 
 // virtual memory blocks
-
-//#ifdef WIN32_FILE_MAPPING
-//HANDLE s_psM, s_psHw, s_psS, s_psxM, s_psVuMem;
-//#define PHYSICAL_ALLOC(ptr, size, block) { \
-//	block = CreateFileMapping(NULL, NULL, PAGE_READWRITE, 0, bufSize, #block);
-////MapViewOfFileEx
-//}
-//
-//#else
-
-PSMEMORYBLOCK s_psM = {0}, s_psHw = {0}, s_psS = {0}, s_psxM = {0}, s_psVuMem = {0};
 PSMEMORYMAP *memLUT = NULL;
-
-#define PHYSICAL_ALLOC(ptr, size, block) { \
-	if(SysPhysicalAlloc(size, &block) == -1 ) \
-		goto eCleanupAndExit; \
-	if(SysVirtualPhyAlloc((void*)ptr, size, &block) == -1) \
-		goto eCleanupAndExit; \
-} \
-
-//#endif
 
 #define VIRTUAL_ALLOC(base, size, Protection) { \
 	LPVOID lpMemReserved = VirtualAlloc( base, size, MEM_RESERVE|MEM_COMMIT, Protection ); \
@@ -162,11 +144,6 @@ PSMEMORYMAP *memLUT = NULL;
 		SysPrintf("Cannot reserve memory at 0x%8.8x(%x), error: %d.\n", base, lpMemReserved, GetLastError()); \
 		goto eCleanupAndExit; \
 	} \
-} \
-
-#define PHYSICAL_FREE(ptr, size, block) { \
-	SysVirtualFree(ptr, size); \
-	SysPhysicalFree(&block); \
 } \
 
 #define VIRTUAL_FREE(ptr, size) { \
@@ -428,42 +405,6 @@ void memShutdown()
 	VirtualAlloc(PS2MEM_BASE, 0x40000000, MEM_RESERVE, PAGE_NOACCESS);
 }
 
-void memSetPageAddr(u32 vaddr, u32 paddr) {
-
-	PSMEMORYMAP* pmap;
-
-	if( vaddr == paddr )
-		return;
-
-	if( (vaddr>>28) != 1 && (vaddr>>28) != 9 && (vaddr>>28) != 11 ) {
-		pmap = &memLUT[vaddr >> 12];
-		
-		if( pmap->aPFNs != NULL && (pmap->aPFNs != memLUT[paddr>>12].aPFNs ||
-			pmap->aVFNs[0] != TRANSFORM_ADDR(vaddr)+(u32)PS2MEM_BASE) ) {
-
-			SysMapUserPhysicalPages((void*)pmap->aVFNs[0], 1, NULL);
-			pmap->aVFNs[0] = 0;
-		}
-
-		*pmap = memLUT[paddr >> 12];
-	}
-}
-
-void memClearPageAddr(u32 vaddr) {
-//	SysPrintf("memClearPageAddr: %8.8x\n", vaddr);
-
-	if ((vaddr & 0xffffc000) == 0x70000000) return;
-
-//	if( vaddr >= 0x20000000 && vaddr < 0x80000000 ) {
-//		Cpu->Clear(vaddr&~0xfff, 0x1000/4);
-//		if( memLUT[vaddr>>12].aVFNs != NULL ) {
-//			SysMapUserPhysicalPages((void*)memLUT[vaddr>>12].aVFNs[0], 1, NULL );
-//			memLUT[vaddr>>12].aVFNs = NULL;
-//			memLUT[vaddr>>12].aPFNs = NULL;
-//		}
-//	}
-}
-
 #define GET_REGVALUE(code) *((u32*)&pexdata->ContextRecord->Eax + (((code)>>11)&7))
 #define GET_XMMVALUE(xmm) ((u64*)((u8*)pexdata->ContextRecord->ExtendedRegisters + XmmExtendedRegOffset + ((xmm)<<4)))
 
@@ -575,19 +516,19 @@ EXCEPTION_DISPOSITION SysPageFaultExceptionFilter(
 
 			if( pmap->aVFNs[0] != 0 ) {
 				// delete the current mapping
-				SysMapUserPhysicalPages((void*)pmap->aVFNs[0], 1, NULL);
+				SysMapUserPhysicalPages((void*)pmap->aVFNs[0], 1, NULL, 0);
 			}
 
 			assert( pmap->aPFNs[0] != 0 );
 
 			pmap->aVFNs[0] = addr&~0xfff;
-			if( SysMapUserPhysicalPages((void*)(addr&~0xfff), 1, pmap->aPFNs) )
+			if( SysMapUserPhysicalPages((void*)(addr&~0xfff), 1, pmap->aPFNs, 0) )
 				return ExceptionContinueExecution;
 
 			// try allocing the virtual mem
 			pnewaddr = VirtualAlloc((void*)(addr&~0xffff), 0x10000, MEM_RESERVE|MEM_PHYSICAL, PAGE_READWRITE);
 
-			if( SysMapUserPhysicalPages((void*)(addr&~0xfff), 1, pmap->aPFNs) )
+			if( SysMapUserPhysicalPages((void*)(addr&~0xfff), 1, pmap->aPFNs, 0) )
 				return ExceptionContinueExecution;
 
 			SysPrintf("Fatal error, virtual page 0x%x cannot be found %d (p:%x,v:%x)\n",
@@ -599,10 +540,10 @@ EXCEPTION_DISPOSITION SysPageFaultExceptionFilter(
 
 		if( (addr&0xffff4000) == 0x11000000 ) {
 			// vu0mem
-			SysMapUserPhysicalPages((void*)s_psVuMem.aVFNs[1], 1, NULL);
+			SysMapUserPhysicalPages((void*)s_psVuMem.aVFNs[1], 1, NULL, 0);
 			
 			s_psVuMem.aVFNs[1] = addr&~0xfff;
-			SysMapUserPhysicalPages((void*)addr, 1, &s_psVuMem.aPFNs[1]);
+			SysMapUserPhysicalPages((void*)addr, 1, s_psVuMem.aPFNs, 1);
 
 			return ExceptionContinueExecution;//EXCEPTION_CONTINUE_EXECUTION;
 		}
@@ -639,10 +580,192 @@ DefaultHandler:
 	return EXCEPTION_CONTINUE_EXECUTION;
 }
 
+#else // linux implementation
+
+#define VIRTUAL_ALLOC(base, size, Protection) { \
+    void* lpMemReserved = mmap( base, size, Protection, MAP_PRIVATE|MAP_ANONYMOUS ); \
+	if( lpMemReserved == NULL || base != lpMemReserved ) \
+	{ \
+		SysPrintf("Cannot reserve memory at 0x%8.8x(%x).\n", base, lpMemReserved); \
+        perror("err"); \
+		goto eCleanupAndExit; \
+	} \
+} \
+
+#define VIRTUAL_FREE(ptr, size) munmap(ptr, size)
+
+uptr *memLUT = NULL;
+
+int memInit()
+{
+int i;
+	LPVOID pExtraMem = NULL;	
+
+	// release the previous reserved mem
+    munmap(PS2MEM_BASE, 0x40000000);
+
+	// allocate all virtual memory
+	PHYSICAL_ALLOC(PS2MEM_BASE, 0x02000000, s_psM);
+	VIRTUAL_ALLOC(PS2MEM_ROM, 0x00400000, PROT_READ);
+	VIRTUAL_ALLOC(PS2MEM_ROM1, 0x00040000, PROT_READ);
+	VIRTUAL_ALLOC(PS2MEM_ROM2, 0x00080000, PROT_READ);
+	VIRTUAL_ALLOC(PS2MEM_EROM, 0x001C0000, PROT_READ);
+	PHYSICAL_ALLOC(PS2MEM_SCRATCH, 0x00010000, s_psS);
+	PHYSICAL_ALLOC(PS2MEM_HW, 0x00010000, s_psHw);
+	PHYSICAL_ALLOC(PS2MEM_PSX, 0x00200000, s_psxM);
+	PHYSICAL_ALLOC(PS2MEM_VU0MICRO, 0x00010000, s_psVuMem);
+
+	VIRTUAL_ALLOC(PS2MEM_PSXHW, 0x00010000, PROT_READ|PROT_WRITE);
+	VIRTUAL_ALLOC(PS2MEM_PSXHW4, 0x00010000, PROT_NONE);
+	VIRTUAL_ALLOC(PS2MEM_GS, 0x00002000, PROT_READ|PROT_WRITE);
+	VIRTUAL_ALLOC(PS2MEM_DEV9, 0x00010000, PROT_NONE);
+	VIRTUAL_ALLOC(PS2MEM_SPU2, 0x00010000, PROT_NONE);
+	VIRTUAL_ALLOC(PS2MEM_SPU2_, 0x00010000, PROT_NONE);
+
+	VIRTUAL_ALLOC(PS2MEM_B80, 0x00010000, PROT_READ|PROT_WRITE);
+	VIRTUAL_ALLOC(PS2MEM_BA0, 0x00010000, PROT_READ|PROT_WRITE);
+
+	// special addrs mmap
+	VIRTUAL_ALLOC(PS2MEM_BASE+0x5fff0000, 0x10000, PROT_READ|PROT_WRITE);
+
+	// alloc virtual mappings
+	memLUT = (PSMEMORYMAP*)_aligned_malloc(0x100000 * sizeof(uptr), 16);
+	memset(memLUT, 0, sizeof(uptr)*0x100000);
+	for (i=0; i<0x02000; i++) memLUT[i + 0x00000] = PS2MEM_BASE+(i<<12);
+	for (i=2; i<0x00010; i++) memLUT[i + 0x10000] = PS2MEM_BASE+0x10000000+(i<<12);
+	for (i=0; i<0x00800; i++) memLUT[i + 0x1c000] = PS2MEM_BASE+0x1c000000+(i<<12);
+	for (i=0; i<0x00004; i++) memLUT[i + 0x11000] = PS2MEM_VU0MICRO;
+	for (i=0; i<0x00004; i++) memLUT[i + 0x11004] = PS2MEM_VU0MEM;
+	for (i=0; i<0x00004; i++) memLUT[i + 0x11008] = PS2MEM_VU1MICRO+(i<<12);
+	for (i=0; i<0x00004; i++) memLUT[i + 0x1100c] = PS2MEM_VU1MEM+(i<<12);
+
+	for (i=0; i<0x00004; i++) memLUT[i + 0x50000] = PS2MEM_SCRATCH+(i<<12);
+
+	// map to other modes
+	memcpy(memLUT+0x80000, memLUT, 0x20000*sizeof(uptr));
+	memcpy(memLUT+0xa0000, memLUT, 0x20000*sizeof(uptr));
+
+	if (psxInit() == -1)
+		goto eCleanupAndExit;
+
+eCleanupAndExit:
+	memShutdown();
+	return -1;
+}
+
+void memShutdown()
+{
+	VIRTUAL_FREE(PS2MEM_BASE, 0x20000000);
+	VIRTUAL_FREE(PS2MEM_PSX, 0x00800000);
+
+	PHYSICAL_FREE(PS2MEM_BASE, 0x02000000, s_psM);
+	VIRTUAL_FREE(PS2MEM_ROM, 0x00400000);
+	VIRTUAL_FREE(PS2MEM_ROM1, 0x00080000);
+	VIRTUAL_FREE(PS2MEM_ROM2, 0x00080000);
+	VIRTUAL_FREE(PS2MEM_EROM, 0x001C0000);
+	PHYSICAL_FREE(PS2MEM_SCRATCH, 0x00010000, s_psS);
+	PHYSICAL_FREE(PS2MEM_HW, 0x00010000, s_psHw);
+	PHYSICAL_FREE(PS2MEM_PSX, 0x00800000, s_psxM);
+	PHYSICAL_FREE(PS2MEM_VU0MICRO, 0x00010000, s_psVuMem);
+
+	VIRTUAL_FREE(PS2MEM_VU0MICRO, 0x00010000); // allocate for all VUs
+
+	VIRTUAL_FREE(PS2MEM_PSXHW, 0x00010000);
+	VIRTUAL_FREE(PS2MEM_PSXHW4, 0x00010000);
+	VIRTUAL_FREE(PS2MEM_GS, 0x00010000);
+	VIRTUAL_FREE(PS2MEM_DEV9, 0x00010000);
+	VIRTUAL_FREE(PS2MEM_SPU2, 0x00010000);
+	VIRTUAL_FREE(PS2MEM_SPU2_, 0x00010000);
+
+	VIRTUAL_FREE(PS2MEM_B80, 0x00010000);
+	VIRTUAL_FREE(PS2MEM_BA0, 0x00010000);
+
+	VirtualFree(PS2MEM_VU0MICRO, 0, MEM_RELEASE);
+
+	_aligned_free(memLUT); memLUT = NULL;
+
+	// reserve mem
+    if( mmap(PS2MEM_BASE, 0x40000000, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0) != PS2MEM_BASE ) {
+        SysPrintf("failed to reserve mem\n");
+    }
+}
+
+#endif // _WIN32
+
+// Some games read/write between different addrs but same physical memory
+// this causes major slowdowns because it goes into the exception handler, so use this (zerofrog)
+u32 VM_RETRANSLATE(u32 mem)
+{
+	u8* p, *pbase;
+	if( (mem&0xffff0000) == 0x50000000 ) // reserved scratch pad mem
+		return PS2MEM_BASE_+mem;
+
+	p = (u8*)dmaGetAddrBase(mem), *pbase;
+
+#ifdef _WIN32	
+	// do manual LUT since IPU/SPR seems to use addrs 0x3000xxxx quite often
+	if( memLUT[ (p-PS2MEM_BASE)>>12 ].aPFNs == NULL ) {
+		return PS2MEM_BASE_+mem;
+	}
+
+	pbase = (u8*)memLUT[ (p-PS2MEM_BASE)>>12 ].aVFNs[0];
+	if( pbase != NULL )
+		p = pbase + ((u32)p&0xfff);
+#endif
+
+	return (u32)p;
+}
+
+void memSetPageAddr(u32 vaddr, u32 paddr) {
+
+	PSMEMORYMAP* pmap;
+
+	if( vaddr == paddr )
+		return;
+
+	if( (vaddr>>28) != 1 && (vaddr>>28) != 9 && (vaddr>>28) != 11 ) {
+#ifdef _WIN32
+		pmap = &memLUT[vaddr >> 12];
+		
+		if( pmap->aPFNs != NULL && (pmap->aPFNs != memLUT[paddr>>12].aPFNs ||
+			pmap->aVFNs[0] != TRANSFORM_ADDR(vaddr)+(u32)PS2MEM_BASE) ) {
+
+			SysMapUserPhysicalPages((void*)pmap->aVFNs[0], 1, NULL, 0);
+			pmap->aVFNs[0] = 0;
+		}
+
+		*pmap = memLUT[paddr >> 12];
+#else
+        memLUT[vaddr>>12] = memLUT[paddr>>12];
+#endif
+	}
+}
+
+void memClearPageAddr(u32 vaddr) {
+//	SysPrintf("memClearPageAddr: %8.8x\n", vaddr);
+
+	if ((vaddr & 0xffffc000) == 0x70000000) return;
+
+#ifdef _WIN32
+//	if( vaddr >= 0x20000000 && vaddr < 0x80000000 ) {
+//		Cpu->Clear(vaddr&~0xfff, 0x1000/4);
+//		if( memLUT[vaddr>>12].aVFNs != NULL ) {
+//			SysMapUserPhysicalPages((void*)memLUT[vaddr>>12].aVFNs[0], 1, NULL, 0 );
+//			memLUT[vaddr>>12].aVFNs = NULL;
+//			memLUT[vaddr>>12].aPFNs = NULL;
+//		}
+//	}
+#else
+    if( memLUT[vaddr>>12] != NULL ) {
+        SysVirtualFree(memLUT[vaddr>>12], 0x1000);
+        memLUT[vaddr>>12] = 0;
+    }
+#endif
+}
+
 u8 recMemRead8()
 {
-
-	register u32 mem;
+    register u32 mem;
 	__asm mov mem, ecx // already anded with ~0xa0000000
 
 	switch( (mem&~0xffff) ) {
@@ -722,7 +845,7 @@ void _eeReadConstMem128(int mmreg, u32 mem)
 void _eeWriteConstMem8(u32 mem, int mmreg)
 {
 	assert( !IS_XMMREG(mmreg) && !IS_MMXREG(mmreg) );
-	if( IS_CONSTREG(mmreg) ) MOV8ItoM(mem, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
+	if( IS_EECONSTREG(mmreg) ) MOV8ItoM(mem, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
 	else if( IS_PSXCONSTREG(mmreg) ) MOV8ItoM(mem, g_psxConstRegs[((mmreg>>16)&0x1f)]);
 	else MOV8RtoM(mem, mmreg);
 }
@@ -730,7 +853,7 @@ void _eeWriteConstMem8(u32 mem, int mmreg)
 void _eeWriteConstMem16(u32 mem, int mmreg)
 {
 	assert( !IS_XMMREG(mmreg) && !IS_MMXREG(mmreg) );
-	if( IS_CONSTREG(mmreg) ) MOV16ItoM(mem, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
+	if( IS_EECONSTREG(mmreg) ) MOV16ItoM(mem, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
 	else if( IS_PSXCONSTREG(mmreg) ) MOV16ItoM(mem, g_psxConstRegs[((mmreg>>16)&0x1f)]);
 	else MOV16RtoM(mem, mmreg);
 }
@@ -740,12 +863,12 @@ void _eeWriteConstMem16OP(u32 mem, int mmreg, int op)
 	assert( !IS_XMMREG(mmreg) && !IS_MMXREG(mmreg) );
 	switch(op) {
 		case 0: // and
-			if( IS_CONSTREG(mmreg) ) AND16ItoM(mem, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
+			if( IS_EECONSTREG(mmreg) ) AND16ItoM(mem, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
 			else if( IS_PSXCONSTREG(mmreg) ) AND16ItoM(mem, g_psxConstRegs[((mmreg>>16)&0x1f)]);
 			else AND16RtoM(mem, mmreg);
 			break;
 		case 1: // and
-			if( IS_CONSTREG(mmreg) ) OR16ItoM(mem, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
+			if( IS_EECONSTREG(mmreg) ) OR16ItoM(mem, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
 			else if( IS_PSXCONSTREG(mmreg) ) OR16ItoM(mem, g_psxConstRegs[((mmreg>>16)&0x1f)]);
 			else OR16RtoM(mem, mmreg);
 			break;
@@ -760,7 +883,7 @@ void _eeWriteConstMem32(u32 mem, int mmreg)
 		SetMMXstate();
 		MOVDMMXtoM(mem, mmreg&0xf);
 	}
-	else if( IS_CONSTREG(mmreg) ) MOV32ItoM(mem, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
+	else if( IS_EECONSTREG(mmreg) ) MOV32ItoM(mem, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
 	else if( IS_PSXCONSTREG(mmreg) ) MOV32ItoM(mem, g_psxConstRegs[((mmreg>>16)&0x1f)]);
 	else MOV32RtoM(mem, mmreg);
 }
@@ -780,7 +903,7 @@ void _eeWriteConstMem32OP(u32 mem, int mmreg, int op)
 				PANDMtoR(mmreg&0xf, mem);
 				MOVDMMXtoM(mem, mmreg&0xf);
 			}
-			else if( IS_CONSTREG(mmreg) ) {
+			else if( IS_EECONSTREG(mmreg) ) {
 				AND32ItoM(mem, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
 			}
 			else if( IS_PSXCONSTREG(mmreg) ) {
@@ -803,7 +926,7 @@ void _eeWriteConstMem32OP(u32 mem, int mmreg, int op)
 				PORMtoR(mmreg&0xf, mem);
 				MOVDMMXtoM(mem, mmreg&0xf);
 			}
-			else if( IS_CONSTREG(mmreg) ) {
+			else if( IS_EECONSTREG(mmreg) ) {
 				OR32ItoM(mem, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
 			}
 			else if( IS_PSXCONSTREG(mmreg) ) {
@@ -825,7 +948,7 @@ void _eeWriteConstMem32OP(u32 mem, int mmreg, int op)
 				PANDNMtoR(mmreg&0xf, mem);
 				MOVDMMXtoM(mem, mmreg&0xf);
 			}
-			else if( IS_CONSTREG(mmreg) ) {
+			else if( IS_EECONSTREG(mmreg) ) {
 				AND32ItoM(mem, ~g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
 			}
 			else if( IS_PSXCONSTREG(mmreg) ) {
@@ -848,7 +971,7 @@ void _eeWriteConstMem64(u32 mem, int mmreg)
 		SetMMXstate();
 		MOVQRtoM(mem, mmreg&0xf);
 	}
-	else if( IS_CONSTREG(mmreg) ) {
+	else if( IS_EECONSTREG(mmreg) ) {
 		MOV32ItoM(mem, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
 		MOV32ItoM(mem+4, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[1]);
 	}
@@ -863,7 +986,7 @@ void _eeWriteConstMem128(u32 mem, int mmreg)
 		MOVQRtoM(mem, mmreg&0xf);
 		MOVQRtoM(mem+8, (mmreg>>4)&0xf);
 	}
-	else if( IS_CONSTREG(mmreg) ) {
+	else if( IS_EECONSTREG(mmreg) ) {
 		SetMMXstate();
 		MOV32ItoM(mem, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
 		MOV32ItoM(mem+4, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[1]);
@@ -879,7 +1002,7 @@ void _eeMoveMMREGtoR(x86IntRegType to, int mmreg)
 		SetMMXstate();
 		MOVD32MMXtoR(to, mmreg&0xf);
 	}
-	else if( IS_CONSTREG(mmreg) ) MOV32ItoR(to, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
+	else if( IS_EECONSTREG(mmreg) ) MOV32ItoR(to, g_cpuConstRegs[((mmreg>>16)&0x1f)].UL[0]);
 	else if( IS_PSXCONSTREG(mmreg) ) MOV32ItoR(to, g_psxConstRegs[((mmreg>>16)&0x1f)]);
 	else if( mmreg != to ) MOV32RtoR(to, mmreg);
 }
@@ -2084,7 +2207,7 @@ void memWrite32(u32 mem, u32 value)
 
 		default:
 			*(u32*)(PS2MEM_BASE+mem) = value;
-
+	
 			if (CHECK_EEREC) {
 				REC_CLEARM(mem);
 			}
@@ -2194,6 +2317,7 @@ void memMapMem(u32 base) {
 	for (i=0; i<0x00004; i++) memLUTWK[i + 0x11008 + base] = (uptr)&VU1.Micro[i << 12];
 	for (i=0; i<0x00004; i++) memLUTWK[i + 0x1100c + base] = (uptr)&VU1.Mem[i << 12];
 
+	assert( ((uptr)VU0.Mem&15)==0 && ((uptr)VU0.Micro&15)==0);
 	for (i=0; i<0x00010; i++) memLUTRK[i + 0x10000 + base] = 1; // hwm
 	for (i=0; i<0x00010; i++) memLUTRK[i + 0x1f800 + base] = 2; // psh
 	for (i=0; i<0x00010; i++) memLUTRK[i + 0x1f400 + base] = 3; // psh4
@@ -2229,15 +2353,19 @@ void memMapUserMem() {
 int memInit() {
 	int i;
 
+	psR  = (u8*)_aligned_malloc(0x00400010, 16);
+	psR1 = (u8*)_aligned_malloc(0x00080010, 16);
+	psR2 = (u8*)_aligned_malloc(0x00080010, 16);
+	
+	if (psxInit() == -1)
+		return -1;
+
 	memLUTRK = (uptr*)_aligned_malloc(0x100000 * sizeof(uptr), 16);
 	memLUTWK = (uptr*)_aligned_malloc(0x100000 * sizeof(uptr), 16);
 	memLUTRU = (uptr*)_aligned_malloc(0x100000 * sizeof(uptr), 16);
 	memLUTWU = (uptr*)_aligned_malloc(0x100000 * sizeof(uptr), 16);
 
 	psM  = (u8*)_aligned_malloc(0x02000010, 16);
-	psR  = (u8*)_aligned_malloc(0x00400010, 16);
-	psR1 = (u8*)_aligned_malloc(0x00080010, 16);
-	psR2 = (u8*)_aligned_malloc(0x00080010, 16);
 	psER = (u8*)_aligned_malloc(0x001C0010, 16);
 	psS  = (u8*)_aligned_malloc(0x00004010, 16);
 	if (memLUTRK == NULL || memLUTWK == NULL ||
@@ -2259,8 +2387,6 @@ int memInit() {
 	memset(psER, 0, 0x001C0010);
 	memset(psS,  0, 0x00004010);
 
-	if (psxInit() == -1) return -1;
-
 	for (i=0x00000; i<0x00004; i++) memLUTRK[i + 0x70000] = (uptr)&psS[i << 12];
 	for (i=0x00000; i<0x00004; i++) memLUTWK[i + 0x70000] = (uptr)&psS[i << 12];
 
@@ -2273,6 +2399,10 @@ int memInit() {
 	memMapUserMem();
 
 	memSetKernelMode();
+
+#ifdef ENABLECACHE
+	memset(pCache,0,sizeof(_cacheS)*64);
+#endif
 
 	return 0;
 }
@@ -2317,12 +2447,20 @@ int  memRead8 (u32 mem, u8  *out)  {
 	char *p;
 
 	p = (char *)(memLUTR[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
+#ifdef ENABLECACHE
+				if ((mem & 0x20000000) == 0 &&
+			(cpuRegs.CP0.r[16] & 0x10000) && !(cpuRegs.CP0.n.Status.val & 0x4)) {
+			u8 *tmp = readCache(mem);
+			*out = *(u8 *)(tmp+(mem&0xf));
+			return 0;
+		}
+#endif
 		*out = *(u8 *)(p + (mem & 0xfff));
 		return 0;
 	}
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			*out = hwRead8(mem & ~0xa0000000); return 0;
 		case 2: // psh
@@ -2349,10 +2487,11 @@ int  memRead8RS (u32 mem, u64 *out)  {
 	char *p;
 
 	p = (char *)(memLUTR[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
 #ifdef ENABLECACHE
-		if ((mem & 0x20000000) == 0) {
-			u8 *tmp = readCache(mem);
+				if ((mem & 0x20000000) == 0 &&
+			(cpuRegs.CP0.r[16] & 0x10000) && !(cpuRegs.CP0.n.Status.val & 0x4)) {
+			char *tmp = (char*)readCache(mem);
 			*out = *(s8 *)(tmp+(mem&0xf));
 			return 0;
 		}
@@ -2361,7 +2500,7 @@ int  memRead8RS (u32 mem, u64 *out)  {
 		return 0;
 	}
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			*out = (s8)hwRead8(mem & ~0xa0000000); return 0;
 		case 2: // psh
@@ -2388,10 +2527,11 @@ int  memRead8RU (u32 mem, u64 *out)  {
 	char *p;
 
 	p = (char *)(memLUTR[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
 #ifdef ENABLECACHE
-		if ((mem & 0x20000000) == 0) {
-			u8 *tmp = readCache(mem);
+				if ((mem & 0x20000000) == 0 &&
+			(cpuRegs.CP0.r[16] & 0x10000) && !(cpuRegs.CP0.n.Status.val & 0x4)) {
+			char *tmp = (char*)readCache(mem);
 			*out = *(u8 *)(tmp+(mem&0xf));
 			return 0;
 		}
@@ -2400,7 +2540,7 @@ int  memRead8RU (u32 mem, u64 *out)  {
 		return 0;
 	}
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			*out = (u8)hwRead8(mem & ~0xa0000000); return 0;
 		case 2: // psh
@@ -2427,12 +2567,20 @@ int  memRead16(u32 mem, u16 *out)  {
 	char *p;
 
 	p = (char *)(memLUTR[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
+#ifdef ENABLECACHE
+				if ((mem & 0x20000000) == 0 &&
+			(cpuRegs.CP0.r[16] & 0x10000) && !(cpuRegs.CP0.n.Status.val & 0x4)) {
+			u8 *tmp = readCache(mem);
+			*out = *(u16 *)(tmp+(mem&0xf));
+			return 0;
+		}
+#endif
 		*out = *(u16*)(p + (mem & 0xfff));
 		return 0;
 	}
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			*out = hwRead16(mem & ~0xa0000000); return 0;
 		case 2: // psh
@@ -2466,10 +2614,11 @@ int  memRead16RS(u32 mem, u64 *out)  {
 	char *p;
 
 	p = (char *)(memLUTR[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
 #ifdef ENABLECACHE
-		if ((mem & 0x20000000) == 0) {
-			u8 *tmp = readCache(mem);
+				if ((mem & 0x20000000) == 0 &&
+			(cpuRegs.CP0.r[16] & 0x10000) && !(cpuRegs.CP0.n.Status.val & 0x4)) {
+			char *tmp = (char*)readCache(mem);
 			*out = *(s16*)(tmp+(mem&0xf));
 			return 0;
 		}
@@ -2478,7 +2627,7 @@ int  memRead16RS(u32 mem, u64 *out)  {
 		return 0;
 	}
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			*out = (s16)hwRead16(mem & ~0xa0000000); return 0;
 		case 2: // psh
@@ -2512,10 +2661,11 @@ int  memRead16RU(u32 mem, u64 *out)  {
 	char *p;
 
 	p = (char *)(memLUTR[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
 #ifdef ENABLECACHE
-		if ((mem & 0x20000000) == 0) {
-			u8 *tmp = readCache(mem);
+				if ((mem & 0x20000000) == 0 &&
+			(cpuRegs.CP0.r[16] & 0x10000) && !(cpuRegs.CP0.n.Status.val & 0x4)) {
+			char *tmp = (char*)readCache(mem);
 			*out = *(u16*)(tmp+(mem&0xf));
 			return 0;
 		}
@@ -2524,7 +2674,7 @@ int  memRead16RU(u32 mem, u64 *out)  {
 		return 0;
 	}
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			*out = (u16)hwRead16(mem & ~0xa0000000); return 0;
 		case 2: // psh
@@ -2558,13 +2708,21 @@ int memRead32(u32 mem, u32 *out)  {
 	char *p;
 
 	p = (char *)(memLUTR[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
+#ifdef ENABLECACHE
+				if ((mem & 0x20000000) == 0 &&
+			(cpuRegs.CP0.r[16] & 0x10000) && !(cpuRegs.CP0.n.Status.val & 0x4)) {
+			u8 *tmp = readCache(mem);
+			*out = *(u32 *)(tmp+(mem&0xf));
+			return 0;
+		}
+#endif
 		*out = *(u32*)(p + (mem & 0xfff));
 		return 0;
 	}
-	assert( (int)p < 8 );
+	assert( (int)(uptr)p < 8 );
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			*out = hwRead32(mem & ~0xa0000000); return 0;
 		case 2: // psh
@@ -2589,10 +2747,11 @@ int  memRead32RS(u32 mem, u64 *out)  {
 	char *p;
 
 	p = (char *)(memLUTR[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
 #ifdef ENABLECACHE
-		if ((mem & 0x20000000) == 0) {
-			u8 *tmp = readCache(mem);
+				if ((mem & 0x20000000) == 0 &&
+			(cpuRegs.CP0.r[16] & 0x10000) && !(cpuRegs.CP0.n.Status.val & 0x4)) {
+			char *tmp = (char*)readCache(mem);
 			*out = *(s32*)(tmp+(mem&0xf));
 			return 0;
 		}
@@ -2601,7 +2760,7 @@ int  memRead32RS(u32 mem, u64 *out)  {
 		return 0;
 	}
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			*out = (s32)hwRead32(mem & ~0xa0000000); return 0;
 		case 2: // psh
@@ -2626,10 +2785,11 @@ int  memRead32RU(u32 mem, u64 *out)  {
 	char *p;
 
 	p = (char *)(memLUTR[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
 #ifdef ENABLECACHE
-		if ((mem & 0x20000000) == 0) {
-			u8 *tmp = readCache(mem);
+				if ((mem & 0x20000000) == 0 &&
+			(cpuRegs.CP0.r[16] & 0x10000) && !(cpuRegs.CP0.n.Status.val & 0x4)) {
+			char *tmp = (char*)readCache(mem);
 			*out = *(u32*)(tmp+(mem&0xf));
 			return 0;
 		}
@@ -2638,7 +2798,7 @@ int  memRead32RU(u32 mem, u64 *out)  {
 		return 0;
 	}
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			*out = (u32)hwRead32(mem & ~0xa0000000); return 0;
 		case 2: // psh
@@ -2663,9 +2823,10 @@ int  memRead64(u32 mem, u64 *out)  {
 	char *p;
 
 	p = (char *)(memLUTR[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
 #ifdef ENABLECACHE
-		if ((mem & 0x20000000) == 0) {
+				if ((mem & 0x20000000) == 0 &&
+			(cpuRegs.CP0.r[16] & 0x10000) && !(cpuRegs.CP0.n.Status.val & 0x4)) {
 			u8 *tmp = readCache(mem);
 			*out = *(u64*)(tmp+(mem&0xf));
 			return 0;
@@ -2675,7 +2836,7 @@ int  memRead64(u32 mem, u64 *out)  {
 		return 0;
 	}
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			*out = hwRead64(mem & ~0xa0000000); return 0;
 		case 6: // gsm
@@ -2694,9 +2855,10 @@ int  memRead128(u32 mem, u64 *out)  {
 	char *p;
 
 	p = (char *)(memLUTR[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
 #ifdef ENABLECACHE
-		if ((mem & 0x20000000) == 0) {
+				if ((mem & 0x20000000) == 0 &&
+			(cpuRegs.CP0.r[16] & 0x10000) && !(cpuRegs.CP0.n.Status.val & 0x4)) {
 			u64 *tmp = (u64*)readCache(mem);
 			out[0] = tmp[0];
 			out[1] = tmp[1];
@@ -2709,7 +2871,7 @@ int  memRead128(u32 mem, u64 *out)  {
 		return 0;
 	}
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			hwRead128(mem & ~0xa0000000, out); return 0;
 		case 6: // gsm
@@ -2729,9 +2891,9 @@ void memWrite8 (u32 mem, u8  value)   {
 	char *p;
 
 	p = (char *)(memLUTW[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
 #ifdef ENABLECACHE
-		if ((mem & 0x20000000) == 0) {
+		if ((mem & 0x20000000) == 0 && (cpuRegs.CP0.r[16] & 0x10000)) {
 			writeCache8(mem, value);
 			return;
 		}
@@ -2744,7 +2906,7 @@ void memWrite8 (u32 mem, u8  value)   {
 		return;
 	}
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			hwWrite8(mem & ~0xa0000000, value);
 			return;
@@ -2770,9 +2932,9 @@ void memWrite16(u32 mem, u16 value) {
 	char *p;
 
 	p = (char *)(memLUTW[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
 #ifdef ENABLECACHE
-		if ((mem & 0x20000000) == 0) {
+		if ((mem & 0x20000000) == 0 && (cpuRegs.CP0.r[16] & 0x10000)) {
 			writeCache16(mem, value);
 			return;
 		}
@@ -2785,7 +2947,7 @@ void memWrite16(u32 mem, u16 value) {
 		return;
 	}
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			hwWrite16(mem & ~0xa0000000, value);
 			return;
@@ -2816,9 +2978,10 @@ void memWrite32(u32 mem, u32 value)
 {
 	char *p;
 	p = (char *)(memLUTW[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
 #ifdef ENABLECACHE
-		if ((mem & 0x20000000) == 0) {
+		if ((mem & 0x20000000) == 0 && (cpuRegs.CP0.r[16] & 0x10000)) 
+		{
 			writeCache32(mem, value);
 			return;
 		}
@@ -2831,7 +2994,7 @@ void memWrite32(u32 mem, u32 value)
 		return;
 	}
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			hwWrite32(mem & ~0xa0000000, value);
 			return;
@@ -2854,9 +3017,9 @@ void memWrite64(u32 mem, u64 value)   {
 	char *p;
 
 	p = (char *)(memLUTW[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
 	#ifdef ENABLECACHE
-		if ((mem & 0x20000000) == 0) {
+		if ((mem & 0x20000000) == 0 && (cpuRegs.CP0.r[16] & 0x10000)) {
 			writeCache64(mem, value);
 			return;
 		}
@@ -2876,7 +3039,7 @@ void memWrite64(u32 mem, u64 value)   {
 	}
 
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			hwWrite64(mem & ~0xa0000000, value);
 			return;
@@ -2894,11 +3057,11 @@ void memWrite128(u32 mem, u64 *value) {
 	char *p;
 
 	p = (char *)(memLUTW[mem >> 12]);
-	if ((int)p > 0x10) {
+	if ((uptr)p > 0x10) {
 #ifdef ENABLECACHE
-		if ((mem & 0x20000000) == 0) {
+		if ((mem & 0x20000000) == 0 && (cpuRegs.CP0.r[16] & 0x10000)) {
 			writeCache128(mem, value);
-			return;
+				return;
 		}
 #endif
 		p+= mem & 0xfff;
@@ -2918,7 +3081,7 @@ void memWrite128(u32 mem, u64 *value) {
 		return;
 	}
 
-	switch ((int)p) {
+	switch ((int)(uptr)p) {
 		case 1: // hwm
 			hwWrite128(mem & ~0xa0000000, value);
 			return;
@@ -2935,7 +3098,7 @@ void memWrite128(u32 mem, u64 *value) {
 }
 
 
-#endif // WIN32_VIRTUAL_MEM
+#endif // PCSX2_VIRTUAL_MEM
 
 void loadBiosRom(char *ext, u8 *dest) {
 	struct stat buf;
@@ -2986,7 +3149,7 @@ void memReset() {
 	char Bios[256];
 	FILE *fp;
 
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
 	DWORD OldProtect;
 	memset(PS2MEM_BASE, 0, 0x02000000);
 	memset(PS2MEM_SCRATCH, 0, 0x00004000);
@@ -3003,12 +3166,21 @@ void memReset() {
 		return;
 	}
 
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
+
+#ifdef _WIN32
 	// make sure can write
 	VirtualProtect(PS2MEM_ROM, 0x00400000, PAGE_READWRITE, &OldProtect);
 	VirtualProtect(PS2MEM_ROM1, 0x00040000, PAGE_READWRITE, &OldProtect);
 	VirtualProtect(PS2MEM_ROM2, 0x00080000, PAGE_READWRITE, &OldProtect);
 	VirtualProtect(PS2MEM_EROM, 0x001C0000, PAGE_READWRITE, &OldProtect);
+#else
+    mprotect(PS2EMEM_ROM, 0x00400000, PROT_READ|PROT_WRITE);
+    mprotect(PS2EMEM_ROM1, 0x00400000, PROT_READ|PROT_WRITE);
+    mprotect(PS2EMEM_ROM2, 0x00800000, PROT_READ|PROT_WRITE);
+    mprotect(PS2EMEM_EROM, 0x001C0000, PROT_READ|PROT_WRITE);
+#endif
+
 #endif
 
 	fp = fopen(Bios, "rb");
@@ -3026,16 +3198,25 @@ void memReset() {
 	loadBiosRom("rom2", PS2MEM_ROM2);
 	loadBiosRom("erom", PS2MEM_EROM);
 
-#ifdef WIN32_VIRTUAL_MEM
+#ifdef PCSX2_VIRTUAL_MEM
+
+#ifdef _WIN32
 	VirtualProtect(PS2MEM_ROM, 0x00400000, PAGE_READONLY, &OldProtect);
 	VirtualProtect(PS2MEM_ROM1, 0x00040000, PAGE_READONLY, &OldProtect);
 	VirtualProtect(PS2MEM_ROM2, 0x00080000, PAGE_READONLY, &OldProtect);
 	VirtualProtect(PS2MEM_EROM, 0x001C0000, PAGE_READONLY, &OldProtect);
+#else
+    mprotect(PS2EMEM_ROM, 0x00400000, PROT_READ);
+    mprotect(PS2EMEM_ROM1, 0x00400000, PROT_READ);
+    mprotect(PS2EMEM_ROM2, 0x00800000, PROT_READ);
+    mprotect(PS2EMEM_EROM, 0x001C0000, PROT_READ);
+#endif
+
 #endif
 }
 
 void memSetKernelMode() {
-#ifndef WIN32_VIRTUAL_MEM
+#ifndef PCSX2_VIRTUAL_MEM
 	memLUTR = memLUTRK;
 	memLUTW = memLUTWK;
 #endif
@@ -3047,10 +3228,11 @@ void memSetSupervisorMode() {
 
 void memSetUserMode() {
 #ifdef FULLTLB
-#ifndef WIN32_VIRTUAL_MEM
+#ifndef PCSX2_VIRTUAL_MEM
 	memLUTR = memLUTRU;
 	memLUTW = memLUTWU;
 #endif
 	MemMode = 2;
 #endif
 }
+

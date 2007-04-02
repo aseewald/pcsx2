@@ -168,10 +168,12 @@ unsigned int parseCommandLine( char *filename )
 		args[ 255 ] = 0;
 		memcpy( &PS2MEM_BASE[ args_ptr ], args, 256 );				//params 1, 2, etc copied
 		memset( &PS2MEM_BASE[ args_ptr + strlen( args ) ], 0, 256 - strlen( args ) );
-#ifdef __WIN32__
+#ifdef _WIN32
 		p = strrchr( filename, '\\' );
 #else	//linux
 		p = strrchr( filename, '/' );
+        if( p == NULL )
+            p = strchr(filename, '\\');
 #endif
 		if ( p )
       {
@@ -620,7 +622,7 @@ int loadElfFile(char *filename) {
    // Applying patches
     if (Config.Patch) {
 		sprintf(str, "%8.8x", crc);
-#ifdef __WIN32__
+#ifdef _WIN32
 		sprintf(str2,"patches not found can't apply patches crc=%8.8x",crc);//if patches found it will overwritten :p
 		if (gApp.hConsole) SetConsoleTitle(str2);
 #endif
@@ -639,12 +641,49 @@ int loadElfFile(char *filename) {
 	return 0;
 }
 
-extern int g_VUSignedZero;
-
+#include "VU.h"
+extern int g_FFXHack;
+int g_VUGameFixes = 0;
 void LoadGameSpecificSettings()
 {
-	if( ElfCRC==0x0c414549 ) { // spacefisherman
-		g_VUSignedZero = 1;
+    // default
+    g_VUGameFixes = 0;
+    g_FFXHack = 0;
+
+    switch(ElfCRC) {
+        case 0x0c414549: // spacefisherman, missing gfx
+		    g_VUGameFixes |= VUFIX_SIGNEDZERO;
+            break;
+        case 0x4C9EE7DF: // crazy taxi (u)
+        case 0xC9C145BF: // crazy taxi, missing gfx
+            g_VUGameFixes |= VUFIX_EXTRAFLAGS;
+            break;
+
+        case 0xb99379b7: // erementar gerad (discolored chars)
+            g_VUGameFixes |= VUFIX_XGKICKDELAY2;
+            break;
+
+        case 0x6a4efe60: // ffx(j)
+		case 0xA39517AB: // ffx(e)
+		case 0xBB3D833A: // ffx(u)
+		case 0x941bb7d9: // ffx(g)
+		case 0xD9FC6310: // ffx int(j)
+        case 0xa39517ae: // ffx(f)
+        case 0xa39517a9: // ffx(i)
+        case 0x658597e2: // ffx int
+        case 0x941BB7DE: // ffx(s)
+        case 0x3866CA7E: // ffx(asia)
+        case 0x48FE0C71: // ffx2 (u)
+		case 0x9aac530d: // ffx2 (g)
+		case 0x9AAC5309: // ffx2 (e)
+		case 0x8A6D7F14: // ffx2 (j)
+        case 0x9AAC530B: // ffx2 (i)
+        case 0x9AAC530A: // ffx2 (f)
+        case 0xe1fd9a2d: // ffx2 last mission (?)
+        case 0x93f9b89a: // ffx2 demo (g)
+        case 0x304C115C: // harvest moon - awl
+		case 0xF0A6D880: // harvest moon - sth
+            g_FFXHack = 1;
+            break;		
 	}
 }
-

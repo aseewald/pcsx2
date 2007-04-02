@@ -1,5 +1,5 @@
 /*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2003  Pcsx2 Team
+ *  Copyright (C) 2002-2007  Pcsx2 Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -348,7 +348,9 @@ int  cdrInterrupt() {
 	        	cdr.Result[2] = cdr.Prev[0];
 	        	cdr.Result[3] = itob((btoi(cdr.Prev[1])) - 2);
 	        	cdr.Result[4] = cdr.Prev[2];
-		    	memcpy(cdr.Result+5, cdr.Prev, 3);
+                cdr.Result[5] = cdr.Prev[0];
+                cdr.Result[6] = cdr.Prev[1];
+                cdr.Result[7] = cdr.Prev[2];
 //			}
         	cdr.Stat = Acknowledge;
         	break;
@@ -421,15 +423,15 @@ int  cdrInterrupt() {
         	switch (cdr.Param[0]) {
         	    case 0x20: // System Controller ROM Version
 					SetResultSize(4);
-					memcpy(cdr.Result, Test20, 4);
+                    *(int*)cdr.Result = *(int*)Test20;
 					break;
 				case 0x22:
 					SetResultSize(8);
-					memcpy(cdr.Result, Test22, 4);
+                    *(int*)cdr.Result = *(int*)Test22;
 					break;
 				case 0x23: case 0x24:
 					SetResultSize(8);
-					memcpy(cdr.Result, Test23, 4);
+                    *(int*)cdr.Result = *(int*)Test23;
 					break;
         	}
 			break;
@@ -590,7 +592,7 @@ int  cdrReadInterrupt() {
 		return 0;
 	}
 
-	memcpy(cdr.Transfer, buf+12, 2340);
+	memcpy_fast(cdr.Transfer, buf+12, 2340);
     cdr.Stat = DataReady;
 
 #ifdef CDR_LOG
@@ -1022,7 +1024,7 @@ void psxDma3(u32 madr, u32 bcr, u32 chcr) {
 
 			cdsize = (bcr & 0xffff) * 4;
 
-			memcpy((u8*)PSXM(madr), cdr.pTransfer, cdsize);
+			memcpy_fast((u8*)PSXM(madr), cdr.pTransfer, cdsize);
 			psxCpu->Clear(madr, cdsize/4);
 			cdr.pTransfer+=cdsize;
 
@@ -1069,8 +1071,8 @@ int cdrFreeze(gzFile f, int Mode) {
 
 	gzfreeze(&cdr, sizeof(cdr));
 
-	if (Mode == 1) tmp = cdr.pTransfer - cdr.Transfer;
-	gzfreezel(&tmp);
+	if (Mode == 1) tmp = (int)(cdr.pTransfer - cdr.Transfer);
+	gzfreeze(&tmp, 4);
 	if (Mode == 0) cdr.pTransfer = cdr.Transfer + tmp;
 
 	return 0;

@@ -28,26 +28,29 @@ static u32 branchPC;
 
 // These macros are used to assemble the repassembler functions
 
-#ifdef PSXCPU_LOG
-#define debugI() \
-	if (Log) { \
-		PSXCPU_LOG("%s\n", disR3000AF(psxRegs.code, psxRegs.pc)); \
-	}
-#else
-#define debugI()
-#endif
-
+#ifdef _DEBUG
 #define execI() { \
 	psxRegs.code = PSXMu32(psxRegs.pc); \
  \
- 	debugI(); \
+ 	if (Log) { \
+		PSXCPU_LOG("%s\n", disR3000AF(psxRegs.code, psxRegs.pc)); \
+	} \
 	psxRegs.pc+= 4; \
 	psxRegs.cycle++; \
  \
 	psxBSC[psxRegs.code >> 26](); \
-	EEsCycle-= (psxRegs.cycle - IOPoCycle) << 3; \
-	IOPoCycle = psxRegs.cycle; \
 }
+#else
+#define execI() { \
+	psxRegs.code = PSXMu32(psxRegs.pc); \
+ \
+ 	psxRegs.pc+= 4; \
+	psxRegs.cycle++; \
+ \
+	psxBSC[psxRegs.code >> 26](); \
+}
+#endif
+
 
 #define doBranch(tar) { \
 	branch2 = branch = 1; \
@@ -758,11 +761,23 @@ static void intExecute() {
 	for (;;) execI();
 }
 
+#ifdef _DEBUG
+extern u32 psxdump;
+extern void iDumpPsxRegisters(u32,u32);
+#endif
+
 static void intExecuteBlock() {
 	while (EEsCycle > 0){
 		branch2 = 0;
-		while (!branch2) 
+		while (!branch2) {
 			execI();
+
+#ifdef _DEBUG
+            if( psxdump & 16 ) {
+                iDumpPsxRegisters(psxRegs.pc,1);
+            }
+#endif
+        }
 	}
 }
 

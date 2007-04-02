@@ -22,7 +22,7 @@
 #include "R5900.h"
 #include "InterTables.h"
 
-extern BOOL bExecBIOS;
+//extern BOOL bExecBIOS;
 
 void COP0() {
 	Int_COP0PrintTable[_Rs_]();
@@ -317,8 +317,8 @@ void TLBP() {
 		u32 u;
 	} EntryHi32;
 
-	if( !bExecBIOS )
-		__Log("TLBP %x\n", cpuRegs.CP0.n.EntryHi);
+//	if( !bExecBIOS )
+//		__Log("TLBP %x\n", cpuRegs.CP0.n.EntryHi);
 
 	EntryHi32.u=cpuRegs.CP0.n.EntryHi;
 

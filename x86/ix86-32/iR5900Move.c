@@ -16,6 +16,9 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+// stop compiling if NORECBUILD build (only for Visual Studio)
+#if !(defined(_MSC_VER) && defined(PCSX2_NORECBUILD))
+
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -26,7 +29,7 @@
 #include "iR5900.h"
 
 
-#ifdef __WIN32__
+#ifdef _WIN32
 #pragma warning(disable:4244)
 #pragma warning(disable:4761)
 #endif
@@ -834,3 +837,5 @@ REC_FUNC( MTHI1 );
 REC_FUNC( MTLO1 );
 
 #endif
+
+#endif // PCSX2_NORECBUILD
