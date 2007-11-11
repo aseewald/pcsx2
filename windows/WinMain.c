@@ -18,8 +18,8 @@
 
 #define WINVER 0x0500
 
-#if _WIN32_WINNT < 0x0500
-#define _WIN32_WINNT 0x0500
+#if _WIN32_WINNT < 0x0501
+#define _WIN32_WINNT 0x0501
 #endif
 
 #include <windows.h>
@@ -29,6 +29,8 @@
 #include <stdarg.h>
 #include <string.h>
 #include <sys/stat.h>
+
+#include <ntsecapi.h>
 
 #include <assert.h>
 
@@ -287,8 +289,6 @@ void OnStates_SaveOther() {
 	}
 }
 
-#ifdef PCSX2_DEVBUILD
-
 TESTRUNARGS g_TestRun;
 
 static int ParseCommandLine(char* pcmd)
@@ -335,7 +335,8 @@ static int ParseCommandLine(char* pcmd)
         else if( stricmp(token, "-nogui") == 0 ) {
 			UseGui = 0;
 		}
-		else if( stricmp(token, "-image") == 0 ) {
+#ifdef PCSX2_DEVBUILD
+        else if( stricmp(token, "-image") == 0 ) {
 			token = strtok(NULL, pdelim);
 			g_TestRun.pimagename = token;
 		}
@@ -350,11 +351,7 @@ static int ParseCommandLine(char* pcmd)
 				sscanf(token, "%x", &varLog);
 			}
 		}
-		else if( stricmp(token, "-pad") == 0 ) {
-			token = strtok(NULL, pdelim);
-			printf("-pad ignored\n");
-		}
-		else if( stricmp(token, "-frame") == 0 ) {
+        else if( stricmp(token, "-frame") == 0 ) {
 			token = strtok(NULL, pdelim);
 			if( token != NULL ) {
 				g_TestRun.frame = atoi(token);
@@ -366,14 +363,19 @@ static int ParseCommandLine(char* pcmd)
 				g_TestRun.numimages = atoi(token);
 			}
 		}
+        else if( stricmp(token, "-jpg") == 0 ) {
+			g_TestRun.jpgcapture = 1;
+		}
+#endif
+		else if( stricmp(token, "-pad") == 0 ) {
+			token = strtok(NULL, pdelim);
+			printf("-pad ignored\n");
+		}
 		else if( stricmp(token, "-efile") == 0 ) {
 			token = strtok(NULL, pdelim);
 			if( token != NULL ) {
 				g_TestRun.efile = atoi(token);
 			}
-		}
-		else if( stricmp(token, "-jpg") == 0 ) {
-			g_TestRun.jpgcapture = 1;
 		}
 		else if( stricmp(token, "-gs") == 0 ) {
 			token = strtok(NULL, pdelim);
@@ -407,7 +409,6 @@ static int ParseCommandLine(char* pcmd)
 	return 0;
 }
 
-#endif
 extern void LoadPatch(char *crc);
 
 BOOL SysLoggedSetLockPagesPrivilege ( HANDLE hProcess, BOOL bEnable);
@@ -428,6 +429,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	if( !SysLoggedSetLockPagesPrivilege( GetCurrentProcess(), TRUE ) )
 		return -1;
+
+	
 
 	lpMemReserved = VirtualAlloc(PS2MEM_BASE, 0x40000000, MEM_RESERVE, PAGE_NOACCESS);
 
@@ -455,6 +458,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		strcpy(Config.BiosDir,    "Bios\\");
 		strcpy(Config.PluginsDir, "Plugins\\");
 		Config.Patch = 1;
+        Config.Options = PCSX2_EEREC|PCSX2_VU0REC|PCSX2_VU1REC|PCSX2_COP2REC;
 
 		SysMessage(_("Pcsx2 needs to be configured"));
 		Pcsx2Configure(NULL);
@@ -559,30 +563,39 @@ void RunGui() {
 	}
 }
 
+static int shiftkey = 0;
 void CALLBACK KeyEvent(keyEvent* ev)
 {
-	int shift;
+	
 	if (ev == NULL) return;
 	if (ev->event == KEYRELEASE) {
+		switch (ev->key) {
+		case VK_SHIFT: shiftkey = 0; break;
+		}
 		GSkeyEvent(ev); return;
 	}
-	if (ev->event != KEYPRESS) return;
+	if (ev->event != KEYPRESS)
+        return;
 
-    shift = !(GetKeyState(VK_SHIFT)&0x8000);
+    //some pad plugins don't give a key released event for shift, so this is needed
+    //shiftkey = GetKeyState(VK_SHIFT)&0x8000;
+    //Well SSXPad breaks with your code, thats why my code worked and your makes reg dumping impossible
+	//So i suggest you fix the plugins that dont.
     
 	switch (ev->key) {
-		case VK_F1: ProcessFKeys(1, shift); break;
-		case VK_F2: ProcessFKeys(2, shift); break;
-        case VK_F3: ProcessFKeys(3, shift); break;
-        case VK_F4: ProcessFKeys(4, shift); break;
-        case VK_F5: ProcessFKeys(5, shift); break;
-        case VK_F6: ProcessFKeys(6, shift); break;
-        case VK_F7: ProcessFKeys(7, shift); break;
-        case VK_F8: ProcessFKeys(8, shift); break;
-        case VK_F9: ProcessFKeys(9, shift); break;
-        case VK_F10: ProcessFKeys(10, shift); break;
-        case VK_F11: ProcessFKeys(11, shift); break;
-        case VK_F12: ProcessFKeys(12, shift); break;
+		case VK_SHIFT: shiftkey = 1; break;
+		case VK_F1: ProcessFKeys(1, shiftkey); break;
+		case VK_F2: ProcessFKeys(2, shiftkey); break;
+        case VK_F3: ProcessFKeys(3, shiftkey); break;
+        case VK_F4: ProcessFKeys(4, shiftkey); break;
+        case VK_F5: ProcessFKeys(5, shiftkey); break;
+        case VK_F6: ProcessFKeys(6, shiftkey); break;
+        case VK_F7: ProcessFKeys(7, shiftkey); break;
+        case VK_F8: ProcessFKeys(8, shiftkey); break;
+        case VK_F9: ProcessFKeys(9, shiftkey); break;
+        case VK_F10: ProcessFKeys(10, shiftkey); break;
+        case VK_F11: ProcessFKeys(11, shiftkey); break;
+        case VK_F12: ProcessFKeys(12, shiftkey); break;
 
 		case VK_ESCAPE:
 #ifdef PCSX2_DEVBUILD

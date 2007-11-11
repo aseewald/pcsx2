@@ -429,7 +429,7 @@ void PCGTB() {
     if (sTemp64 > 0x7FFFFFFF) { \
         cpuRegs.GPR.r[_Rd_].UL[n] = 0x7FFFFFFF; \
     } else \
-    if ((sTemp64 < 0x180000000LL) && (sTemp64 >= 0x100000000LL)) { \
+    if ((sTemp64 < (s32)0x80000000) ) { \
         cpuRegs.GPR.r[_Rd_].UL[n] = 0x80000000LL; \
     } else { \
         cpuRegs.GPR.r[_Rd_].UL[n] = (s32)sTemp64; \
@@ -444,12 +444,12 @@ void PADDSW() {
 }
 
 #define _PSUBSW(n) \
-    sTemp64 = (s64)cpuRegs.GPR.r[_Rs_].UL[n] - (s64)cpuRegs.GPR.r[_Rt_].UL[n]; \
+    sTemp64 = (s64)cpuRegs.GPR.r[_Rs_].SL[n] - (s64)cpuRegs.GPR.r[_Rt_].SL[n]; \
     if (sTemp64 >= 0x7FFFFFFF) { \
         cpuRegs.GPR.r[_Rd_].UL[n] = 0x7FFFFFFF; \
     } else \
-    if ((sTemp64 < 0x180000000LL) && (sTemp64 >= 0x100000000LL)) { \
-        cpuRegs.GPR.r[_Rd_].UL[n] = 0x80000000LL; \
+    if ((sTemp64 < (s32)0x80000000) ) { \
+        cpuRegs.GPR.r[_Rd_].UL[n] = 0x80000000; \
     } else { \
         cpuRegs.GPR.r[_Rd_].UL[n] = (s32)sTemp64; \
     }
@@ -459,7 +459,10 @@ void PSUBSW() {
 
 	if (!_Rd_) return;
 
-	_PSUBSW(0); _PSUBSW(1); _PSUBSW(2); _PSUBSW(3);
+	_PSUBSW(0);
+    _PSUBSW(1);
+    _PSUBSW(2);
+    _PSUBSW(3);
 }
 
 void PEXTLW() {
@@ -491,7 +494,7 @@ void PPACW() {
     if (sTemp32 > 0x7FFF) { \
         cpuRegs.GPR.r[_Rd_].US[n] = 0x7FFF; \
     } else \
-    if ((sTemp32 < 0x18000) && (sTemp32 >= 0x10000)) { \
+    if ((sTemp32 < (s32)0xffff8000) ) { \
         cpuRegs.GPR.r[_Rd_ ].US[n] = 0x8000; \
     } else { \
         cpuRegs.GPR.r[_Rd_ ].US[n] = (s16)sTemp32; \
@@ -511,7 +514,7 @@ void PADDSH() {
     if (sTemp32 >= 0x7FFF) { \
         cpuRegs.GPR.r[_Rd_].US[n] = 0x7FFF; \
     } else \
-    if ((sTemp32 < 0x18000) && (sTemp32 >= 0x10000)) { \
+    if ((sTemp32 < (s32)0xffff8000) ) { \
         cpuRegs.GPR.r[_Rd_].US[n] = 0x8000; \
     } else { \
         cpuRegs.GPR.r[_Rd_].US[n] = (s16)sTemp32; \

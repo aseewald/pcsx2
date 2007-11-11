@@ -432,11 +432,14 @@ void ipuSoftReset()
 		memset(mb16.Cr,0,sizeof(mb16.Cr));
 		mpeg2_inited=1;
 	}
-	FIFOto_clear();
+    
+    FIFOto_clear();
 	memset(fifo_output,0,sizeof(u32)*32);
 	FOwritepos = 0;
 	FOreadpos = 0;
 	coded_block_pattern = 0;
+
+    //g_nDMATransfer = 0;
 
 	ipuRegs->ctrl._u32 = 0;
 	g_BP.BP     = 0;
@@ -462,7 +465,11 @@ void ipuWrite32(u32 mem,u32 value)
 			break;
 		case 0x10002010: // IPU_CTRL
 			ipuRegs->ctrl._u32 = (value&0x47f30000)|(ipuRegs->ctrl._u32&0x8000ffff);
-			if (ipuRegs->ctrl.RST & 0x1) { // RESET
+            if( ipuRegs->ctrl.IDP == 3 ) {
+                SysPrintf("IPU Invaild Intra DC Precision, switching to 9 bits\n");
+                ipuRegs->ctrl.IDP = 1;
+            }
+            if (ipuRegs->ctrl.RST & 0x1) { // RESET
 				ipuSoftReset();
 			}
 
@@ -768,6 +775,11 @@ static BOOL ipuFDEC(u32 val)
 
 	BigEndian(ipuRegs->cmd.DATA, ipuRegs->cmd.DATA);
 	ipuRegs->top = ipuRegs->cmd.DATA;
+
+#ifdef IPU_LOG
+    IPU_LOG("FDEC read: 0x%8.8x\n", ipuRegs->top);
+#endif
+
 	return TRUE;
 }
 
@@ -987,7 +999,7 @@ void IPUCMD_WRITE(u32 val) {
 		case SCE_IPU_FDEC:
 
 #ifdef IPU_LOG
-			IPU_LOG("IPU FDEC command. Skip 0x%X bits, FIFO 0x%X bytes, BP 0x%X, FP %d, CHCR 0x%x, %x\n",
+			IPU_LOG("IPU FDEC command. Skip 0x%X bits, FIFO 0x%X qwords, BP 0x%X, FP %d, CHCR 0x%x, %x\n",
 				val & 0x3f,g_BP.IFC,(int)g_BP.BP,g_BP.FP,((DMACh*)&PS2MEM_HW[0xb400])->chcr,cpuRegs.pc);
 #endif
 
@@ -1041,10 +1053,12 @@ void IPUCMD_WRITE(u32 val) {
 				if(ipu0dma->qwc > 0 && (ipu0dma->chcr & 0x100)) INT(DMAC_FROM_IPU,0);
 				IPU_INTERRUPT(DMAC_FROM_IPU);
 				FreezeMMXRegs(0);
+				FreezeXMMRegs(0)
 				return;
 			}
 
 			FreezeMMXRegs(0);
+			FreezeXMMRegs(0)
 			break;
 		case SCE_IPU_PACK:
 
@@ -1055,10 +1069,12 @@ void IPUCMD_WRITE(u32 val) {
 			if( ipuPACK(ipuRegs->cmd.DATA) ) {
 				IPU_INTERRUPT(DMAC_TO_IPU);
 				FreezeMMXRegs(0);
+				FreezeXMMRegs(0)
 				return;
 			}
 
 			FreezeMMXRegs(0);
+			FreezeXMMRegs(0)
 			break;
 
 		case SCE_IPU_IDEC:
@@ -1067,6 +1083,7 @@ void IPUCMD_WRITE(u32 val) {
 				// idec done, ipu0 done too
 				if(ipu0dma->qwc > 0 && (ipu0dma->chcr & 0x100)) INT(DMAC_FROM_IPU,0);
 				FreezeMMXRegs(0);
+				FreezeXMMRegs(0)
 				return;
 			}
 
@@ -1075,6 +1092,7 @@ void IPUCMD_WRITE(u32 val) {
 			ipuCurCmd = val>>28;
 			ipuRegs->ctrl.BUSY = 1;
 			FreezeMMXRegs(0);
+			FreezeXMMRegs(0)
 
 			return;
 
@@ -1083,6 +1101,7 @@ void IPUCMD_WRITE(u32 val) {
 			if( ipuBDEC(val)) {
 				if(ipu0dma->qwc > 0 && (ipu0dma->chcr & 0x100)) INT(DMAC_FROM_IPU,0);
 				FreezeMMXRegs(0);
+				FreezeXMMRegs(0)
 				return;
 			}
 
@@ -1090,6 +1109,7 @@ void IPUCMD_WRITE(u32 val) {
 			ipuCurCmd = val>>28;
 			ipuRegs->ctrl.BUSY = 1;
 			FreezeMMXRegs(0);
+			FreezeXMMRegs(0)
 			
 			return;
 	}
@@ -1168,8 +1188,15 @@ void IPUWorker()
 			so_call(s_routine);
 			if( !s_RoutineDone ) {
 				FreezeMMXRegs(0);
+				FreezeXMMRegs(0)
 				return;
 			}
+
+//            if( (g_nDMATransfer&IPU_DMA_ACTV1) && (ipu1dma->chcr&0x100) && g_BP.IFC > 0 ) {
+//                ipu1dma->madr -= g_BP.IFC * 16;
+//                ipu1dma->qwc += g_BP.IFC;
+//                g_BP.IFC = 0;
+//            }
 
 			ipuRegs->ctrl.OFC = 0;
 			ipuRegs->ctrl.BUSY = 0;
@@ -1177,8 +1204,10 @@ void IPUWorker()
 			ipuRegs->cmd.BUSY = 0;
 			ipuCurCmd = 0xffffffff;
 			// CHECK!: IPU0dma remains when IDEC is done, so we need to clear it
-			if(ipu0dma->qwc > 0 && (ipu0dma->chcr & 0x100)) INT(DMAC_FROM_IPU,0);
+			if(ipu0dma->qwc > 0 && (ipu0dma->chcr & 0x100))
+                INT(DMAC_FROM_IPU,0);
             FreezeMMXRegs(0);
+			FreezeXMMRegs(0)
 			return;
 		case SCE_IPU_BDEC:
 			FreezeMMXRegs(1);
@@ -1187,6 +1216,7 @@ void IPUWorker()
 			{
 				//hwIntcIrq(INTC_IPU);
 				FreezeMMXRegs(0);
+				FreezeXMMRegs(0)
 				return;
 			}
 
@@ -1197,6 +1227,7 @@ void IPUWorker()
 			if(ipu0dma->qwc > 0 && (ipu0dma->chcr & 0x100)) INT(DMAC_FROM_IPU,0);
 			
 			FreezeMMXRegs(0);
+			FreezeXMMRegs(0)
 			return;
 
 		default:
@@ -1741,11 +1772,6 @@ int IPU1dma()
 			ipu1dma->chcr = ( ipu1dma->chcr & 0xFFFF ) | ( (*ptag) & 0xFFFF0000 );  //Transfer upper part of tag to CHCR bits 31-15
 			ipu1dma->qwc  = (u16)ptag[0];			    //QWC set to lower 16bits of the tag
 			//ipu1dma->madr = ptag[1];				    //MADR = ADDR field
-
-#ifdef IPU_LOG
-			IPU_LOG("dmaIPU1 dmaChain %8.8x_%8.8x size=%d, addr=%lx, fifosize=%x\n",
-				ptag[1], ptag[0], ipu1dma->qwc, ipu1dma->madr, 8 - g_BP.IFC);
-#endif
 			
 			//done = hwDmacSrcChainWithStack(ipu1dma, id);
 			switch(ptag[0] & 0x70000000) {
@@ -1784,10 +1810,18 @@ int IPU1dma()
 					break;
 			}
 
-			if( ptag[0] & 0x80000000 ) 
+#ifdef IPU_LOG
+			IPU_LOG("dmaIPU1 dmaChain %8.8x_%8.8x size=%d, addr=%lx, fifosize=%x\n",
+				ptag[1], ptag[0], ipu1dma->qwc, ipu1dma->madr, 8 - g_BP.IFC);
+#endif
+
+			if( (ipu1dma->chcr & 0x80) && ptag[0] & 0x80000000 ) 
 				g_nDMATransfer |= IPU_DMA_DOTIE1;
 			else
 				g_nDMATransfer &= ~IPU_DMA_DOTIE1;
+
+			//Britney Dance beat does a blank NEXT tag, for some odd reason the fix doesnt work if after IPU1Chain O_o
+			if(ipu1dma->qwc == 0 && done == 0 && !(g_nDMATransfer & IPU_DMA_DOTIE1)) IPU1dma();
 
 			IPU1chain();
 
@@ -1951,7 +1985,7 @@ void dmaIPU1() // toIPU
 		IPUWorker();
 }
 
-extern void dmaGIF();
+extern void GIFdma();
 
 int ipu0Interrupt() {
 #ifdef IPU_LOG 
@@ -1966,7 +2000,7 @@ int ipu0Interrupt() {
 	if( g_nDMATransfer & IPU_DMA_GIFSTALL ) {
 		// gif
 		g_nDMATransfer &= ~IPU_DMA_GIFSTALL;
-		if(((DMACh*)&PS2MEM_HW[0xA000])->chcr & 0x100) dmaGIF();
+		if(((DMACh*)&PS2MEM_HW[0xA000])->chcr & 0x100) GIFdma();
 	}
 
 	if( g_nDMATransfer & IPU_DMA_VIFSTALL ) {

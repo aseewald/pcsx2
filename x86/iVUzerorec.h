@@ -32,7 +32,7 @@ void SuperVUReset(int vuindex); // if vuindex is -1, resets everything
 void SuperVUExecuteProgram(u32 startpc, int vuindex);
 void SuperVUClear(u32 startpc, u32 size, int vuindex);
 
-u32 SuperVUGetRecTimes(int clear);
+u64 SuperVUGetRecTimes(int clear);
 
 // read = 0, will write to reg
 // read = 1, will read from reg

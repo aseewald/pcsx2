@@ -22,6 +22,8 @@
 #include <assert.h>
 #include <string.h>
 
+#define PLUGINtypedefs // for GSgifTransfer1
+
 #include "Common.h"
 #include "GS.h"
 #include "InterTables.h"
@@ -42,6 +44,8 @@
 #pragma warning(disable:4244)
 #pragma warning(disable:4761)
 #endif
+
+extern _GSgifTransfer1    GSgifTransfer1;
 
 int vucycle;
 int vucycleold;
@@ -1122,6 +1126,8 @@ void recUpdateFlags(VURegs * VU, int reg, int info)
 
 	AND32ItoR(x86oldflag, 0x0c0);
 	OR32RtoR(x86oldflag, EAX);
+    //SHL32ItoR(EAX,6);
+    //OR32RtoR(x86oldflag, EAX);
 	MOV32RtoM(stataddr, x86oldflag);
 
 	_freeX86reg(x86macflag);
@@ -1286,30 +1292,20 @@ void recVUMI_ADD_xyzw(VURegs *VU, int xyzw, int info)
 			if( EEREC_D != EEREC_S ) SSE_MOVAPS_XMM_to_XMM(EEREC_D, EEREC_S);
 		}
 	}
-	else if( _X_Y_Z_W == 8 ) {
-		if( EEREC_D == EEREC_TEMP ) {
-			_unpackVFSS_xyzw(EEREC_TEMP, EEREC_T, xyzw);
-			SSE_ADDSS_XMM_to_XMM(EEREC_D, EEREC_S);
-
-			// have to flip over EEREC_D if computing flags!
-			if( (info & PROCESS_VU_UPDATEFLAGS) )
-				_vuFlipRegSS(VU, EEREC_D);
-		}
-		else {
-			if( xyzw == 0 ) {
-				if( EEREC_D == EEREC_T ) {
-					SSE_ADDSS_XMM_to_XMM(EEREC_D, EEREC_S);
-				}
-				else {
-					if( EEREC_D != EEREC_S ) SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_S);
-					SSE_ADDSS_XMM_to_XMM(EEREC_D, EEREC_T);
-				}
+	else if( _X_Y_Z_W == 8 && (EEREC_D != EEREC_TEMP) ) {
+		if( xyzw == 0 ) {
+			if( EEREC_D == EEREC_T ) {
+				SSE_ADDSS_XMM_to_XMM(EEREC_D, EEREC_S);
 			}
 			else {
-				_unpackVFSS_xyzw(EEREC_TEMP, EEREC_T, xyzw);
 				if( EEREC_D != EEREC_S ) SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_S);
-				SSE_ADDSS_XMM_to_XMM(EEREC_D, EEREC_TEMP);
+				SSE_ADDSS_XMM_to_XMM(EEREC_D, EEREC_T);
 			}
+		}
+		else {
+			_unpackVFSS_xyzw(EEREC_TEMP, EEREC_T, xyzw);
+			if( EEREC_D != EEREC_S ) SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_S);
+			SSE_ADDSS_XMM_to_XMM(EEREC_D, EEREC_TEMP);
 		}
 	}
 	else if( _Fs_ == 0 && !_W ) {
@@ -1593,31 +1589,60 @@ void recVUMI_SUB_xyzw(VURegs *VU, int xyzw, int info)
 	if( !_Fd_ ) info |= PROCESS_EE_SET_D(EEREC_TEMP);
 
 	if( _X_Y_Z_W == 8 ) {
-		if( EEREC_D == EEREC_TEMP ) {
-			_unpackVFSS_xyzw(EEREC_TEMP, EEREC_S, xyzw);
-			SSE_SUBSS_XMM_to_XMM(EEREC_D, EEREC_T);
+        if( EEREC_D == EEREC_TEMP ) {
+			
+            switch (xyzw) {
+		        case 0:
+			        if( EEREC_TEMP != EEREC_S ) SSE_MOVAPS_XMM_to_XMM(EEREC_TEMP, EEREC_S);
+			        break;
+		        case 1:
+			        if( cpucaps.hasStreamingSIMD3Extensions ) SSE3_MOVSLDUP_XMM_to_XMM(EEREC_TEMP, EEREC_S);
+			        else {
+				        if( EEREC_TEMP != EEREC_S ) SSE_MOVAPS_XMM_to_XMM(EEREC_TEMP, EEREC_S);
+				        SSE_SHUFPS_XMM_to_XMM(EEREC_TEMP, EEREC_TEMP, 0x00);
+			        }
+			        break;
+		        case 2:
+			        SSE_MOVLHPS_XMM_to_XMM(EEREC_TEMP, EEREC_S);
+			        break;
+		        case 3:
+			        if( cpucaps.hasStreamingSIMD3Extensions && EEREC_TEMP != EEREC_S ) {
+				        SSE3_MOVSLDUP_XMM_to_XMM(EEREC_TEMP, EEREC_S);
+				        SSE_MOVLHPS_XMM_to_XMM(EEREC_TEMP, EEREC_TEMP);
+			        }
+			        else {
+				        if( EEREC_TEMP != EEREC_S ) SSE_MOVAPS_XMM_to_XMM(EEREC_TEMP, EEREC_S);
+				        SSE_SHUFPS_XMM_to_XMM(EEREC_TEMP, EEREC_TEMP, 0);
+			        }
+			        break;
+	        }
+
+			SSE_SUBPS_XMM_to_XMM(EEREC_D, EEREC_T);
 
 			// have to flip over EEREC_D if computing flags!
-			if( (info & PROCESS_VU_UPDATEFLAGS) )
-				_vuFlipRegSS(VU, EEREC_D);
+            if( (info & PROCESS_VU_UPDATEFLAGS) ) {
+                if( xyzw == 1 ) SSE_SHUFPS_XMM_to_XMM(EEREC_D, EEREC_D, 0xe1); // y
+	            else if( xyzw == 2 ) SSE_SHUFPS_XMM_to_XMM(EEREC_D, EEREC_D, 0xc6); // z
+	            else if( xyzw == 3 ) SSE_SHUFPS_XMM_to_XMM(EEREC_D, EEREC_D, 0x27); // w
+            }
 		}
-		else {
-			if( xyzw == 0 ) {
-				if( EEREC_D == EEREC_T ) {
-					if( _Fs_ > 0 ) SSE_SUBSS_XMM_to_XMM(EEREC_D, EEREC_S);
-					SSE_XORPS_M128_to_XMM(EEREC_D, (u32)s_unaryminus);
-				}
-				else {
-					if( EEREC_D != EEREC_S ) SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_S);
-					SSE_SUBSS_XMM_to_XMM(EEREC_D, EEREC_T);
-				}
-			}
-			else {
-				_unpackVFSS_xyzw(EEREC_TEMP, EEREC_T, xyzw);
-				SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_S);
-				SSE_SUBSS_XMM_to_XMM(EEREC_D, EEREC_TEMP);
-			}
-		}
+		else {	
+		    if( xyzw == 0 ) {
+			    if( EEREC_D == EEREC_T ) {
+				    if( _Fs_ > 0 ) SSE_SUBSS_XMM_to_XMM(EEREC_D, EEREC_S);
+				    SSE_XORPS_M128_to_XMM(EEREC_D, (u32)s_unaryminus);
+			    }
+			    else {
+				    if( EEREC_D != EEREC_S ) SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_S);
+				    SSE_SUBSS_XMM_to_XMM(EEREC_D, EEREC_T);
+			    }
+		    }
+		    else {
+			    _unpackVFSS_xyzw(EEREC_TEMP, EEREC_T, xyzw);
+			    SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_S);
+			    SSE_SUBSS_XMM_to_XMM(EEREC_D, EEREC_TEMP);
+		    }
+        }
 	}
 //	else if( _XYZW_SS && xyzw == 0 ) {
 //		if( EEREC_D == EEREC_S ) {
@@ -2612,7 +2637,7 @@ void recVUMI_MAX_xyzw(VURegs *VU, int xyzw, int info)
 {	
 	if ( _Fd_ == 0 ) return;
 
-	if( _X_Y_Z_W == 8 ) {
+	if( _X_Y_Z_W == 8 && (EEREC_D != EEREC_TEMP)) {
 		if( _Fs_ == 0 && _Ft_ == 0 ) {
 			if( xyzw < 3 ) {
 				SSE_XORPS_XMM_to_XMM(EEREC_TEMP, EEREC_TEMP);
@@ -2622,14 +2647,6 @@ void recVUMI_MAX_xyzw(VURegs *VU, int xyzw, int info)
 				SSE_MOVSS_M32_to_XMM(EEREC_TEMP, (u32)s_fones);
 				SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_TEMP);
 			}
-		}
-		else if( EEREC_D == EEREC_TEMP ) {
-			_unpackVFSS_xyzw(EEREC_TEMP, EEREC_T, xyzw);
-			SSE_MAXSS_XMM_to_XMM(EEREC_D, EEREC_S);
-
-			// have to flip over EEREC_D if computing flags!
-			if( (info & PROCESS_VU_UPDATEFLAGS) )
-				_vuFlipRegSS(VU, EEREC_D);
 		}
 		else {
 			if( xyzw == 0 ) {
@@ -2785,29 +2802,19 @@ void recVUMI_MINI_xyzw(VURegs *VU, int xyzw, int info)
 {
 	if ( _Fd_ == 0 ) return;
 
-	if( _X_Y_Z_W == 8 ) {
-		if( EEREC_D == EEREC_TEMP ) {
-			_unpackVFSS_xyzw(EEREC_TEMP, EEREC_T, xyzw);
-			SSE_MINSS_XMM_to_XMM(EEREC_D, EEREC_S);
-
-			// have to flip over EEREC_D if computing flags!
-			if( (info & PROCESS_VU_UPDATEFLAGS) )
-				_vuFlipRegSS(VU, EEREC_D);
+	if( _X_Y_Z_W == 8 && (EEREC_D != EEREC_TEMP)) {
+		if( xyzw == 0 ) {
+			if( EEREC_D == EEREC_S ) SSE_MINSS_XMM_to_XMM(EEREC_D, EEREC_T);
+			else if( EEREC_D == EEREC_T ) SSE_MINSS_XMM_to_XMM(EEREC_D, EEREC_S);
+			else {
+				SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_S);
+				SSE_MINSS_XMM_to_XMM(EEREC_D, EEREC_T);
+			}
 		}
 		else {
-			if( xyzw == 0 ) {
-				if( EEREC_D == EEREC_S ) SSE_MINSS_XMM_to_XMM(EEREC_D, EEREC_T);
-				else if( EEREC_D == EEREC_T ) SSE_MINSS_XMM_to_XMM(EEREC_D, EEREC_S);
-				else {
-					SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_S);
-					SSE_MINSS_XMM_to_XMM(EEREC_D, EEREC_T);
-				}
-			}
-			else {
-				_unpackVFSS_xyzw(EEREC_TEMP, EEREC_T, xyzw);
-				if( EEREC_D != EEREC_S ) SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_S);
-				SSE_MINSS_XMM_to_XMM(EEREC_D, EEREC_TEMP);
-			}
+			_unpackVFSS_xyzw(EEREC_TEMP, EEREC_T, xyzw);
+			if( EEREC_D != EEREC_S ) SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_S);
+			SSE_MINSS_XMM_to_XMM(EEREC_D, EEREC_TEMP);
 		}
 	}
 	else if (_X_Y_Z_W != 0xf) {
@@ -4111,11 +4118,16 @@ void recVUMI_FSSET(VURegs *VU, int info)
 	u16 imm = 0;
 	imm = (((VU->code >> 21 ) & 0x1) << 11) | (VU->code & 0x7FF);
 
-	MOV32MtoR(EAX, prevaddr);
-	AND32ItoR(EAX, 0x3f);
-	if ((imm&0xfc0) != 0) OR32ItoR(EAX, imm & 0xFC0);
-
-	MOV32RtoM(writeaddr ? writeaddr : prevaddr, EAX);
+    // keep the low 6 bits ONLY if the upper instruction is an fmac instruction (otherwise rewrite) - metal gear solid 3
+//    if( (info & PROCESS_VU_SUPER) && VUREC_FMAC ) {
+//        MOV32MtoR(EAX, prevaddr);
+//	    AND32ItoR(EAX, 0x3f);
+//	    if ((imm&0xfc0) != 0) OR32ItoR(EAX, imm & 0xFC0);
+//        MOV32RtoM(writeaddr ? writeaddr : prevaddr, EAX);
+//    }
+//    else {
+        MOV32ItoM(writeaddr ? writeaddr : prevaddr, imm&0xfc0);
+//    }
 }
 
 void recVUMI_FMAND( VURegs *VU, int info )
@@ -4650,41 +4662,41 @@ void recVUMI_ESQRT( VURegs *VU, int info )
 	SSE_MOVSS_XMM_to_M32(VU_VI_ADDR(REG_P, 0), EEREC_TEMP);
 }
 
-//#ifdef _MSC_VER
-//
-//static u32 s_saveecx, s_saveedx, s_saveebx, s_saveesi, s_saveedi, s_saveebp;
-//float tempsqrt = 0;
-//extern float vuDouble(u32 f);
-//__declspec(naked) void tempERSQRT()
-//{
-//    __asm {
-//		mov s_saveecx, ecx
-//		mov s_saveedx, edx
-//		mov s_saveebx, ebx
-//		mov s_saveesi, esi
-//		mov s_saveedi, edi
-//		mov s_saveebp, ebp
-//	}
-//
-//	if (tempsqrt >= 0) {
-//		tempsqrt = fpusqrtf(tempsqrt);
-//		if (tempsqrt) {
-//			tempsqrt = 1.0f / tempsqrt; 
-//		}
-//        tempsqrt = vuDouble(*(u32*)&tempsqrt);
-//	}
-//
-//    __asm {
-//		mov ecx, s_saveecx
-//		mov edx, s_saveedx
-//		mov ebx, s_saveebx
-//		mov esi, s_saveesi
-//		mov edi, s_saveedi
-//		mov ebp, s_saveebp
-//		ret
-//	}
-//}
-//#endif
+#if defined(_MSC_VER) && !defined(__x86_64__)
+
+static u32 s_saveecx, s_saveedx, s_saveebx, s_saveesi, s_saveedi, s_saveebp;
+float tempsqrt = 0;
+extern float vuDouble(u32 f);
+__declspec(naked) void tempERSQRT()
+{
+    __asm {
+		mov s_saveecx, ecx
+		mov s_saveedx, edx
+		mov s_saveebx, ebx
+		mov s_saveesi, esi
+		mov s_saveedi, edi
+		mov s_saveebp, ebp
+	}
+
+	if (tempsqrt >= 0) {
+		tempsqrt = fpusqrtf(tempsqrt);
+		if (tempsqrt) {
+			tempsqrt = 1.0f / tempsqrt; 
+		}
+        tempsqrt = vuDouble(*(u32*)&tempsqrt);
+	}
+
+    __asm {
+		mov ecx, s_saveecx
+		mov edx, s_saveedx
+		mov ebx, s_saveebx
+		mov esi, s_saveesi
+		mov edi, s_saveedi
+		mov ebp, s_saveebp
+		ret
+	}
+}
+#endif
 
 void recVUMI_ERSQRT( VURegs *VU, int info )
 {
@@ -4850,37 +4862,38 @@ extern pthread_cond_t g_condGsEvent;
 void VU1XGKICK_MTGSTransfer(u32 *pMem, u32 addr)
 {
 	u32 size;
-    int left;
-	u8* pmem;
+    u8* pmem;
 	u32* data = (u32*)((u8*)pMem + (addr&0x3fff));
 
 	static int scount = 0;
 	++scount;
 
-	size = GSgifTransferDummy(0, data, 0x4000>>4);
+	size = GSgifTransferDummy(0, data, (0x4000-(addr&0x3fff))>>4);
 
-	size = 0x4000-(size<<4);
+	size = 0x4000-(size<<4)-(addr&0x3fff);
+    assert( size >= 0 );
 
     // can't exceed 0x4000
-    left = addr+size-0x4000;
-    if( left > 0 ) size -= left;
-	assert( size > 0 );//&& addr+size <= 0x4000 );
+//    left = addr+size-0x4000;
+//    if( left > 0 ) size -= left;
+    if( size > 0 ) {
 
-	pmem = GSRingBufCopy(NULL, size, GS_RINGTYPE_P1);
-	assert( pmem != NULL );
+	    pmem = GSRingBufCopy(NULL, size, GS_RINGTYPE_P1);
+	    assert( pmem != NULL );
 
-	memcpy_fast(pmem, (u8*)pMem+addr, size);
-//    if( left > 0 ) {
-//        memcpy_fast(pmem+size-left, (u8*)pMem, left);
-//    }
-	GSRINGBUF_DONECOPY(pmem, size);
+	    memcpy_fast(pmem, (u8*)pMem+addr, size);
+    //    if( left > 0 ) {
+    //        memcpy_fast(pmem+size-left, (u8*)pMem, left);
+    //    }
+	    GSRINGBUF_DONECOPY(pmem, size);
 
-	if( !CHECK_DUALCORE ) {
+        if( !CHECK_DUALCORE ) {
 #if defined(_WIN32) && !defined(WIN32_PTHREADS)
-        SetEvent(g_hGsEvent);
+            SetEvent(g_hGsEvent);
 #else
-        pthread_cond_signal(&g_condGsEvent);
+            pthread_cond_signal(&g_condGsEvent);
 #endif
+        }
 	}
 }
 

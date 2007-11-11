@@ -127,7 +127,7 @@ typedef struct {
 
 extern int EEsCycle;
 extern u32 EEoCycle, IOPoCycle;
-extern cpuRegisters cpuRegs;
+extern PCSX2_ALIGNED16_DECL(cpuRegisters cpuRegs);
 
 // used for optimization
 typedef union {
@@ -154,7 +154,7 @@ typedef union {
 	if( (reg) < 32 ) g_cpuHasConstReg &= ~(1<<(reg)); \
 }
 
-extern GPR_reg64 g_cpuConstRegs[32];
+extern PCSX2_ALIGNED16_DECL(GPR_reg64 g_cpuConstRegs[32]);
 extern u32 g_cpuHasConstReg, g_cpuFlushedConstReg;
 
 typedef union {
@@ -168,7 +168,7 @@ typedef struct {
 	FPRreg ACC;			// 32 bit accumulator 
 } fpuRegisters;
 
-extern fpuRegisters fpuRegs;
+extern PCSX2_ALIGNED16_DECL(fpuRegisters fpuRegs);
 
 
 typedef struct {
@@ -182,7 +182,7 @@ typedef struct {
 	u32 PFN1;
 } tlbs;
 
-extern tlbs tlb[48];
+extern PCSX2_ALIGNED16_DECL(tlbs tlb[48]);
 
 #ifndef _PC_
 

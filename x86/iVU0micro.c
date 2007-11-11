@@ -46,7 +46,7 @@ static VURegs * const VU = (VURegs*)&VU0;
 //u32 vu0time = 0;
 //static LARGE_INTEGER vu0base, vu0final;
 
-#ifdef PCSX2_DEVBUILD
+#ifdef _DEBUG
 extern u32 vudump;
 #endif
 

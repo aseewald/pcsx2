@@ -57,23 +57,19 @@ __inline static int _limit( int a, int max )
 		_vifRegs->offset++;                                  \
 	}
 
-static void _writeX( u32 *dest, u32 data )
-{
-	//int n;
-
-	switch ( _vif->cl ) {
-		case 0:  n =  0; break;
-		case 1:  n =  8; break;
-		case 2:  n = 16; break;
-		default: n = 24; break;
-	}
-/*#ifdef GIF_LOG
-	GIF_LOG("_writeX %x = %x (writecycle=%d; mask %x; mode %d)\n", (u32)dest-(u32)VU1.Mem, data, _vif->cl, ( _vifRegs->mask >> n ) & 0x3,_vifRegs->mode);
-#endif*/
-	switch ( ( _vifRegs->mask >> n ) & 0x3 ) {
+static void writeX( u32 *dest, u32 data ) {
+	if (_vifRegs->code & 0x10000000) { 
+		switch ( _vif->cl ) {
+			case 0:  n = (_vifRegs->mask) & 0x3; break;
+			case 1:  n = (_vifRegs->mask >> 8) & 0x3; break;
+			case 2:  n = (_vifRegs->mask >> 16) & 0x3; break;
+			default: n = (_vifRegs->mask >> 24) & 0x3; break;
+		}
+	} else n = 0;
+	
+	switch ( n ) {
 		case 0:
 			if((_vif->cmd & 0x6F) == 0x6f) {
-				//SysPrintf("Phew X!\n");
 				*dest = data;
 				break;
 			}
@@ -97,28 +93,24 @@ static void _writeX( u32 *dest, u32 data )
 			}
 			break;
 	}
-
-/*#ifdef GIF_LOG
-	GIF_LOG("_writeX-done : Data %x : Row %x\n", *dest, _vifRegs->r0);
+/*#ifdef VIF_LOG
+	VIF_LOG("writeX %8.8x : Mode %d, r0 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r0,data);
 #endif*/
 }
 
-static void _writeY( u32 *dest, u32 data )
-{
-	//int n;
-	switch ( _vif->cl ) {
-		case 0:  n =  2; break;
-		case 1:  n = 10; break;
-		case 2:  n = 18; break;
-		default: n = 26; break;
-	}
-/*#ifdef GIF_LOG
-	GIF_LOG("_writeY %x = %x (writecycle=%d; mask %x; mode %d)\n", (u32)dest-(u32)VU1.Mem, data, _vif->cl, ( _vifRegs->mask >> n ) & 0x3,_vifRegs->mode);
-#endif*/
-	switch ( ( _vifRegs->mask >> n ) & 0x3 ) {
+static void writeY( u32 *dest, u32 data ) {
+	if (_vifRegs->code & 0x10000000) { 
+		switch ( _vif->cl ) {
+			case 0:  n = (_vifRegs->mask >> 2) & 0x3; break;
+			case 1:  n = (_vifRegs->mask >> 10) & 0x3; break;
+			case 2:  n = (_vifRegs->mask >> 18) & 0x3; break;
+			default: n = (_vifRegs->mask >> 26) & 0x3; break;
+		}
+	} else n = 0;
+	
+	switch ( n ) {
 		case 0:
 			if((_vif->cmd & 0x6F) == 0x6f) {
-				//SysPrintf("Phew Y!\n");
 				*dest = data;
 				break;
 			}
@@ -134,8 +126,7 @@ static void _writeY( u32 *dest, u32 data )
 			break;
 		case 1: *dest = _vifRegs->r1; break;
 		case 2: 
-			switch ( _vif->cl )
-         {
+			switch ( _vif->cl ) {
 				case 0:  *dest = _vifRegs->c0; break;
 				case 1:  *dest = _vifRegs->c1; break;
 				case 2:  *dest = _vifRegs->c2; break;
@@ -143,35 +134,31 @@ static void _writeY( u32 *dest, u32 data )
 			}
 			break;
 	}
-
-/*#ifdef GIF_LOG
-	GIF_LOG("_writeY-done : Data %x : Row %x\n", *dest, _vifRegs->r1);
+/*#ifdef VIF_LOG
+	VIF_LOG("writeY %8.8x : Mode %d, r1 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r1,data);
 #endif*/
 }
 
-static void _writeZ( u32 *dest, u32 data )
-{
-	//int n;
-	switch ( _vif->cl ) {
-		case 0:  n =  4; break;
-		case 1:  n = 12; break;
-		case 2:  n = 20; break;
-		default: n = 28; break;
-	}
-/*#ifdef GIF_LOG
-	GIF_LOG("_writeZ %x = %x (writecycle=%d; mask %x; mode %d)\n", (u32)dest-(u32)VU1.Mem, data, _vif->cl, ( _vifRegs->mask >> n ) & 0x3,_vifRegs->mode);
-#endif*/
-	switch ( ( _vifRegs->mask >> n ) & 0x3 ) {
+static void writeZ( u32 *dest, u32 data ) {
+	if (_vifRegs->code & 0x10000000) { 
+		switch ( _vif->cl ) {
+			case 0:  n = (_vifRegs->mask >> 4) & 0x3; break;
+			case 1:  n = (_vifRegs->mask >> 12) & 0x3; break;
+			case 2:  n = (_vifRegs->mask >> 20) & 0x3; break;
+			default: n = (_vifRegs->mask >> 28) & 0x3; break;
+		}
+	} else n = 0;
+	
+	switch ( n ) {
 		case 0:
 			if((_vif->cmd & 0x6F) == 0x6f) {
-				//SysPrintf("Phew Z!\n");
 				*dest = data;
 				break;
 			}
 			if (_vifRegs->mode == 1) {
 				*dest = data + _vifRegs->r2;
 			} else 
-			if (_vifRegs->mode == 2) {
+			if (_vifRegs->mode == 2) {  
 				_vifRegs->r2 = data + _vifRegs->r2;
 				*dest = _vifRegs->r2;
 			} else {
@@ -180,8 +167,7 @@ static void _writeZ( u32 *dest, u32 data )
 			break;
 		case 1: *dest = _vifRegs->r2; break;
 		case 2: 
-			switch ( _vif->cl )
-         {
+			switch ( _vif->cl ) {
 				case 0:  *dest = _vifRegs->c0; break;
 				case 1:  *dest = _vifRegs->c1; break;
 				case 2:  *dest = _vifRegs->c2; break;
@@ -189,24 +175,24 @@ static void _writeZ( u32 *dest, u32 data )
 			}
 			break;
 	}
+/*#ifdef VIF_LOG
+	VIF_LOG("writeZ %8.8x : Mode %d, r2 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r2,data);
+#endif*/
 }
 
-static void _writeW( u32 *dest, u32 data )
-{
-	//int n;
-	switch ( _vif->cl ) {
-		case 0:  n =  6; break;
-		case 1:  n = 14; break;
-		case 2:  n = 22; break;
-		default: n = 30; break;
-	}
-/*#ifdef GIF_LOG
-	GIF_LOG("_writeW %x = %x (writecycle=%d; mask %x; mode %d)\n", (u32)dest-(u32)VU1.Mem, data, _vif->cl, ( _vifRegs->mask >> n ) & 0x3,_vifRegs->mode);
-#endif*/
-	switch ( ( _vifRegs->mask >> n ) & 0x3 ) {
+static void writeW( u32 *dest, u32 data ) {
+	if (_vifRegs->code & 0x10000000) { 
+		switch ( _vif->cl ) {
+			case 0:  n = (_vifRegs->mask >> 6) & 0x3; break;
+			case 1:  n = (_vifRegs->mask >> 14) & 0x3; break;
+			case 2:  n = (_vifRegs->mask >> 22) & 0x3; break;
+			default: n = (_vifRegs->mask >> 30) & 0x3; break;
+		}
+	} else n = 0;
+	
+	switch ( n ) {
 		case 0:
 			if((_vif->cmd & 0x6F) == 0x6f) {
-				//SysPrintf("Phew W!\n");
 				*dest = data;
 				break;
 			}
@@ -230,486 +216,195 @@ static void _writeW( u32 *dest, u32 data )
 			}
 			break;
 	}
-}
-
-static void writeX( u32 *dest, u32 data ) {
-	if (_vifRegs->code & 0x10000000) { _writeX(dest, data); return; }
-	if((_vif->cmd & 0x6F) == 0x6f) {
-		//SysPrintf("Phew X!\n");
-		*dest = data;
-		return;
-	}
-	if (_vifRegs->mode == 1) {
-		*dest = data + _vifRegs->r0;
-	} else 
-	if (_vifRegs->mode == 2) {
-		_vifRegs->r0 = data + _vifRegs->r0;
-		*dest = _vifRegs->r0;
-	} else {
-		*dest = data;
-	}
-/*#ifdef GIF_LOG
-	GIF_LOG("writeX %8.8x : Mode %d, r0 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r0,data);
+/*#ifdef VIF_LOG
+	VIF_LOG("writeW %8.8x : Mode %d, r3 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r3,data);
 #endif*/
 }
 
-static void writeY( u32 *dest, u32 data ) {
-	if (_vifRegs->code & 0x10000000) { _writeY(dest, data); return; }
-	if((_vif->cmd & 0x6F) == 0x6f) {
-		//SysPrintf("Phew Y!\n");
-		*dest = data;
-		return;
-	}
-	if (_vifRegs->mode == 1) {
-		*dest = data + _vifRegs->r1;
-	} else 
-	if (_vifRegs->mode == 2) {
-		_vifRegs->r1 = data + _vifRegs->r1;
-		*dest = _vifRegs->r1;
-	} else {
-		*dest = data;
-	}
-/*#ifdef GIF_LOG
-	GIF_LOG("writeY %8.8x : Mode %d, r1 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r1,data);
-#endif*/
+void UNPACK_S_32(u32 *dest, u32 *data, int size) {
+	_UNPACKpart(0, writeX(dest++, *data) );
+	_UNPACKpart(1, writeY(dest++, *data) );
+	_UNPACKpart(2, writeZ(dest++, *data) );
+	_UNPACKpart(3, writeW(dest  , *data) );
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
 }
 
-static void writeZ( u32 *dest, u32 data ) {
-	if (_vifRegs->code & 0x10000000) { _writeZ(dest, data); return; }
-	if((_vif->cmd & 0x6F) == 0x6f) {
-		//SysPrintf("Phew Z!\n");
-		*dest = data;
-		return;
-	}
-	if (_vifRegs->mode == 1) {
-		*dest = data + _vifRegs->r2;
-	} else 
-	if (_vifRegs->mode == 2) {
-		_vifRegs->r2 = data + _vifRegs->r2;
-		*dest = _vifRegs->r2;
-	} else {
-		*dest = data;
-	}
-/*#ifdef GIF_LOG
-	GIF_LOG("writeZ %8.8x : Mode %d, r2 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r2,data);
-#endif*/
+void UNPACK_S_16s( u32 *dest, u32 *data, int size) {
+	s16 *sdata = (s16*)data;
+	_UNPACKpart(0, writeX(dest++, *sdata) ); 
+	_UNPACKpart(1, writeY(dest++, *sdata) ); 
+	_UNPACKpart(2, writeZ(dest++, *sdata) ); 
+	_UNPACKpart(3, writeW(dest  , *sdata) ); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0; 
 }
 
-static void writeW( u32 *dest, u32 data ) {
-	if (_vifRegs->code & 0x10000000) { _writeW(dest, data); return; }
-	if((_vif->cmd & 0x6F) == 0x6f) {
-		//SysPrintf("Phew X!\n");
-		*dest = data;
-		return;
-	}
-	if (_vifRegs->mode == 1) {
-		*dest = data + _vifRegs->r3;
-	} else 
-	if (_vifRegs->mode == 2) {
-		_vifRegs->r3 = data + _vifRegs->r3;
-		*dest = _vifRegs->r3;
-	} else {
-		*dest = data;
-	}
-/*#ifdef GIF_LOG
-	GIF_LOG("writeW %8.8x : Mode %d, r3 = %x, data %8.8x\n", *dest,_vifRegs->mode,_vifRegs->r3,data);
-#endif*/
+void UNPACK_S_16u( u32 *dest, u32 *data, int size) {
+	u16 *sdata = (u16*)data;
+	_UNPACKpart(0, writeX(dest++, *sdata) ); 
+	_UNPACKpart(1, writeY(dest++, *sdata) ); 
+	_UNPACKpart(2, writeZ(dest++, *sdata) ); 
+	_UNPACKpart(3, writeW(dest  , *sdata) ); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
 }
 
-void UNPACK_S_32(u32 *dest, u32 *data) {
-		writeX(dest++, *data);
-		writeY(dest++, *data);
-		writeZ(dest++, *data);
-		writeW(dest++, *data++);
+void UNPACK_S_8s(u32 *dest, u32 *data, int size) {
+	s8 *cdata = (s8*)data;
+	_UNPACKpart(0, writeX(dest++, *cdata) ); 
+	_UNPACKpart(1, writeY(dest++, *cdata) ); 
+	_UNPACKpart(2, writeZ(dest++, *cdata) ); 
+	_UNPACKpart(3, writeW(dest  , *cdata) ); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
 }
 
-int  UNPACK_S_32part(u32 *dest, u32 *data, int size) {
-	u32 *_data = data;
-	while (size > 0) {
-		_UNPACKpart(0, writeX(dest++, *data) );
-		_UNPACKpart(1, writeY(dest++, *data) );
-		_UNPACKpart(2, writeZ(dest++, *data) );
-		_UNPACKpart(3, writeW(dest++, *data++) );
-		if (_vifRegs->offset == 4) _vifRegs->offset = 0;
-	}
-
-	return (uptr)data - (uptr)_data;
+void UNPACK_S_8u(u32 *dest, u32 *data, int size) {
+	u8 *cdata = (u8*)data;
+	_UNPACKpart(0, writeX(dest++, *cdata) ); 
+	_UNPACKpart(1, writeY(dest++, *cdata) ); 
+	_UNPACKpart(2, writeZ(dest++, *cdata) ); 
+	_UNPACKpart(3, writeW(dest  , *cdata) ); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
 }
 
-#define _UNPACK_S_16(format) \
-	format *sdata = (format*)data; \
-	 \
- \
-		writeX(dest++, *sdata); \
-		writeY(dest++, *sdata); \
-		writeZ(dest++, *sdata); \
-		writeW(dest++, *sdata++);
-
-void UNPACK_S_16s( u32 *dest, u32 *data ) {
-	_UNPACK_S_16( s16 );
-}
-
-void UNPACK_S_16u( u32 *dest, u32 *data ) {
-	_UNPACK_S_16( u16 );
-}
-
-#define _UNPACK_S_16part(format) \
-	format *sdata = (format*)data; \
-	while (size > 0) { \
-		_UNPACKpart(0, writeX(dest++, *sdata) ); \
-		_UNPACKpart(1, writeY(dest++, *sdata) ); \
-		_UNPACKpart(2, writeZ(dest++, *sdata) ); \
-		_UNPACKpart(3, writeW(dest++, *sdata++) ); \
-		if (_vifRegs->offset == 4) _vifRegs->offset = 0; \
-	} \
-	return (uptr)sdata - (uptr)data;
-
-int  UNPACK_S_16spart(u32 *dest, u32 *data, int size) {
-	_UNPACK_S_16part(s16);
-}
-
-int  UNPACK_S_16upart(u32 *dest, u32 *data, int size) {
-	_UNPACK_S_16part(u16);
-}
-
-#define _UNPACK_S_8(format) \
-	format *cdata = (format*)data; \
-	 \
- \
-		writeX(dest++, *cdata); \
-		writeY(dest++, *cdata); \
-		writeZ(dest++, *cdata); \
-		writeW(dest++, *cdata++);
-
-void UNPACK_S_8s(u32 *dest, u32 *data) {
-	_UNPACK_S_8(s8);
-}
-
-void UNPACK_S_8u(u32 *dest, u32 *data) {
-	_UNPACK_S_8(u8);
-}
-
-#define _UNPACK_S_8part(format) \
-	format *cdata = (format*)data; \
-	while (size > 0) { \
-		_UNPACKpart(0, writeX(dest++, *cdata) ); \
-		_UNPACKpart(1, writeY(dest++, *cdata) ); \
-		_UNPACKpart(2, writeZ(dest++, *cdata) ); \
-		_UNPACKpart(3, writeW(dest++, *cdata++) ); \
-		if (_vifRegs->offset == 4) _vifRegs->offset = 0; \
-	} \
-	return (uptr)cdata - (uptr)data;
-
-int  UNPACK_S_8spart(u32 *dest, u32 *data, int size) {
-	_UNPACK_S_8part(s8);
-}
-
-int  UNPACK_S_8upart(u32 *dest, u32 *data, int size) {
-	_UNPACK_S_8part(u8);
-}
-
-void UNPACK_V2_32( u32 *dest, u32 *data ) {
-		writeX(dest++, *data++);
-		writeY(dest++, *data);
-		writeZ(dest++, *data);
-		writeW(dest++, *data++);
+void UNPACK_V2_32( u32 *dest, u32 *data, int size ) {
+	_UNPACKpart(0, writeX(dest++, *data++));
+	_UNPACKpart(1, writeY(dest++, *data--));
+	_UNPACKpart_nosize(2, writeZ(dest++, *data));
+	_UNPACKpart_nosize(3, writeW(dest  , 0));
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
 	
 }
 
-int  UNPACK_V2_32part( u32 *dest, u32 *data, int size ) {
-	u32 *_data = data;
-	while (size > 0) { 
-		_UNPACKpart(0, writeX(dest++, *data++));
-		_UNPACKpart(1, writeY(dest++, *data++));
-		_UNPACKpart_nosize(2, writeZ(dest++, 0));
-		_UNPACKpart_nosize(3, writeW(dest++, 0));
-		if (_vifRegs->offset == 4) _vifRegs->offset = 0;
-	}
-	return (uptr)data - (uptr)_data;
+void UNPACK_V2_16s(u32 *dest, u32 *data, int size) {
+	s16 *sdata = (s16*)data;
+	_UNPACKpart(0, writeX(dest++, *sdata++)); 
+	_UNPACKpart(1, writeY(dest++, *sdata--)); 
+	_UNPACKpart_nosize(2,writeZ(dest++, *sdata++)); 
+	_UNPACKpart_nosize(3,writeW(dest  , *sdata)); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
 }
 
-#define _UNPACK_V2_16(format) \
-	format *sdata = (format*)data; \
-	 \
- \
-		writeX(dest++, *sdata++); \
-		writeY(dest++, *sdata); \
-		writeZ(dest++, *sdata); \
-		writeW(dest++, *sdata++); \
+void UNPACK_V2_16u(u32 *dest, u32 *data, int size) {
+	u16 *sdata = (u16*)data;
+	_UNPACKpart(0, writeX(dest++, *sdata++)); 
+	_UNPACKpart(1, writeY(dest++, *sdata--)); 
+	_UNPACKpart_nosize(2,writeZ(dest++, *sdata++)); 
+	_UNPACKpart_nosize(3,writeW(dest  , *sdata)); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
+}
+
+void UNPACK_V2_8s(u32 *dest, u32 *data, int size) {
+	s8 *cdata = (s8*)data;
+	_UNPACKpart(0, writeX(dest++, *cdata++)); 
+	_UNPACKpart(1, writeY(dest++, *cdata--)); 
+	_UNPACKpart_nosize(2,writeZ(dest++, *cdata++)); 
+	_UNPACKpart_nosize(3,writeW(dest  , *cdata)); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
+}
+
+void UNPACK_V2_8u(u32 *dest, u32 *data, int size) {
+	u8 *cdata = (u8*)data;
+	_UNPACKpart(0, writeX(dest++, *cdata++)); 
+	_UNPACKpart(1, writeY(dest++, *cdata--)); 
+	_UNPACKpart_nosize(2,writeZ(dest++, *cdata++)); 
+	_UNPACKpart_nosize(3,writeW(dest  , *cdata)); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
+}
+
+void UNPACK_V3_32(u32 *dest, u32 *data, int size) {
+	_UNPACKpart(0, writeX(dest++, *data++); );
+	_UNPACKpart(1, writeY(dest++, *data++); );
+	_UNPACKpart(2, writeZ(dest++, *data++); );
+	_UNPACKpart_nosize(3, writeW(dest, *data); );
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
+}
+
+void UNPACK_V3_16s(u32 *dest, u32 *data, int size) {
+	s16 *sdata = (s16*)data;
+	_UNPACKpart(0, writeX(dest++, *sdata++)); 
+	_UNPACKpart(1, writeY(dest++, *sdata++)); 
+	_UNPACKpart(2, writeZ(dest++, *sdata++)); 
+	_UNPACKpart_nosize(3,writeW(dest, *sdata)); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
+}
+
+void UNPACK_V3_16u(u32 *dest, u32 *data, int size) {
+	u16 *sdata = (u16*)data;
+	_UNPACKpart(0, writeX(dest++, *sdata++)); 
+	_UNPACKpart(1, writeY(dest++, *sdata++)); 
+	_UNPACKpart(2, writeZ(dest++, *sdata++)); 
+	_UNPACKpart_nosize(3,writeW(dest, *sdata)); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
+}
+
+void UNPACK_V3_8s(u32 *dest, u32 *data, int size) {
+	s8 *cdata = (s8*)data;
+	_UNPACKpart(0, writeX(dest++, *cdata++)); 
+	_UNPACKpart(1, writeY(dest++, *cdata++)); 
+	_UNPACKpart(2, writeZ(dest++, *cdata++)); 
+	_UNPACKpart_nosize(3,writeW(dest, *cdata)); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
+}
+
+void UNPACK_V3_8u(u32 *dest, u32 *data, int size) {
+	u8 *cdata = (u8*)data;
+	_UNPACKpart(0, writeX(dest++, *cdata++)); 
+	_UNPACKpart(1, writeY(dest++, *cdata++)); 
+	_UNPACKpart(2, writeZ(dest++, *cdata++)); 
+	_UNPACKpart_nosize(3,writeW(dest, *cdata)); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
+}
+
+void UNPACK_V4_32( u32 *dest, u32 *data , int size) {
+	_UNPACKpart(0, writeX(dest++, *data++) );
+	_UNPACKpart(1, writeY(dest++, *data++) );
+	_UNPACKpart(2, writeZ(dest++, *data++) );
+	_UNPACKpart(3, writeW(dest  , *data  ) );
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
+}
+
+void UNPACK_V4_16s(u32 *dest, u32 *data, int size) {
+	s16 *sdata = (s16*)data;
+	_UNPACKpart(0, writeX(dest++, *sdata++) ); 
+	_UNPACKpart(1, writeY(dest++, *sdata++) ); 
+	_UNPACKpart(2, writeZ(dest++, *sdata++) ); 
+	_UNPACKpart(3, writeW(dest  , *sdata  ) ); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0; 
+}
+
+void UNPACK_V4_16u(u32 *dest, u32 *data, int size) {
+	u16 *sdata = (u16*)data;
+	_UNPACKpart(0, writeX(dest++, *sdata++) ); 
+	_UNPACKpart(1, writeY(dest++, *sdata++) ); 
+	_UNPACKpart(2, writeZ(dest++, *sdata++) ); 
+	_UNPACKpart(3, writeW(dest  , *sdata  ) ); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0; 
+}
+
+void UNPACK_V4_8s(u32 *dest, u32 *data, int size) {
+	s8 *cdata = (s8*)data;
+	_UNPACKpart(0, writeX(dest++, *cdata++) ); 
+	_UNPACKpart(1, writeY(dest++, *cdata++) ); 
+	_UNPACKpart(2, writeZ(dest++, *cdata++) ); 
+	_UNPACKpart(3, writeW(dest  , *cdata  ) ); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0; 
+}
+
+void UNPACK_V4_8u(u32 *dest, u32 *data, int size) {
+	u8 *cdata = (u8*)data;
+	_UNPACKpart(0, writeX(dest++, *cdata++) ); 
+	_UNPACKpart(1, writeY(dest++, *cdata++) ); 
+	_UNPACKpart(2, writeZ(dest++, *cdata++) ); 
+	_UNPACKpart(3, writeW(dest  , *cdata  ) ); 
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0; 
+}
+
+void UNPACK_V4_5(u32 *dest, u32 *data, int size) {
 	
-
-void UNPACK_V2_16s(u32 *dest, u32 *data) {
-	_UNPACK_V2_16(s16);
-}
-
-void UNPACK_V2_16u(u32 *dest, u32 *data) {
-	_UNPACK_V2_16(u16);
-}
-
-#define _UNPACK_V2_16part(format) \
-	format *sdata = (format*)data; \
-	\
-	 while(size > 0) {	\
-		_UNPACKpart(0, writeX(dest++, *sdata++)); \
-		_UNPACKpart(1, writeY(dest++, *sdata++)); \
-		_UNPACKpart_nosize(2,writeZ(dest++, 0)); \
-		_UNPACKpart_nosize(3,writeW(dest++, 0)); \
-		if (_vifRegs->offset == 4) _vifRegs->offset = 0;	\
-	 }	\
-	return (uptr)sdata - (uptr)data;
-
-int  UNPACK_V2_16spart(u32 *dest, u32 *data, int size) {
-	_UNPACK_V2_16part(s16);
-}
-
-int  UNPACK_V2_16upart(u32 *dest, u32 *data, int size) {
-	_UNPACK_V2_16part(u16);
-}
-
-#define _UNPACK_V2_8(format) \
-	format *cdata = (format*)data; \
-	 \
- \
-		writeX(dest++, *cdata++); \
-		writeY(dest++, *cdata); \
-		writeZ(dest++, *cdata); \
-		writeW(dest++, *cdata++); 
-
-void UNPACK_V2_8s(u32 *dest, u32 *data) {
-	_UNPACK_V2_8(s8);
-}
-
-void UNPACK_V2_8u(u32 *dest, u32 *data) {
-	_UNPACK_V2_8(u8);
-}
-
-#define _UNPACK_V2_8part(format) \
-	format *cdata = (format*)data; \
-	 while(size > 0) {	\
-		_UNPACKpart(0, writeX(dest++, *cdata++)); \
-		_UNPACKpart(1, writeY(dest++, *cdata++)); \
-		_UNPACKpart_nosize(2,writeZ(dest++, 0)); \
-		_UNPACKpart_nosize(3,writeW(dest++, 0)); \
-		if (_vifRegs->offset == 4) _vifRegs->offset = 0;	\
-	 }	\
-	return (uptr)cdata - (uptr)data;
-
-int  UNPACK_V2_8spart(u32 *dest, u32 *data, int size) {
-	_UNPACK_V2_8part(s8);
-}
-
-int  UNPACK_V2_8upart(u32 *dest, u32 *data, int size) {
-	_UNPACK_V2_8part(u8);
-}
-
-void UNPACK_V3_32(u32 *dest, u32 *data) {
-		writeX(dest++, *data++);
-		writeY(dest++, *data++);
-		writeZ(dest++, *data);
-		writeW(dest++, *data++);
-}
-
-int  UNPACK_V3_32part(u32 *dest, u32 *data, int size) {
-	u32 *_data = data;
-	while (size > 0) {
-		_UNPACKpart(0, writeX(dest++, *data++); );
-		_UNPACKpart(1, writeY(dest++, *data++); );
-		_UNPACKpart(2, writeZ(dest++, *data++); );
-		_UNPACKpart_nosize(3, writeW(dest++, 0); );
-		if (_vifRegs->offset == 4) _vifRegs->offset = 0;
-	}
-	return (uptr)data - (uptr)_data;
-}
-
-#define _UNPACK_V3_16(format) \
-	format *sdata = (format*)data; \
-	 \
- \
-		writeX(dest++, *sdata++); \
-		writeY(dest++, *sdata++); \
-		writeZ(dest++, *sdata); \
-		writeW(dest++, *sdata++); 
-
-void UNPACK_V3_16s(u32 *dest, u32 *data) {
-	_UNPACK_V3_16(s16);
-}
-
-void UNPACK_V3_16u(u32 *dest, u32 *data) {
-	_UNPACK_V3_16(u16);
-}
-
-#define _UNPACK_V3_16part(format) \
-	format *sdata = (format*)data; \
-	 \
-	 while(size > 0) {	\
-		_UNPACKpart(0, writeX(dest++, *sdata++)); \
-		_UNPACKpart(1, writeY(dest++, *sdata++)); \
-		_UNPACKpart(2, writeZ(dest++, *sdata++)); \
-		_UNPACKpart_nosize(3,writeW(dest++, 0)); \
-		if (_vifRegs->offset == 4) _vifRegs->offset = 0;	\
-	 }	\
-	return (uptr)sdata - (uptr)data;
-
-int  UNPACK_V3_16spart(u32 *dest, u32 *data, int size) {
-	_UNPACK_V3_16part(s16);
-}
-
-int  UNPACK_V3_16upart(u32 *dest, u32 *data, int size) {
-	_UNPACK_V3_16part(u16);
-}
-
-#define _UNPACK_V3_8(format) \
-	format *cdata = (format*)data; \
-	 \
- \
-		writeX(dest++, *cdata++); \
-		writeY(dest++, *cdata++); \
-		writeZ(dest++, *cdata); \
-		writeW(dest++, *cdata++); 
-
-void UNPACK_V3_8s(u32 *dest, u32 *data) {
-	_UNPACK_V3_8(s8);
-}
-
-void UNPACK_V3_8u(u32 *dest, u32 *data) {
-	_UNPACK_V3_8(u8);
-}
-
-#define _UNPACK_V3_8part(format) \
-	format *cdata = (format*)data; \
-	 while(size > 0) {	\
-		_UNPACKpart(0, writeX(dest++, *cdata++)); \
-		_UNPACKpart(1, writeY(dest++, *cdata++)); \
-		_UNPACKpart(2, writeZ(dest++, *cdata++)); \
-		_UNPACKpart_nosize(3,writeW(dest++, 0)); \
-		if (_vifRegs->offset == 4) _vifRegs->offset = 0;	\
-	 }	\
-	return (uptr)cdata - (uptr)data;
-
-int  UNPACK_V3_8spart(u32 *dest, u32 *data, int size) {
-	_UNPACK_V3_8part(s8);
-}
-
-int  UNPACK_V3_8upart(u32 *dest, u32 *data, int size) {
-	_UNPACK_V3_8part(u8);
-}
-
-void UNPACK_V4_32( u32 *dest, u32 *data ) {
-		writeX(dest++, *data++);
-		writeY(dest++, *data++);
-		writeZ(dest++, *data++);
-		writeW(dest++, *data++);
-}
-
-int  UNPACK_V4_32part(u32 *dest, u32 *data, int size) {
-	u32 *_data = data;
-	while (size > 0) {
-		_UNPACKpart(0, writeX(dest++, *data++) );
-		_UNPACKpart(1, writeY(dest++, *data++) );
-		_UNPACKpart(2, writeZ(dest++, *data++) );
-		_UNPACKpart(3, writeW(dest++, *data++) );
-		if (_vifRegs->offset == 4) _vifRegs->offset = 0;
-	}
-	return (uptr)data - (uptr)_data;
-}
-
-#define _UNPACK_V4_16(format) \
-	format *sdata = (format*)data; \
-	 \
-  \
-		writeX(dest++, *sdata++); \
-		writeY(dest++, *sdata++); \
-		writeZ(dest++, *sdata++); \
-		writeW(dest++, *sdata++);
-
-void UNPACK_V4_16s(u32 *dest, u32 *data) {
-	_UNPACK_V4_16(s16);
-}
-
-void UNPACK_V4_16u(u32 *dest, u32 *data) {
-	_UNPACK_V4_16(u16);
-}
-
-#define _UNPACK_V4_16part(format) \
-	format *sdata = (format*)data; \
-	while (size > 0) { \
-		_UNPACKpart(0, writeX(dest++, *sdata++) ); \
-		_UNPACKpart(1, writeY(dest++, *sdata++) ); \
-		_UNPACKpart(2, writeZ(dest++, *sdata++) ); \
-		_UNPACKpart(3, writeW(dest++, *sdata++) ); \
-		if (_vifRegs->offset == 4) _vifRegs->offset = 0; \
-	} \
-	return (uptr)sdata - (uptr)data;
-
-int  UNPACK_V4_16spart(u32 *dest, u32 *data, int size) {
-	_UNPACK_V4_16part(s16);
-}
-
-int  UNPACK_V4_16upart(u32 *dest, u32 *data, int size) {
-	_UNPACK_V4_16part(u16);
-}
-
-#define _UNPACK_V4_8(format) \
-	format *cdata = (format*)data; \
-	 \
- \
-		writeX(dest++, *cdata++); \
-		writeY(dest++, *cdata++); \
-		writeZ(dest++, *cdata++); \
-		writeW(dest++, *cdata++);
-
-void UNPACK_V4_8s(u32 *dest, u32 *data) {
-	_UNPACK_V4_8(s8);
-}
-
-void UNPACK_V4_8u(u32 *dest, u32 *data) {
-	_UNPACK_V4_8(u8);
-}
-
-#define _UNPACK_V4_8part(format) \
-	format *cdata = (format*)data; \
-	while (size > 0) { \
-		_UNPACKpart(0, writeX(dest++, *cdata++) ); \
-		_UNPACKpart(1, writeY(dest++, *cdata++) ); \
-		_UNPACKpart(2, writeZ(dest++, *cdata++) ); \
-		_UNPACKpart(3, writeW(dest++, *cdata++) ); \
-		if (_vifRegs->offset == 4) _vifRegs->offset = 0; \
-	} \
-	return (uptr)cdata - (uptr)data;
-
-int  UNPACK_V4_8spart(u32 *dest, u32 *data, int size) {
-	_UNPACK_V4_8part(s8);
-}
-
-int  UNPACK_V4_8upart(u32 *dest, u32 *data, int size) {
-	_UNPACK_V4_8part(u8);
-}
-
-void UNPACK_V4_5(u32 *dest, u32 *data) {
-	u16 *sdata = (u16*)data;
-	u32 rgba;
-
-	rgba = *sdata++;
-	writeX(dest++, (rgba & 0x001f) << 3);
-	writeY(dest++, (rgba & 0x03e0) >> 2);
-	writeZ(dest++, (rgba & 0x7c00) >> 7);
-	writeW(dest++, (rgba & 0x8000) >> 8);
-}
-
-int  UNPACK_V4_5part(u32 *dest, u32 *data, int size) {
-	u16 *sdata = (u16*)data;
-	u32 rgba;
-
-	while (size > 0) {
-		rgba = *sdata++;
-		_UNPACKpart(0, writeX(dest++, (rgba & 0x001f) << 3); );
-		_UNPACKpart(1, writeY(dest++, (rgba & 0x03e0) >> 2); );
-		_UNPACKpart(2, writeZ(dest++, (rgba & 0x7c00) >> 7); );
-		_UNPACKpart(3, writeW(dest++, (rgba & 0x8000) >> 8); );
-		if (_vifRegs->offset == 4) _vifRegs->offset = 0;
-	}
-
-	return (uptr)sdata - (uptr)data;
+	_UNPACKpart(0, writeX(dest++, (*data & 0x001f) << 3); );
+	_UNPACKpart(1, writeY(dest++, (*data & 0x03e0) >> 2); );
+	_UNPACKpart(2, writeZ(dest++, (*data & 0x7c00) >> 7); );
+	_UNPACKpart(3, writeW(dest  , (*data & 0x8000) >> 8); );
+	if (_vifRegs->offset == 4) _vifRegs->offset = 0;
 }
 
 static int cycles;
@@ -728,8 +423,8 @@ int mfifoVIF1rbTransfer() {
 		int s2 = (vif1ch->qwc << 4) - s1;
 
 		
-/*#ifdef GIF_LOG
-			GIF_LOG("Split\n");
+/*#ifdef VIF_LOG
+			VIF_LOG("Split\n");
 #endif*/
 		/* it does, so first copy 's1' bytes from 'addr' to 'data' */
 		src = (u32*)PSM(vif1ch->madr);
@@ -751,8 +446,8 @@ int mfifoVIF1rbTransfer() {
 	} else {
 		/* it doesn't, so just transfer 'qwc*4' words 
 		   from 'vif1ch->madr' to VIF1 */
-/*#ifdef GIF_LOG
-			GIF_LOG("Straight\n");
+/*#ifdef VIF_LOG
+			VIF_LOG("Straight\n");
 #endif*/
 		src = (u32*)PSM(vif1ch->madr);
 		if (src == NULL) return -1;
@@ -772,29 +467,27 @@ int mfifoVIF1rbTransfer() {
 }
 
 int mfifoVIF1chain() {
-	u32 maddr = psHu32(DMAC_RBOR);
-	int msize = psHu32(DMAC_RBSR)+16, ret;
-	u32 *pMem;
-	int mfifoqwc = vif1ch->qwc;
-
+	int ret;
+	
 	/* Is QWC = 0? if so there is nothing to transfer */
 	if (vif1ch->qwc == 0 && vif1.vifstalled == 0) return 0;
 
 	
-	if (vif1ch->madr >= maddr &&
-		vif1ch->madr <= (maddr+msize)) {
-/*#ifdef GIF_LOG
-			GIF_LOG("Ring Buffer\n");
+	if (vif1ch->madr >= psHu32(DMAC_RBOR) &&
+		vif1ch->madr <= (psHu32(DMAC_RBOR)+psHu32(DMAC_RBSR)+16)) {
+/*#ifdef VIF_LOG
+			VIF_LOG("Ring Buffer\n");
 #endif*/
 		//SysPrintf("MFIFO QWC %x, VIF QWC %x oldqwc %x\n", vifqwc, vif1ch->qwc, mfifoqwc);
 		ret = mfifoVIF1rbTransfer();
 		//vifqwc -= (mfifoqwc - vif1ch->qwc);
 		//SysPrintf("end MFIFO QWC %x, VIF QWC %x oldqwc %x taken from vifqwc %x\n", vifqwc, vif1ch->qwc, mfifoqwc, (mfifoqwc - vif1ch->qwc));
 	} else {
-		pMem = (u32*)dmaGetAddr(vif1ch->madr);
+		int mfifoqwc = vif1ch->qwc;
+		u32 *pMem = (u32*)dmaGetAddr(vif1ch->madr);
 		if (pMem == NULL) return -1;
-/*#ifdef GIF_LOG
-			GIF_LOG("Other src\n");
+/*#ifdef VIF_LOG
+			VIF_LOG("Other src\n");
 #endif*/
 		if(vif1.vifstalled == 1){
 			ret = VIF1transfer(pMem+vif1.irqoffset, vif1ch->qwc*4-vif1.irqoffset, 0);
@@ -805,7 +498,7 @@ int mfifoVIF1chain() {
 		//vif1ch->madr+= (vif1ch->qwc << 4);
 	}
 
-	cycles+= (mfifoqwc - vif1ch->qwc) * BIAS; /* guessing */
+	
 	
 	
 	//vif1ch->qwc = 0;
@@ -829,13 +522,12 @@ void mfifoVIF1transfer(int qwc) {
 	g_vifCycles = 0;
 
 	if(qwc > 0){
-#ifdef GIF_LOG
-			GIF_LOG("Added %x qw to mfifo, total now %x\n", qwc, vifqwc);
+#ifdef VIF_LOG
+			VIF_LOG("Added %x qw to mfifo, total now %x\n", qwc, vifqwc);
 #endif
 	}
-
 	//if(qwc > 0) SysPrintf("Added %x to MFIFO, new total %x\n", qwc, vifqwc);
-	//if(vifqwc == 0) return;
+	if(vifqwc < 0 || (vif1ch->chcr & 0x100) == 0) return;
 	//if(vif1.vifstalled == 1 && (vif1Regs->stat & (VIF1_STAT_VSS|VIF1_STAT_VIS|VIF1_STAT_VFS)))return;
 	/*if(vifqwc == 0) {
 	//#ifdef PCSX2_DEVBUILD
@@ -849,25 +541,46 @@ void mfifoVIF1transfer(int qwc) {
 	/*if ((psHu32(DMAC_CTRL) & 0xC0)) { 
 			SysPrintf("DMA Stall Control %x\n",(psHu32(DMAC_CTRL) & 0xC0));
 			}*/
-/*#ifdef GIF_LOG
-	GIF_LOG("mfifoVIF1transfer %x madr %x, tadr %x\n", vif1ch->chcr, vif1ch->madr, vif1ch->tadr);
+/*#ifdef VIF_LOG
+	VIF_LOG("mfifoVIF1transfer %x madr %x, tadr %x\n", vif1ch->chcr, vif1ch->madr, vif1ch->tadr);
 #endif*/
 	
  //if((vif1ch->chcr & 0x100) == 0)SysPrintf("MFIFO VIF1 not ready!\n");
 	//while (qwc > 0 && done == 0) {
-	 if(vif1ch->qwc == 0){
+	 if(vif1ch->qwc == 0 && vifqwc > 0){
 			if(vif1ch->tadr == spr0->madr) {
 		
 	#ifdef PCSX2_DEVBUILD
 				/*if( vifqwc > 1 )
 					SysPrintf("vif mfifo tadr==madr but qwc = %d\n", vifqwc);*/	
 	#endif	
+				FreezeMMXRegs(0);
+				FreezeXMMRegs(0);
 				//hwDmacIrq(14);
 				return;
 			}
 			
 			ptag = (u32*)dmaGetAddr(vif1ch->tadr);
-			
+
+			if (vif1ch->chcr & 0x40) {
+				if(vif1.vifstalled == 1 && vif1.stallontag == 1) ret = VIF1transfer(ptag+(2+vif1.irqoffset), 2-vif1.irqoffset, 1);  //Transfer Tag on Stall
+				else if(vif1.vifstalled == 0)ret = VIF1transfer(ptag+2, 2, 1);  //Transfer Tag
+				if (ret == -2) {
+#ifdef VIF_LOG
+			VIF_LOG("MFIFO Stallon tag\n");
+#endif
+			//SysPrintf("Tag MFIFO QWC %x, VIF QWC %x\n", vifqwc, vif1ch->qwc);
+					//vif1.vifstalled = 1;
+					INT(10,cycles+g_vifCycles);
+					FreezeMMXRegs(0);
+				    FreezeXMMRegs(0);
+					return;        //IRQ set by VIFTransfer
+				} else {
+					vif1.vifstalled = 0;
+					vif1.stallontag = 0;
+				}
+			}
+
 			id        = (ptag[0] >> 28) & 0x7;
 			vif1ch->qwc  = (ptag[0] & 0xffff);
 			vif1ch->madr = ptag[1];
@@ -875,27 +588,12 @@ void mfifoVIF1transfer(int qwc) {
 			
 			
 			//SysPrintf("Tag read MFIFO QWC %x, VIF QWC %x\n", vifqwc, vif1ch->qwc);
-			if (vif1ch->chcr & 0x40) {
-				if(vif1.vifstalled == 1 && vif1.stallontag == 1) ret = VIF1transfer(ptag+(2+vif1.irqoffset), 2-vif1.irqoffset, 1);  //Transfer Tag on Stall
-				else if(vif1.vifstalled == 0)ret = VIF1transfer(ptag+2, 2, 1);  //Transfer Tag
-				if (ret == -2) {
-#ifdef GIF_LOG
-			GIF_LOG("MFIFO Stallon tag\n");
-#endif
-			//SysPrintf("Tag MFIFO QWC %x, VIF QWC %x\n", vifqwc, vif1ch->qwc);
-					//vif1.vifstalled = 1;
-					INT(10,cycles+g_vifCycles);
-					return;        //IRQ set by VIFTransfer
-				} else {
-					vif1.vifstalled = 0;
-					vif1.stallontag = 0;
-				}
-			}
+			
 			
 			vif1ch->chcr = ( vif1ch->chcr & 0xFFFF ) | ( (*ptag) & 0xFFFF0000 );
 			
-#ifdef GIF_LOG
-			GIF_LOG("dmaChain %8.8x_%8.8x size=%d, id=%d, madr=%lx, tadr=%lx mfifo qwc = %x spr0 madr = %x\n",
+#ifdef VIF_LOG
+			VIF_LOG("dmaChain %8.8x_%8.8x size=%d, id=%d, madr=%lx, tadr=%lx mfifo qwc = %x spr0 madr = %x\n",
 					ptag[1], ptag[0], vif1ch->qwc, id, vif1ch->madr, vif1ch->tadr, vifqwc, spr0->madr);
 #endif	
 			vifqwc--;
@@ -906,7 +604,12 @@ void mfifoVIF1transfer(int qwc) {
 					vif1ch->tadr = psHu32(DMAC_RBOR) + ((vif1ch->tadr + 16) & psHu32(DMAC_RBSR));
 					vif1.done = 2;										//End Transfer
 					if((vif1ch->madr & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)) {
-						if(vifqwc < vif1ch->qwc) return;
+						if(vifqwc < vif1ch->qwc) {
+							vifqwc -= vif1ch->qwc;
+                            FreezeMMXRegs(0);
+			                FreezeXMMRegs(0);
+							return;
+						}
 					}
 					break;
 
@@ -915,7 +618,12 @@ void mfifoVIF1transfer(int qwc) {
 					vif1ch->tadr = psHu32(DMAC_RBOR) + ((vif1ch->madr + (vif1ch->qwc << 4)) & psHu32(DMAC_RBSR));			//Set TADR to QW following the data
 					vif1.done = 0;
 					if((vif1ch->madr & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)) {
-						if(vifqwc < vif1ch->qwc) return;
+						if(vifqwc < vif1ch->qwc) {
+							vifqwc -= vif1ch->qwc;
+                            FreezeMMXRegs(0);
+			                FreezeXMMRegs(0);
+							return;
+						}
 					}
 					break;
 
@@ -925,7 +633,12 @@ void mfifoVIF1transfer(int qwc) {
 					vif1ch->tadr = temp;								//Copy temporarily stored ADDR to Tag
 					vif1.done = 0;
 					if((vif1ch->madr & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)) {
-						if(vifqwc < vif1ch->qwc) return;
+						if(vifqwc < vif1ch->qwc) {
+							vifqwc -= vif1ch->qwc;
+                            FreezeMMXRegs(0);
+			                FreezeXMMRegs(0);
+							return;
+						}
 					}
 					break;
 
@@ -934,7 +647,12 @@ void mfifoVIF1transfer(int qwc) {
 					vif1ch->tadr = psHu32(DMAC_RBOR) + ((vif1ch->tadr + 16) & psHu32(DMAC_RBSR));							//Set TADR to next tag
 					vif1.done = 0;
 					if((vif1ch->madr & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)) {
-						if(vifqwc < vif1ch->qwc) return;
+						if(vifqwc < vif1ch->qwc) {
+							vifqwc -= vif1ch->qwc;
+                            FreezeMMXRegs(0);
+			                FreezeXMMRegs(0);
+							return;
+						}
 					}
 					break;
 
@@ -943,12 +661,17 @@ void mfifoVIF1transfer(int qwc) {
 					vif1ch->tadr = psHu32(DMAC_RBOR) + ((vif1ch->madr + (vif1ch->qwc << 4)) & psHu32(DMAC_RBSR));			//Set TADR to QW following the data
 					vif1.done = 2;										//End Transfer
 					if((vif1ch->madr & ~psHu32(DMAC_RBSR)) == psHu32(DMAC_RBOR)) {
-						if(vifqwc < vif1ch->qwc) return;
+						if(vifqwc < vif1ch->qwc) {
+							vifqwc -= vif1ch->qwc;
+                            FreezeMMXRegs(0);
+			                FreezeXMMRegs(0);
+							return;
+						}
 					}
 					break;
 				}
-#ifdef GIF_LOG
-			GIF_LOG("dmaChain %8.8x_%8.8x size=%d, id=%d, madr=%lx, tadr=%lx mfifo qwc = %x spr0 madr = %x\n",
+#ifdef VIF_LOG
+			VIF_LOG("dmaChain %8.8x_%8.8x size=%d, id=%d, madr=%lx, tadr=%lx mfifo qwc = %x spr0 madr = %x\n",
 					ptag[1], ptag[0], vif1ch->qwc, id, vif1ch->madr, vif1ch->tadr, vifqwc, spr0->madr);
 	#endif			
 			
@@ -959,8 +682,8 @@ void mfifoVIF1transfer(int qwc) {
 				}
 			//}
 			if ((vif1ch->chcr & 0x80) && (ptag[0] >> 31)) {
-#ifdef GIF_LOG
-			GIF_LOG("dmaIrq Set\n");
+#ifdef VIF_LOG
+			VIF_LOG("dmaIrq Set\n");
 #endif
 			//SysPrintf("mfifoVIF1transfer: dmaIrq Set\n");
 			//vifqwc = 0;
@@ -971,18 +694,20 @@ void mfifoVIF1transfer(int qwc) {
 
 		ret = mfifoVIF1chain();
 		if (ret == -1) {
-			SysPrintf("dmaChain error %8.8x_%8.8x size=%d, id=%d, madr=%lx, tadr=%lx\n",
+			SysPrintf("VIF dmaChain error %8.8x_%8.8x size=%d, id=%d, madr=%lx, tadr=%lx\n",
 					ptag[1], ptag[0], vif1ch->qwc, id, vif1ch->madr, vif1ch->tadr);
 			vif1.done = 1;
-			INT(10,cycles+g_vifCycles);
+			INT(10,g_vifCycles);
 		}
 		if(ret == -2){
 			//SysPrintf("VIF MFIFO Stall\n");
 			//vif1.vifstalled = 1;
-#ifdef GIF_LOG
-			GIF_LOG("MFIFO Stall\n");
+#ifdef VIF_LOG
+			VIF_LOG("MFIFO Stall\n");
 #endif
-			INT(10,cycles+g_vifCycles);
+			FreezeMMXRegs(0);
+			FreezeXMMRegs(0);
+			INT(10,g_vifCycles);
 			return;
 		}
 		
@@ -999,8 +724,8 @@ void mfifoVIF1transfer(int qwc) {
 
 	//SysPrintf("vifqwc %x, vif1ch->qwc %x, vifstalled %x, vifdone %x\n", vifqwc, vif1ch->qwc, vif1.vifstalled, vif1.done);
 	if(vif1.done == 2 && vif1ch->qwc == 0) vif1.done = 1;
-	if(vifqwc == 0 && vif1.done == 0 && vif1.vifstalled == 0) hwDmacIrq(14);
-	 INT(10,cycles+g_vifCycles);
+	if(vifqwc <= 0 && vif1.done == 0 && vif1.vifstalled == 0) hwDmacIrq(14);
+	INT(10,g_vifCycles);
 	
 	// if(vifqwc == 0) vif1Regs->stat&= ~0x1F000000; // FQC=0
 	//hwDmacIrq(1);
@@ -1008,40 +733,47 @@ void mfifoVIF1transfer(int qwc) {
 	else SysPrintf("Evens up :)\n");*/
 
 	//if(vifqwc & 0xFFF00000) SysPrintf("Negative QWC?!! %x\n", vifqwc);
-#ifdef GIF_LOG
-	GIF_LOG("mfifoVIF1transfer end %x madr %x, tadr %x vifqwc %x\n", vif1ch->chcr, vif1ch->madr, vif1ch->tadr, vifqwc);
+#ifdef VIF_LOG
+	VIF_LOG("mfifoVIF1transfer end %x madr %x, tadr %x vifqwc %x\n", vif1ch->chcr, vif1ch->madr, vif1ch->tadr, vifqwc);
 #endif
+	FreezeMMXRegs(0);
+	FreezeXMMRegs(0);
 }
 
 int vifMFIFOInterrupt()
 {
 	
 	if(!(vif1ch->chcr & 0x100)) return 1;
-	if(vif1.vifstalled == 1 && (vif1Regs->stat & (VIF1_STAT_VSS|VIF1_STAT_VIS|VIF1_STAT_VFS))) {
-		if(vif1.irq) {
+	//if(vif1.vifstalled == 1 && (vif1Regs->stat & (VIF1_STAT_VSS|VIF1_STAT_VIS|VIF1_STAT_VFS))) {
+		if(vif1.irq && vif1.tag.size == 0) {
 			vif1Regs->stat|= VIF1_STAT_INT;
 			hwIntcIrq(5);
 			--vif1.irq;
+			if(vif1Regs->stat & (VIF1_STAT_VSS|VIF1_STAT_VIS|VIF1_STAT_VFS))
+				{
+					vif1Regs->stat&= ~0x1F000000; // FQC=0
+					// One game doesnt like vif stalling at end, cant remember what. Spiderman isnt keen on it tho
+					vif1ch->chcr &= ~0x100;
+					return 1;
+				}		
+			//return 0;
 		}
-		return 1;
-	}
+	//}
 
 	if(vif1.done != 1) {
 		mfifoVIF1transfer(0);
-        FreezeMMXRegs(0);
-	    FreezeXMMRegs(0);
-		if(vifqwc == 0 && vif1.done != 1) return 1;
+		if(vifqwc <= 0 && vif1.done != 1) return 1;
 		else {
 			if((vif1ch->madr == spr0->madr && vif1ch->tadr == spr0->madr) && vif1.done == 0) return 1;
 			else return 0;
 		}
 	} else if(vif1.done != 1) return 1;
-
+	
 	vif1.done = 0;
 	vif1ch->chcr &= ~0x100;
 	hwDmacIrq(DMAC_VIF1);
-#ifdef GIF_LOG
-			GIF_LOG("vif mfifo dma end\n");
+#ifdef VIF_LOG
+			VIF_LOG("vif mfifo dma end\n");
 #endif
 //	vif1ch->chcr &= ~0x100;
 	vif1Regs->stat&= ~0x1F000000; // FQC=0

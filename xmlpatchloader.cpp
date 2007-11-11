@@ -77,9 +77,9 @@ int LoadPatch(char *crc)
 	bool loadOkay = doc.LoadFile();
 	if ( !loadOkay )
 	{
-		SysPrintf("XML Patch Loader: Could not load file '%s'. Error='%s'.\n", pfile, doc.ErrorDesc() );
+		//SysPrintf("XML Patch Loader: Could not load file '%s'. Error='%s'.\n", pfile, doc.ErrorDesc() );
 		return -1;
-	}
+	} else SysPrintf("XML Patch Loader: '%s' Found\n", pfile);
 
 	TiXmlNode *root = doc.FirstChild("GAME");
 	if(!root)

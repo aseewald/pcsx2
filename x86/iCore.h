@@ -146,6 +146,7 @@ void _flushConstReg(int reg);
 #define EEREC_HI (((info)>>24)&0xf)
 #define EEREC_ACC (((info)>>20)&0xf)
 #define EEREC_TEMP (((info)>>24)&0xf)
+#define VUREC_FMAC ((info)&0x80000000)
 
 #define PROCESS_EE_SET_S(reg) ((reg)<<8)
 #define PROCESS_EE_SET_T(reg) ((reg)<<12)
@@ -156,6 +157,8 @@ void _flushConstReg(int reg);
 
 #define PROCESS_VU_SET_ACC(reg) PROCESS_EE_SET_ACC(reg)
 #define PROCESS_VU_SET_TEMP(reg) ((reg)<<24)
+
+#define PROCESS_VU_SET_FMAC() 0x80000000
 
 // special info not related to above flags
 #define PROCESS_CONSTS 1

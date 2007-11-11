@@ -69,7 +69,7 @@ u32 sio2_getRecv2() {
 #ifdef PAD_LOG
 	PAD_LOG("Reading Recv2 = %x\n",0xF);
 #endif
-	return 0xF;
+	return 0xf;
 }//0, 0x10, 0x20, 0x10 | 0x20; bits 4 & 5
 
 u32 sio2_getRecv3() { 
@@ -97,15 +97,17 @@ u32 sio2_getSend2(u32 index){return sio2.packet.sendArray2[index];}				//0->3
 
 void sio2_setSend3(u32 index, u32 value) 
 {
-	int i;
+//	int i;
 	sio2.packet.sendArray3[index]=value;
 #ifdef PAD_LOG
-	if (index==15){
-		for (i=0; i<4; i++){PAD_LOG("0x%08X ", sio2.packet.sendArray1[i]);}PAD_LOG("\n");
-		for (i=0; i<4; i++){PAD_LOG("0x%08X ", sio2.packet.sendArray2[i]);}PAD_LOG("\n");
-		for (i=0; i<8; i++){PAD_LOG("0x%08X ", sio2.packet.sendArray3[i]);}PAD_LOG("\n");
-		for (  ; i<16; i++){PAD_LOG("0x%08X ", sio2.packet.sendArray3[i]);}PAD_LOG("\n");
-	}
+//	if (index==15){
+//		for (i=0; i<4; i++){PAD_LOG("0x%08X ", sio2.packet.sendArray1[i]);}PAD_LOG("\n");
+//		for (i=0; i<4; i++){PAD_LOG("0x%08X ", sio2.packet.sendArray2[i]);}PAD_LOG("\n");
+//		for (i=0; i<8; i++){PAD_LOG("0x%08X ", sio2.packet.sendArray3[i]);}PAD_LOG("\n");
+//		for (  ; i<16; i++){PAD_LOG("0x%08X ", sio2.packet.sendArray3[i]);}PAD_LOG("\n");
+	PAD_LOG("[%d] : 0x%08X ", index,sio2.packet.sendArray3[index]);
+		PAD_LOG("\n");
+//	}
 #endif
 }	//0->15
 
@@ -119,7 +121,6 @@ void sio2_setCtrl(u32 value){
 		//trigger interupt for SIO2
 		psxHu32(0x1070)|=0x20000;
 		//SBUS
-		hwIntcIrq(INTC_SBUS);
 		sio2.recvIndex=0;
 		sio2.ctrl &= ~1;
 	} else { // send packet
@@ -142,9 +143,10 @@ u32 sio2_get8278(){return sio2._8278;}
 void sio2_set827C(u32 value){sio2._827C=value;}
 u32 sio2_get827C(){return sio2._827C;}
 
-void sio2_fifoIn(u8 value){
+void sio2_serialIn(u8 value){
 	u16 ctrl=0x0002;
-	if (sio2.packet.sendArray3[sio2.cmdport] && (sio2.cmdlength==0)){//else do nothing!
+	if (sio2.packet.sendArray3[sio2.cmdport] && (sio2.cmdlength==0))
+	{
 		
 		sio2.cmdlength=(sio2.packet.sendArray3[sio2.cmdport] >> 8) & 0x1FF;
 		ctrl &= ~0x2000;
@@ -154,13 +156,40 @@ void sio2_fifoIn(u8 value){
 #ifdef PSXDMA_LOG
 		PSXDMA_LOG("sio2_fifoIn: ctrl = %x, cmdlength = %x, cmdport = %d (%x)\n", ctrl, sio2.cmdlength, sio2.cmdport, sio2.packet.sendArray3[sio2.cmdport]);
 #endif
-		sio2.cmdport++;//position in sendArray3
+		sio2.cmdport++;
 	}
-	if (sio2.cmdlength) sio2.cmdlength--;
 
-//	sioWriteCtrl16(ctrl);
-	
+	if (sio2.cmdlength) sio2.cmdlength--;
 	sioWrite8(value);
+	
+	if (sio2.packet.sendSize > BUFSIZE) {//asadr
+		SysPrintf("*PCSX2*: sendSize >= %d\n", BUFSIZE);
+	} else {
+		sio2.buf[sio2.packet.sendSize] = sioRead8();
+		sio2.packet.sendSize++;
+	}
+}
+extern void SIODMAWrite(u8 value);
+
+void sio2_fifoIn(u8 value){
+	u16 ctrl=0x0002;
+	if (sio2.packet.sendArray3[sio2.cmdport] && (sio2.cmdlength==0))
+	{
+		
+		sio2.cmdlength=(sio2.packet.sendArray3[sio2.cmdport] >> 8) & 0x1FF;
+		ctrl &= ~0x2000;
+		ctrl |= (sio2.packet.sendArray3[sio2.cmdport] & 1) << 13;
+		//sioWriteCtrl16(SIO_RESET);
+		sioWriteCtrl16(ctrl);
+#ifdef PSXDMA_LOG
+		PSXDMA_LOG("sio2_fifoIn: ctrl = %x, cmdlength = %x, cmdport = %d (%x)\n", ctrl, sio2.cmdlength, sio2.cmdport, sio2.packet.sendArray3[sio2.cmdport]);
+#endif
+		sio2.cmdport++;
+	}
+
+	if (sio2.cmdlength) sio2.cmdlength--;
+	SIODMAWrite(value);
+	
 	if (sio2.packet.sendSize > BUFSIZE) {//asadr
 		SysPrintf("*PCSX2*: sendSize >= %d\n", BUFSIZE);
 	} else {
@@ -171,6 +200,7 @@ void sio2_fifoIn(u8 value){
 
 u8 sio2_fifoOut(){
 	if (sio2.recvIndex <= sio2.packet.sendSize){
+		//PAD_LOG("READING %x\n",sio2.buf[sio2.recvIndex]);
 		return sio2.buf[sio2.recvIndex++];
 	} else {
 		SysPrintf("*PCSX2*: buffer overrun\n");
@@ -183,20 +213,32 @@ u8 sio2_fifoOut(){
 /////////////////////////////////////////////////
 
 void psxDma11(u32 madr, u32 bcr, u32 chcr) {
+	unsigned int i, j;
+	int size = (bcr >> 16) * (bcr & 0xffff);
 #ifdef PSXDMA_LOG
 	PSXDMA_LOG("*** DMA 11 - SIO2 in *** %lx addr = %lx size = %lx\n", chcr, madr, bcr);
 #endif
-
+	
 	if (chcr != 0x01000201) return;
 
-	bcr = ((bcr >> 16) * (bcr & 0xFFFF)) * 4;	// 8 bits
-	while (bcr > 0) {								
-		sio2_fifoIn(PSXMu8(madr));
-		bcr--; madr++;
-		if(sio2.packet.sendSize == BUFSIZE) break;
+	for(i = 0; i < (bcr >> 16); i++)
+	{
+		sio.count = 1;
+		for(j = 0; j < ((bcr & 0xFFFF) * 4); j++)
+		{
+			sio2_fifoIn(PSXMu8(madr));
+			madr++;
+			if(sio2.packet.sendSize == BUFSIZE) {
+				HW_DMA11_MADR = madr;
+				PSX_INT(11,(size>>2));	// Interrupts should always occur at the end
+				return;
+			}
+		}
+		
 	}
+
 	HW_DMA11_MADR = madr;
-	PSX_INT(11,(bcr>>2));	// Interrupts should always occur at the end
+	PSX_INT(11,(size>>2));	// Interrupts should always occur at the end
 }
 
 int psxDMA11Interrupt()
@@ -207,6 +249,7 @@ int psxDMA11Interrupt()
 }
 
 void psxDma12(u32 madr, u32 bcr, u32 chcr) {
+	int size = bcr;
 #ifdef PSXDMA_LOG
 	PSXDMA_LOG("*** DMA 12 - SIO2 out *** %lx addr = %lx size = %lx\n", chcr, madr, bcr);
 #endif
@@ -223,7 +266,7 @@ void psxDma12(u32 madr, u32 bcr, u32 chcr) {
 		if(sio2.recvIndex == sio2.packet.sendSize) break;
 	}
 	HW_DMA12_MADR = madr;
-	PSX_INT(12,(bcr>>2));	// Interrupts should always occur at the end
+	PSX_INT(12,(size>>2));	// Interrupts should always occur at the end
 }
 
 int psxDMA12Interrupt()

@@ -74,11 +74,12 @@ MEMCPY_AMD.CPP
 // Inline assembly syntax for use with Visual C++
 extern "C" {
 
+#include "PS2Etypes.h"
+
 #ifdef _WIN32
 #include <windows.h>
 #endif
 
-#include "PS2Etypes.h"
 #include "Misc.h"
 
 #if defined(_MSC_VER) && !defined(__x86_64__)

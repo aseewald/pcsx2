@@ -549,13 +549,30 @@ void recBLTZAL(int info)
 ////////////////////////////////////////////////////
 void recBGEZAL( void ) 
 {
-	SysPrintf("BGEZAL\n");
-	_eeFlushAllUnused();
-	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
-	MOV32ItoM( (int)&cpuRegs.pc, pc );
-	iFlushCall(FLUSH_EVERYTHING);
-	CALLFunc( (int)BGEZAL );
-	branch = 2; 
+    u32 branchTo = ((s32)_Imm_ * 4) + pc;
+
+	if( GPR_IS_CONST1(_Rs_) ) {
+        // will always branch
+        _deleteEEreg(31, 0);
+	    MOV32ItoM((u32)&cpuRegs.GPR.r[31].UL[0], pc+4);
+	    MOV32ItoM((u32)&cpuRegs.GPR.r[31].UL[1], 0);
+
+        if( !(g_cpuConstRegs[_Rs_].SD[0] >= 0) )
+			branchTo = pc+4;
+
+		recompileNextInstruction(1);
+		SetBranchImm( branchTo );
+    }
+    else {
+        SysPrintf("BGEZAL\n");
+    
+	    _eeFlushAllUnused();
+	    MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
+	    MOV32ItoM( (int)&cpuRegs.pc, pc );
+	    iFlushCall(FLUSH_EVERYTHING);
+	    CALLFunc( (int)BGEZAL );
+	    branch = 2; 
+    }
 }
 
 ////////////////////////////////////////////////////
@@ -871,6 +888,7 @@ void recBGTZ( void )
 }
 
 ////////////////////////////////////////////////////
+#ifdef EE_CONST_PROP
 void recBLTZ() 
 {
 	u32 branchTo = ((s32)_Imm_ * 4) + pc;
@@ -935,6 +953,106 @@ void recBGEZ( void )
 
 	SetBranchImm(pc);
 }
+
+////////////////////////////////////////////////////
+void recBLTZL( void ) 
+{
+	u32 branchTo = ((s32)_Imm_ * 4) + pc;
+
+	_eeFlushAllUnused();
+
+	if( GPR_IS_CONST1(_Rs_) ) {
+		if( !(g_cpuConstRegs[_Rs_].SD[0] < 0) )
+			SetBranchImm( pc + 4);
+		else {
+			recompileNextInstruction(1);
+			SetBranchImm( branchTo );
+		}
+		return;
+	}
+
+	recSetBranchL(1);
+
+	SaveBranchState();
+	recompileNextInstruction(1);
+	SetBranchImm(branchTo);
+
+	x86SetJ32( j32Ptr[ 0 ] );
+
+	LoadBranchState();
+	SetBranchImm(pc);
+}
+
+	
+////////////////////////////////////////////////////
+void recBGEZL( void ) 
+{
+	u32 branchTo = ((s32)_Imm_ * 4) + pc;
+
+	_eeFlushAllUnused();
+
+	if( GPR_IS_CONST1(_Rs_) ) {
+		if( !(g_cpuConstRegs[_Rs_].SD[0] >= 0) )
+			SetBranchImm( pc + 4);
+		else {
+			recompileNextInstruction(1);
+			SetBranchImm( branchTo );
+		}
+		return;
+	}
+
+	recSetBranchL(0);
+
+	SaveBranchState();
+	recompileNextInstruction(1);
+	SetBranchImm(branchTo);
+
+	x86SetJ32( j32Ptr[ 0 ] );
+
+	LoadBranchState();
+	SetBranchImm(pc);
+}
+
+#else
+void recBLTZ( void ) 
+{
+	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
+	MOV32ItoM( (int)&cpuRegs.pc, pc );
+	iFlushCall(FLUSH_EVERYTHING);
+	CALLFunc( (int)BLTZ );
+	branch = 2;    
+}
+
+void recBGEZ( void ) 
+{
+	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
+	MOV32ItoM( (int)&cpuRegs.pc, pc );
+	iFlushCall(FLUSH_EVERYTHING);
+	CALLFunc( (int)BGEZ );
+	branch = 2;    
+}
+
+void recBLTZL( void ) 
+{
+	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
+	MOV32ItoM( (int)&cpuRegs.pc, pc );
+	iFlushCall(FLUSH_EVERYTHING);
+	CALLFunc( (int)BLTZL );
+	branch = 2;    
+}
+
+void recBGEZL( void ) 
+{
+	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
+	MOV32ItoM( (int)&cpuRegs.pc, pc );
+	iFlushCall(FLUSH_EVERYTHING);
+    CALLFunc( (int)BGEZL );
+	branch = 2;    
+}
+
+#endif
+
+
 
 /*********************************************************
 * Register branch logic  Likely                          *
@@ -1029,64 +1147,7 @@ void recBGTZL( void )
 	SetBranchImm(pc);
 }
 
-////////////////////////////////////////////////////
-void recBLTZL( void ) 
-{
-	u32 branchTo = ((s32)_Imm_ * 4) + pc;
 
-	_eeFlushAllUnused();
-
-	if( GPR_IS_CONST1(_Rs_) ) {
-		if( !(g_cpuConstRegs[_Rs_].SD[0] < 0) )
-			SetBranchImm( pc + 4);
-		else {
-			recompileNextInstruction(1);
-			SetBranchImm( branchTo );
-		}
-		return;
-	}
-
-	recSetBranchL(1);
-
-	SaveBranchState();
-	recompileNextInstruction(1);
-	SetBranchImm(branchTo);
-
-	x86SetJ32( j32Ptr[ 0 ] );
-
-	LoadBranchState();
-	SetBranchImm(pc);
-}
-
-	
-////////////////////////////////////////////////////
-void recBGEZL( void ) 
-{
-	u32 branchTo = ((s32)_Imm_ * 4) + pc;
-
-	_eeFlushAllUnused();
-
-	if( GPR_IS_CONST1(_Rs_) ) {
-		if( !(g_cpuConstRegs[_Rs_].SD[0] >= 0) )
-			SetBranchImm( pc + 4);
-		else {
-			recompileNextInstruction(1);
-			SetBranchImm( branchTo );
-		}
-		return;
-	}
-
-	recSetBranchL(0);
-
-	SaveBranchState();
-	recompileNextInstruction(1);
-	SetBranchImm(branchTo);
-
-	x86SetJ32( j32Ptr[ 0 ] );
-
-	LoadBranchState();
-	SetBranchImm(pc);
-}
 
 #endif
 

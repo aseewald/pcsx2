@@ -906,9 +906,109 @@ extern decoder_t g_decoder;
 extern int g_nIPU0Data; // or 0x80000000 whenever transferring
 extern u8* g_pIPU0Pointer;
 
+#if defined(_MSC_VER)
+#pragma pack(push, 1)
+#endif
+
+typedef struct _TGA_HEADER
+{
+    u8  identsize;          // size of ID field that follows 18 u8 header (0 usually)
+    u8  colourmaptype;      // type of colour map 0=none, 1=has palette
+    u8  imagetype;          // type of image 0=none,1=indexed,2=rgb,3=grey,+8=rle packed
+
+    s16 colourmapstart;     // first colour map entry in palette
+    s16 colourmaplength;    // number of colours in palette
+    u8  colourmapbits;      // number of bits per palette entry 15,16,24,32
+
+    s16 xstart;             // image x origin
+    s16 ystart;             // image y origin
+    s16 width;              // image width in pixels
+    s16 height;             // image height in pixels
+    u8  bits;               // image bits per pixel 8,16,24,32
+    u8  descriptor;         // image descriptor bits (vh flip bits)
+    
+    // pixel data follows header
+    
+#if defined(_MSC_VER)
+} TGA_HEADER;
+#pragma pack(pop)
+#else
+} TGA_HEADER __attribute__((packed));
+#endif
+
+void SaveTGA(const char* filename, int width, int height, void* pdata)
+{
+    TGA_HEADER hdr;
+    FILE* f = fopen(filename, "wb");
+    if( f == NULL )
+        return;
+
+    assert( sizeof(TGA_HEADER) == 18 && sizeof(hdr) == 18 );
+    
+    memset(&hdr, 0, sizeof(hdr));
+    hdr.imagetype = 2;
+    hdr.bits = 32;
+    hdr.width = width;
+    hdr.height = height;
+    hdr.descriptor |= 8|(1<<5); // 8bit alpha, flip vertical
+
+    fwrite(&hdr, sizeof(hdr), 1, f);
+    fwrite(pdata, width*height*4, 1, f);
+    fclose(f);
+}
+static int s_index = 0, s_frame = 0;
+
+void SaveRGB32(u8* ptr)
+{
+    char filename[255];
+    sprintf(filename, "frames/frame%.4d.tga", s_index++);
+    SaveTGA(filename, 16, 16, ptr);
+}
+
+void waitForSCD()
+{
+    u8 bit8;
+    while( !getBits8((u8*)&bit8, 0) )
+		so_resume();
+    if (bit8==0) {
+        if( g_BP.BP & 7 )
+            g_BP.BP += 8 - (g_BP.BP&7);
+        ipuRegs->ctrl.SCD = 1;
+    }
+	
+	while(!getBits32((u8*)&ipuRegs->top, 0))
+	{
+		so_resume();
+	}
+	BigEndian(ipuRegs->top, ipuRegs->top);
+
+    if( ipuRegs->ctrl.SCD ) {
+        while( !(ipuRegs->top & 0x100) ) {
+            while(!getBits8((u8*)&bit8, 1))
+                so_resume();
+            while(!getBits32((u8*)&ipuRegs->top, 0))
+	            so_resume();
+            BigEndian(ipuRegs->top, ipuRegs->top);
+        }
+
+        if( ipuRegs->top == 0x1b3 ) {
+            // fixes srs
+            SysPrintf("bad start code %x, will manuall skip stream\n", ipuRegs->top);
+            while( ipuRegs->top != 0x100 ) {
+                while(!getBits8((u8*)&bit8, 1))
+                    so_resume();
+                while(!getBits32((u8*)&ipuRegs->top, 0))
+	                so_resume();
+                BigEndian(ipuRegs->top, ipuRegs->top);
+            }
+        }
+    }
+}
+
 void mpeg2sliceIDEC(void* pdone)
 {
 	u32 read;
+
 	decoder_t * decoder = &g_decoder;
 
 	*(int*)pdone = 0;
@@ -919,6 +1019,7 @@ void mpeg2sliceIDEC(void* pdone)
 	decoder->dc_dct_pred[2] = 128 << decoder->intra_dc_precision;
 
 	decoder->mbc=0;
+    ipuRegs->ctrl.ECD = 0;
 
 	if (UBITS (decoder->bitstream_buf, 2) == 0)
 	{
@@ -947,6 +1048,7 @@ void mpeg2sliceIDEC(void* pdone)
 
 			if (decoder->macroblock_modes & MACROBLOCK_INTRA) {
 				decoder->coded_block_pattern = 0x3F;//all 6 blocks
+                //ipuRegs->ctrl.CBP = 0x3f;
 
 				memset(decoder->mb8,0,sizeof(struct macroblock_8));
 				memset(decoder->rgb32,0,sizeof(struct rgb32));
@@ -964,6 +1066,7 @@ void mpeg2sliceIDEC(void* pdone)
 
 					g_nIPU0Data = 64;
 					g_pIPU0Pointer = (u8*)decoder->rgb32;
+                    //if( s_frame >= 39 ) SaveRGB32(g_pIPU0Pointer);
 					while(g_nIPU0Data > 0) {
 						read = FIFOfrom_write((u32*)g_pIPU0Pointer,g_nIPU0Data);
 						if( read == 0 )
@@ -981,6 +1084,7 @@ void mpeg2sliceIDEC(void* pdone)
 
 					g_nIPU0Data = 32;
 					g_pIPU0Pointer = (u8*)decoder->rgb16;
+                    //if( s_frame >= 39 ) SaveRGB32(g_pIPU0Pointer);
 					while(g_nIPU0Data > 0) {
 						read = FIFOfrom_write((u32*)g_pIPU0Pointer,g_nIPU0Data);
 						if( read == 0 ){
@@ -1015,20 +1119,22 @@ void mpeg2sliceIDEC(void* pdone)
 							continue;
 						default:	/* end of slice/frame, or error? */
 						{
-							int i;
-							ipuRegs->ctrl.SCD = 1;
-							ipuRegs->ctrl.ECD=0;
-                            coded_block_pattern=decoder->coded_block_pattern;
+							//int i;
 
-							for (i=0; i<2; i++) {
-								u8 byte;
-								while(!getBits8(&byte, 0))
-									so_resume();
-								if (byte == 0) break;
-								g_BP.BP+= 8;
-							}
-							g_BP.BP-=32;//bitstream_init takes 32 bits
-							if((int)g_BP.BP < 0) {
+							ipuRegs->ctrl.SCD = 0;
+                            coded_block_pattern=decoder->coded_block_pattern;
+                            
+//							for (i=0; i<2; i++) {
+//								u8 byte;
+//								while(!getBits8(&byte, 0))
+//									so_resume();
+//								if (byte == 0) break;
+//								g_BP.BP+= 8;
+//							}
+                            g_BP.BP+=decoder->bitstream_bits-16;
+                            //g_BP.BP-=32;//bitstream_init takes 32 bits
+
+                            if((int)g_BP.BP < 0) {
 								g_BP.BP = 128 + (int)g_BP.BP;
 
 								// After BP is positioned correctly, we need to reload the old buffer
@@ -1036,11 +1142,10 @@ void mpeg2sliceIDEC(void* pdone)
 								ReorderBitstream();
 							}
 
-							while(!getBits32((u8*)&ipuRegs->top, 0))
-							{
-								so_resume();
-							}
-							BigEndian(ipuRegs->top, ipuRegs->top);
+                            waitForSCD();
+                            if( ipuRegs->ctrl.SCD ) {
+                                //SysPrintf("top %d: %8.8x\n", s_frame++, ipuRegs->top);
+                            }
 									
 							*(int*)pdone = 1;
 							so_exit();
@@ -1060,11 +1165,15 @@ void mpeg2sliceIDEC(void* pdone)
 		}
 	}
 
-	ipuRegs->ctrl.ECD=!ipuRegs->ctrl.SCD;
+    ipuRegs->ctrl.SCD = 0;
 
-	coded_block_pattern=decoder->coded_block_pattern;
+    coded_block_pattern=decoder->coded_block_pattern;
 
-	g_BP.BP-=32;//bitstream_init takes 32 bits
+	//ipuRegs->ctrl.ECD=!ipuRegs->ctrl.SCD;
+	//g_BP.BP-=32;//bitstream_init takes 32 bits
+
+    g_BP.BP+=decoder->bitstream_bits-16;
+
 	if((int)g_BP.BP < 0) {
 		g_BP.BP = 128 + (int)g_BP.BP;
 
@@ -1073,11 +1182,10 @@ void mpeg2sliceIDEC(void* pdone)
 		ReorderBitstream();
 	}
 
-	while(!getBits32((u8*)&ipuRegs->top, 0))
-	{
-		so_resume();
-	}
-	BigEndian(ipuRegs->top, ipuRegs->top);
+    waitForSCD();
+    if( ipuRegs->ctrl.SCD ) {
+        //SysPrintf("idectop: %8.8x, bp = %x\n", ipuRegs->top, g_BP.BP);
+    }
 
 	*(int*)pdone = 1;
 	so_exit();
@@ -1171,15 +1279,11 @@ void mpeg2_slice(void* pdone)
 
 	IPU_LOG("BDEC %x, %d\n",g_BP.BP,g_BP.FP);
 
-	while( !getBits8((u8*)&bit8, 0) )
-		so_resume();
-	if (bit8==0) ipuRegs->ctrl.SCD = 1;
-	
-	while(!getBits32((u8*)&ipuRegs->top, 0))
-	{
-		so_resume();
-	}
-	BigEndian(ipuRegs->top, ipuRegs->top);
+	waitForSCD();
+
+    if( ipuRegs->ctrl.SCD ) {
+        //SysPrintf("bdectop: %8.8x, bp = %x\n", ipuRegs->top, g_BP.BP);
+    }
 
 	*(int*)pdone = 1;
 	so_exit();

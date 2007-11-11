@@ -16,7 +16,6 @@
         
 // SuperVUExecuteProgram(u32 startpc, int vuindex)
 .globl SuperVUExecuteProgram
-        .type SuperVUExecuteProgram, @function
 SuperVUExecuteProgram:
 #ifdef __x86_64__
         mov %rax, [%rsp]
@@ -64,7 +63,6 @@ SuperVUExecuteProgram:
 
 
 .globl SuperVUEndProgram
-        .type SuperVUEndProgram, @function
 SuperVUEndProgram:
 		// restore cpu state
 		ldmxcsr g_sseMXCSR
@@ -100,7 +98,6 @@ SuperVUEndProgram:
 
 
 .globl svudispfn
-        .type svudispfn, @function
 svudispfn:
 #ifdef __x86_64__
         mov [g_curdebugvu], %rax

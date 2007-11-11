@@ -133,11 +133,12 @@ int main(int argc, char *argv[]) {
         else if( stricmp(token, "-nogui") == 0 ) {
             UseGui = 0;
         }
+        else if( stricmp(token, "-loadgs") == 0 ) {
+			g_pRunGSState = argv[i++];
+		}
+#ifdef PCSX2_DEVBUILD
 		else if( stricmp(token, "-image") == 0 ) {
 			g_TestRun.pimagename = argv[i++];
-		}
-		else if( stricmp(token, "-loadgs") == 0 ) {
-			g_pRunGSState = argv[i++];
 		}
 		else if( stricmp(token, "-log") == 0 ) {
 			g_TestRun.plogname = argv[i++];
@@ -149,11 +150,7 @@ int main(int argc, char *argv[]) {
 				sscanf(token, "%x", &varLog);
 			}
 		}
-		else if( stricmp(token, "-pad") == 0 ) {
-			token = argv[i++];
-			printf("-pad ignored\n");
-		}
-		else if( stricmp(token, "-frame") == 0 ) {
+        else if( stricmp(token, "-frame") == 0 ) {
 			token = argv[i++];
 			if( token != NULL ) {
 				g_TestRun.frame = atoi(token);
@@ -180,13 +177,18 @@ int main(int argc, char *argv[]) {
 			token = argv[i++];
 			g_TestRun.pspudll = token;
 		}
+        else if( stricmp(token, "-test") == 0 ) {
+            g_TestRun.enabled = 1;
+        }
+#endif
+		else if( stricmp(token, "-pad") == 0 ) {
+			token = argv[i++];
+			printf("-pad ignored\n");
+		}
 		else if( stricmp(token, "-loadgs") == 0 ) {
 			token = argv[i++];
 			g_pRunGSState = token;
 		}
-        else if( stricmp(token, "-test") == 0 ) {
-            g_TestRun.enabled = 1;
-        }
 		else {
             file = token;
             printf("opening file %s\n", file);

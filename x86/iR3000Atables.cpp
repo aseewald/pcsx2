@@ -26,11 +26,12 @@ extern "C" {
 #include <assert.h>
 #include <malloc.h>
 
+#include "PS2Etypes.h"
+
 #if defined(_WIN32)
 #include <windows.h>
 #endif
 
-#include "PS2Etypes.h"
 #include "System.h"
 #include "Memory.h"
 #include "Misc.h"
@@ -998,25 +999,28 @@ static void rpsxLW()
 	MOV32MtoR(X86ARG1, (uptr)&psxRegs.GPR.r[_Rs_]);
 	if (_Imm_) ADD32ItoR(X86ARG1, _Imm_);
 
+#ifndef TLB_DEBUG_MEM
 	TEST32ItoR(X86ARG1, 0x10000000);
 	j8Ptr[0] = JZ8(0);
+#endif
 
 	_callFunctionArg1((uptr)psxMemRead32, X86ARG1|MEM_X86TAG, 0);
 	if (_Rt_) {
 		MOV32RtoM((uptr)&psxRegs.GPR.r[_Rt_], EAX);
 	}
-
+#ifndef TLB_DEBUG_MEM
 	j8Ptr[1] = JMP8(0);
 	x86SetJ8(j8Ptr[0]);
 
 	// read from psM directly
-	AND32ItoR(X86ARG1, 0x0fffffff);
+	AND32ItoR(X86ARG1, 0x1fffff);
 	ADD32ItoR(X86ARG1, (uptr)psxM);
 
 	MOV32RmtoR( X86ARG1, X86ARG1 );
 	MOV32RtoM( (uptr)&psxRegs.GPR.r[_Rt_], X86ARG1);
 
 	x86SetJ8(j8Ptr[1]);
+#endif
 	PSX_DEL_CONST(_Rt_);
 }
 
@@ -1181,9 +1185,7 @@ void rpsxSRAV_(int info)
 PSXRECOMPILE_CONSTCODE0(SRAV);
 
 extern void rpsxSYSCALL();
-
-void rpsxBREAK() {
-}
+extern void rpsxBREAK();
 
 void rpsxMFHI()
 {

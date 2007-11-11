@@ -23,14 +23,11 @@
 #include <malloc.h>
 #include <assert.h>
 
-#include "DebugTools/Debug.h"
-#include "R5900.h"
-#include "iR5900.h"
-#include "VUmicro.h"
+#include "Common.h"
+#include "VU.h"
 #include "VUops.h"
-#include "VUflags.h"
+#include "VUmicro.h"
 #include "iVU1micro.h"
-
 #include "iVUzerorec.h"
 
 VURegs* g_pVU1;
@@ -43,7 +40,7 @@ extern PSMEMORYBLOCK s_psVuMem;
 #pragma warning(disable:4113)
 #endif
 
-#ifdef PCSX2_DEVBUILD
+#ifdef _DEBUG
 u32 vudump = 0;
 #endif
 

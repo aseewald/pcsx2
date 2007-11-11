@@ -52,7 +52,8 @@
 #define _Fs_ _Rd_
 #define _Fd_ _Sa_
 
-extern u32 g_minvals[4], g_maxvals[4];
+extern PCSX2_ALIGNED16_DECL(u32 g_minvals[4]);
+extern PCSX2_ALIGNED16_DECL(u32 g_maxvals[4]);
 
 ////////////////////////////////////////////////////
 void recMFC1(void) {
@@ -848,10 +849,18 @@ FPURECOMPILE_CONSTCODE(MUL_S, XMMINFO_WRITED|XMMINFO_READS|XMMINFO_READT);
 ////////////////////////////////////////////////////
 void recDIV_S_xmm(int info)
 {
-	int regd = recNonCommutativeOp(info, EEREC_D, 1);
-	SSE_MAXSS_M32_to_XMM(regd, (uptr)&g_minvals[0]);
-	SSE_MINSS_M32_to_XMM(regd, (uptr)&g_maxvals[0]);
+    int t0reg = _allocTempXMMreg(XMMT_FPS, -1);				
+    int regd = recNonCommutativeOp(info, EEREC_D, 1);
+//	SSE_MAXSS_M32_to_XMM(regd, (uptr)&g_minvals[0]);
+//	SSE_MINSS_M32_to_XMM(regd, (uptr)&g_maxvals[0]);
 
+    // katamari needs this
+    SSE_XORPS_XMM_to_XMM(t0reg, t0reg);
+	SSE_CMPORDSS_XMM_to_XMM(t0reg, regd);
+	SSE_ANDPS_XMM_to_XMM(regd, t0reg);
+
+    _freeXMMreg(t0reg);
+	
 //	_freeXMMreg(EEREC_D);
 //	MOV32MtoR(EAX, (uptr)&fpuRegs.fpr[_Fd_]);
 //	AND32ItoR(EAX, 0x7f800000);

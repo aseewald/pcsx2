@@ -74,8 +74,11 @@ BIOS
 #include <assert.h>
 
 extern u32 maxrecmem;
+extern int rdram_devices, rdram_sdevid;
 
+#ifndef __x86_64__
 extern void * memcpy_fast(void *dest, const void *src, size_t n);
+#endif
 
 //#define FULLTLB
 int MemMode = 0;		// 0 is Kernel Mode, 1 is Supervisor Mode, 2 is User Mode
@@ -655,7 +658,7 @@ eCleanupAndExit:
 
 void memShutdown()
 {
-	VIRTUAL_FREE(PS2MEM_BASE, 0x20000000);
+	VIRTUAL_FREE(PS2MEM_BASE, 0x40000000);
 	VIRTUAL_FREE(PS2MEM_PSX, 0x00800000);
 
 	PHYSICAL_FREE(PS2MEM_BASE, 0x02000000, s_psM);
@@ -1140,6 +1143,10 @@ hwread:
 			je hwsifpresetread
 			cmp ecx, 0x1000f240
 			je hwsifsyncread
+            cmp ecx, 0x1000f440
+			je hwmch_drd
+            cmp ecx, 0x1000f430
+			je hwmch_ricm
 			
 			cmp ecx, 0x10003000
 			jb hwdefread2
@@ -1155,16 +1162,17 @@ hwdefread2:
 			
 			// sif
 hwsifpresetread:
-			mov eax, 0
+			xor eax, eax
 			ret
 hwsifsyncread:
-			mov eax, dword ptr [0x1000F240+PS2MEM_BASE_]
+            mov eax, 0x1000F240
+			mov eax, dword ptr [eax+PS2MEM_BASE_]
 			or eax, 0xF0000102
 			ret
 		}
 		
 counterread:
-		{
+        {
 			static u32 mem, index;
 		
 			// counters
@@ -1190,6 +1198,53 @@ counterread:
 				ret
 			}
 		}
+
+hwmch_drd: // MCH_DRD
+        __asm {
+            mov eax, dword ptr [ecx+PS2MEM_BASE_-0x10]
+            shr eax, 6
+            test eax, 0xf
+            jz mch_drd_2
+hwmch_ricm:
+            xor eax, eax
+            ret
+
+mch_drd_2:
+            shr eax, 10
+            and eax, 0xfff
+            cmp eax, 0x21 // INIT
+            je mch_drd_init
+            cmp eax, 0x23 // CNFGA
+            je mch_drd_cnfga
+            cmp eax, 0x24 // CNFGB
+            je mch_drd_cnfgb
+            cmp eax, 0x40 // DEVID
+            je mch_drd_devid
+            xor eax, eax 
+            ret
+
+mch_drd_init:
+            mov edx, rdram_devices
+            xor eax, eax
+            cmp edx, rdram_sdevid
+            setg al
+            add rdram_sdevid, eax
+            imul eax, 0x1f
+            ret
+
+mch_drd_cnfga:
+            mov eax, 0x0D0D
+            ret
+
+mch_drd_cnfgb:
+            mov eax, 0x0090
+            ret
+
+mch_drd_devid:
+            mov eax, dword ptr [ecx+PS2MEM_BASE_-0x10]
+            and eax, 0x1f
+            ret
+        }
 	}
 
 psxhwread:
@@ -1388,7 +1443,7 @@ int recMemConstWrite8(u32 mem, int mmreg)
 				CALLFunc((u32)Cpu->ClearVU0);
 				ADD32ItoR(ESP, 8);
 			}
-			else if( mem >= 0x11008000 && mem < 0x1100c0000 ) {
+			else if( mem >= 0x11008000 && mem < 0x1100c000 ) {
 				PUSH32I(1);
 				PUSH32I(mem&0x3ff8);
 				CALLFunc((u32)Cpu->ClearVU1);
@@ -1411,6 +1466,9 @@ void recMemWrite16()   {
 
 	switch( mem>>16 ) {
 		case 0x1000: hwWrite16(mem, value); return;
+		case 0x1600:
+			//HACK: DEV9 VM crash fix
+			return;
 		case 0x1f80: psxHwWrite16(mem, value); return;
 		case 0x1200: gsWrite16(mem, value); return;
 		case 0x1f90:
@@ -1441,6 +1499,9 @@ int recMemConstWrite16(u32 mem, int mmreg)
 
 	switch( mem>>16 ) {
 		case 0x1000: hwConstWrite16(mem, mmreg); return 0;
+        case 0x1600:
+			//HACK: DEV9 VM crash fix
+			return 0;
 		case 0x1f80: psxHwConstWrite16(mem, mmreg); return 0;
 		case 0x1200: gsConstWrite16(mem, mmreg); return 0;
 		case 0x1f90:
@@ -1466,7 +1527,7 @@ int recMemConstWrite16(u32 mem, int mmreg)
 				CALLFunc((u32)Cpu->ClearVU0);
 				ADD32ItoR(ESP, 8);
 			}
-			else if( mem >= 0x11008000 && mem < 0x1100c0000 ) {
+			else if( mem >= 0x11008000 && mem < 0x1100c000 ) {
 				PUSH32I(1);
 				PUSH32I(mem&0x3ff8);
 				CALLFunc((u32)Cpu->ClearVU1);
@@ -1694,7 +1755,7 @@ int recMemConstWrite64(u32 mem, int mmreg)
 				CALLFunc((u32)Cpu->ClearVU0);
 				ADD32ItoR(ESP, 8);
 			}
-			else if( mem >= 0x11008000 && mem < 0x1100c0000 ) {
+			else if( mem >= 0x11008000 && mem < 0x1100c000 ) {
 				PUSH32I(2);
 				PUSH32I(mem&0x3ff8);
 				CALLFunc((u32)Cpu->ClearVU1);
@@ -1830,7 +1891,7 @@ int recMemConstWrite128(u32 mem, int mmreg)
 				CALLFunc((u32)Cpu->ClearVU0);
 				ADD32ItoR(ESP, 8);
 			}
-			else if( mem >= 0x11008000 && mem < 0x1100c0000 ) {
+			else if( mem >= 0x11008000 && mem < 0x1100c000 ) {
 				PUSH32I(4);
 				PUSH32I(mem&0x3ff8);
 				CALLFunc((u32)Cpu->ClearVU1);
@@ -2288,6 +2349,14 @@ uptr *memLUTWK;
 uptr *memLUTRU;
 uptr *memLUTWU;
 
+#define CHECK_MEM(mem) //MyMemCheck(mem)
+
+void MyMemCheck(u32 mem)
+{
+    if( mem == 0x1c02f2a0 )
+        SysPrintf("yo\n");
+}
+
 /////////////////////////////
 // REGULAR MEM START 
 /////////////////////////////
@@ -2707,6 +2776,8 @@ int  memRead16RU(u32 mem, u64 *out)  {
 int memRead32(u32 mem, u32 *out)  {
 	char *p;
 
+    CHECK_MEM(mem);
+
 	p = (char *)(memLUTR[mem >> 12]);
 	if ((uptr)p > 0x10) {
 #ifdef ENABLECACHE
@@ -2746,6 +2817,8 @@ int memRead32(u32 mem, u32 *out)  {
 int  memRead32RS(u32 mem, u64 *out)  {
 	char *p;
 
+    CHECK_MEM(mem);
+
 	p = (char *)(memLUTR[mem >> 12]);
 	if ((uptr)p > 0x10) {
 #ifdef ENABLECACHE
@@ -2783,6 +2856,8 @@ int  memRead32RS(u32 mem, u64 *out)  {
 
 int  memRead32RU(u32 mem, u64 *out)  {
 	char *p;
+
+    CHECK_MEM(mem);
 
 	p = (char *)(memLUTR[mem >> 12]);
 	if ((uptr)p > 0x10) {
@@ -2822,6 +2897,8 @@ int  memRead32RU(u32 mem, u64 *out)  {
 int  memRead64(u32 mem, u64 *out)  {
 	char *p;
 
+    CHECK_MEM(mem);
+
 	p = (char *)(memLUTR[mem >> 12]);
 	if ((uptr)p > 0x10) {
 #ifdef ENABLECACHE
@@ -2853,6 +2930,8 @@ int  memRead64(u32 mem, u64 *out)  {
 
 int  memRead128(u32 mem, u64 *out)  {
 	char *p;
+
+    CHECK_MEM(mem);
 
 	p = (char *)(memLUTR[mem >> 12]);
 	if ((uptr)p > 0x10) {
@@ -2887,6 +2966,13 @@ int  memRead128(u32 mem, u64 *out)  {
 	return -1;
 }
 
+#define CHECK_VUMEM() { \
+    if( mem >= 0x11000000 && mem < 0x11004000 ) \
+        Cpu->ClearVU0(mem&0x3ff8, 4); \
+    else if( mem >= 0x1108000 && mem < 0x1100c000 ) \
+        Cpu->ClearVU1(mem&0x3ff8, 4); \
+}
+		
 void memWrite8 (u32 mem, u8  value)   {
 	char *p;
 
@@ -2898,8 +2984,10 @@ void memWrite8 (u32 mem, u8  value)   {
 			return;
 		}
 #endif
-		*(u8 *)(p + (mem & 0xfff)) = value;
+
+        *(u8 *)(p + (mem & 0xfff)) = value;
 		if (CHECK_EEREC) {
+            CHECK_VUMEM();
 			REC_CLEARM(mem&(~3));
 //			PSXREC_CLEARM(mem & 0x1ffffc);
 		}
@@ -2941,6 +3029,7 @@ void memWrite16(u32 mem, u16 value) {
 #endif
 		*(u16*)(p + (mem & 0xfff)) = value;
 		if (CHECK_EEREC) {
+            CHECK_VUMEM();
 			REC_CLEARM(mem&~1);
 			//PSXREC_CLEARM(mem & 0x1ffffe);
 		}
@@ -2988,6 +3077,7 @@ void memWrite32(u32 mem, u32 value)
 #endif
 		*(u32*)(p + (mem & 0xfff)) = value;
 		if (CHECK_EEREC) {
+            CHECK_VUMEM();
 			REC_CLEARM(mem);
 //			PSXREC_CLEARM(mem & 0x1fffff);
 		}
@@ -3032,6 +3122,7 @@ void memWrite64(u32 mem, u64 value)   {
 			);*/
 		*(u64*)(p + (mem & 0xfff)) = value;
 		if (CHECK_EEREC) {
+            CHECK_VUMEM();
 			REC_CLEARM(mem);
 			REC_CLEARM(mem+4);
 		}
@@ -3068,6 +3159,7 @@ void memWrite128(u32 mem, u64 *value) {
 		((u64*)p)[0] = value[0];
 		((u64*)p)[1] = value[1];
 		if (CHECK_EEREC) {
+            CHECK_VUMEM();
 			REC_CLEARM(mem);
 			REC_CLEARM(mem+4);
 			REC_CLEARM(mem+8);

@@ -1,6 +1,7 @@
 ;; iR3000A.c assembly routines
 ;; zerofrog(@gmail.com)
 extern svudispfntemp:near
+extern QueryPerformanceCounter:near
 extern s_TotalVUCycles:abs
 extern s_callstack:ptr
 extern s_vu1esp:abs
@@ -12,10 +13,25 @@ extern SuperVUCleanupProgram:near
 extern g_sseVUMXCSR:abs
 extern g_sseMXCSR:abs
 
+extern svubase:abs
+
 .code
    
 ;; SuperVUExecuteProgram(u32 startpc, int vuindex)
 SuperVUExecuteProgram proc public
+
+		;; uncomment only if SUPERVU_COUNT is defined
+		;; {
+		;push rcx
+		;push rdx
+		;mov rcx, svubase
+		;sub rsp,32
+		;call QueryPerformanceCounter
+		;add rsp,32
+		;pop rdx
+		;pop rcx
+		;; }
+		
         mov rax, [rsp]
         mov dword ptr [s_TotalVUCycles], 0
 

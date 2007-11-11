@@ -20,7 +20,7 @@
 #define __PSXSIO2_H__
 
 
-#define BUFSIZE	1024
+#define BUFSIZE	8448
 
 //from sio2man.c
 
@@ -65,6 +65,7 @@ typedef struct {
 sio2Struct sio2;
 
 void sio2Reset();
+
 u32  sio2_getRecv1();
 u32  sio2_getRecv2();
 u32  sio2_getRecv3();
@@ -84,6 +85,7 @@ u32  sio2_get8278();
 void sio2_set827C(u32 value);
 u32  sio2_get827C();
 
+void sio2_serialIn(u8 value);
 void sio2_fifoIn(u8 value);
 u8   sio2_fifoOut();
 

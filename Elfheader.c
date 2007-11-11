@@ -388,7 +388,11 @@ BOOL loadProgramHeaders( char *Exepath )
 					} else {
 						size = elfProgH[ i ].p_filesz;
 					}
-					memcpy(&PS2MEM_BASE[elfProgH[ i ].p_paddr & 0x1ffffff], 
+
+                    if( elfProgH[ i ].p_vaddr != elfProgH[ i ].p_paddr )
+                        SysPrintf("ElfProgram different load addrs: paddr=0x%8.8x, vaddr=0x%8.8x\n", elfProgH[ i ].p_paddr, elfProgH[ i ].p_vaddr);
+                    // used to be paddr
+					memcpy(&PS2MEM_BASE[elfProgH[ i ].p_vaddr & 0x1ffffff], 
 						   &elfdata[elfProgH[ i ].p_offset],
 						   size);
 #ifdef ELF_LOG  
@@ -643,6 +647,7 @@ int loadElfFile(char *filename) {
 
 #include "VU.h"
 extern int g_FFXHack;
+extern int path3hack;
 int g_VUGameFixes = 0;
 void LoadGameSpecificSettings()
 {
@@ -662,6 +667,10 @@ void LoadGameSpecificSettings()
         case 0xb99379b7: // erementar gerad (discolored chars)
             g_VUGameFixes |= VUFIX_XGKICKDELAY2;
             break;
+		case 0xa08c4057:  //Sprint Cars (SLUS)
+		case 0x8b0725d5:  //Flinstones Bedrock Racing (SLES)
+			path3hack = 1;
+			break;
 
         case 0x6a4efe60: // ffx(j)
 		case 0xA39517AB: // ffx(e)

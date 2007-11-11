@@ -32,8 +32,6 @@ void recResetVU0( void );
 
 void vu0Finish();
 
-extern VURegs VU0;
-
 extern char *recMemVU0;	/* VU0 blocks */
 extern char *recVU0;	   /* VU1 mem */
 extern char *recVU0mac;

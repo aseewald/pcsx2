@@ -21,7 +21,7 @@
 #include <string.h>
 
 #include "PsxCommon.h"
-
+#include "Misc.h"
 
 // used for constant propagation
 R3000Acpu *psxCpu;

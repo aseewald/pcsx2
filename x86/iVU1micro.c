@@ -39,8 +39,6 @@
 
 #include "iVUzerorec.h"
 
-// TODO: there's a bug in spyro start menu where release vurec works but debug vurec breaks
-
 #ifdef _WIN32
 #pragma warning(disable:4244)
 #pragma warning(disable:4761)
@@ -143,7 +141,7 @@ static void iDumpBlock()
 
 u32 g_VUProgramId = 0;
 
-#ifdef PCSX2_DEVBUILD
+#ifdef _DEBUG
 static u32 vuprogcount = 0;
 extern u32 vudump;
 #endif

@@ -88,7 +88,6 @@ int LoadConfig() {
 	
 	// cpu
 	GetValuel("Options", Config.Options);
-	GetValuel("SafeCnts", Config.SafeCnts);
 
 	GetValuel("Patch",      Config.Patch);
 
@@ -138,7 +137,6 @@ void SaveConfig() {
 	SetValue("FW",  Config.FW);
 	//cpu
 	SetValuel("Options",        Config.Options);
-	SetValuel("SafeCnts", Config.SafeCnts);
 	// misc
 	SetValuel("Patch",      Config.Patch);
 

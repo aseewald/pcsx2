@@ -108,6 +108,8 @@ void _SPR0interleave() {
 	int tqwc = (psHu32(DMAC_SQWC) >> 16) & 0xff;
 	int cycles = 0;
 	u32 *pMem;
+
+	if(tqwc == 0) tqwc = qwc;
 	//SysPrintf("dmaSPR0 interleave\n");
 #ifdef SPR_LOG
 		SPR_LOG("SPR0 interleave size=%d, tqwc=%d, sqwc=%d, addr=%lx sadr=%lx\n",
@@ -240,7 +242,7 @@ void dmaSPR0() { // fromSPR
 	if ((psHu32(DMAC_CTRL) & 0xC) == 0xC) { // GIF MFIFO
 		spr0->madr = psHu32(DMAC_RBOR) + (spr0->madr & psHu32(DMAC_RBSR));
 		//SysPrintf("mfifoGIFtransfer %x madr %x, tadr %x\n", gif->chcr, gif->madr, gif->tadr);
-		if(gif->chcr & 0x100)mfifoGIFtransfer(qwc);
+		mfifoGIFtransfer(qwc);
 	} else
 	if ((psHu32(DMAC_CTRL) & 0xC) == 0x8) { // VIF1 MFIFO
 		spr0->madr = psHu32(DMAC_RBOR) + (spr0->madr & psHu32(DMAC_RBSR));
@@ -295,8 +297,7 @@ void _SPR1interleave() {
 	int tqwc = (psHu32(DMAC_SQWC) >> 16) & 0xff;
 	int cycles = 0;
 	u32 *pMem;
-	tqwc = tqwc ? tqwc : 256;
-	sqwc = sqwc ? sqwc : 256;
+	if(tqwc == 0) tqwc = qwc;
 
 #ifdef SPR_LOG
 		SPR_LOG("SPR1 interleave size=%d, tqwc=%d, sqwc=%d, addr=%lx sadr=%lx\n",
@@ -331,6 +332,7 @@ void dmaSPR1() { // toSPR
 	if ((spr1->chcr & 0xc) == 0x8) { // Interleave Mode
 		_SPR1interleave();
 		FreezeMMXRegs(0);
+		FreezeXMMRegs(0)
 		return;
 	}
 
@@ -340,6 +342,7 @@ void dmaSPR1() { // toSPR
 		SPR1chain();
 		INT(9, cycles);
 		FreezeMMXRegs(0);
+		FreezeXMMRegs(0)
 		return;
 	}
 
@@ -392,6 +395,7 @@ void dmaSPR1() { // toSPR
 	
 	INT(9, cycles);
 	FreezeMMXRegs(0);
+	FreezeXMMRegs(0)
 }
 
 int SPRTOinterrupt()

@@ -1,6 +1,6 @@
-AC_INIT(pcsx2,0.9.3,zerofrog@gmail.com)
+AC_INIT(pcsx2,0.9.4,zerofrog@gmail.com)
 
-AM_INIT_AUTOMAKE(pcsx2,0.9.3)
+AM_INIT_AUTOMAKE(pcsx2,0.9.4)
 
 AC_PROG_CC([gcc g++ cl KCC CC cxx cc++ xlC aCC c++])
 AC_PROG_CXX([gcc g++ cl KCC CC cxx cc++ xlC aCC c++])
@@ -30,9 +30,9 @@ then
  MYOBJDIR="Debug"
 else
  AC_DEFINE(NDEBUG,1,[NDEBUG])
- CFLAGS+=" -O2 -fomit-frame-pointer "
- CPPFLAGS+=" -O2 -fomit-frame-pointer "
- CXXFLAGS+=" -O2 -fomit-frame-pointer "
+ CFLAGS+=" -O3 -fomit-frame-pointer "
+ CPPFLAGS+=" -O3 -fomit-frame-pointer "
+ CXXFLAGS+=" -O3 -fomit-frame-pointer "
  MYOBJDIR="Release"
 fi
 AC_MSG_RESULT($debug)
@@ -95,6 +95,7 @@ dnl fi
 if test "x$cpu64" == xyes
 then
 AC_DEFINE(__x86_64__,1,[__x86_64__])
+CCASFLAGS="$CCASFLAGS -D__x86_64__"
 fi
 AC_MSG_RESULT($cpu64)
 AM_CONDITIONAL(X86_64, test x$cpu64 = xyes)

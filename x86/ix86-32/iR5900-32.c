@@ -166,6 +166,9 @@ void iDumpBlock( int startpc, char * ptr )
 //	system( command );
 
 	f = fopen( filename, "w" );
+
+    if( disR5900GetSym(startpc) != NULL )
+        fprintf(f, "%s\n", disR5900GetSym(startpc));
 	for ( i = startpc; i < s_nEndBlock; i += 4 ) {
 		fprintf( f, "%s\n", disR5900Fasm( PSMu32( i ), i ) );
 	}
@@ -1113,7 +1116,8 @@ void eeRecompileCodeConst0(R5900FNPTR constcode, R5900FNPTR_INFO constscode, R59
 // rt = rs op imm16
 void eeRecompileCodeConst1(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode)
 {
-	if ( ! _Rt_ ) return;
+    if ( ! _Rt_ )
+        return;
 
 	// for now, don't support xmm
 	CHECK_SAVE_REG(_Rt_);
@@ -2227,6 +2231,8 @@ void StopPerfCounter()
 //	assert( !g_globalXMMSaved );
 //}
 
+#define EECYCLE_MULT 9/8
+
 static void iBranchTest(u32 newpc, u32 cpuBranch)
 {
 #ifdef PCSX2_DEVBUILD
@@ -2242,11 +2248,11 @@ static void iBranchTest(u32 newpc, u32 cpuBranch)
 
 	if( !USE_FAST_BRANCHES || cpuBranch ) {
 		MOV32MtoR(ECX, (int)&cpuRegs.cycle);
-		ADD32ItoR(ECX, s_nBlockCycles*9/8); // NOTE: mulitply cycles here, 6/5 ratio stops pal ffx from randomly crashing, but crashes jakI
+		ADD32ItoR(ECX, s_nBlockCycles*EECYCLE_MULT); // NOTE: mulitply cycles here, 6/5 ratio stops pal ffx from randomly crashing, but crashes jakI
 		MOV32RtoM((int)&cpuRegs.cycle, ECX); // update cycles
 	}
 	else {
-		ADD32ItoM((int)&cpuRegs.cycle, s_nBlockCycles*9/8);
+		ADD32ItoM((int)&cpuRegs.cycle, s_nBlockCycles*EECYCLE_MULT);
 		return;
 	}
 
@@ -2419,7 +2425,7 @@ void recMTSAH( void )
 	else {
 		_eeMoveGPRtoR(EAX, _Rs_);
 		AND32ItoR(EAX, 0x7);
-		XOR32RtoR(EAX, _Imm_&0x7);
+		XOR32ItoR(EAX, _Imm_&0x7);
 		SHL32ItoR(EAX, 4);
 		MOV32RtoM((u32)&cpuRegs.sa, EAX);
 	}
@@ -2652,7 +2658,7 @@ void recompileNextInstruction(int delayslot)
 //	_freeXMMregs();
 //	_freeMMXregs();
 //	_flushCachedRegs();
-//	g_cpuHasConstReg = 0;
+//	g_cpuHasConstReg = 1;
 }
 
 //__declspec(naked) void iDummyBlock()
@@ -2685,6 +2691,8 @@ extern u32 psxdump;
 extern u32 psxNextCounter, psxNextsCounter;
 extern void iDumpPsxRegisters(u32 startpc, u32 temp); 
 extern Counter counters[6];
+extern int rdram_devices;	// put 8 for TOOL and 2 for PS2 and PSX
+extern int rdram_sdevid;
 
 void iDumpRegisters(u32 startpc, u32 temp)
 {
@@ -2692,9 +2700,16 @@ void iDumpRegisters(u32 startpc, u32 temp)
 	char* pstr = temp ? "t" : "";
 	const u32 dmacs[] = {0x8000, 0x9000, 0xa000, 0xb000, 0xb400, 0xc000, 0xc400, 0xc800, 0xd000, 0xd400 };
 	extern char *disRNameGPR[];
+    char* psymb;
 	
-    __Log("%sreg: %x %x\n", pstr, startpc, cpuRegs.interrupt);
+    psymb = disR5900GetSym(startpc);
+
+    if( psymb != NULL )
+        __Log("%sreg(%s): %x %x c:%x\n", pstr, psymb, startpc, cpuRegs.interrupt, cpuRegs.cycle);
+    else
+        __Log("%sreg: %x %x c:%x\n", pstr, startpc, cpuRegs.interrupt, cpuRegs.cycle);
 	for(i = 1; i < 32; ++i) __Log("%s: %x_%x_%x_%x\n", disRNameGPR[i], cpuRegs.GPR.r[i].UL[3], cpuRegs.GPR.r[i].UL[2], cpuRegs.GPR.r[i].UL[1], cpuRegs.GPR.r[i].UL[0]);
+    //for(i = 0; i < 32; i+=4) __Log("cp%d: %x_%x_%x_%x\n", i, cpuRegs.CP0.r[i], cpuRegs.CP0.r[i+1], cpuRegs.CP0.r[i+2], cpuRegs.CP0.r[i+3]);
 	//for(i = 0; i < 32; ++i) __Log("%sf%d: %f %x\n", pstr, i, fpuRegs.fpr[i].f, fpuRegs.fprc[i]);
 	//for(i = 1; i < 32; ++i) __Log("%svf%d: %f %f %f %f, vi: %x\n", pstr, i, VU0.VF[i].F[3], VU0.VF[i].F[2], VU0.VF[i].F[1], VU0.VF[i].F[0], VU0.VI[i].UL);
 	for(i = 0; i < 32; ++i) __Log("%sf%d: %x %x\n", pstr, i, fpuRegs.fpr[i].UL, fpuRegs.fprc[i]);
@@ -2705,24 +2720,25 @@ void iDumpRegisters(u32 startpc, u32 temp)
 	__Log("%sCycle: %x %x, Count: %x\n", pstr, cpuRegs.cycle, g_nextBranchCycle, cpuRegs.CP0.n.Count);
 	iDumpPsxRegisters(psxRegs.pc, temp);
 
-	__Log("cyc11: %x %x; vu0: %x, vu1: %x\n", cpuRegs.sCycle[1], cpuRegs.eCycle[1], VU0.cycle, VU1.cycle);
+    //__Log("f410,30,40: %x %x %x, %d %d\n", psHu32(0xf410), psHu32(0xf430), psHu32(0xf440), rdram_sdevid, rdram_devices);
+//	__Log("cyc11: %x %x; vu0: %x, vu1: %x\n", cpuRegs.sCycle[1], cpuRegs.eCycle[1], VU0.cycle, VU1.cycle);
 
-	__Log("%scounters: %x %x; psx: %x %x\n", pstr, nextsCounter, nextCounter, psxNextsCounter, psxNextCounter);
-	for(i = 0; i < 4; ++i) {
-		__Log("eetimer%d: count: %x mode: %x target: %x %x; %x %x; %x %x %x %x\n", i,
-			counters[i].count, counters[i].mode, counters[i].target, counters[i].hold, counters[i].rate,
-			counters[i].interrupt, counters[i].Cycle, counters[i].sCycle, counters[i].CycleT, counters[i].sCycleT);
-	}
-	__Log("VIF0_STAT = %x, VIF1_STAT = %x\n", psHu32(0x3800), psHu32(0x3C00));
-	__Log("ipu %x %x %x %x; bp: %x %x %x %x\n", psHu32(0x2000), psHu32(0x2010), psHu32(0x2020), psHu32(0x2030), g_BP.BP, g_BP.bufferhasnew, g_BP.FP, g_BP.IFC);
-	__Log("gif: %x %x %x\n", psHu32(0x3000), psHu32(0x3010), psHu32(0x3020));
-	for(i = 0; i < ARRAYSIZE(dmacs); ++i) {
-		DMACh* p = (DMACh*)(PS2MEM_HW+dmacs[i]);
-		__Log("dma%d c%x m%x q%x t%x s%x\n", i, p->chcr, p->madr, p->qwc, p->tadr, p->sadr);
-	}
-	__Log("dmac %x %x %x %x\n", psHu32(DMAC_CTRL), psHu32(DMAC_STAT), psHu32(DMAC_RBSR), psHu32(DMAC_RBOR));
-	__Log("intc %x %x\n", psHu32(INTC_STAT), psHu32(INTC_MASK));
-	__Log("sif: %x %x %x %x %x\n", psHu32(0xf200), psHu32(0xf220), psHu32(0xf230), psHu32(0xf240), psHu32(0xf260));
+//	__Log("%scounters: %x %x; psx: %x %x\n", pstr, nextsCounter, nextCounter, psxNextsCounter, psxNextCounter);
+//	for(i = 0; i < 4; ++i) {
+//		__Log("eetimer%d: count: %x mode: %x target: %x %x; %x %x; %x %x %x %x\n", i,
+//			counters[i].count, counters[i].mode, counters[i].target, counters[i].hold, counters[i].rate,
+//			counters[i].interrupt, counters[i].Cycle, counters[i].sCycle, counters[i].CycleT, counters[i].sCycleT);
+//	}
+//	__Log("VIF0_STAT = %x, VIF1_STAT = %x\n", psHu32(0x3800), psHu32(0x3C00));
+//	__Log("ipu %x %x %x %x; bp: %x %x %x %x\n", psHu32(0x2000), psHu32(0x2010), psHu32(0x2020), psHu32(0x2030), g_BP.BP, g_BP.bufferhasnew, g_BP.FP, g_BP.IFC);
+//	__Log("gif: %x %x %x\n", psHu32(0x3000), psHu32(0x3010), psHu32(0x3020));
+//	for(i = 0; i < ARRAYSIZE(dmacs); ++i) {
+//		DMACh* p = (DMACh*)(PS2MEM_HW+dmacs[i]);
+//		__Log("dma%d c%x m%x q%x t%x s%x\n", i, p->chcr, p->madr, p->qwc, p->tadr, p->sadr);
+//	}
+//	__Log("dmac %x %x %x %x\n", psHu32(DMAC_CTRL), psHu32(DMAC_STAT), psHu32(DMAC_RBSR), psHu32(DMAC_RBOR));
+//	__Log("intc %x %x\n", psHu32(INTC_STAT), psHu32(INTC_MASK));
+//	__Log("sif: %x %x %x %x %x\n", psHu32(0xf200), psHu32(0xf220), psHu32(0xf230), psHu32(0xf240), psHu32(0xf260));
 }
 
 extern u32 psxdump;
@@ -2742,8 +2758,31 @@ static void printfn()
 	//assert( i = g_sseMXCSR );
 #endif
 
-    if( (dumplog&2) ) {//&& lastrec != g_lastpc ) {
+    // mgs3
+//    if( g_lastpc == 0x121b30 ) {
+//        __Log("found %x %x\n", cpuRegs.cycle, *(int*)0x1523d744);
+//    }
+    if( cpuRegs.cycle == 0x12c6e925 || cpuRegs.cycle == 0x115fc589) {//0x12c6e9ee) {//12c6b084 ) {
+//        FILE* tempf = fopen("temp260000.txt", "wb");
+//        fwrite((void*)0x15260000, 0x100000, 1, tempf);
+//        fclose(tempf);
+//        dumplog |= 2;
+    }
+//    if( cpuRegs.cycle >= 0x88ae0000 ) {
+////        FILE* tempf = fopen("tempbios.txt", "wb");
+////        fwrite(PSM(0), 0x80000, 1, tempf);
+////        fclose(tempf);
+//        varLog |= 0x7fffffff;
+//        dumplog |= 2;
+//        psxdump |= 2;
+//    }
 
+    // mgs3
+//    if( cpuRegs.cycle == 0x979b27e6 ) {//0x95ea2bee ) {
+//        dumplog |= 2;
+//    }
+
+    if( (dumplog&2) && g_lastpc != 0x81fc0 ) {//&& lastrec != g_lastpc ) {
 		curcount++;
 
 		if( curcount > skip ) {
@@ -3226,7 +3265,7 @@ StartRecomp:
 	else {
 		assert( branch != 3 );
 		if( branch ) assert( !willbranch3 );
-		else ADD32ItoM((int)&cpuRegs.cycle, s_nBlockCycles*9/8);
+		else ADD32ItoM((int)&cpuRegs.cycle, s_nBlockCycles*EECYCLE_MULT);
 
 		if( willbranch3 ) {
 			BASEBLOCK* pblock = PC_GETBLOCK(s_nEndBlock);

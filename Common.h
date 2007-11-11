@@ -26,6 +26,8 @@
 #include <zlib.h>
 #include <string.h>
 
+#include "PS2Etypes.h"
+
 #if defined(__x86_64__)
 #define DONT_USE_GETTEXT
 #endif
@@ -115,8 +117,6 @@ extern AppData gApp;
 
 #endif
 
-#include "PS2Etypes.h"
-
 typedef struct _TESTRUNARGS
 {
 	u8 enabled;
@@ -143,7 +143,6 @@ extern TESTRUNARGS g_TestRun;
 //#define PSXCLK	 9216000	/* 36.864 Mhz */
 //#define PSXCLK	186864000	/* 36.864 Mhz */
 #define PS2CLK 294912000	/* 294.912 mhz */
-#define PSXCLK	36864000	/* 36.864 Mhz */
 
 
 /* Config.PsxType == 1: PAL:
@@ -195,8 +194,9 @@ extern TESTRUNARGS g_TestRun;
 
 #include <pthread.h> // sync functions
 
-#include "R5900.h"
+#include "Plugins.h"
 #include "DebugTools/Debug.h"
+#include "R5900.h"
 #include "System.h"
 #include "Memory.h"
 #include "Elfheader.h"
@@ -222,7 +222,7 @@ int cdCaseopen;
 extern void __Log(char *fmt, ...);
 extern u16 logProtocol;
 extern u8  logSource;
-#define PCSX2_VERSION "0.9.3"
+#define PCSX2_VERSION "0.9.4"
 
 // C++ code for sqrtf
 void InitFPUOps();

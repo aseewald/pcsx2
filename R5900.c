@@ -216,7 +216,7 @@ void cpuException(u32 code, u32 bd) {
 }
 
 void cpuTlbMiss(u32 addr, u32 bd, u32 excode) {
-	SysPrintf("cpuTlbMiss %x, %x, status=%x, code=%x\n", cpuRegs.pc, cpuRegs.cycle, cpuRegs.CP0.n.Status.val, excode);
+    SysPrintf("cpuTlbMiss %x, %x, addr: %x, status=%x, code=%x\n", cpuRegs.pc, cpuRegs.cycle, addr, cpuRegs.CP0.n.Status.val, excode);
 	if (bd) {
 		SysPrintf("branch delay!!\n");
 	}
@@ -349,8 +349,8 @@ void _cpuTestInterrupts() {
 	TESTINT(2, gsInterrupt);
 	TESTINT(3, ipu0Interrupt);
 	TESTINT(4, ipu1Interrupt);
-	TESTINT(5, EEsif0Interrupt);
-	TESTINT(6, EEsif1Interrupt);
+	/*TESTINT(5, EEsif0Interrupt);
+	TESTINT(6, EEsif1Interrupt);*/
 	TESTINT(8, SPRFROMinterrupt);
 	TESTINT(9, SPRTOinterrupt);
 
@@ -391,6 +391,8 @@ extern u8 g_globalXMMSaved;
 X86_32CODE(extern u8 g_globalMMXSaved;)
 
 u32 loaded = 0;
+u32 g_MTGSVifStart = 0, g_MTGSVifCount=0;
+extern void gsWaitGS();
 
 void cpuBranchTest()
 {
@@ -401,7 +403,7 @@ void cpuBranchTest()
 
 //	if( !loaded && cpuRegs.cycle > 0x20000000 ) {
 //		char strstate[255];
-//		sprintf(strstate, "sstates/%8.8X.002", ElfCRC);
+//		sprintf(strstate, "sstates/%8.8X.000", ElfCRC);
 //		LoadState(strstate);
 //		loaded = 1;
 //	}
@@ -410,6 +412,14 @@ void cpuBranchTest()
 
 	if ((int)(cpuRegs.cycle - nextsCounter) >= nextCounter)
 		rcntUpdate();
+
+    // stall mtgs if it is taking too long
+    if( g_MTGSVifCount > 0 ) {
+        if( cpuRegs.cycle-g_MTGSVifStart > g_MTGSVifCount ) {
+            gsWaitGS();
+            g_MTGSVifCount = 0;
+        }
+    }
 
 	if (cpuRegs.interrupt)
 		_cpuTestInterrupts();
@@ -441,7 +451,7 @@ void cpuBranchTest()
 }
 
 static void _cpuTestINTC() {
-	if (cpuRegs.CP0.n.Status.val & 0x400 ){
+	if ((cpuRegs.CP0.n.Status.val & 0x10407) == 0x10401){
 		if	(psHu32(INTC_STAT) & psHu32(INTC_MASK)) {
 			if ((cpuRegs.interrupt & (1 << 30)) == 0) {
 				INT(30,4);
@@ -451,7 +461,7 @@ static void _cpuTestINTC() {
 }
 
 static void _cpuTestDMAC() {
-	if (cpuRegs.CP0.n.Status.val & 0x800 ){
+	if ((cpuRegs.CP0.n.Status.val & 0x10807) == 0x10801){
 		if	(psHu16(0xe012) & psHu16(0xe010) || 
 			 psHu16(0xe010) & 0x8000) {
 			if ( (cpuRegs.interrupt & (1 << 31)) == 0) {
@@ -462,22 +472,22 @@ static void _cpuTestDMAC() {
 }
 
 void cpuTestHwInts() {
-	if ((cpuRegs.CP0.n.Status.val & 0x10007) != 0x10001) return;
+	//if ((cpuRegs.CP0.n.Status.val & 0x10007) != 0x10001) return;
 	_cpuTestINTC();
 	_cpuTestDMAC();
 	_cpuTestTIMR();
 }
 
 void cpuTestINTCInts() {
-	if ((cpuRegs.CP0.n.Status.val & 0x10007) == 0x10001) {
+	//if ((cpuRegs.CP0.n.Status.val & 0x10407) == 0x10401) {
 		_cpuTestINTC();
-	}
+	//}
 }
 
 void cpuTestDMACInts() {
-	if ((cpuRegs.CP0.n.Status.val & 0x10007) == 0x10001) {
+	//if ((cpuRegs.CP0.n.Status.val & 0x10807) == 0x10801) {
 		_cpuTestDMAC();
-	}
+	//}
 }
 
 void cpuTestTIMRInts() {

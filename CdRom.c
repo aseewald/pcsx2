@@ -70,6 +70,9 @@ char *CmdName[0x100]= {
 	"CdlReset",   NULL,           "CDlReadToc", NULL
 };
 
+long LoadCdBios;
+int cdOpenCase;
+
 u8 Test04[] = { 0 };
 u8 Test05[] = { 0 };
 u8 Test20[] = { 0x98, 0x06, 0x10, 0xC3 };

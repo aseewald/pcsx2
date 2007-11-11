@@ -18,7 +18,6 @@
 #define REG_BLOCK %esi
 
 .globl Dispatcher
-	.type Dispatcher, @function
 Dispatcher:
 	# EDX contains the jump addr to modify
 	push %edx
@@ -68,7 +67,6 @@ Dispatcher_CallFn:
 	jmp REG_BLOCK
 
 .globl DispatcherClear
-	.type DispatcherClear, @function
 DispatcherClear:
 	// EDX contains the current pc
 	mov dword ptr [cpuRegs + PCOFFSET], %edx
@@ -124,7 +122,6 @@ DispatcherClear_Recompile:
 
 // called when jumping to variable pc address
 .globl DispatcherReg
-	.type DispatcherReg, @function
 DispatcherReg:
 
 	//s_pDispatchBlock = PC_GETBLOCK(cpuRegs.pc);
@@ -177,7 +174,6 @@ DispatcherReg_recomp:
 
 
 .globl _StartPerfCounter
-	.type _StartPerfCounter, @function
 _StartPerfCounter:
 
 	push %eax
@@ -194,7 +190,6 @@ _StartPerfCounter:
 	ret
 
 .globl _StopPerfCounter
-	.type _StopPerfCounter, @function
 _StopPerfCounter:
 
 	push %eax

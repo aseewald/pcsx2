@@ -57,7 +57,7 @@ void UpdateCP0Status() {
 	} else { // User Mode
 		memSetUserMode();
 	}
-	if ((cpuRegs.CP0.n.Status.val & 0x10007) == 0x10001)cpuTestHwInts();
+	cpuTestHwInts();
 }
 
 void WriteCP0Status(u32 value) {
@@ -100,6 +100,9 @@ void MFC0() {
 		    /*SysPrintf("MFC0 PCCR = %x PCR0 = %x PCR1 = %x IMM= %x\n", 
 		    cpuRegs.PERF.n.pccr, cpuRegs.PERF.n.pcr0, cpuRegs.PERF.n.pcr1, _Imm_ & 0x3F);*/
 		    break;
+		case 24: 
+			SysPrintf("MFC0 Breakpoint debug Registers code = %x\n", cpuRegs.code & 0x3FF);
+			break;
 		case 9:
 			// update
 			cpuRegs.CP0.n.Count += cpuRegs.cycle-s_iLastCOP0Cycle;
@@ -130,6 +133,9 @@ void MTC0() {
 				case 1: cpuRegs.PERF.n.pcr0 = cpuRegs.GPR.r[_Rt_].UL[0]; s_iLastPERFCycle[0] = cpuRegs.cycle; break;
 				case 3: cpuRegs.PERF.n.pcr1 = cpuRegs.GPR.r[_Rt_].UL[0]; s_iLastPERFCycle[1] = cpuRegs.cycle; break;
 			}
+			break;
+		case 24: 
+			SysPrintf("MTC0 Breakpoint debug Registers code = %x\n", cpuRegs.code & 0x3FF);
 			break;
 		case 12: WriteCP0Status(cpuRegs.GPR.r[_Rt_].UL[0]); break;
 		case 9: s_iLastCOP0Cycle = cpuRegs.cycle; cpuRegs.CP0.r[9] = cpuRegs.GPR.r[_Rt_].UL[0]; break;

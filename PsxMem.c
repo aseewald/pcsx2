@@ -23,6 +23,7 @@
 #include "PsxCommon.h"
 #include "VU.h"
 #include "iCore.h"
+#include "Hw.h"
 #include "iR3000A.h"
 
 extern u32 g_psxMaxRecMem;
@@ -191,6 +192,9 @@ void psxMemWrite16(u32 mem, u16 value)
 {
 	u32 t = (mem >> 16) & 0x1fff;
 	switch(t) {
+		case 0x1600:
+			//HACK: DEV9 VM crash fix
+			break;
 		case 0x1f80:
 			mem&= 0x1fffffff;
 			if (mem < 0x1f801000)
@@ -338,6 +342,18 @@ void psxMemWrite32(u32 mem, u32 value)
 #else
 
 // TLB functions
+
+#ifdef TLB_DEBUG_MEM
+void* PSXM(u32 mem)
+{
+    return (psxMemRLUT[(mem) >> 16] == 0 ? NULL : (void*)(psxMemRLUT[(mem) >> 16] + ((mem) & 0xffff)));
+}
+
+void* _PSXM(u32 mem)
+{
+    return ((void*)(psxMemRLUT[(mem) >> 16] + ((mem) & 0xffff)));
+}
+#endif
 
 s8 *psxM;
 s8 *psxP;

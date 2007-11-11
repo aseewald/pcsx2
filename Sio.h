@@ -41,6 +41,7 @@ typedef struct {
 	u32 lastsector;
 	u32 sector;
 	u32 k;
+	u32 count;
 } _sio;
 _sio sio;
 
@@ -78,10 +79,12 @@ void sioWrite8(unsigned char value);
 void sioWriteCtrl16(unsigned short value);
 int  sioInterrupt();
 int  sioFreeze(gzFile f, int Mode);
+void InitializeSIO(u8 value);
 
 FILE *LoadMcd(int mcd);
 void ReadMcd(int mcd, char *data, u32 adr, int size);
 void SaveMcd(int mcd, char *data, u32 adr, int size);
+void EraseMcd(int mcd, u32 adr);
 void CreateMcd(char *mcd);
 
 typedef struct {

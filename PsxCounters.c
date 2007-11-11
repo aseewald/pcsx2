@@ -126,6 +126,13 @@ void psxRcntInit() {
 		psxCounters[6].mode = 0x8;
 	} else cnts = 6;
 
+	if (USBasync != NULL) {
+		psxCounters[cnts].rate = 1;
+		psxCounters[cnts].CycleT = PSXCLK/1000;
+		psxCounters[cnts].mode = 0x8;
+		cnts ++;
+	}
+
 	for (i=0; i<3; i++)
 		psxCounters[i].sCycleT = psxRegs.cycle;
 	for (i=3; i<6; i++)
@@ -363,23 +370,36 @@ void _testRcnt32(int i) {
 
 void psxRcntUpdate() {
 	int i;
+	int q=6;
 	for (i=0; i<=5; i++) {
 		psxCounters[i].count += (psxRegs.cycle - psxCounters[i].sCycleT) / psxCounters[i].rate;
 		psxCounters[i].sCycleT = psxRegs.cycle - (psxRegs.cycle % psxCounters[i].rate);
 	}
-		_testRcnt16(0);
-		_testRcnt16(1);
-		_testRcnt16(2);
-		_testRcnt32(3);
-		_testRcnt32(4);
-		_testRcnt32(5);
 
+	_testRcnt16(0);
+	_testRcnt16(1);
+	_testRcnt16(2);
+	_testRcnt32(3);
+	_testRcnt32(4);
+	_testRcnt32(5);
+
+	if(SPU2async)
+	{
+		q=7;
 		if (cnts >= 7 && (psxRegs.cycle - psxCounters[6].sCycleT) >= psxCounters[6].CycleT) {
-		    SPU2async(psxRegs.cycle - psxCounters[6].sCycleT);//(u32)(psxRegs.cycle - psxNextsCounter));		
+			SPU2async(psxRegs.cycle - psxCounters[6].sCycleT);//(u32)(psxRegs.cycle - psxNextsCounter));		
 			psxCounters[6].sCycleT = psxRegs.cycle;
+		}
+	}
+	if(USBasync)
+	{
+		if (cnts > q && (psxRegs.cycle - psxCounters[q].sCycleT) >= psxCounters[q].CycleT) {
+			USBasync(psxRegs.cycle - psxCounters[q].sCycleT);//(u32)(psxRegs.cycle - psxNextsCounter));		
+			psxCounters[q].sCycleT = psxRegs.cycle;
+		}
 	}
 
-		psxRcntSet();
+	psxRcntSet();
 }
 
 void psxRcntWcount16(int index, u32 value) {

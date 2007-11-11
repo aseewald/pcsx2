@@ -20,7 +20,7 @@
 #include <string.h>
 
 #include "PsxCommon.h"
-//#include "PsxBios2.h"
+#include "Common.h"
 
 static int branch = 0;
 static int branch2 = 0;

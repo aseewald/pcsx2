@@ -472,6 +472,7 @@
 #define UNPACK_V2_32SSE_1A UNPACK_V2_32SSE_1
 
 // V2-16
+// due to lemmings, have to copy lower qword to the upper qword of every reg
 #define UNPACK_V2_16SSE_4A(CL, TOTALCL, MaskType, ModeType) \
 	punpcklwd XMM_R0, qword ptr [VIF_SRC]; \
 	punpckhwd XMM_R2, qword ptr [VIF_SRC]; \
@@ -479,8 +480,13 @@
 	UNPACK_RIGHTSHIFT XMM_R0, 16; \
 	UNPACK_RIGHTSHIFT XMM_R2, 16; \
 	\
-	pshufd XMM_R1, XMM_R0, 0xee; \
-	pshufd XMM_R3, XMM_R2, 0xee; \
+	punpckhqdq XMM_R1, XMM_R0; \
+	punpckhqdq XMM_R3, XMM_R2; \
+	\
+	punpcklqdq XMM_R0, XMM_R0; \
+	punpcklqdq XMM_R2, XMM_R2; \
+	punpckhqdq XMM_R1, XMM_R1; \
+	punpckhqdq XMM_R3, XMM_R3; \
 	\
 	UNPACK4_SSE(CL, TOTALCL, MaskType, ModeType); \
 	add VIF_SRC, 16; \
@@ -494,8 +500,13 @@
 	UNPACK_RIGHTSHIFT XMM_R0, 16; \
 	UNPACK_RIGHTSHIFT XMM_R2, 16; \
 	\
-	pshufd XMM_R1, XMM_R0, 0xee; \
-	pshufd XMM_R3, XMM_R2, 0xee; \
+	punpckhqdq XMM_R1, XMM_R0; \
+	punpckhqdq XMM_R3, XMM_R2; \
+	\
+	punpcklqdq XMM_R0, XMM_R0; \
+	punpcklqdq XMM_R2, XMM_R2; \
+	punpckhqdq XMM_R1, XMM_R1; \
+	punpckhqdq XMM_R3, XMM_R3; \
 	\
 	UNPACK4_SSE(CL, TOTALCL, MaskType, ModeType); \
 	\
@@ -508,7 +519,11 @@
 	UNPACK_RIGHTSHIFT XMM_R0, 16; \
 	UNPACK_RIGHTSHIFT XMM_R2, 16; \
 	\
-	pshufd XMM_R1, XMM_R0, 0xee; \
+	punpckhqdq XMM_R1, XMM_R0; \
+	\
+	punpcklqdq XMM_R0, XMM_R0; \
+	punpcklqdq XMM_R2, XMM_R2; \
+	punpckhqdq XMM_R1, XMM_R1; \
 	\
 	UNPACK3_SSE(CL, TOTALCL, MaskType, ModeType); \
 	\
@@ -523,7 +538,11 @@
 	UNPACK_RIGHTSHIFT XMM_R0, 16; \
 	UNPACK_RIGHTSHIFT XMM_R2, 16; \
 	\
-	pshufd XMM_R1, XMM_R0, 0xee; \
+	punpckhqdq XMM_R1, XMM_R0; \
+	\
+	punpcklqdq XMM_R0, XMM_R0; \
+	punpcklqdq XMM_R2, XMM_R2; \
+	punpckhqdq XMM_R1, XMM_R1; \
 	\
 	UNPACK3_SSE(CL, TOTALCL, MaskType, ModeType); \
 	\
@@ -533,7 +552,10 @@
 	punpcklwd XMM_R0, qword ptr [VIF_SRC]; \
 	UNPACK_RIGHTSHIFT XMM_R0, 16; \
 	\
-	pshufd XMM_R1, XMM_R0, 0xee; \
+	punpckhqdq XMM_R1, XMM_R0; \
+	\
+	punpcklqdq XMM_R0, XMM_R0; \
+	punpckhqdq XMM_R1, XMM_R1; \
 	\
 	UNPACK2_SSE(CL, TOTALCL, MaskType, ModeType); \
 	\
@@ -544,7 +566,10 @@
 	punpcklwd XMM_R0, XMM_R0; \
 	UNPACK_RIGHTSHIFT XMM_R0, 16; \
 	\
-	pshufd XMM_R1, XMM_R0, 0xee; \
+	punpckhqdq XMM_R1, XMM_R0; \
+	\
+	punpcklqdq XMM_R0, XMM_R0; \
+	punpckhqdq XMM_R1, XMM_R1; \
 	\
 	UNPACK2_SSE(CL, TOTALCL, MaskType, ModeType); \
 	\
@@ -553,6 +578,7 @@
 #define UNPACK_V2_16SSE_1A(CL, TOTALCL, MaskType, ModeType) \
 	punpcklwd XMM_R0, dword ptr [VIF_SRC]; \
 	UNPACK_RIGHTSHIFT XMM_R0, 16; \
+	punpcklqdq XMM_R0, XMM_R0; \
 	\
 	UNPACK1_SSE(CL, TOTALCL, MaskType, ModeType); \
 	\
@@ -562,12 +588,14 @@
 	movd XMM_R0, dword ptr [VIF_SRC]; \
 	punpcklwd XMM_R0, XMM_R0; \
 	UNPACK_RIGHTSHIFT XMM_R0, 16; \
+	punpcklqdq XMM_R0, XMM_R0; \
 	\
 	UNPACK1_SSE(CL, TOTALCL, MaskType, ModeType); \
 	\
 	add VIF_SRC, 4; \
 
 // V2-8
+// and1 streetball needs to copy lower qword to the upper qword of every reg
 #define UNPACK_V2_8SSE_4(CL, TOTALCL, MaskType, ModeType) \
 	movq XMM_R0, qword ptr [VIF_SRC]; \
 	\
@@ -578,8 +606,13 @@
 	UNPACK_RIGHTSHIFT XMM_R0, 24; \
 	UNPACK_RIGHTSHIFT XMM_R2, 24; \
 	\
-	pshufd XMM_R1, XMM_R0, 0xee; \
-	pshufd XMM_R3, XMM_R2, 0xee; \
+	punpckhqdq XMM_R1, XMM_R0; \
+	punpckhqdq XMM_R3, XMM_R2; \
+	\
+	punpcklqdq XMM_R0, XMM_R0; \
+	punpcklqdq XMM_R2, XMM_R2; \
+	punpckhqdq XMM_R1, XMM_R1; \
+	punpckhqdq XMM_R3, XMM_R3; \
 	\
 	UNPACK4_SSE(CL, TOTALCL, MaskType, ModeType); \
 	\
@@ -597,7 +630,11 @@
 	UNPACK_RIGHTSHIFT XMM_R0, 24; \
 	UNPACK_RIGHTSHIFT XMM_R2, 24; \
 	\
-	pshufd XMM_R1, XMM_R0, 0xee; \
+	punpckhqdq XMM_R1, XMM_R0; \
+	\
+	punpcklqdq XMM_R0, XMM_R0; \
+	punpcklqdq XMM_R2, XMM_R2; \
+	punpckhqdq XMM_R1, XMM_R1; \
 	\
 	UNPACK3_SSE(CL, TOTALCL, MaskType, ModeType); \
 	\
@@ -611,7 +648,10 @@
 	punpcklwd XMM_R0, XMM_R0; \
 	UNPACK_RIGHTSHIFT XMM_R0, 24; \
 	\
-	pshufd XMM_R1, XMM_R0, 0xee; \
+	punpckhqdq XMM_R1, XMM_R0; \
+	\
+	punpcklqdq XMM_R0, XMM_R0; \
+	punpckhqdq XMM_R1, XMM_R1; \
 	\
 	UNPACK2_SSE(CL, TOTALCL, MaskType, ModeType); \
 	\
@@ -624,6 +664,7 @@
 	punpcklbw XMM_R0, XMM_R0; \
 	punpcklwd XMM_R0, XMM_R0; \
 	UNPACK_RIGHTSHIFT XMM_R0, 24; \
+	punpcklqdq XMM_R0, XMM_R0; \
 	\
 	UNPACK1_SSE(CL, TOTALCL, MaskType, ModeType); \
 	\
@@ -1328,7 +1369,6 @@
 
 #define defUNPACK_SkippingWrite(name, MaskType, ModeType, qsize, sign, SAVE_ROW_REG) \
 .globl UNPACK_SkippingWrite_##name##_##sign##_##MaskType##_##ModeType; \
-	.type UNPACK_SkippingWrite_##name##_##sign##_##MaskType##_##ModeType, @function; \
 UNPACK_SkippingWrite_##name##_##sign##_##MaskType##_##ModeType: \
     INIT_ARGS(); \
     mov VIF_TMPADDR, _vifRegs; \

@@ -53,6 +53,9 @@ extern u8 g_RealGSMem[0x2000];
 #define GS_RINGTYPE_MEMWRITE16	8
 #define GS_RINGTYPE_MEMWRITE32	9
 #define GS_RINGTYPE_MEMWRITE64	10
+#define GS_RINGTYPE_SAVE 11
+#define GS_RINGTYPE_LOAD 12
+#define GS_RINGTYPE_RECORD 13
 
 // if returns NULL, don't copy (memory is preserved)
 u8* GSRingBufCopy(void* mem, u32 size, u32 type);
@@ -158,6 +161,7 @@ void  gsConstRead128(u32 mem, int xmmreg);
 void gsIrq();
 int  gsInterrupt();
 void dmaGIF();
+void GIFdma();
 void mfifoGIFtransfer(int qwc);
 int  gsFreeze(gzFile f, int Mode);
 int _GIFchain();

@@ -34,6 +34,8 @@ extern "C" {
 #include <assert.h>
 #include <malloc.h>
 
+#include "PS2Etypes.h"
+
 #if defined(_WIN32)
 #include <windows.h>
 #else
@@ -41,7 +43,6 @@ extern "C" {
 #include <sys/types.h>
 #endif
 
-#include "PS2Etypes.h"
 #include "System.h"
 #include "zlib.h"
 #include "Memory.h"
@@ -142,7 +143,10 @@ BASEBLOCKEX* PSX_GETBLOCKEX(BASEBLOCK* p)
 static void iDumpBlock( int startpc, char * ptr )
 {
 	FILE *f;
-	char filename[ 256 ], command[256];
+	char filename[ 256 ];
+#ifdef __LINUX__
+	char command[256];
+#endif
 	u32 i, j;
 	EEINST* pcur;
 	u8 used[34];
@@ -433,10 +437,23 @@ void psxRecompileCodeConst0(R3000AFNPTR constcode, R3000AFNPTR_INFO constscode, 
 	PSX_DEL_CONST(_Rd_);
 }
 
+extern "C" void zeroEx();
+
 // rt = rs op imm16
 void psxRecompileCodeConst1(R3000AFNPTR constcode, R3000AFNPTR_INFO noconstcode)
 {
-	if ( ! _Rt_ ) return;
+    if ( ! _Rt_ ) {
+#ifdef _DEBUG
+        if( (psxRegs.code>>26) == 9 ) {
+            //ADDIU, call bios
+            MOV32ItoM( (uptr)&psxRegs.code, psxRegs.code );
+	        MOV32ItoM( (uptr)&psxRegs.pc, psxpc );
+            _psxFlushCall(FLUSH_NODESTROY);
+            CALLFunc((uptr)zeroEx);
+        }
+#endif
+        return;
+    }
 
 	// for now, don't support xmm
 	PSX_CHECK_SAVE_REG(_Rt_);
@@ -594,8 +611,8 @@ static void R3000AExecute()
 #ifdef _DEBUG
 	u8* fnptr;
 	u32 oldesi;
-#else
-	R3000AFNPTR pfn;
+/*#else
+	R3000AFNPTR pfn;*/
 #endif
 
 	BASEBLOCK* pblock;
@@ -953,16 +970,17 @@ void psxSetBranchImm( u32 imm )
 }
 
 #define USE_FAST_BRANCHES 0
+#define PSXCYCLE_MULT 17/16
 
 static void iPsxBranchTest(u32 newpc, u32 cpuBranch)
 {
 	if( !USE_FAST_BRANCHES || cpuBranch ) {
 		MOV32MtoR(ECX, (uptr)&psxRegs.cycle);
-		ADD32ItoR(ECX, s_psxBlockCycles*17/16); // greater mult factor causes nfsmw to crash
+		ADD32ItoR(ECX, s_psxBlockCycles*PSXCYCLE_MULT); // greater mult factor causes nfsmw to crash
 		MOV32RtoM((uptr)&psxRegs.cycle, ECX); // update cycles
 	}
 	else {
-		ADD32ItoM((uptr)&psxRegs.cycle, s_psxBlockCycles*17/16);
+		ADD32ItoM((uptr)&psxRegs.cycle, s_psxBlockCycles*PSXCYCLE_MULT);
 		return;
 	}
 
@@ -1011,6 +1029,24 @@ void rpsxSYSCALL()
 	_psxFlushCall(FLUSH_NODESTROY);
 
 	_callFunctionArg2((uptr)psxException, MEM_CONSTTAG, MEM_CONSTTAG, 0x20, psxbranch==1);
+
+	CMP32ItoM((uptr)&psxRegs.pc, psxpc-4);
+	j8Ptr[0] = JE8(0);
+	ADD32ItoM((uptr)&psxRegs.cycle, s_psxBlockCycles);
+	JMP32((uptr)psxDispatcherReg - ( (uptr)x86Ptr + 5 ));
+	x86SetJ8(j8Ptr[0]);
+
+	//if (!psxbranch) psxbranch = 2;
+}
+
+extern "C" void psxBREAK();
+void rpsxBREAK()
+{
+	MOV32ItoM( (uptr)&psxRegs.code, psxRegs.code );
+	MOV32ItoM((uptr)&psxRegs.pc, psxpc - 4);
+	_psxFlushCall(FLUSH_NODESTROY);
+
+	_callFunctionArg2((uptr)psxBREAK, MEM_CONSTTAG, MEM_CONSTTAG, 0x24, psxbranch==1);
 
 	CMP32ItoM((uptr)&psxRegs.pc, psxpc-4);
 	j8Ptr[0] = JE8(0);
@@ -1130,17 +1166,20 @@ static void recExecuteBlock() {
 	R3000AExecute();
 }
 
+#include "PsxHw.h"
+
 extern "C"
 void iDumpPsxRegisters(u32 startpc, u32 temp)
 {
 	int i;
 	const char* pstr = temp ? "t" : "";
 
-	__Log("%spsxreg: %x %x\n", pstr, startpc, *(u32*)PSXM(0x6cc14));
-	for(i = 0; i < 34; i+=2) __Log("%spsx%d: %x %x\n", pstr, i, psxRegs.GPR.r[i], psxRegs.GPR.r[i+1]);
+    __Log("%spsxreg: %x %x ra:%x k0: %x %x\n", pstr, startpc, psxRegs.cycle, psxRegs.GPR.n.ra, psxRegs.GPR.n.k0, *(int*)PSXM(0x13c128));
+    for(i = 0; i < 34; i+=2) __Log("%spsx%s: %x %x\n", pstr, disRNameGPR[i], psxRegs.GPR.r[i], psxRegs.GPR.r[i+1]);
 	__Log("%scycle: %x %x %x %x; counters %x %x\n", pstr, psxRegs.cycle, g_psxNextBranchCycle, EEsCycle, IOPoCycle,
 		(uptr)psxNextsCounter, (uptr)psxNextCounter);
 
+    __Log("psxdma%d c%x b%x m%x t%x\n", 9, HW_DMA9_CHCR, HW_DMA9_BCR, HW_DMA9_MADR, HW_DMA9_TADR);
 	for(i = 0; i < 7; ++i) __Log("%scounter%d: %x %x %x\n", pstr, i, psxCounters[i].count, psxCounters[i].rate, psxCounters[i].sCycleT);
 //	for(i = 0; i < 32; ++i) {
 //		__Log("int%d: %x %x\n", i, psxRegs.sCycle[i], psxRegs.eCycle[i]);
@@ -1155,7 +1194,20 @@ static void printfn()
 	static int curcount = 0;
 	const int skip = 0;
 
-    if( (psxdump&2) ) {//&& lastrec != g_psxlastpc ) {
+    //*(int*)PSXM(0x27990) = 1; // enables cdvd bios output for scph10000
+
+    if( psxRegs.cycle == 0x113a1be5 ) {
+//        FILE* tempf = fopen("tempdmciop.txt", "wb");
+//        fwrite(PSXM(0), 0x200000, 1, tempf);
+//        fclose(tempf);
+        //psxdump |= 2;
+    }
+
+//    if( psxRegs.cycle == 0x114152d8 ) {
+//        psxRegs.GPR.n.s0 = 0x55000;
+//    }
+
+    if( (psxdump&2) && lastrec != g_psxlastpc ) {
 		curcount++;
 
 		if( curcount > skip ) {
@@ -1224,7 +1276,7 @@ void psxRecRecompile(u32 startpc)
 	x86Align(16);
 	recPtr = x86Ptr;
 
-	psxbranch = 0;
+    psxbranch = 0;
 
 	s_pCurBlock->startpc = startpc;
 	s_pCurBlock->pFnptr = (u32)(uptr)x86Ptr;
@@ -1364,7 +1416,7 @@ StartRecomp:
 	if( (psxdump & 1) )
 		iDumpBlock(startpc, recPtr);
 #endif
-
+	
 	g_pCurInstInfo = s_pInstCache;
 	while (!psxbranch && psxpc < s_nEndBlock) {
 		psxRecompileNextInstruction(0);
@@ -1405,7 +1457,7 @@ StartRecomp:
 	else {
 		assert( psxbranch != 3 );
 		if( psxbranch ) assert( !willbranch3 );
-		else ADD32ItoM((uptr)&psxRegs.cycle, s_psxBlockCycles*17/16);
+		else ADD32ItoM((uptr)&psxRegs.cycle, s_psxBlockCycles*PSXCYCLE_MULT);
 
 		if( willbranch3 ) {
 			BASEBLOCK* pblock = PSX_GETBLOCK(s_nEndBlock);

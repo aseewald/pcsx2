@@ -16,7 +16,6 @@
 #define RESTORE_OFFSET 72
 
 .globl so_call
-        .type so_call, @function
 so_call:
         test dword ptr [%rdi+RESTORE_OFFSET], 1
         jnz so_call_RestoreRegs
@@ -62,7 +61,6 @@ so_call_CallFn:
         jmp %rax
 
 .globl so_resume
-        .type so_resume, @function
 so_resume:
         mov %rdi, [g_pCurrentRoutine]
         mov %rax, [%rdi+RBP_OFFSET]
@@ -97,7 +95,6 @@ so_resume:
         ret
 
 .globl so_exit
-        .type so_exit, @function
 so_exit:
         mov %rdi, [g_pCurrentRoutine]
         mov %rsp, [%rdi+STACK_OFFSET]
@@ -111,7 +108,6 @@ so_exit:
 #else
 
 .globl so_call
-        .type so_call, @function
 so_call:
 		mov %eax, dword ptr [%esp+4]
         test dword ptr [%eax+24], 1
@@ -146,7 +142,6 @@ CallFn:
         jmp dword ptr [%eax]
 
 .globl so_resume
-        .type so_resume, @function
 so_resume:
 		mov %eax, [g_pCurrentRoutine]
         mov %ecx, [%eax+8]
@@ -174,7 +169,6 @@ so_resume:
         ret
 
 .globl so_exit
-        .type so_exit, @function
 so_exit:
 		mov %eax, [g_pCurrentRoutine]
         mov %esp, [%eax+4]

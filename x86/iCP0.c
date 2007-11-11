@@ -82,12 +82,12 @@ void recMFC0( void )
 	if ( ! _Rt_ ) return;
 
 	if( _Rd_ == 9 ) {
-		MOV32MtoR( EAX, (uptr)&cpuRegs.CP0.r[ _Rd_ ] );
-		MOV32MtoR(ECX, (uptr)&cpuRegs.cycle);
-		ADD32RtoR(EAX, ECX);
+        MOV32MtoR(ECX, (uptr)&cpuRegs.cycle);
+        MOV32RtoR(EAX,ECX);
 		SUB32MtoR(EAX, (uptr)&s_iLastCOP0Cycle);
+        ADD32RtoM((uptr)&cpuRegs.CP0.n.Count, EAX);
 		MOV32RtoM((uptr)&s_iLastCOP0Cycle, ECX);
-		MOV32RtoM((uptr)&cpuRegs.CP0.r[ _Rd_ ], EAX);
+        MOV32MtoR( EAX, (uptr)&cpuRegs.CP0.r[ _Rd_ ] );
 		
 		_deleteEEreg(_Rt_, 0);
 		MOV32RtoM((uptr)&cpuRegs.GPR.r[_Rt_].UL[0],EAX);
@@ -103,54 +103,65 @@ void recMFC0( void )
 		
 		_deleteEEreg(_Rt_, 0);
 		switch(_Imm_ & 0x3F){
-				case 0:
-					MOV32MtoR(EAX, (uptr)&cpuRegs.PERF.n.pccr); break;
-				case 1:
-					// check if needs to be incremented
-					MOV32MtoR(ECX, (uptr)&cpuRegs.PERF.n.pccr);
-					MOV32MtoR(EAX, (uptr)&cpuRegs.PERF.n.pcr0);
-					AND32ItoR(ECX, 0x800003E0);
+			case 0:
+				MOV32MtoR(EAX, (uptr)&cpuRegs.PERF.n.pccr);
 
-					CMP32ItoR(ECX, 0x80000020);
-					j8Ptr[0] = JNE8(0);
-					
-					MOV32MtoR(EDX, (uptr)&cpuRegs.cycle);
-					SUB32MtoR(EAX, (uptr)&s_iLastPERFCycle[0]);
-					ADD32RtoR(EAX, EDX);
-					MOV32RtoM((uptr)&s_iLastPERFCycle[0], EDX);
-					MOV32RtoM((uptr)&cpuRegs.PERF.n.pcr0, EAX);
+                break;
+			case 1:
+				// check if needs to be incremented
+				MOV32MtoR(ECX, (uptr)&cpuRegs.PERF.n.pccr);
+				MOV32MtoR(EAX, (uptr)&cpuRegs.PERF.n.pcr0);
+				AND32ItoR(ECX, 0x800003E0);
 
-					x86SetJ8(j8Ptr[0]);
-					break;
-				case 3:
-					// check if needs to be incremented
-					MOV32MtoR(ECX, (uptr)&cpuRegs.PERF.n.pccr);
-					MOV32MtoR(EAX, (uptr)&cpuRegs.PERF.n.pcr1);
-					AND32ItoR(ECX, 0x800F8000);
+				CMP32ItoR(ECX, 0x80000020);
+				j8Ptr[0] = JNE8(0);
+				
+				MOV32MtoR(EDX, (uptr)&cpuRegs.cycle);
+				SUB32MtoR(EAX, (uptr)&s_iLastPERFCycle[0]);
+				ADD32RtoR(EAX, EDX);
+				MOV32RtoM((uptr)&s_iLastPERFCycle[0], EDX);
+				MOV32RtoM((uptr)&cpuRegs.PERF.n.pcr0, EAX);
 
-					CMP32ItoR(ECX, 0x80008000);
-					j8Ptr[0] = JNE8(0);
-					
-					MOV32MtoR(EDX, (uptr)&cpuRegs.cycle);
-					SUB32MtoR(EAX, (uptr)&s_iLastPERFCycle[1]);
-					ADD32RtoR(EAX, EDX);
-					MOV32RtoM((uptr)&s_iLastPERFCycle[1], EDX);
-					MOV32RtoM((uptr)&cpuRegs.PERF.n.pcr1, EAX);
+				x86SetJ8(j8Ptr[0]);
+				break;
+			case 3:
+				// check if needs to be incremented
+				MOV32MtoR(ECX, (uptr)&cpuRegs.PERF.n.pccr);
+				MOV32MtoR(EAX, (uptr)&cpuRegs.PERF.n.pcr1);
+				AND32ItoR(ECX, 0x800F8000);
 
-					x86SetJ8(j8Ptr[0]);
-					
-					break;
-			}
-			
-		MOV32RtoM( (uptr)&cpuRegs.CP0.r[ _Rt_ ], EAX );
-		
+				CMP32ItoR(ECX, 0x80008000);
+				j8Ptr[0] = JNE8(0);
+				
+				MOV32MtoR(EDX, (uptr)&cpuRegs.cycle);
+				SUB32MtoR(EAX, (uptr)&s_iLastPERFCycle[1]);
+				ADD32RtoR(EAX, EDX);
+				MOV32RtoM((uptr)&s_iLastPERFCycle[1], EDX);
+				MOV32RtoM((uptr)&cpuRegs.PERF.n.pcr1, EAX);
+
+				x86SetJ8(j8Ptr[0]);
+				
+				break;
+		}
+	
+        MOV32RtoM((uptr)&cpuRegs.GPR.r[_Rt_].UL[0],EAX);
+
+		if(EEINST_ISLIVE1(_Rt_)) {
+			CDQ();
+			MOV32RtoM((uptr)&cpuRegs.GPR.r[_Rt_].UL[1], EDX);
+		}
+		else EEINST_RESETHASLIVE1(_Rt_);
+
 #ifdef PCSX2_DEVBUILD
 		SysPrintf("MFC0 PCCR = %x PCR0 = %x PCR1 = %x IMM= %x\n", 
 				cpuRegs.PERF.n.pccr, cpuRegs.PERF.n.pcr0, cpuRegs.PERF.n.pcr1, _Imm_ & 0x3F);
 #endif
 		return;
 	}
-
+	else if( _Rd_ == 24){
+		SysPrintf("MFC0 Breakpoint debug Registers code = %x\n", cpuRegs.code & 0x3FF);
+        return;
+	}
 	_eeOnWriteReg(_Rt_, 1);
 
 	if( EEINST_ISLIVE1(_Rt_) ) {
@@ -263,6 +274,9 @@ void recMTC0()
 						break;
 				}
 				break;
+			case 24: 
+				SysPrintf("MTC0 Breakpoint debug Registers code = %x\n", cpuRegs.code & 0x3FF);
+				break;
 			default:
 				MOV32ItoM((uptr)&cpuRegs.CP0.r[_Rd_], g_cpuConstRegs[_Rt_].UL[0]);
 				break;
@@ -303,6 +317,9 @@ void recMTC0()
 						MOV32RtoM((uptr)&s_iLastPERFCycle[1], ECX);
 						break;
 				}
+				break;
+			case 24: 
+				SysPrintf("MTC0 Breakpoint debug Registers code = %x\n", cpuRegs.code & 0x3FF);
 				break;
 			default:
 				_eeMoveGPRtoM((uptr)&cpuRegs.CP0.r[_Rd_], _Rt_);

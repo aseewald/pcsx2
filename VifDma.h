@@ -38,7 +38,7 @@ typedef struct {
 	u8 vifstalled;
 	u8 stallontag;
 	u8 irqoffset; // 32bit offset where next vif code is
-	u32 savedtag;
+    u32 savedtag; // need this for backwards compat with save states
 } vifStruct;
 
 extern vifStruct vif0, vif1;
@@ -46,60 +46,39 @@ extern vifStruct vif0, vif1;
 #define vif0ch ((DMACh*)&PS2MEM_HW[0x8000])
 #define vif1ch ((DMACh*)&PS2MEM_HW[0x9000])
 
-void UNPACK_S_32( u32 *dest, u32 *data );
-int  UNPACK_S_32part( u32 *dest, u32 *data, int size );
+void UNPACK_S_32( u32 *dest, u32 *data, int size );
 
-void UNPACK_S_16u( u32 *dest, u32 *data );
-int  UNPACK_S_16upart( u32 *dest, u32 *data, int size );
-void UNPACK_S_16s( u32 *dest, u32 *data );
-int  UNPACK_S_16spart( u32 *dest, u32 *data, int size );
+void UNPACK_S_16u( u32 *dest, u32 *data, int size );
+void UNPACK_S_16s( u32 *dest, u32 *data, int size );
 
-void UNPACK_S_8u( u32 *dest, u32 *data );
-int  UNPACK_S_8upart( u32 *dest, u32 *data, int size );
-void UNPACK_S_8s( u32 *dest, u32 *data );
-int  UNPACK_S_8spart( u32 *dest, u32 *data, int size );
+void UNPACK_S_8u( u32 *dest, u32 *data, int size );
+void UNPACK_S_8s( u32 *dest, u32 *data, int size );
 
-void UNPACK_V2_32( u32 *dest, u32 *data );
-int  UNPACK_V2_32part( u32 *dest, u32 *data, int size );
+void UNPACK_V2_32( u32 *dest, u32 *data, int size );
 
-void UNPACK_V2_16u( u32 *dest, u32 *data );
-int  UNPACK_V2_16upart( u32 *dest, u32 *data, int size );
-void UNPACK_V2_16s( u32 *dest, u32 *data );
-int  UNPACK_V2_16spart( u32 *dest, u32 *data, int size );
+void UNPACK_V2_16u( u32 *dest, u32 *data, int size );
+void UNPACK_V2_16s( u32 *dest, u32 *data, int size );
 
-void UNPACK_V2_8u( u32 *dest, u32 *data );
-int  UNPACK_V2_8upart( u32 *dest, u32 *data, int size );
-void UNPACK_V2_8s( u32 *dest, u32 *data );
-int  UNPACK_V2_8spart( u32 *dest, u32 *data, int size );
+void UNPACK_V2_8u( u32 *dest, u32 *data, int size );
+void UNPACK_V2_8s( u32 *dest, u32 *data, int size );
 
-void UNPACK_V3_32( u32 *dest, u32 *data );
-int  UNPACK_V3_32part( u32 *dest, u32 *data, int size );
+void UNPACK_V3_32( u32 *dest, u32 *data, int size );
 
-void UNPACK_V3_16u( u32 *dest, u32 *data );
-int  UNPACK_V3_16upart( u32 *dest, u32 *data, int size );
-void UNPACK_V3_16s( u32 *dest, u32 *data );
-int  UNPACK_V3_16spart( u32 *dest, u32 *data, int size );
+void UNPACK_V3_16u( u32 *dest, u32 *data, int size );
+void UNPACK_V3_16s( u32 *dest, u32 *data, int size );
 
-void UNPACK_V3_8u( u32 *dest, u32 *data );
-int  UNPACK_V3_8upart( u32 *dest, u32 *data, int size );
-void UNPACK_V3_8s( u32 *dest, u32 *data );
-int  UNPACK_V3_8spart( u32 *dest, u32 *data, int size );
+void UNPACK_V3_8u( u32 *dest, u32 *data, int size );
+void UNPACK_V3_8s( u32 *dest, u32 *data, int size );
 
-void UNPACK_V4_32( u32 *dest, u32 *data );
-int  UNPACK_V4_32part( u32 *dest, u32 *data, int size );
+void UNPACK_V4_32( u32 *dest, u32 *data, int size );
 
-void UNPACK_V4_16u( u32 *dest, u32 *data );
-int  UNPACK_V4_16upart( u32 *dest, u32 *data, int size );
-void UNPACK_V4_16s( u32 *dest, u32 *data );
-int  UNPACK_V4_16spart( u32 *dest, u32 *data, int size );
+void UNPACK_V4_16u( u32 *dest, u32 *data, int size );
+void UNPACK_V4_16s( u32 *dest, u32 *data, int size );
 
-void UNPACK_V4_8u( u32 *dest, u32 *data );
-int  UNPACK_V4_8upart( u32 *dest, u32 *data, int size );
-void UNPACK_V4_8s( u32 *dest, u32 *data );
-int  UNPACK_V4_8spart( u32 *dest, u32 *data, int size );
+void UNPACK_V4_8u( u32 *dest, u32 *data, int size );
+void UNPACK_V4_8s( u32 *dest, u32 *data, int size );
 
-void UNPACK_V4_5( u32 *dest, u32 *data );
-int  UNPACK_V4_5part( u32 *dest, u32 *data, int size );
+void UNPACK_V4_5( u32 *dest, u32 *data, int size );
 
 void vifDmaInit();
 void vif0Init();

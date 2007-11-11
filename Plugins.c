@@ -114,6 +114,7 @@ int LoadGSplugin(char *filename) {
 	LoadGSsymN(getDriverInfo,"GSgetDriverInfo");
 
 	LoadGSsymN(setFrameSkip, "GSsetFrameSkip");
+    LoadGSsymN(setupRecording, "GSsetupRecording");
 
 #ifdef _WIN32
 	LoadGSsymN(setWindowInfo,"GSsetWindowInfo");
@@ -249,6 +250,8 @@ int LoadSPU2plugin(char *filename) {
 	LoadSPU2sym1(WriteMemAddr,  "SPU2WriteMemAddr");
 	LoadSPU2sym1(irqCallback,  "SPU2irqCallback");
 
+    LoadSPU2symN(setupRecording, "SPU2setupRecording");
+
 	LoadSPU2sym0(freeze,       "SPU2freeze");
 	LoadSPU2sym0(configure,    "SPU2configure");
 	LoadSPU2sym0(about,        "SPU2about");
@@ -362,6 +365,9 @@ long CALLBACK USB_test() { return 0; }
 	LoadSym(USB##dest, _USB##dest, name, 0); \
 	if (USB##dest == NULL) USB##dest = (_USB##dest) USB_##dest;
 
+#define LoadUSBsymX(dest, name) \
+	LoadSym(USB##dest, _USB##dest, name, 0); \
+
 int LoadUSBplugin(char *filename) {
 	void *drv;
 
@@ -382,6 +388,8 @@ int LoadUSBplugin(char *filename) {
 	LoadUSBsym1(irqCallback,   "USBirqCallback");
 	LoadUSBsym1(irqHandler,    "USBirqHandler");
 	LoadUSBsym1(setRAM,        "USBsetRAM");
+	
+	LoadUSBsymX(async,         "USBasync");
 
 	LoadUSBsym0(freeze,        "USBfreeze");
 	LoadUSBsym0(configure,     "USBconfigure");
@@ -583,7 +591,7 @@ int OpenPlugins(const char* pTitleFilename) {
 	//and last the dev9
 	DEV9irqCallback(dev9Irq);
 	dev9Handler = DEV9irqHandler();
-	ret = DEV9open((void *)&pDsp);
+	ret = DEV9open(&(psxRegs.pc)); //((void *)&pDsp);
 	if (ret != 0) { SysMessage (_("Error Opening DEV9 Plugin")); goto OpenError; }
 
 	USBirqCallback(usbIrq);

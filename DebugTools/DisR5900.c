@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "Debug.h"
+#include "R5900.h"
 #include "VU.h"
 
 long jumpMode;

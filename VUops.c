@@ -16,15 +16,17 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#define PLUGINtypedefs // for GSgifTransfer1
+
 #include <math.h>
 #include <stdlib.h>
 #include "Common.h"
-#include "DebugTools/Debug.h"
-#include "R5900.h"
 #include "VUmicro.h"
 #include "VUflags.h"
 #include "VUops.h"
 #include "GS.h"
+
+extern _GSgifTransfer1    GSgifTransfer1;
 
 //Lower/Upper instructions can use that..
 #define _Ft_ ((VU->code >> 16) & 0x1F)  // The rt part of the instruction register 

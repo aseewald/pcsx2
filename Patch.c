@@ -47,6 +47,7 @@ PatchTextTable commands[] =
 											// X - EE rounding mode (default is NEAR)
 											// Y - VU rounding mode (default is CHOP)
    { "zerogs", 6, patchFunc_zerogs }, // zerogs=hex
+   { "path3hack", 7, patchFunc_path3hack },
    { "", 0, NULL }
 };
 
@@ -355,6 +356,12 @@ void patchFunc_fastmemory( char * cmd, char * param )
 	// only valid for recompilers
 	SetFastMemory(1);
 #endif
+}
+
+extern int path3hack;
+void patchFunc_path3hack( char * cmd, char * param )
+{
+	path3hack = 1;
 }
 
 void patchFunc_roundmode( char * cmd, char * param )

@@ -111,10 +111,10 @@ u32 dumplog = 0;
 u32 pc;			         // recompiler pc
 int branch;		         // set for branch
 
-#ifdef PCSX2_DEVBUILD
+//#ifdef PCSX2_DEVBUILD
 LARGE_INTEGER lbase = {0}, lfinal = {0};
 static u32 s_startcount = 0;
-#endif
+//#endif
 
 void _cop2AnalyzeOp(EEINST* pinst, int dostalls); // reccop2.c
 static void iBranchTest(u32 newpc, u32 cpuBranch);

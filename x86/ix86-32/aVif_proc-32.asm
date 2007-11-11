@@ -571,14 +571,21 @@ UNPACK_V2_16SSE_4A macro CL, TOTALCL, MaskType, ModeType
 	UNPACK_RIGHTSHIFT xmm0, 16
 	UNPACK_RIGHTSHIFT xmm2, 16
 
-	pshufd xmm1, xmm0, 0eeh
-	pshufd xmm7, xmm2, 0eeh
+	punpckhqdq xmm1, xmm0
+ punpckhqdq xmm7, xmm2
 
+ punpcklqdq xmm0, xmm0
+ punpcklqdq xmm2, xmm2
+ punpckhqdq xmm1, xmm1
+ punpckhqdq xmm7, xmm7
+	
 	UNPACK4_SSE CL, TOTALCL, MaskType, ModeType
 	add esi, 16
 	endm
 
 UNPACK_V2_16SSE_4 macro CL, TOTALCL, MaskType, ModeType
+	pxor xmm0, xmm0
+	pxor xmm2, xmm2
 	movdqu xmm0, [esi]
 
 	punpckhwd xmm2, xmm0
@@ -587,9 +594,13 @@ UNPACK_V2_16SSE_4 macro CL, TOTALCL, MaskType, ModeType
 	UNPACK_RIGHTSHIFT xmm0, 16
 	UNPACK_RIGHTSHIFT xmm2, 16
 
+	punpckhqdq xmm1, xmm0
+ punpckhqdq xmm7, xmm2
 
-	pshufd xmm1, xmm0, 0eeh
-	pshufd xmm7, xmm2, 0eeh
+ punpcklqdq xmm0, xmm0
+ punpcklqdq xmm2, xmm2
+ punpckhqdq xmm1, xmm1
+ punpckhqdq xmm7, xmm7
 
 	UNPACK4_SSE CL, TOTALCL, MaskType, ModeType
 
@@ -604,7 +615,11 @@ UNPACK_V2_16SSE_3A macro CL, TOTALCL, MaskType, ModeType
 	UNPACK_RIGHTSHIFT xmm2, 16
 
 
-	pshufd xmm1, xmm0, 0eeh
+	punpckhqdq xmm1, xmm0
+
+ punpcklqdq xmm0, xmm0
+ punpcklqdq xmm2, xmm2
+ punpckhqdq xmm1, xmm1
 
 	UNPACK3_SSE CL, TOTALCL, MaskType, ModeType
 
@@ -621,7 +636,11 @@ UNPACK_V2_16SSE_3 macro CL, TOTALCL, MaskType, ModeType
 	UNPACK_RIGHTSHIFT xmm2, 16
 
 
-	pshufd xmm1, xmm0, 0eeh
+	punpckhqdq xmm1, xmm0
+
+ punpcklqdq xmm0, xmm0
+ punpcklqdq xmm2, xmm2
+ punpckhqdq xmm1, xmm1
 
 	UNPACK3_SSE CL, TOTALCL, MaskType, ModeType
 
@@ -633,7 +652,10 @@ UNPACK_V2_16SSE_2A macro CL, TOTALCL, MaskType, ModeType
 	UNPACK_RIGHTSHIFT xmm0, 16
 
 
-	pshufd xmm1, xmm0, 0eeh
+	punpckhqdq xmm1, xmm0
+
+ punpcklqdq xmm0, xmm0
+ punpckhqdq xmm1, xmm1
 
 	UNPACK2_SSE CL, TOTALCL, MaskType, ModeType
 
@@ -646,7 +668,10 @@ UNPACK_V2_16SSE_2 macro CL, TOTALCL, MaskType, ModeType
 	UNPACK_RIGHTSHIFT xmm0, 16
 
 
-	pshufd xmm1, xmm0, 0eeh
+	punpckhqdq xmm1, xmm0
+
+ punpcklqdq xmm0, xmm0
+ punpckhqdq xmm1, xmm1
 
 	UNPACK2_SSE CL, TOTALCL, MaskType, ModeType
 
@@ -657,6 +682,8 @@ UNPACK_V2_16SSE_1A macro CL, TOTALCL, MaskType, ModeType
 	punpcklwd xmm0, [esi]
 	UNPACK_RIGHTSHIFT xmm0, 16
 
+	punpcklqdq xmm0, xmm0
+	
 	UNPACK1_SSE CL, TOTALCL, MaskType, ModeType
 
 	add esi, 4
@@ -667,6 +694,8 @@ UNPACK_V2_16SSE_1 macro CL, TOTALCL, MaskType, ModeType
 	punpcklwd xmm0, xmm0
 	UNPACK_RIGHTSHIFT xmm0, 16
 
+	punpcklqdq xmm0, xmm0
+	
 	UNPACK1_SSE CL, TOTALCL, MaskType, ModeType
 
 	add esi, 4
@@ -683,9 +712,13 @@ UNPACK_V2_8SSE_4 macro CL, TOTALCL, MaskType, ModeType
 	UNPACK_RIGHTSHIFT xmm0, 24
 	UNPACK_RIGHTSHIFT xmm2, 24
 
+	punpckhqdq xmm1, xmm0
+ punpckhqdq xmm7, xmm2
 
-	pshufd xmm1, xmm0, 0eeh
-	pshufd xmm7, xmm2, 0eeh
+ punpcklqdq xmm0, xmm0
+ punpcklqdq xmm2, xmm2
+ punpckhqdq xmm1, xmm1
+ punpckhqdq xmm7, xmm7
 
 	UNPACK4_SSE CL, TOTALCL, MaskType, ModeType
 
@@ -706,9 +739,12 @@ UNPACK_V2_8SSE_3 macro CL, TOTALCL, MaskType, ModeType
 	UNPACK_RIGHTSHIFT xmm0, 24
 	UNPACK_RIGHTSHIFT xmm2, 24
 
+	punpckhqdq xmm1, xmm0
 
-	pshufd xmm1, xmm0, 0eeh
-
+ punpcklqdq xmm0, xmm0
+ punpcklqdq xmm2, xmm2
+ punpckhqdq xmm1, xmm1
+ 
 	UNPACK3_SSE CL, TOTALCL, MaskType, ModeType
 
 	add esi, 6
@@ -724,9 +760,11 @@ UNPACK_V2_8SSE_2 macro CL, TOTALCL, MaskType, ModeType
 	punpcklwd xmm0, xmm0
 	UNPACK_RIGHTSHIFT xmm0, 24
 
+	punpckhqdq xmm1, xmm0
 
-	pshufd xmm1, xmm0, 0eeh
-
+ punpcklqdq xmm0, xmm0
+ punpckhqdq xmm1, xmm1
+ 
 	UNPACK2_SSE CL, TOTALCL, MaskType, ModeType
 
 	add esi, 4
@@ -741,6 +779,7 @@ UNPACK_V2_8SSE_1 macro CL, TOTALCL, MaskType, ModeType
 	punpcklbw xmm0, xmm0
 	punpcklwd xmm0, xmm0
 	UNPACK_RIGHTSHIFT xmm0, 24
+	punpcklqdq xmm0, xmm0
 
 	UNPACK1_SSE CL, TOTALCL, MaskType, ModeType
 

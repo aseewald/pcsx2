@@ -86,9 +86,7 @@ int LoadConfig() {
 	//cpu
 	GetPrivateProfileString("Cpu Options", "Options", NULL, szValue, 20, szIniFile);
     Conf->Options= (u32)strtoul(szValue, NULL, 10);
-	GetPrivateProfileString("Cpu Options", "SafeCnts", NULL, szValue, 20, szIniFile);
-    Conf->SafeCnts = strtoul(szValue, NULL, 0);
-
+	
 	//Misc
 	GetPrivateProfileString("Misc", "Patch", NULL, szValue, 20, szIniFile);
     Conf->Patch = strtoul(szValue, NULL, 10);
@@ -160,8 +158,6 @@ void SaveConfig() {
 	//cpu
     sprintf(szValue,"%u", Conf->Options);
     WritePrivateProfileString("Cpu Options","Options",szValue,szIniFile);
-	sprintf(szValue,"%u",Conf->SafeCnts);
-    WritePrivateProfileString("Cpu Options","SafeCnts",szValue,szIniFile);
 	//Misc
     sprintf(szValue,"%u",Conf->Patch);
     WritePrivateProfileString("Misc","Patch",szValue,szIniFile);

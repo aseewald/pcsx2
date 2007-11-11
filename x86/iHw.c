@@ -37,8 +37,8 @@ extern u32 *psHL;
 extern u64 *psHD;
 #endif
 
-extern int b440;
-extern int b440table[];
+extern int rdram_devices;	// put 8 for TOOL and 2 for PS2 and PSX
+extern int rdram_sdevid;
 extern char sio_buffer[1024];
 extern int sio_count;
 
@@ -201,63 +201,87 @@ int hwConstRead16(u32 x86reg, u32 mem, u32 sign)
 }
 
 #ifdef PCSX2_VIRTUAL_MEM
-
-#if defined(_MSC_VER) && !defined(__x86_64__)
-__declspec(naked) void recCheckF440()
-{
-	__asm {
-		add b440, 1
-		mov eax, b440
-		sub eax, 3
-		mov edx, 31
-
-		cmp eax, 27
-		ja WriteVal
-		shl eax, 2
-		mov edx, dword ptr [eax+b440table]
-
-WriteVal:
-		mov eax, PS2MEM_BASE_+0x1000f440
-		mov dword ptr [eax], edx
-		ret
-	}
-}
-#else
-void recCheckF440();
-#endif
+//
+//#if defined(_MSC_VER) && !defined(__x86_64__)
+//__declspec(naked) void recCheckF440()
+//{
+//	__asm {
+//		add b440, 1
+//		mov eax, b440
+//		sub eax, 3
+//		mov edx, 31
+//
+//		cmp eax, 27
+//		ja WriteVal
+//		shl eax, 2
+//		mov edx, dword ptr [eax+b440table]
+//
+//WriteVal:
+//		mov eax, PS2MEM_BASE_+0x1000f440
+//		mov dword ptr [eax], edx
+//		ret
+//	}
+//}
+//#else
+//void recCheckF440();
+//#endif
 
 void iMemRead32Check()
 {
 	// test if 0xf440
-	if( bExecBIOS ) {
-		u8* ptempptr[2];
-		CMP32ItoR(ECX, 0x1000f440);
-		ptempptr[0] = JNE8(0);
-
-//		// increment and test
-//		INC32M((uptr)&b440);
-//		MOV32MtoR(EAX, (uptr)&b440);
-//		SUB32ItoR(EAX, 3);
-//		MOV32ItoR(EDX, 31);
+//	if( bExecBIOS ) {
+//		u8* ptempptr[2];
+//		CMP32ItoR(ECX, 0x1000f440);
+//		ptempptr[0] = JNE8(0);
 //
-//		CMP32ItoR(EAX, 27);
+////		// increment and test
+////		INC32M((uptr)&b440);
+////		MOV32MtoR(EAX, (uptr)&b440);
+////		SUB32ItoR(EAX, 3);
+////		MOV32ItoR(EDX, 31);
+////
+////		CMP32ItoR(EAX, 27);
+////
+////		// look up table
+////		ptempptr[1] = JA8(0);
+////		SHL32ItoR(EAX, 2);
+////		ADD32ItoR(EAX, (int)b440table);
+////		MOV32RmtoR(EDX, EAX);
+////
+////		x86SetJ8( ptempptr[1] );
+////
+////		MOV32RtoM( (int)PS2MEM_HW+0xf440, EDX);
+//		CALLFunc((uptr)recCheckF440);
 //
-//		// look up table
-//		ptempptr[1] = JA8(0);
-//		SHL32ItoR(EAX, 2);
-//		ADD32ItoR(EAX, (int)b440table);
-//		MOV32RmtoR(EDX, EAX);
-//
-//		x86SetJ8( ptempptr[1] );
-//
-//		MOV32RtoM( (int)PS2MEM_HW+0xf440, EDX);
-		CALLFunc((uptr)recCheckF440);
-
-		x86SetJ8( ptempptr[0] );
-	}
+//		x86SetJ8( ptempptr[0] );
+//	}
 }
 
 #endif
+
+int hwContRead32_f440()
+{
+    if ((psHu32(0xf430) >> 6) & 0xF)
+        return 0;
+	else
+		switch ((psHu32(0xf430)>>16) & 0xFFF){//MCH_RICM: x:4|SA:12|x:5|SDEV:1|SOP:4|SBC:1|SDEV:5
+		case 0x21://INIT
+        {
+			int ret = 0x1F * (rdram_sdevid < rdram_devices);
+            rdram_sdevid += (rdram_sdevid < rdram_devices);
+            return ret;
+        }
+		case 0x23://CNFGA
+			return 0x0D0D;	//PVER=3 | MVER=16 | DBL=1 | REFBIT=5
+		case 0x24://CNFGB
+			//0x0110 for PSX  SVER=0 | CORG=8(5x9x7) | SPT=1 | DEVTYP=0 | BYTE=0
+			return 0x0090;	//SVER=0 | CORG=4(5x9x6) | SPT=1 | DEVTYP=0 | BYTE=0
+		case 0x40://DEVID
+			return psHu32(0xf430) & 0x1F;	// =SDEV
+	}
+
+    return 0;
+}
 
 int hwConstRead32(u32 x86reg, u32 mem)
 {
@@ -376,30 +400,9 @@ int hwConstRead32(u32 x86reg, u32 mem)
 			return 0;
 
 		case 0x1000f440:
-			//iMemRead32Check();
-			// increment and test
-			INC32M((uptr)&b440);
-			MOV32MtoR(EAX, (uptr)&b440);
-			SUB32ItoR(EAX, 3);
-			MOV32ItoR(EDX, 31);
-
-			CMP32ItoR(EAX, 27);
-
-			// look up table
-			j8Ptr[8] = JA8(0);
-			SHL32ItoR(EAX, 2);
-			ADD32ItoR(EAX, (int)b440table);
-			MOV32RmtoR(EDX, EAX);
-
-			x86SetJ8( j8Ptr[8] );
-
-			MOV32RtoM( (uptr)PS2MEM_HW+0xf440, EDX);
-			
-			if( IS_XMMREG(x86reg) ) SSE2_MOVD_R_to_XMM(x86reg&0xf, EDX);
-			MMXONLY(else if( IS_MMXREG(x86reg) ) MOVD32RtoMMX(x86reg&0xf, EDX);)
-			else MOV32RtoR(x86reg, EDX);
-
-			return 0;
+            iFlushCall(0);
+            CALLFunc((uptr)hwContRead32_f440);
+            return 1;
 
 		case 0x1000f520: // DMAC_ENABLER
 			_eeReadConstMem32(x86reg, (uptr)&PS2MEM_HW[0xf590]);
@@ -802,7 +805,10 @@ void hwConstWrite16(u32 mem, int mmreg)
 // when writing an Imm
 #define recDmaExecI(name, num) { \
 	u32 c = g_cpuConstRegs[(mmreg>>16)&0x1f].UL[0]; \
-	if(mem!= 0x1000c000 && mem != 0x1000c800) MOV16ItoM((uptr)&PS2MEM_HW[(mem) & 0xffff], c); \
+    /* Keep the old tag if in chain mode and hw doesnt set it*/ \
+    if( (c & 0xc) == 0x4 && (c&0xffff0000) == 0 ) { \
+        MOV16ItoM((uptr)&PS2MEM_HW[(mem) & 0xffff], c); \
+    } \
 	else MOV32ItoM((uptr)&PS2MEM_HW[(mem) & 0xffff], c); \
 	if( c & 0x100 ) { \
 		TEST8ItoM((uptr)&PS2MEM_HW[DMAC_CTRL&0xffff], 1); \
@@ -819,17 +825,25 @@ void hwConstWrite16(u32 mem, int mmreg)
 	} \
 	else { \
 		_eeMoveMMREGtoR(EAX, mmreg); \
-		if(mem!= 0x1000c000 && mem != 0x1000c800) { \
-			if( IS_XMMREG(mmreg) || IS_MMXREG(mmreg) ) { \
-				MOV16RtoM((uptr)&PS2MEM_HW[(mem) & 0xffff], EAX); \
-			} \
-			else { \
-				_eeWriteConstMem16((uptr)&PS2MEM_HW[(mem) & 0xffff], mmreg); \
-			} \
+        TEST32ItoR(EAX, 0xffff0000); \
+        j8Ptr[6] = JNZ8(0); \
+        MOV32RtoR(ECX, EAX); \
+        AND32ItoR(ECX, 0xc); \
+        CMP32ItoR(ECX, 4); \
+        j8Ptr[7] = JNE8(0); \
+        if( IS_XMMREG(mmreg) || IS_MMXREG(mmreg) ) { \
+			MOV16RtoM((uptr)&PS2MEM_HW[(mem) & 0xffff], EAX); \
 		} \
-		else _eeWriteConstMem32((uptr)&PS2MEM_HW[(mem) & 0xffff], mmreg); \
-		\
-		TEST16ItoR(EAX, 0x100); \
+		else { \
+			_eeWriteConstMem16((uptr)&PS2MEM_HW[(mem) & 0xffff], mmreg); \
+		} \
+        j8Ptr[8] = JMP8(0); \
+        x86SetJ8(j8Ptr[6]); \
+        x86SetJ8(j8Ptr[7]); \
+        _eeWriteConstMem32((uptr)&PS2MEM_HW[(mem) & 0xffff], mmreg); \
+        x86SetJ8(j8Ptr[8]); \
+        \
+        TEST16ItoR(EAX, 0x100); \
 		j8Ptr[5] = JZ8(0); \
 		TEST32ItoM((uptr)&PS2MEM_HW[DMAC_CTRL&0xffff], 1); \
 		j8Ptr[6] = JZ8(0); \
@@ -982,8 +996,8 @@ void hwConstWrite32(u32 mem, int mmreg)
 			XOR16RtoM((uptr)&PS2MEM_HW[0xe012], EAX);
 			
 			MOV32MtoR(EAX, (uptr)&cpuRegs.CP0.n.Status.val);
-			AND32ItoR(EAX, 0x10007);
-			CMP32ItoR(EAX, 0x10001);
+			AND32ItoR(EAX, 0x10807);
+			CMP32ItoR(EAX, 0x10801);
 			j8Ptr[5] = JNE8(0);
 			CALLFunc((uptr)cpuTestDMACInts);
 
@@ -992,6 +1006,13 @@ void hwConstWrite32(u32 mem, int mmreg)
 
 		case 0x1000f000: // INTC_STAT
 			_eeWriteConstMem32OP((uptr)&PS2MEM_HW[0xf000], mmreg, 2);
+			MOV32MtoR(EAX, (uptr)&cpuRegs.CP0.n.Status.val);
+			AND32ItoR(EAX, 0x10407);
+			CMP32ItoR(EAX, 0x10401);
+			j8Ptr[5] = JNE8(0);
+			CALLFunc((uptr)cpuTestINTCInts);
+
+			x86SetJ8( j8Ptr[5] );
 			break;
 
 		case 0x1000f010: // INTC_MASK
@@ -1000,22 +1021,56 @@ void hwConstWrite32(u32 mem, int mmreg)
 			XOR16RtoM((uptr)&PS2MEM_HW[0xf010], EAX);
 			
 			MOV32MtoR(EAX, (uptr)&cpuRegs.CP0.n.Status.val);
-			AND32ItoR(EAX, 0x10007);
-			CMP32ItoR(EAX, 0x10001);
+			AND32ItoR(EAX, 0x10407);
+			CMP32ItoR(EAX, 0x10401);
 			j8Ptr[5] = JNE8(0);
-			CALLFunc((uptr)cpuTestDMACInts);
+			CALLFunc((uptr)cpuTestINTCInts);
 
 			x86SetJ8( j8Ptr[5] );
 			break;
+
+        case 0x1000f130:
+		case 0x1000f410:
+			break;
+
+        case 0x1000f430://MCH_RICM: x:4|SA:12|x:5|SDEV:1|SOP:4|SBC:1|SDEV:5
+
+            //if ((((value >> 16) & 0xFFF) == 0x21) && (((value >> 6) & 0xF) == 1) && (((psHu32(0xf440) >> 7) & 1) == 0))//INIT & SRP=0
+            //    rdram_sdevid = 0
+            _eeMoveMMREGtoR(EAX, mmreg);
+            MOV32RtoR(EDX, EAX);
+            MOV32RtoR(ECX, EAX);
+            SHR32ItoR(EAX, 6);
+            SHR32ItoR(EDX, 16);
+            AND32ItoR(EAX, 0xf);
+            AND32ItoR(EDX, 0xfff);
+            CMP32ItoR(EAX, 1);
+            j8Ptr[5] = JNE8(0);
+            CMP32ItoR(EDX, 0x21);
+            j8Ptr[6] = JNE8(0);
+
+            TEST32ItoM((uptr)&psHu32(0xf440), 0x80);
+            j8Ptr[7] = JNZ8(0);
+
+            // if SIO repeater is cleared, reset sdevid
+            MOV32ItoM((uptr)&rdram_sdevid, 0);
+			
+            //kill the busy bit
+            x86SetJ8(j8Ptr[5]);
+            x86SetJ8(j8Ptr[6]);
+            x86SetJ8(j8Ptr[7]);
+            AND32ItoR(ECX, ~0x80000000);
+            MOV32RtoM((uptr)&psHu32(0xf430), ECX);
+			break;
+
+		case 0x1000f440://MCH_DRD:
+            _eeWriteConstMem32((uptr)&PS2MEM_HW[0xf440], mmreg);
+			break;
+
 		case 0x1000f590: // DMAC_ENABLEW
 			_eeWriteConstMem32((uptr)&PS2MEM_HW[0xf520], mmreg);
 			_eeWriteConstMem32((uptr)&PS2MEM_HW[0xf590], mmreg);
 			return;
-
-		case 0x1000f130:
-		case 0x1000f410:
-		case 0x1000f430:
-			break;
 
 		default:
 			if ((mem & 0xffffff0f) == 0x1000f200) {
@@ -1153,8 +1208,8 @@ void hwConstWrite64(u32 mem, int mmreg)
 			XOR16RtoM((uptr)&PS2MEM_HW[0xe012], EAX);
 			
 			MOV32MtoR(EAX, (uptr)&cpuRegs.CP0.n.Status.val);
-			AND32ItoR(EAX, 0x10007);
-			CMP32ItoR(EAX, 0x10001);
+			AND32ItoR(EAX, 0x10807);
+			CMP32ItoR(EAX, 0x10801);
 			j8Ptr[5] = JNE8(0);
 			CALLFunc((uptr)cpuTestDMACInts);
 
@@ -1168,6 +1223,13 @@ void hwConstWrite64(u32 mem, int mmreg)
 
 		case 0x1000f000: // INTC_STAT
 			_eeWriteConstMem32OP((uptr)&PS2MEM_HW[mem&0xffff], mmreg, 2);
+			MOV32MtoR(EAX, (uptr)&cpuRegs.CP0.n.Status.val);
+			AND32ItoR(EAX, 0x10407);
+			CMP32ItoR(EAX, 0x10401);
+			j8Ptr[5] = JNE8(0);
+			CALLFunc((uptr)cpuTestINTCInts);
+
+			x86SetJ8( j8Ptr[5] );
 			break;
 
 		case 0x1000f010: // INTC_MASK
@@ -1178,10 +1240,10 @@ void hwConstWrite64(u32 mem, int mmreg)
 			XOR16RtoM((uptr)&PS2MEM_HW[0xf010], EAX);
 			
 			MOV32MtoR(EAX, (uptr)&cpuRegs.CP0.n.Status.val);
-			AND32ItoR(EAX, 0x10007);
-			CMP32ItoR(EAX, 0x10001);
+			AND32ItoR(EAX, 0x10407);
+			CMP32ItoR(EAX, 0x10401);
 			j8Ptr[5] = JNE8(0);
-			CALLFunc((uptr)cpuTestDMACInts);
+			CALLFunc((uptr)cpuTestINTCInts);
 
 			x86SetJ8( j8Ptr[5] );
 			

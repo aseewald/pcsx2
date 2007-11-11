@@ -5,9 +5,10 @@
 
 #include <vector>
 
+#include "PS2Etypes.h"
+
 extern "C" {
 #include "windows/resource.h"
-#include "PS2Etypes.h"
 #include "PS2Edefs.h"
 #include "Memory.h"
 

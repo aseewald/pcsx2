@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "PsxCommon.h"
+
 // Dma0/1   in Mdec.c
 // Dma3     in CdRom.c
 // Dma8     in PsxSpd.c
@@ -27,10 +28,10 @@
 void psxDma4(u32 madr, u32 bcr, u32 chcr) { // SPU
 	int size;
 
-	if(chcr & 0x400) SysPrintf("SPU 2 DMA 4 linked list chain mode! chcr = %x madr = %x bcr = %x\n", chcr, madr, bcr);
+	/*if(chcr & 0x400) SysPrintf("SPU 2 DMA 4 linked list chain mode! chcr = %x madr = %x bcr = %x\n", chcr, madr, bcr);
 	if(chcr & 0x40000000) SysPrintf("SPU 2 DMA 4 Unusual bit set on 'to' direction chcr = %x madr = %x bcr = %x\n", chcr, madr, bcr);
 	if((chcr & 0x1) == 0) SysPrintf("SPU 2 DMA 4 loading from spu2 memory chcr = %x madr = %x bcr = %x\n", chcr, madr, bcr);
-
+*/
 	
 	switch (chcr) {
 		case 0x01000201: //cpu to spu transfer
@@ -96,11 +97,11 @@ void psxDma6(u32 madr, u32 bcr, u32 chcr) {
 
 void psxDma7(u32 madr, u32 bcr, u32 chcr) {
 	int size;
-
+/*
 	if(chcr & 0x400) SysPrintf("SPU 2 DMA 7 linked list chain mode! chcr = %x madr = %x bcr = %x\n", chcr, madr, bcr);
 	if(chcr & 0x40000000) SysPrintf("SPU 2 DMA 7 Unusual bit set on 'to' direction chcr = %x madr = %x bcr = %x\n", chcr, madr, bcr);
 	if((chcr & 0x1) == 0) SysPrintf("SPU 2 DMA 7 loading from spu2 memory chcr = %x madr = %x bcr = %x\n", chcr, madr, bcr);
-
+*/
 	
 	switch (chcr) {
 		case 0x01000201: //cpu to spu2 transfer
@@ -211,7 +212,7 @@ irq:
 }
 
 void dev9Irq(int cycles) {
-	PSX_INT(20, (PSXCLK/cycles));
+	PSX_INT(20, cycles);
 }
 
 int  usbInterrupt() {
@@ -225,7 +226,7 @@ irq:
 }
 
 void usbIrq(int cycles) {
-	PSX_INT(21, (PSXCLK/cycles));
+	PSX_INT(21, cycles);
 }
 
 void fwIrq() {

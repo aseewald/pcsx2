@@ -68,7 +68,7 @@
 				StructMemberAlignment="5"
 				BufferSecurityCheck="false"
 				EnableFunctionLevelLinking="false"
-				EnableEnhancedInstructionSet="2"
+				EnableEnhancedInstructionSet="0"
 				PrecompiledHeaderFile=".\Release/pcsx2.pch"
 				AssemblerListingLocation=".\Release/"
 				ObjectFile=".\Release/"
@@ -92,10 +92,10 @@
 				Name="VCLinkerTool"
 				AdditionalOptions="/MACHINE:I386"
 				AdditionalDependencies="odbc32.lib odbccp32.lib comctl32.lib ../libs/gnu_gettext.lib ws2_32.lib winmm.lib ../libs/pthreadVC2.lib"
-				OutputFile="../../pcsx2exe/pcsx2.exe"
+				OutputFile="..\..\..\bin\pcsx2.exe"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
-				AdditionalLibraryDirectories="..\"
+				AdditionalLibraryDirectories="..\;..\libs"
 				ProgramDatabaseFile=".\Release/pcsx2.pdb"
 				SubSystem="2"
 				TargetMachine="1"
@@ -123,6 +123,7 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
+				CommandLine=""
 			/>
 		</Configuration>
 		<Configuration
@@ -166,6 +167,7 @@
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
 				StructMemberAlignment="5"
+				EnableEnhancedInstructionSet="0"
 				RuntimeTypeInfo="true"
 				PrecompiledHeaderFile=".\Debug/pcsx2.pch"
 				AssemblerListingLocation=".\Debug/"
@@ -191,10 +193,10 @@
 				Name="VCLinkerTool"
 				AdditionalOptions="/MACHINE:I386"
 				AdditionalDependencies="odbc32.lib odbccp32.lib comctl32.lib ../libs/gnu_gettext.lib ws2_32.lib winmm.lib ../libs/pthreadVC2.lib"
-				OutputFile="../../pcsx2exe/pcsx2d.exe"
+				OutputFile="..\..\..\bin\pcsx2d.exe"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
-				AdditionalLibraryDirectories="..\"
+				AdditionalLibraryDirectories="..\;..\libs"
 				GenerateDebugInformation="true"
 				ProgramDatabaseFile=".\Debug/pcsx2.pdb"
 				SubSystem="2"
@@ -222,6 +224,7 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
+				CommandLine=""
 			/>
 		</Configuration>
 		<Configuration
@@ -265,6 +268,7 @@
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
 				StructMemberAlignment="5"
+				EnableEnhancedInstructionSet="0"
 				RuntimeTypeInfo="true"
 				PrecompiledHeaderFile=".\Debug TLB/pcsx2.pch"
 				AssemblerListingLocation=".\Debug TLB/"
@@ -290,10 +294,10 @@
 				Name="VCLinkerTool"
 				AdditionalOptions="/MACHINE:I386"
 				AdditionalDependencies="odbc32.lib odbccp32.lib comctl32.lib ../libs/gnu_gettext.lib ws2_32.lib winmm.lib ../libs/pthreadVC2.lib"
-				OutputFile="..\..\pcsx2exe\pcsx2td.exe"
+				OutputFile="..\..\..\bin\pcsx2td.exe"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
-				AdditionalLibraryDirectories="..\"
+				AdditionalLibraryDirectories="..\;..\libs"
 				GenerateDebugInformation="true"
 				ProgramDatabaseFile=".\Debug TLB/pcsx2.pdb"
 				SubSystem="2"
@@ -321,6 +325,7 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
+				CommandLine=""
 			/>
 		</Configuration>
 		<Configuration
@@ -373,7 +378,7 @@
 				StructMemberAlignment="5"
 				BufferSecurityCheck="false"
 				EnableFunctionLevelLinking="false"
-				EnableEnhancedInstructionSet="1"
+				EnableEnhancedInstructionSet="0"
 				PrecompiledHeaderFile=".\ReleaseTLB/pcsx2.pch"
 				AssemblerListingLocation=".\ReleaseTLB/"
 				ObjectFile=".\ReleaseTLB/"
@@ -397,10 +402,10 @@
 				Name="VCLinkerTool"
 				AdditionalOptions="/MACHINE:I386"
 				AdditionalDependencies="odbc32.lib odbccp32.lib comctl32.lib ../libs/gnu_gettext.lib ws2_32.lib winmm.lib ../libs/pthreadVC2.lib"
-				OutputFile="../../pcsx2exe/pcsx2t.exe"
+				OutputFile="..\..\..\bin\pcsx2t.exe"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
-				AdditionalLibraryDirectories="..\"
+				AdditionalLibraryDirectories="..\;..\libs"
 				ProgramDatabaseFile=".\ReleaseTLB/pcsx2.pdb"
 				SubSystem="2"
 				TargetMachine="1"
@@ -428,6 +433,118 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
+				CommandLine=""
+			/>
+		</Configuration>
+		<Configuration
+			Name="Release (to Public)|Win32"
+			OutputDirectory="$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)"
+			ConfigurationType="1"
+			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
+			UseOfMFC="0"
+			ATLMinimizesCRunTimeLibraryUsage="false"
+			CharacterSet="2"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+			/>
+			<Tool
+				Name="MASM"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+				PreprocessorDefinitions="NDEBUG"
+				MkTypLibCompatible="true"
+				SuppressStartupBanner="true"
+				TargetEnvironment="1"
+				TypeLibraryName=".\Release/pcsx2.tlb"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+				AdditionalOptions="/Ob0"
+				Optimization="3"
+				InlineFunctionExpansion="0"
+				EnableIntrinsicFunctions="true"
+				FavorSizeOrSpeed="1"
+				OmitFramePointers="true"
+				EnableFiberSafeOptimizations="true"
+				WholeProgramOptimization="true"
+				AdditionalIncludeDirectories="./;../../;../../IPU;../../ZLIB;../../DebugTools;../../x86;&quot;../../x86/ix86-32&quot;;../libs"
+				PreprocessorDefinitions="NDEBUG,WIN32,_WINDOWS,__MSCW32__,__WIN32__,__i386__,ENABLE_NLS,PACKAGE=\&quot;pcsx2\&quot;,PCSX2_VIRTUAL_MEM,_CRT_SECURE_NO_DEPRECATE,TIXML_USE_STL"
+				StringPooling="true"
+				MinimalRebuild="false"
+				ExceptionHandling="1"
+				RuntimeLibrary="0"
+				StructMemberAlignment="5"
+				BufferSecurityCheck="false"
+				EnableFunctionLevelLinking="false"
+				EnableEnhancedInstructionSet="0"
+				PrecompiledHeaderFile=".\$(ConfigurationName)/pcsx2.pch"
+				AssemblerListingLocation=".\$(ConfigurationName)/"
+				ObjectFile=".\$(ConfigurationName)/"
+				ProgramDataBaseFileName=".\$(ConfigurationName)/"
+				WarningLevel="3"
+				SuppressStartupBanner="true"
+				CompileAs="0"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+				PreprocessorDefinitions="NDEBUG"
+				Culture="1032"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+				AdditionalOptions="/MACHINE:I386"
+				AdditionalDependencies="odbc32.lib odbccp32.lib comctl32.lib ../libs/gnu_gettext.lib ws2_32.lib winmm.lib ../libs/pthreadVC2.lib"
+				OutputFile="..\..\..\bin\pcsx2r.exe"
+				LinkIncremental="1"
+				SuppressStartupBanner="true"
+				AdditionalLibraryDirectories="..\;..\libs"
+				ProgramDatabaseFile=".\$(ConfigurationName)/pcsx2.pdb"
+				SubSystem="2"
+				LinkTimeCodeGeneration="1"
+				TargetMachine="1"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCWebDeploymentTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
+				CommandLine=""
 			/>
 		</Configuration>
 	</Configurations>
@@ -578,6 +695,14 @@
 				</FileConfiguration>
 				<FileConfiguration
 					Name="Release TLB|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						AssemblerOutput="4"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release (to Public)|Win32"
 					>
 					<Tool
 						Name="VCCLCompilerTool"
@@ -838,6 +963,16 @@
 						RuntimeLibrary="0"
 					/>
 				</FileConfiguration>
+				<FileConfiguration
+					Name="Release (to Public)|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						OmitFramePointers="false"
+						EnableFiberSafeOptimizations="false"
+						RuntimeLibrary="0"
+					/>
+				</FileConfiguration>
 			</File>
 			<File
 				RelativePath="..\..\Counters.h"
@@ -1069,6 +1204,14 @@
 							ObjectFile="$(IntDir)/$(InputName)1.obj"
 						/>
 					</FileConfiguration>
+					<FileConfiguration
+						Name="Release (to Public)|Win32"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+							ObjectFile="$(IntDir)/$(InputName)1.obj"
+						/>
+					</FileConfiguration>
 				</File>
 				<File
 					RelativePath="..\..\Ipu\mpeg2lib\Mpeg.c"
@@ -1099,6 +1242,14 @@
 					</FileConfiguration>
 					<FileConfiguration
 						Name="Release TLB|Win32"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+							ObjectFile="$(IntDir)/$(InputName)1.obj"
+						/>
+					</FileConfiguration>
+					<FileConfiguration
+						Name="Release (to Public)|Win32"
 						>
 						<Tool
 							Name="VCCLCompilerTool"

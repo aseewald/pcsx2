@@ -15,7 +15,7 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-        
+
 // Fast assembly routines for x86-64
 // zerofrog(@gmail.com)
 .intel_syntax
@@ -38,7 +38,6 @@
 #endif
 
 .globl memcmp_mmx
-	.type memcmp_mmx, @function
 memcmp_mmx:
 #ifndef __x86_64__
 		// make sure mmx regs are stored
@@ -234,7 +233,6 @@ memcmp_End:
 #endif
 
 .globl memxor_mmx
-	.type	memxor_mmx, @function
 memxor_mmx:
 #ifndef __x86_64__
 		// make sure mmx regs are stored

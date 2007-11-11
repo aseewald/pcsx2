@@ -133,7 +133,7 @@ typedef struct {
 	u32 _smflag[32];
 } psxRegisters;
 
-extern psxRegisters psxRegs;
+extern PCSX2_ALIGNED16_DECL(psxRegisters psxRegs);
 
 #define PSX_IS_CONST1(reg) ((reg)<32 && (g_psxHasConstReg&(1<<(reg))))
 #define PSX_IS_CONST2(reg1, reg2) ((g_psxHasConstReg&(1<<(reg1)))&&(g_psxHasConstReg&(1<<(reg2))))

@@ -21,6 +21,7 @@
 
 #include <stddef.h>
 #include <malloc.h>
+#include <assert.h>
 
 // compile-time assert
 #ifndef C_ASSERT
@@ -87,7 +88,6 @@ typedef struct {
 	int Mdec;
 	int Patch;
 	int ThPriority;
-	int SafeCnts;
 } PcsxConfig;
 
 extern PcsxConfig Config;

@@ -25,6 +25,10 @@
 #include <ctype.h>
 #include <time.h>
 
+#ifndef _WIN32
+#include <sys/time.h>
+#endif
+
 #include "PsxCommon.h"
 #include "CDVDiso.h"
 
@@ -47,15 +51,15 @@ char *sCmdName[0x100]= {
 	"", "", "sceCdReadILinkID", "sceCdWriteILinkID", /*10*/
 	"sceAudioDigitalOut", "sceForbidDVDP", "sceAutoAdjustCtrl", "sceCdReadModelNumber",
 	"sceWriteModelNumber", "sceCdForbidCD", "sceCdBootCertify", "sceCdCancelPOffRdy",
-	"sceCdBlueLEDCtl", "", "sceRemote2Read", "sceRemote2_7",
+	"sceCdBlueLEDCtl", "", "sceRm2Read", "sceRemote2_7",//Rm2PortGetConnection?
 	"sceRemote2_6", "sceCdWriteWakeUpTime", "sceCdReadWakeUpTime", "", /*20*/
 	"sceCdRcBypassCtl", "", "", "",
 	"", "sceCdNoticeGameStart", "", "",
 	"sceCdXBSPowerCtl", "sceCdXLEDCtl", "sceCdBuzzerCtl", "",
 	"", "sceCdSetMediumRemoval", "sceCdGetMediumRemoval", "sceCdXDVRPReset", /*30*/
-	"", "", "__sceCdGetOSDVER", "",
-	"", "", "", "",
-	"", "", "", "",
+	"", "", "__sceCdReadRegionParams", "__sceCdReadMAC",
+	"__sceCdWriteMAC", "", "", "",
+	"", "", "__sceCdWriteRegionParams", "",
 	"sceCdOpenConfig", "sceCdReadConfig", "sceCdWriteConfig", "sceCdCloseConfig", /*40*/
 	"", "", "", "",
 	"", "", "", "",
@@ -92,14 +96,15 @@ typedef struct {
 	s32 consoleId;	// offset of console id (?)
 	s32 ilinkId;	// offset of ilink id (ilink mac address)
 	s32 modelNum;	// offset of ps2 model number (eg "SCPH-70002")
-	s32	osdver;		// offset of OSDVER for PStwo
+	s32	regparams;	// offset of RegionParams for PStwo
+	s32 mac;		// offset of the value written to 0xFFFE0188 and 0xFFFE018C on PStwo
 } NVMLayout;
 
 #define NVM_FORMAT_MAX	2
 NVMLayout nvmlayouts[NVM_FORMAT_MAX] =
 {
-	{0x000,  0x280, 0x300, 0x200, 0x1C8, 0x1C0, 0x1A0, 0x180},	// eeproms from bios v0.00 and up
-	{0x146,  0x270, 0x2B0, 0x200, 0x1C8, 0x1E0, 0x1B0, 0x180},	// eeproms from bios v1.70 and up
+	{0x000,  0x280, 0x300, 0x200, 0x1C8, 0x1C0, 0x1A0, 0x180, 0x198},	// eeproms from bios v0.00 and up
+	{0x146,  0x270, 0x2B0, 0x200, 0x1C8, 0x1E0, 0x1B0, 0x180, 0x198},	// eeproms from bios v1.70 and up
 };
 
 
@@ -144,7 +149,7 @@ FILE *_cdvdOpenMechaVer() {
 	// if file doesnt exist, create empty one
 	fd = fopen(file, "r+b");
 	if (fd == NULL) {
-		SysPrintf("NVM File Not Found , Creating Blank File\n");
+		SysPrintf("MEC File Not Found , Creating Blank File\n");
 		fd = fopen(file, "wb");
 		if (fd == NULL) {
 			SysMessage("_cdvdOpenMechaVer: Error creating %s", file);
@@ -283,15 +288,26 @@ s32 cdvdWriteModelNumber(const u8* num, s32 part)
 	return SET_NVM_DATA(num, part, 8, modelNum);
 }
 
-s32 cdvdReadOSDVER(u8* num)
+s32 cdvdReadRegionParams(u8* num)
 {
-	return GET_NVM_DATA(num, 0, 8, osdver);
+	return GET_NVM_DATA(num, 0, 8, regparams);
 }
 
-s32 cdvdWriteOSDVER(const u8* num)
+s32 cdvdWriteRegionParams(const u8* num)
 {
-	return SET_NVM_DATA(num, 0, 8, osdver);
+	return SET_NVM_DATA(num, 0, 8, regparams);
 }
+
+s32 cdvdReadMAC(u8* num)
+{
+	return GET_NVM_DATA(num, 0, 8, mac);
+}
+
+s32 cdvdWriteMAC(const u8* num)
+{
+	return SET_NVM_DATA(num, 0, 8, mac);
+}
+
 s32 cdvdReadConfig(u8* config)
 {
 	// make sure its in read mode
@@ -607,7 +623,21 @@ s32 cdvdReadDvdDualInfo(s32* dualType, u32* layer1Start)
 }
 
 
-void cdvdReset() {
+#include <time.h>
+
+void cdvdReset()
+{
+#ifdef _WIN32
+	SYSTEMTIME st;
+    //Get and set the internal clock to time
+	GetSystemTime(&st);
+#else
+    time_t traw;
+    struct tm* ptlocal;
+    time(&traw);
+    ptlocal = localtime(&traw);
+#endif
+
 	memset(&cdvd, 0, sizeof(cdvd));
 	cdvd.sDataIn = 0x40;
 	cdvd.Ready   = 0x4e;
@@ -615,6 +645,31 @@ void cdvdReset() {
 	cdvd.Speed = 4;
 	cdvd.BlockSize = 2064;
 	cdvdReadTimeRcnt(0);
+
+    // any random valid date will do
+    cdvd.RTC.hour = 1;
+    cdvd.RTC.day = 25;
+    cdvd.RTC.month = 5;
+    cdvd.RTC.year = 2007;
+
+#ifndef _DEBUG
+#ifdef _WIN32
+	cdvd.RTC.second = (u8)(st.wSecond);
+	cdvd.RTC.minute = (u8)(st.wMinute);
+	cdvd.RTC.hour = (u8)(st.wHour+1)%24;
+	cdvd.RTC.day = (u8)(st.wDay);
+	cdvd.RTC.month = (u8)(st.wMonth);
+	cdvd.RTC.year = (u8)(st.wYear - 2000);
+#else
+    cdvd.RTC.second = ptlocal->tm_sec;
+    cdvd.RTC.minute = ptlocal->tm_min;
+    cdvd.RTC.hour = ptlocal->tm_hour;
+    cdvd.RTC.day = ptlocal->tm_mday;
+    cdvd.RTC.month = ptlocal->tm_mon;
+    cdvd.RTC.year = ptlocal->tm_year;
+#endif
+#endif
+
 }
 void cdvdReadTimeRcnt(int mode){	// Mode 0 is DVD, Mode 1 is CD
 	int readsize = 0;	// 1 Sector size
@@ -756,6 +811,7 @@ int cdvdReadSector() {
 int  cdvdReadInterrupt() {
 
 	//SysPrintf("cdvdReadInterrupt %x %x %x %x %x\n", cpuRegs.interrupt, cdvd.Readed, cdvd.Reading, cdvd.nSectors, (HW_DMA3_BCR_H16 * HW_DMA3_BCR_L16) *4);
+	cdvd.Ready   = 0x00;
 	if (cdvd.Readed == 0) {
 		cdvd.RetryCntP = 0;
 		cdvd.Reading = 1;
@@ -796,6 +852,7 @@ int  cdvdReadInterrupt() {
 		hwIntcIrq(INTC_SBUS);
 		HW_DMA3_CHCR &= ~0x01000000;
 		psxDmaInterrupt(3);
+		cdvd.Ready   = 0x4e;
 		return 1;
 	}
 
@@ -806,9 +863,11 @@ int  cdvdReadInterrupt() {
 	return 0;
 }
 
+u8 monthmap[13] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+
 void cdvdVsync() {
 	cdvd.RTCcount++;
-	if (cdvd.RTCcount < 60) return;
+	if (cdvd.RTCcount < ((Config.PsxType & 1) ? 50 : 60)) return;
 	cdvd.RTCcount = 0;
 
 	cdvd.RTC.second++;
@@ -824,14 +883,16 @@ void cdvdVsync() {
 	cdvd.RTC.hour = 0;
 
 	cdvd.RTC.day++;
-	if (cdvd.RTC.day < 30) return;
-	cdvd.RTC.day = 0;
+	if (cdvd.RTC.day <= monthmap[cdvd.RTC.month-1]) return;
+	cdvd.RTC.day = 1;
 
 	cdvd.RTC.month++;
 	if (cdvd.RTC.month < 12) return;
-	cdvd.RTC.month = 0;
+	cdvd.RTC.month = 1;
 
 	cdvd.RTC.year++;
+	if (cdvd.RTC.year < 100) return;
+	cdvd.RTC.year = 0;
 }
 
 
@@ -1289,10 +1350,17 @@ SysPrintf("*PCSX2*: CDVD TYPE %x\n", rt);
 
 void cdvdWrite14(u8 rt) { // PS1 MODE??
 	u32 cycle = psxRegs.cycle;
+
+	if (rt == 0xFE)	SysPrintf("*PCSX2*: go PS1 mode DISC SPEED = FAST\n");
+	else			SysPrintf("*PCSX2*: go PS1 mode DISC SPEED = %dX\n", rt);
+
 	psxReset();
 	psxHu32(0x1f801450) = 0x8;
 	psxHu32(0x1f801078) = 1;
 	psxRegs.cycle = cycle;
+
+	// PS1 DEBUGGING
+//	varLog = 0x09a00000;
 
 #ifdef PCSX2_DEVBUILD
 	varLog|= 0x10000000;// |  0x00400000;// | 0x1fe00000;
@@ -1369,31 +1437,41 @@ void cdvdWrite16(u8 rt) { // SCOMMAND
 
 		case 0x08: // CdReadRTC (0:8)
 			SetResultSize(8);
-			memcpy_fast(cdvd.Result, (u8*)&cdvd.RTC, 8);
-			/* do not uncomment this by now, it kinda makes 
-			   things a bit more random for debugging (linuz) */
-/*
-			{
-			time_t sysTime;
-			struct tm* utcTime;
-			time(&sysTime);
-			utcTime = gmtime(&sysTime);
-			cdvd.RTC.second	=itob((u8)utcTime->tm_sec);
-			cdvd.RTC.minute	=itob((u8)utcTime->tm_min);
-			cdvd.RTC.hour	=itob((u8)utcTime->tm_hour); // add 8 to the hours (the ps2 wants it this way)
-			cdvd.RTC.day	=itob((u8)utcTime->tm_mday);
-			cdvd.RTC.month	=itob((u8)utcTime->tm_mon);
-			cdvd.RTC.year	=itob((u8)(utcTime->tm_year+100));
-			cdvd.RTC.pad	=0;
-			}
-*/
+			cdvd.Result[0] = 0;
+			cdvd.Result[1] = itob(cdvd.RTC.second); //Seconds
+			cdvd.Result[2] = itob(cdvd.RTC.minute); //Minutes
+			cdvd.Result[3] = itob((cdvd.RTC.hour+8) %24); //Hours
+			
+			cdvd.Result[4] = 0; //Nothing
+			cdvd.Result[5] = itob(cdvd.RTC.day); //Day 
+			if(cdvd.Result[3] <= 7) cdvd.Result[5] += 1;
+			cdvd.Result[6] = itob(cdvd.RTC.month)+0x80; //Month
+			cdvd.Result[7] = itob(cdvd.RTC.year); //Year
+			/*SysPrintf("RTC Read Sec %x Min %x Hr %x Day %x Month %x Year %x\n", cdvd.Result[1], cdvd.Result[2],
+				cdvd.Result[3], cdvd.Result[5], cdvd.Result[6], cdvd.Result[7]);
+			SysPrintf("RTC Read Real Sec %d Min %d Hr %d Day %d Month %d Year %d\n", cdvd.RTC.second, cdvd.RTC.minute,
+				cdvd.RTC.hour, cdvd.RTC.day, cdvd.RTC.month, cdvd.RTC.year);*/
+   
 			break;
 
 		case 0x09: // sceCdWriteRTC (7:1)
-			SetResultSize(1);
+			
 			cdvd.Result[0] = 0;
-			memcpy_fast((u8*)&cdvd.RTC, cdvd.Param, 7);
 			cdvd.RTC.pad = 0;
+
+			cdvd.RTC.second = btoi(cdvd.Param[cdvd.ParamP-7]);
+			cdvd.RTC.minute = btoi(cdvd.Param[cdvd.ParamP-6]) % 60;
+			cdvd.RTC.hour = (btoi(cdvd.Param[cdvd.ParamP-5])+16) % 24;
+			cdvd.RTC.day = btoi(cdvd.Param[cdvd.ParamP-3]);
+			if(cdvd.Param[cdvd.ParamP-5] <= 7) cdvd.RTC.day -= 1;
+			cdvd.RTC.month = btoi(cdvd.Param[cdvd.ParamP-2]-0x80);
+			cdvd.RTC.year = btoi(cdvd.Param[cdvd.ParamP-1]);
+			/*SysPrintf("RTC write incomming Sec %x Min %x Hr %x Day %x Month %x Year %x\n", cdvd.Param[cdvd.ParamP-7], cdvd.Param[cdvd.ParamP-6],
+				cdvd.Param[cdvd.ParamP-5], cdvd.Param[cdvd.ParamP-3], cdvd.Param[cdvd.ParamP-2], cdvd.Param[cdvd.ParamP-1]);
+			SysPrintf("RTC Write Sec %d Min %d Hr %d Day %d Month %d Year %d\n", cdvd.RTC.second, cdvd.RTC.minute,
+				cdvd.RTC.hour, cdvd.RTC.day, cdvd.RTC.month, cdvd.RTC.year);*/
+			//memcpy_fast((u8*)&cdvd.RTC, cdvd.Param, 7);
+			SetResultSize(1);
 			break;
 
 		case 0x0A: // sceCdReadNVM (2:3)
@@ -1580,21 +1658,42 @@ void cdvdWrite16(u8 rt) { // SCOMMAND
 //		case 0x33: //sceCdXDVRPReset (1:1)
 //			break;
 
-		case 0x36: //cdvdman_call189 [__sceCdGetOSDVER - made up name] (0:15)
+		case 0x36: //cdvdman_call189 [__sceCdReadRegionParams - made up name] (0:15) i think it is 16, not 15
 			SetResultSize(15);
-			cdvd.Result[0] = cdvdReadOSDVER(&cdvd.Result[3]);
-			cdvd.Result[1] = 0;//0x10 - encryption zone == (1<<mechaver[0])
-			cdvd.Result[2] = 0;
-			cdvd.Result[11] = 0;
-			cdvd.Result[12] = 0;
-			cdvd.Result[13] = 0;//0xFF
-			cdvd.Result[14] = 0;
-			SysPrintf("OSDVer = %s\n",&cdvd.Result[3]);
+			cdvdGetMechaVer(&cdvd.Result[1]);
+			cdvd.Result[0] = cdvdReadRegionParams(&cdvd.Result[3]);//size==8
+			SysPrintf("REGION PARAMS = %s %s\n", mg_zones[cdvd.Result[1]], &cdvd.Result[3]);
+			cdvd.Result[1] = 1 << cdvd.Result[1];	//encryption zone; see offset 0x1C in encrypted headers
+			//////////////////////////////////////////
+			cdvd.Result[2] = 0;						//??
+//			cdvd.Result[3] == ROMVER[4] == *0xBFC7FF04
+//			cdvd.Result[4] == OSDVER[4] == CAP			Jjpn, Aeng, Eeng, Heng, Reng, Csch, Kkor?
+//			cdvd.Result[5] == OSDVER[5] == small
+//			cdvd.Result[6] == OSDVER[6] == small
+//			cdvd.Result[7] == OSDVER[7] == small
+//			cdvd.Result[8] == VERSTR[0x22] == *0xBFC7FF52
+//			cdvd.Result[9] == DVDID						J U O E A R C M
+//			cdvd.Result[10]== 0;					//??
+			cdvd.Result[11] = 0;					//??
+			cdvd.Result[12] = 0;					//??
+			//////////////////////////////////////////
+			cdvd.Result[13] = 0;					//0xFF - 77001
+			cdvd.Result[14] = 0;					//??
 			break;
 
-		case 0x3E: //[__sceCdSetOSDVER - made up name] (15:1) [Florin: hum, i was expecting 14:1]
+		case 0x37: //called from EECONF [sceCdReadMAC - made up name] (0:9)
+			SetResultSize(9);
+			cdvd.Result[0] = cdvdReadMAC(&cdvd.Result[1]);
+			break;
+
+		case 0x38: //used to fix the MAC back after accidentally trashed it :D [sceCdWriteMAC - made up name] (8:1)
 			SetResultSize(1);
-			cdvd.Result[0] = cdvdWriteOSDVER(&cdvd.Param[2]);
+			cdvd.Result[0] = cdvdWriteMAC(&cdvd.Param[0]);
+			break;
+
+		case 0x3E: //[__sceCdWriteRegionParams - made up name] (15:1) [Florin: hum, i was expecting 14:1]
+			SetResultSize(1);
+			cdvd.Result[0] = cdvdWriteRegionParams(&cdvd.Param[2]);
 			break;
 
 		case 0x40: // CdOpenConfig (3:1)
@@ -1733,9 +1832,9 @@ void cdvdWrite16(u8 rt) { // SCOMMAND
 				bit_ofs = mg_BIToffset(cdvd.mg_buffer);
                 psrc = (u64*)&cdvd.mg_buffer[bit_ofs-0x20];
                 pdst = (u64*)cdvd.mg_kbit;
-                pdst[0] = psrc[0]; pdst[1] = psrc[1];
+                pdst[0] = psrc[0]; pdst[1] = psrc[1];//memcpy(cdvd.mg_kbit, &cdvd.mg_buffer[bit_ofs-0x20], 0x10);
                 pdst = (u64*)cdvd.mg_kcon;
-                pdst[0] = psrc[2]; pdst[1] = psrc[3];
+                pdst[0] = psrc[2]; pdst[1] = psrc[3];//memcpy(cdvd.mg_kcon, &cdvd.mg_buffer[bit_ofs-0x10], 0x10);
 
 				if (cdvd.mg_buffer[bit_ofs+5] || cdvd.mg_buffer[bit_ofs+6] || cdvd.mg_buffer[bit_ofs+7])goto fail_pol_cal;
 				if (cdvd.mg_buffer[bit_ofs+4] * 16 + bit_ofs + 8 + 16 != *(u16*)&cdvd.mg_buffer[0x14]){
@@ -1794,28 +1893,28 @@ fail_pol_cal:
 			cdvd.Result[0] = 0;
 
             ((int*)(cdvd.Result+1))[0] = ((int*)cdvd.mg_kbit)[0];
-            ((int*)(cdvd.Result+1))[1] = ((int*)cdvd.mg_kbit)[1];
+            ((int*)(cdvd.Result+1))[1] = ((int*)cdvd.mg_kbit)[1];//memcpy(cdvd.Result+1, cdvd.mg_kbit, 8);
             break;
 
 		case 0x95: // sceMgReadKbit2 - read second half of BIT key
 			SetResultSize(1+8);//in:0
 			cdvd.Result[0] = 0;
             ((int*)(cdvd.Result+1))[0] = ((int*)(cdvd.mg_kbit+8))[0];
-            ((int*)(cdvd.Result+1))[1] = ((int*)(cdvd.mg_kbit+8))[1];
+            ((int*)(cdvd.Result+1))[1] = ((int*)(cdvd.mg_kbit+8))[1];//memcpy(cdvd.Result+1, cdvd.mg_kbit+8, 8);
 			break;
 
 		case 0x96: // sceMgReadKcon - read first half of content key
 			SetResultSize(1+8);//in:0
 			cdvd.Result[0] = 0;
             ((int*)(cdvd.Result+1))[0] = ((int*)cdvd.mg_kcon)[0];
-            ((int*)(cdvd.Result+1))[1] = ((int*)cdvd.mg_kcon)[1];
+            ((int*)(cdvd.Result+1))[1] = ((int*)cdvd.mg_kcon)[1];//memcpy(cdvd.Result+1, cdvd.mg_kcon, 8);
 			break;
 
 		case 0x97: // sceMgReadKcon2 - read second half of content key
 			SetResultSize(1+8);//in:0
 			cdvd.Result[0] = 0;
             ((int*)(cdvd.Result+1))[0] = ((int*)(cdvd.mg_kcon+8))[0];
-            ((int*)(cdvd.Result+1))[1] = ((int*)(cdvd.mg_kcon+8))[1];
+            ((int*)(cdvd.Result+1))[1] = ((int*)(cdvd.mg_kcon+8))[1];//memcpy(cdvd.Result+1, cdvd.mg_kcon+8, 8);
 			break;
 
 		default:

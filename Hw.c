@@ -36,13 +36,8 @@ u32 *psHL;
 u64 *psHD;
 #endif
 
-int b440 = 0;
-
-int b440table[] = {
-	0, 31, 31, 0, 31, 31, 0, 0,
-	31, 31, 0, 0, 31, 31, 0, 0,
-	31, 31, 0, 0, 31, 31, 0, 0,
-	31, 31, 0, 0 };
+int rdram_devices = 2;	// put 8 for TOOL and 2 for PS2 and PSX
+int rdram_sdevid = 0;
 
 int hwInit() {
 
@@ -53,7 +48,6 @@ int hwInit() {
 	}
 #endif
 
-	b440 = 0;
 	gsInit();
 	vif0Init();
 	vif1Init();
@@ -182,10 +176,6 @@ u16 hwRead16(u32 mem)
 u32 hwRead32(u32 mem) {
 	u32 ret;
 	
-#ifdef SPR_LOG
-		SPR_LOG("Hardware read 32bit at %lx, ret %lx\n", mem, psHu32(mem));
-#endif
-
 	//IPU regs
 	if ((mem>=0x10002000) && (mem<0x10003000)) {
 		return ipuRead32(mem);
@@ -258,23 +248,33 @@ u32 hwRead32(u32 mem) {
 
 		case 0x1000f130:
 		case 0x1000f410:
-		case 0x1000f430:
+		case 0x1000f430://MCH_RICM
 			ret = 0;
 			break;
 
-		case 0x1000f440:
+		case 0x1000f440://MCH_DRD
 			
-			b440++;
-			switch (b440) {
-				case 3: case 6: case 9: case 10:
-				case 13: case 14:
-				case 17: case 18:
-				case 21: case 22:
-				case 25: case 26:
-				case 29: case 30:
-					ret = 0; break;
+			if ((psHu32(0xf430) >> 6) & 0xF)
+				ret = 0;
+			else
+				switch ((psHu32(0xf430)>>16) & 0xFFF){//MCH_RICM: x:4|SA:12|x:5|SDEV:1|SOP:4|SBC:1|SDEV:5
+				case 0x21://INIT
+					ret = 0x1F * (rdram_sdevid < rdram_devices);
+					rdram_sdevid += (rdram_sdevid < rdram_devices);
+					break;
+				case 0x23://CNFGA
+					ret = 0x0D0D;	//PVER=3 | MVER=16 | DBL=1 | REFBIT=5
+					break;
+				case 0x24://CNFGB
+					//0x0110 for PSX  SVER=0 | CORG=8(5x9x7) | SPT=1 | DEVTYP=0 | BYTE=0
+					ret = 0x0090;	//SVER=0 | CORG=4(5x9x6) | SPT=1 | DEVTYP=0 | BYTE=0
+					break;
+				case 0x40://DEVID
+					ret = psHu32(0xf430) & 0x1F;	// =SDEV
+					break;
 				default:
-					ret = 0x1f; break;
+					ret = 0;
+					break;
 			}
 			break;
 
@@ -414,7 +414,10 @@ void hwWrite8(u32 mem, u8 value) {
 			}
 //			SysPrintf("%c", value);
 			break;
-
+		
+		case 0x10003c02: //Tony Hawks Project 8 uses this
+			vif1Write32(mem & ~0x2, value << 16);
+			break;
 		case 0x10008001: // dma0 - vif0
 #ifdef DMA_LOG
 			DMA_LOG("VIF0dma %lx\n", value);
@@ -769,11 +772,12 @@ void hwWrite16(u32 mem, u16 value)
 }
 
 #define DmaExec(name, num) { \
-	/* why not allowing tags on sif0/sif2? */ \
-	if(mem!= 0x1000c000 && mem != 0x1000c400 && mem != 0x1000c800) \
+	/* Keep the old tag if in chain mode and hw doesnt set it*/ \
+	if( (value & 0xc) == 0x4 && (value & 0xffff0000) == 0) \
 		psHu32(mem) = (psHu32(mem) & 0xFFFF0000) | (u16)value; \
-	else	\
-	psHu32(mem) = (u32)value;	\
+	else /* Else (including Normal mode etc) write whatever the hardware sends*/ \
+		 psHu32(mem) = (u32)value;	\
+    \
 	if ((psHu32(mem) & 0x100) && (psHu32(DMAC_CTRL) & 0x1)) { \
 		dma##name(); \
 	} \
@@ -831,7 +835,7 @@ void hwWrite32(u32 mem, u32 value) {
 		case GIF_MODE:
 			// need to set GIF_MODE (hamster ball)
 #ifdef GSPATH3FIX
-			SysPrintf("GIFMODE %x\n", value);
+			//SysPrintf("GIFMODE %x\n", value);
 #endif
 			psHu32(GIF_MODE) = value;
 			if (value & 0x1) psHu32(GIF_STAT)|= 0x1;
@@ -1036,7 +1040,8 @@ void hwWrite32(u32 mem, u32 value) {
 					else psHu16(0xe012)|= 1<<i;
 				}
 			}
-			if ((cpuRegs.CP0.n.Status.val & 0x10007) == 0x10001)cpuTestDMACInts();
+			if ((cpuRegs.CP0.n.Status.val & 0x10807) == 0x10801)
+                cpuTestDMACInts();
 			break;
 
 		case 0x1000f000: // INTC_STAT
@@ -1044,6 +1049,8 @@ void hwWrite32(u32 mem, u32 value) {
 			HW_LOG("INTC_STAT Write 32bit %x\n", value);
 #endif
 			psHu32(0xf000)&=~value;	
+			if ((cpuRegs.CP0.n.Status.val & 0x10407) == 0x10401)
+                cpuTestINTCInts();
 			break;
 
 		case 0x1000f010: // INTC_MASK
@@ -1056,10 +1063,17 @@ void hwWrite32(u32 mem, u32 value) {
 					else psHu32(0xf010)|= 1<<i;
 				}
 			}
-			if ((cpuRegs.CP0.n.Status.val & 0x10007) == 0x10001)cpuTestINTCInts();
+			if ((cpuRegs.CP0.n.Status.val & 0x10407) == 0x10401)
+                cpuTestINTCInts();
 			break;
-		case 0x1000f440:
 			
+		case 0x1000f430://MCH_RICM: x:4|SA:12|x:5|SDEV:1|SOP:4|SBC:1|SDEV:5
+			if ((((value >> 16) & 0xFFF) == 0x21) && (((value >> 6) & 0xF) == 1) && (((psHu32(0xf440) >> 7) & 1) == 0))//INIT & SRP=0
+				rdram_sdevid = 0;	// if SIO repeater is cleared, reset sdevid
+			psHu32(mem) = value & ~0x80000000;	//kill the busy bit
+			break;
+
+		case 0x1000f440://MCH_DRD:
 			psHu32(mem) = value;
 			break;
 
@@ -1071,7 +1085,6 @@ void hwWrite32(u32 mem, u32 value) {
 
 		case 0x1000f130:
 		case 0x1000f410:
-		case 0x1000f430:
 
 #ifdef PCSX2_DEVBUILD
 			HW_LOG("Unknown Hardware write 32 at %x with value %x (%x)\n", mem, value, cpuRegs.CP0.n.Status);
@@ -1197,7 +1210,8 @@ void hwWrite64(u32 mem, u64 value) {
 					else psHu16(0xe012)|= 1<<i;
 				}
 			}
-			if ((cpuRegs.CP0.n.Status.val & 0x10007) == 0x10001)cpuTestDMACInts();
+			if ((cpuRegs.CP0.n.Status.val & 0x10807) == 0x10801)
+                cpuTestDMACInts();
 			break;
 
 		case 0x1000f590: // DMAC_ENABLEW
@@ -1209,7 +1223,9 @@ void hwWrite64(u32 mem, u64 value) {
 #ifdef HW_LOG
 			HW_LOG("INTC_STAT Write 64bit %x\n", value);
 #endif
-			psHu32(0xf000)&=~value;			
+			psHu32(0xf000)&=~value;	
+			if ((cpuRegs.CP0.n.Status.val & 0x10407) == 0x10401)
+                cpuTestINTCInts();
 			break;
 
 		case 0x1000f010: // INTC_MASK
@@ -1223,7 +1239,8 @@ void hwWrite64(u32 mem, u64 value) {
 					else psHu32(0xf010)|= 1<<i;
 				}
 			}
-			if ((cpuRegs.CP0.n.Status.val & 0x10007) == 0x10001)cpuTestINTCInts();
+			if ((cpuRegs.CP0.n.Status.val & 0x10407) == 0x10401)
+                cpuTestINTCInts();
 			break;
 
 		case 0x1000f130:
@@ -1268,13 +1285,13 @@ void hwWrite128(u32 mem, u64 *value) {
 }
 
 int  intcInterrupt() {
-	if ((cpuRegs.CP0.n.Status.val & 0x10007) != 0x10001) return 0;
+	if ((cpuRegs.CP0.n.Status.val & 0x10407) != 0x10401) return 1;
 
 	if ((psHu32(INTC_STAT)) == 0) {
 		SysPrintf("*PCSX2*: intcInterrupt already cleared\n");
 		return 1;
 	}
-	if ((psHu32(INTC_STAT) & psHu32(INTC_MASK)) == 0) return 0;
+	if ((psHu32(INTC_STAT) & psHu32(INTC_MASK)) == 0) return 1;
 
 #ifdef HW_LOG
 	HW_LOG("intcInterrupt %x\n", psHu32(INTC_STAT) & psHu32(INTC_MASK));
@@ -1290,23 +1307,23 @@ int  intcInterrupt() {
 }
 
 int  dmacTestInterrupt() {
-	if ((cpuRegs.CP0.n.Status.val & 0x10007) != 0x10001) return 0;
+	if ((cpuRegs.CP0.n.Status.val & 0x10807) != 0x10801) return 1;
 
 	if ((psHu16(0xe012) & psHu16(0xe010) || 
-		 psHu16(0xe010) & 0x8000) == 0) return 0;
+		 psHu16(0xe010) & 0x8000) == 0) return 1;
 
-	if((psHu32(DMAC_CTRL) & 0x1) == 0) return 0;
+	if((psHu32(DMAC_CTRL) & 0x1) == 0) return 1;
 	return 1;
 }
 
 int  dmacInterrupt()
 {
-if ((cpuRegs.CP0.n.Status.val & 0x10007) != 0x10001) return 0;
+if ((cpuRegs.CP0.n.Status.val & 0x10807) != 0x10801) return 1;
 
 	if ((psHu16(0xe012) & psHu16(0xe010) || 
-		 psHu16(0xe010) & 0x8000) == 0) return 0;
+		 psHu16(0xe010) & 0x8000) == 0) return 1;
 
-	if((psHu32(DMAC_CTRL) & 0x1) == 0) return 0;
+	if((psHu32(DMAC_CTRL) & 0x1) == 0) return 1;
 
 #ifdef HW_LOG
 	HW_LOG("dmacInterrupt %x\n", (psHu16(0xe012) & psHu16(0xe010) || 
@@ -1320,14 +1337,13 @@ if ((cpuRegs.CP0.n.Status.val & 0x10007) != 0x10001) return 0;
 void hwIntcIrq(int n) {
 	//if( psHu32(INTC_MASK) & (1<<n) ) {
 		psHu32(INTC_STAT)|= 1<<n;
-		if ((cpuRegs.CP0.n.Status.val & 0x10007) == 0x10001)cpuTestINTCInts();
+		cpuTestINTCInts();
 	//}
 }
 
 void hwDmacIrq(int n) {
 	psHu32(DMAC_STAT)|= 1<<n;
-	if ((cpuRegs.CP0.n.Status.val & 0x10007) == 0x10001)
-		cpuTestDMACInts();	
+	cpuTestDMACInts();	
 }
 
 /* Write 'size' bytes to memory address 'addr' from 'data'. */
@@ -1372,7 +1388,7 @@ int hwDmacSrcChainWithStack(DMACh *dma, int id) {
 
 	switch (id) {
 		case 0: // Refe - Transfer Packet According to ADDR field
-			dma->tadr += 16;
+			//dma->tadr += 16;
 			return 1;										//End Transfer
 
 		case 1: // CNT - Transfer QWC following the tag.
@@ -1430,7 +1446,7 @@ int hwDmacSrcChainWithStack(DMACh *dma, int id) {
 		case 7: // End - Transfer QWC following the tag 
 			dma->madr = dma->tadr + 16;						//Set MADR to data following the tag
 			//comment out tadr fixes lemans
-			//dma->tadr = dma->madr + (dma->qwc << 4);			//Set TADR to QW following the data
+			//dma->tadr = dma->madr + (dma->qwc << 4);			//Dont Increment tag, breaks Soul Calibur II and III
 			return 1;										//End Transfer
 	}
 
@@ -1442,7 +1458,7 @@ int hwDmacSrcChain(DMACh *dma, int id) {
 
 	switch (id) {
 		case 0: // Refe - Transfer Packet According to ADDR field
-			dma->tadr += 16;
+			//dma->tadr += 16;
 			return 1;										//End Transfer
 
 		case 1: // CNT - Transfer QWC following the tag.
@@ -1463,7 +1479,7 @@ int hwDmacSrcChain(DMACh *dma, int id) {
 
 		case 7: // End - Transfer QWC following the tag
 			dma->madr = dma->tadr + 16;						//Set MADR to data following the tag
-			//dma->tadr = dma->madr + (dma->qwc << 4);			//Set TADR to QW following the data
+			//dma->tadr = dma->madr + (dma->qwc << 4);			//Dont Increment tag, breaks Soul Calibur II and III
 			return 1;										//End Transfer
 	}
 

@@ -38,8 +38,14 @@ extern s8 *psxS;
 extern uptr *psxMemWLUT;
 extern uptr *psxMemRLUT;
 
+//#define TLB_DEBUG_MEM
+#ifdef TLB_DEBUG_MEM
+void* PSXM(u32 mem);
+void* _PSXM(u32 mem);
+#else
 #define PSXM(mem) (psxMemRLUT[(mem) >> 16] == 0 ? NULL : (void*)(psxMemRLUT[(mem) >> 16] + ((mem) & 0xffff)))
 #define _PSXM(mem) ((void*)(psxMemRLUT[(mem) >> 16] + ((mem) & 0xffff)))
+#endif
 
 #define psxSs8(mem)		psxS[(mem) & 0xffff]
 #define psxSs16(mem)	(*(s16*)&psxS[(mem) & 0xffff])

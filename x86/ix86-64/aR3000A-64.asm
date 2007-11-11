@@ -1,28 +1,9 @@
 extern psxRegs:abs
 extern psxRecLUT:abs
 extern psxRecRecompile:near
-extern b440:abs
-extern b440table:abs
 extern EEsCycle:abs
 
 .code
-
-recCheckF440 proc public
-        add dword ptr [b440], 1
-		mov eax, dword ptr [b440]
-		sub eax, 3
-		mov edx, 31
-
-		cmp eax, 27
-		ja WriteVal
-		shl eax, 2
-        cdqe
-		mov edx, dword ptr [rax+b440table]
-
-WriteVal:
-		mov dword ptr [18000000h+01000f440h], edx
-		ret
-recCheckF440 endp
 
 R3000AInterceptor proc public
         sub rsp, 48

@@ -295,7 +295,6 @@ CPU_SSE_XMMCACHE_END
 
 void recPMTHL()
 {
-	SysPrintf("PMTHL email zero if abnormal behavior\n");
 	REC_FUNC_INLINE( PMTHL, 0 );
 }
 
@@ -835,14 +834,12 @@ CPU_SSE_XMMCACHE_END
 ////////////////////////////////////////////////////
 void recPEXT5()
 {
-	SysPrintf("PEXT5 email zero if abnormal behavior\n");
 	REC_FUNC_INLINE( PEXT5, _Rd_ );
 }
 
 ////////////////////////////////////////////////////
 void recPPAC5()
 {
-	SysPrintf("PPAC5 email zero if abnormal behavior\n");
 	REC_FUNC_INLINE( PPAC5, _Rd_ );
 }
 
@@ -1056,14 +1053,13 @@ CPU_SSE_XMMCACHE_END
 }
 
 ////////////////////////////////////////////////////
+//NOTE: check kh2 movies if changing this
 void recPADDSW( void ) 
 {
 	if ( ! _Rd_ ) return;
 
 //CPU_SSE2_XMMCACHE_START(XMMINFO_READS|XMMINFO_READT|XMMINFO_WRITED)
 //CPU_SSE_XMMCACHE_END
-
-	//SysPrintf("PADDSW email zero if abnormal behavior\n");
 
 	if( _Rd_ ) _deleteEEreg(_Rd_, 0);
 	_deleteEEreg(_Rs_, 1);
@@ -1148,13 +1144,13 @@ CPU_SSE_XMMCACHE_END
 }
 
 ////////////////////////////////////////////////////
+//NOTE: check kh2 movies if changing this
 void recPSUBSW( void ) 
 {
 	if ( ! _Rd_ ) return;
 
 //CPU_SSE2_XMMCACHE_START(XMMINFO_READS|XMMINFO_READT|XMMINFO_WRITED)
 //CPU_SSE_XMMCACHE_END
-	//SysPrintf("PSUBSW  email zero if abnormal behavior\n");
 
 	if( _Rd_ ) _deleteEEreg(_Rd_, 0);
 	_deleteEEreg(_Rs_, 1);
@@ -1663,8 +1659,6 @@ CPU_SSE_XMMCACHE_END
 ////////////////////////////////////////////////////
 void recPADSBH()
 {
-	SysPrintf("PADSBH email zero if abnormal behavior\n");
-
 CPU_SSE2_XMMCACHE_START(XMMINFO_READS|XMMINFO_READT|XMMINFO_WRITED)
 	int t0reg;
 
@@ -1807,7 +1801,6 @@ CPU_SSE_XMMCACHE_END
 ////////////////////////////////////////////////////
 void recPSUBUW()
 {
-	SysPrintf("PSUBUW email zero if abnormal behavior\n");
 	REC_FUNC_INLINE( PSUBUW, _Rd_ );
 }
 
@@ -2238,7 +2231,6 @@ REC_FUNC( PROT3W, _Rd_ );
 ////////////////////////////////////////////////////
 void recPMADDW()
 {
-	SysPrintf("PMADDW email zero if abnormal behavior\n");
 	EEINST_SETSIGNEXT(_Rs_);
 	EEINST_SETSIGNEXT(_Rt_);
 	if( _Rd_ ) EEINST_SETSIGNEXT(_Rd_);
@@ -2248,21 +2240,18 @@ void recPMADDW()
 ////////////////////////////////////////////////////
 void recPSLLVW()
 {
-	SysPrintf("PSLLVW email zero if abnormal behavior\n");
 	REC_FUNC_INLINE( PSLLVW, _Rd_ );
 }
 
 ////////////////////////////////////////////////////
 void recPSRLVW()
 {
-	SysPrintf("PSRLVW email zero if abnormal behavior\n");
 	REC_FUNC_INLINE( PSRLVW, _Rd_ ); 
 }
 
 ////////////////////////////////////////////////////
 void recPMSUBW()
 {
-	SysPrintf("PMSUBW email zero if abnormal behavior\n");
 	EEINST_SETSIGNEXT(_Rs_);
 	EEINST_SETSIGNEXT(_Rt_);
 	if( _Rd_ ) EEINST_SETSIGNEXT(_Rd_);
@@ -2303,7 +2292,6 @@ void recPMSUBW()
 ////////////////////////////////////////////////////
 void recPMULTW()
 {
-	SysPrintf("PMULTW email zero if abnormal behavior\n");
 	EEINST_SETSIGNEXT(_Rs_);
 	EEINST_SETSIGNEXT(_Rt_);
 	if( _Rd_ ) EEINST_SETSIGNEXT(_Rd_);
@@ -2312,7 +2300,6 @@ void recPMULTW()
 ////////////////////////////////////////////////////
 void recPDIVW()
 {
-	SysPrintf("PDIVW email zero if abnormal behavior\n");
 	EEINST_SETSIGNEXT(_Rs_);
 	EEINST_SETSIGNEXT(_Rt_);
 	REC_FUNC_INLINE( PDIVW, _Rd_ );
@@ -2321,7 +2308,6 @@ void recPDIVW()
 ////////////////////////////////////////////////////
 void recPDIVBW()
 {
-	SysPrintf("PDIVBW email zero if abnormal behavior\n");
 	REC_FUNC_INLINE( PDIVBW, _Rd_ ); //--
 }
 
@@ -2389,7 +2375,6 @@ CPU_SSE_XMMCACHE_END
 ////////////////////////////////////////////////////
 void recPMSUBH()
 {
-	SysPrintf("PMSUBH email zero if abnormal behavior\n");
 CPU_SSE2_XMMCACHE_START((_Rd_?XMMINFO_WRITED:0)|XMMINFO_READS|XMMINFO_READT|XMMINFO_READLO|XMMINFO_READHI|XMMINFO_WRITELO|XMMINFO_WRITEHI)
 	int t0reg = _allocTempXMMreg(XMMT_INT, -1);
 	int t1reg = _allocTempXMMreg(XMMT_INT, -1);
@@ -2433,7 +2418,6 @@ CPU_SSE_XMMCACHE_END
 ////////////////////////////////////////////////////
 void recPHMSBH()
 {
-	SysPrintf("PHMSBH email zero if abnormal behavior\n");
 CPU_SSE2_XMMCACHE_START((_Rd_?XMMINFO_WRITED:0)|XMMINFO_READS|XMMINFO_READT|XMMINFO_READLO|XMMINFO_READHI|XMMINFO_WRITELO|XMMINFO_WRITEHI)
 	int t0reg = _allocTempXMMreg(XMMT_INT, -1);
 
@@ -3036,7 +3020,6 @@ CPU_SSE_XMMCACHE_END
 ////////////////////////////////////////////////////
 void recPMULTUW()
 {
-	SysPrintf("PMULTUW email zero if abnormal behavior\n");
 CPU_SSE2_XMMCACHE_START(XMMINFO_READS|XMMINFO_READT|XMMINFO_WRITED|XMMINFO_WRITELO|XMMINFO_WRITEHI)
 	int t0reg = _allocTempXMMreg(XMMT_INT, -1);
 	EEINST_SETSIGNEXT(_Rs_);
@@ -3070,7 +3053,6 @@ CPU_SSE_XMMCACHE_END
 ////////////////////////////////////////////////////
 void recPMADDUW()
 {
-	SysPrintf("PMADDUW email zero if abnormal behavior\n");
 CPU_SSE2_XMMCACHE_START(XMMINFO_READS|XMMINFO_READT|XMMINFO_WRITED|XMMINFO_WRITELO|XMMINFO_WRITEHI|XMMINFO_READLO|XMMINFO_READHI)
 	int t0reg = _allocTempXMMreg(XMMT_INT, -1);
 	EEINST_SETSIGNEXT(_Rs_);

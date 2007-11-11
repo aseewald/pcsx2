@@ -221,7 +221,7 @@ int CDVD_GetVolumeDescriptor(void){
 	static struct cdVolDesc localVolDesc;
 
 #ifdef DEBUG
-	printf("CDVD_GetVolumeDescriptor called\n");
+	SysPrintf("CDVD_GetVolumeDescriptor called\n");
 #endif
 
 	for (volDescSector = 16; volDescSector<20; volDescSector++)
@@ -244,10 +244,10 @@ int CDVD_GetVolumeDescriptor(void){
 
 #ifdef DEBUG
 	if (CDVolDesc.filesystemType == 1)
-		printf("CD FileSystem is ISO9660\n");
+		SysPrintf("CD FileSystem is ISO9660\n");
 	else if (CDVolDesc.filesystemType == 2)
-		printf("CD FileSystem is Joliet\n");
-	else printf("Could not detect CD FileSystem type\n");
+		SysPrintf("CD FileSystem is Joliet\n");
+	else SysPrintf("Could not detect CD FileSystem type\n");
 #endif
 //	CdStop();
 
@@ -273,7 +273,7 @@ int CDVD_findfile(char* fname, struct TocEntry* tocEntry){
 	struct dirTocEntry* tocEntryPointer;
 
 #ifdef DEBUG
-	printf("CDVD_findfile called\n");
+	SysPrintf("CDVD_findfile called\n");
 #endif
 
 	//make sure we have good cdReadMode
@@ -356,7 +356,7 @@ int CDVD_findfile(char* fname, struct TocEntry* tocEntry){
 					current_sector++;
 					if (CdRead(current_sector,1,toc,&cdReadMode) != TRUE)
 					{
-						printf("Couldn't Read from CD !\n");
+						SysPrintf("Couldn't Read from CD !\n");
 						return -1;
 					}
 //					CdSync(0x00);
@@ -392,7 +392,7 @@ int CDVD_findfile(char* fname, struct TocEntry* tocEntry){
 		// If we havent found the directory name we wanted then fail
 		if (found_dir != TRUE)
 		{
-			printf("CDVD_findfile: could not find dir\n");
+			SysPrintf("CDVD_findfile: could not find dir\n");
 			return -1;
 		}
 
@@ -402,7 +402,7 @@ int CDVD_findfile(char* fname, struct TocEntry* tocEntry){
 		// Read the TOC of the found subdirectory
 		if (CdRead(localTocEntry.fileLBA,1,toc,&cdReadMode) != TRUE)
 		{
-			printf("Couldn't Read from CD !\n");
+			SysPrintf("Couldn't Read from CD !\n");
 			return -1;
 		}
 //		CdSync(0x00);
@@ -417,7 +417,7 @@ int CDVD_findfile(char* fname, struct TocEntry* tocEntry){
 	}
 
 #ifdef DEBUG
-	printf("CDVD_findfile: found dir, now looking for file\n");
+	SysPrintf("CDVD_findfile: found dir, now looking for file\n");
 #endif
 
 	tocEntryPointer = (struct dirTocEntry*)toc;
@@ -450,7 +450,7 @@ int CDVD_findfile(char* fname, struct TocEntry* tocEntry){
 				memcpy(tocEntry->date, localTocEntry.date, 7);
 
 #ifdef DEBUG
-				printf("CDVD_findfile: found file\n");
+				SysPrintf("CDVD_findfile: found file\n");
 #endif
 
 				return TRUE;
@@ -466,7 +466,7 @@ int CDVD_findfile(char* fname, struct TocEntry* tocEntry){
 			dir_lba++;
 
 			if (CdRead(dir_lba,1,toc,&cdReadMode) != TRUE){
-				printf("Couldn't Read from CD !\n");
+				SysPrintf("Couldn't Read from CD !\n");
 				return -1;
 			}
 //			CdSync(0x00);
@@ -476,7 +476,7 @@ int CDVD_findfile(char* fname, struct TocEntry* tocEntry){
 	}
 
 #ifdef DEBUG
-	printf("CDVD_findfile: could not find file\n");
+	SysPrintf("CDVD_findfile: could not find file\n");
 #endif
 
 	return FALSE;

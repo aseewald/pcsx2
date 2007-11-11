@@ -29,6 +29,7 @@ int hblankend = 0;
 Counter counters[6];
 u32 nextCounter, nextsCounter;
 static void (*s_prevExecuteVU1Block)() = NULL;
+LARGE_INTEGER lfreq;
 
 // its so it doesnt keep triggering an interrupt once its reached its target
 // if it doesnt reset the counter it needs stopping
@@ -108,6 +109,10 @@ void rcntInit() {
 	counters[5].sCycle = cpuRegs.cycle;
 	UpdateVSyncRate();
 	
+#ifdef _WIN32
+    QueryPerformanceFrequency(&lfreq);
+#endif
+
 	for (i=0; i<4; i++) rcntUpd(i);
 	rcntSet();
 
@@ -137,8 +142,25 @@ void UpdateVSyncRate() {
 // debug code, used for stats
 int g_nCounters[4];
 extern u32 s_lastvsync[2];
-LARGE_INTEGER lfreq;
 static int iFrame = 0;	
+
+#ifndef _WIN32
+#include <sys/time.h>
+#endif
+
+u64 GetMicroTime()
+{
+#ifdef _WIN32
+    LARGE_INTEGER count;
+    QueryPerformanceCounter(&count);
+    return count.QuadPart * 1000000 / lfreq.QuadPart;
+#else
+    struct timeval t;
+    gettimeofday(&t, NULL);
+    return (u64)t.tv_sec*1000000+t.tv_usec;
+#endif
+}
+
 
 void FrameLimiter()
 {
@@ -146,30 +168,29 @@ void FrameLimiter()
 
 	// do over 4 frames instead of 1
 	if( (iFrame&3) == 0 ) {
-		u32 frames = (Config.PsxType&1) ? (4000 / 50 - 4) : (4000 / 60 - 4);
-		dwEndTime = timeGetTime();
+		u32 frames = (Config.PsxType&1) ? (4000000 / 50 - 1500) : (4000000 / 60 - 1500);
+		dwEndTime = (u32)GetMicroTime();//timeGetTime();
 
-		if( dwEndTime < dwStartTime + frames ) {
-			if( dwEndTime < dwStartTime + frames - 3 )
-				Sleep(frames-(dwEndTime-dwStartTime)-3);
+		if( dwEndTime-dwStartTime < frames ) {
+			if( dwEndTime-dwStartTime < frames - 4000 )
+				Sleep((frames-(dwEndTime-dwStartTime)-4000)/1000);
 
-			while(dwEndTime < dwStartTime + frames) dwEndTime = timeGetTime();
+			while(dwEndTime-dwStartTime < frames)
+                dwEndTime = (u32)GetMicroTime();//timeGetTime();
 		}
 
-		dwStartTime = timeGetTime();
+		dwStartTime = (u32)GetMicroTime();//timeGetTime();
 	}
 }
 
 extern u32 CSRw;
-extern u32 SuperVUGetRecTimes(int clear);
+extern u64 SuperVUGetRecTimes(int clear);
 extern u32 vu0time;
 
 extern void DummyExecuteVU1Block(void);
 
 #include "VU.h"
 void VSync() {
-
-	//QueryPerformanceFrequency(&lfreq);
 
 	if (counters[5].mode & 0x10000) { // VSync End (22 hsyncs)
 
@@ -201,7 +222,7 @@ void VSync() {
 		
 
 		//SysPrintf("c: %x, %x\n", cpuRegs.cycle, *(u32*)&VU1.Micro[16]);
-		//if( (iFrame%20) == 0 ) SysPrintf("svu time: %d\n", SuperVUGetRecTimes(1));
+		//if( (iFrame%20) == 0 ) SysPrintf("svu time: %d\n", SuperVUGetRecTimes(1) * 100000 / lfreq.QuadPart);
 //		if( (iFrame%10) == 0 ) {
 //			SysPrintf("vu0 time: %d\n", vu0time);
 //			vu0time = 0;
@@ -338,7 +359,7 @@ void VSync() {
 					}
 				}
 				else {
-					if( nNoSkipFrames == 0 && nConsecutiveRender > 3 && nConsecutiveSkip < 20 &&
+					if( nNoSkipFrames == 0 && nConsecutiveRender > 1 && nConsecutiveSkip < 20 &&
 						(CHECK_MULTIGS? (uTotalTime >= uExpectedTime + uDeltaTime/4 && (uTotalTime >= uExpectedTime + uDeltaTime*3/4 || nConsecutiveSkip==0)) : 
 										(uTotalTime >= uExpectedTime + (uDeltaTime/4))) ) {
 
@@ -463,21 +484,23 @@ void rcntUpdate()
 	
 	if ((cpuRegs.cycle - counters[4].sCycleT) >= counters[4].CycleT && hblankend == 1){
 		
-		if (!(GSCSRr & 0x4)){
-			GSCSRr |= 4; // signal
-			
+		if(counters[5].mode & 0x10000){
+			if (!(GSCSRr & 0x4)){
+				GSCSRr |= 4; // signal
+				
+			}
+			if (!(GSIMR&0x400) )
+					gsIrq();
 		}
-		if (!(GSIMR&0x400) )
-				gsIrq();
 		if(gates)rcntEndGate(0);
 		if(psxhblankgate)psxCheckEndGate(0);
 		hblankend = 0;
-		counters[4].CycleT  = counters[4].rate;
+		counters[4].CycleT  = counters[4].rate-PS2HBLANKEND;
 	}
 	if ((cpuRegs.cycle - counters[4].sCycleT) >= counters[4].CycleT) {
 		counters[4].sCycleT = cpuRegs.cycle;
 		counters[4].sCycle = cpuRegs.cycle;
-		counters[4].CycleT  = counters[4].rate-PS2HBLANKEND;
+		counters[4].CycleT  = PS2HBLANKEND;
 		counters[4].Cycle  = counters[4].rate;
 		counters[4].count = 0;
 		
@@ -488,14 +511,12 @@ void rcntUpdate()
 	
 	if ((cpuRegs.cycle - counters[5].sCycleT)
 		>= counters[5].CycleT && (counters[5].mode & 0x10000)){
-			counters[5].CycleT  = counters[5].rate;
+			counters[5].CycleT  = counters[5].rate-PS2VBLANKEND;
 			VSync();
-		}
-		
-		if ((cpuRegs.cycle - counters[5].sCycleT) >= counters[5].CycleT) {
+	} else if ((cpuRegs.cycle - counters[5].sCycleT) >= counters[5].CycleT) {
 			counters[5].sCycleT = cpuRegs.cycle;
 			counters[5].sCycle = cpuRegs.cycle;
-			counters[5].CycleT  = counters[5].rate-PS2VBLANKEND;
+			counters[5].CycleT  = PS2VBLANKEND;
 			counters[5].Cycle  = counters[5].rate;
 			counters[5].count = 0;
 			VSync();

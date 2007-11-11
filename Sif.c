@@ -81,6 +81,12 @@ void SIF0write(u32 *from, int words)
 	sif0.fifoSize += words;
 #ifdef SIF_LOG
 	SIF_LOG("  SIF0 + %d = %d (pos=%d)\n", words, sif0.fifoSize, sif0.fifoWritePos);
+//    {
+//        int i;
+//        for(i = 0; i < words; i += 4) {
+//        SIF_LOG(" EE SIF write data: %x %x %x %x\n", from[i], from[i+1], from[i+2], from[i+3]);
+//        }
+//    }
 #endif
 
 /*	if (sif0.fifoSize == FIFO_SIF0_W) {
@@ -271,6 +277,13 @@ void SIF0Dma()
 					_dmaGetAddr(sif0dma, ptag, sif0dma->madr, 5);
 
 					SIF0read((u32*)ptag, readSize*4);
+//                    {
+//                        int i;
+//                        for(i = 0; i < readSize; ++i) {
+//                            SIF_LOG("EE SIF0 read madr: %x %x %x %x\n", ((u32*)ptag)[4*i+0], ((u32*)ptag)[4*i+1], ((u32*)ptag)[4*i+2], ((u32*)ptag)[4*i+3]);
+//                        }
+//                    }
+
 					Cpu->Clear(sif0dma->madr, readSize*4);
 
 					//cycles += readSize * BIAS;
@@ -306,6 +319,7 @@ void SIF0Dma()
 				{
 					static PCSX2_ALIGNED16(u32 tag[4]);
 					SIF0read((u32*)&tag[0], 4); // Tag
+                    SIF_LOG(" EE SIF read tag: %x %x %x %x\n", tag[0], tag[1], tag[2], tag[3]);
 
 					sif0dma->qwc = (u16)tag[0];
 					sif0dma->madr = tag[1];
@@ -314,7 +328,8 @@ void SIF0Dma()
 #ifdef SIF_LOG
 					SIF_LOG(" EE SIF dest chain tag madr:%08X qwc:%04X id:%X irq:%d(%08X_%08X)\n", sif0dma->madr, sif0dma->qwc, (tag[0]>>28)&3, (tag[0]>>31)&1, tag[1], tag[0]);
 #endif
-					if ((psHu32(DMAC_CTRL) & 0x30) != 0 && ((tag[0]>>28)&3) == 0)psHu32(DMAC_STADR) = sif0dma->madr + (sif0dma->qwc * 16);
+					if ((psHu32(DMAC_CTRL) & 0x30) != 0 && ((tag[0]>>28)&3) == 0)
+                        psHu32(DMAC_STADR) = sif0dma->madr + (sif0dma->qwc * 16);
 					notDone = 1;
 					sif0.chain = 1;
 					if(tag[0] & 0x40000000)
@@ -326,6 +341,7 @@ void SIF0Dma()
 	}while(notDone);
 
 	FreezeMMXRegs(0);
+	FreezeXMMRegs(0)
 }
 
 void SIF1Dma()
@@ -512,6 +528,7 @@ void SIF1Dma()
 	}while(notDone);
 
 	FreezeMMXRegs(0);
+	FreezeXMMRegs(0);
 }
 
 int  sif0Interrupt() {
@@ -568,6 +585,11 @@ void dmaSIF0() {
 	if (sif0.fifoReadPos != sif0.fifoWritePos) {
 		SysPrintf("warning, sif0.fifoReadPos != sif0.fifoWritePos\n");
 	}
+//    if(sif0dma->qwc > 0 & (sif0dma->chcr & 0x4) == 0x4) {
+//        sif0dma->chcr &= ~4; //Halflife sets a QWC amount in chain mode, no tadr set.
+//        SysPrintf("yo\n");
+//    }
+
 	psHu32(0x1000F240) |= 0x2000;
 	if(sif0dma->chcr & 0x100 && HW_DMA9_CHCR & 0x01000000) {
 		hwIntcIrq(INTC_SBUS);
@@ -587,6 +609,12 @@ void dmaSIF1() {
 	if (sif1.fifoReadPos != sif1.fifoWritePos) {
 		SysPrintf("warning, sif1.fifoReadPos != sif1.fifoWritePos\n");
 	}
+
+//    if(sif1dma->qwc > 0 & (sif1dma->chcr & 0x4) == 0x4) {
+//        sif1dma->chcr &= ~4; //Halflife sets a QWC amount in chain mode, no tadr set.
+//        SysPrintf("yo2\n");
+//    }
+
 	psHu32(0x1000F240) |= 0x4000;
 	if(sif1dma->chcr & 0x100 && HW_DMA10_CHCR & 0x01000000) {
 		SIF1Dma();
@@ -603,7 +631,7 @@ void dmaSIF2() {
 			sif2dma->chcr, sif2dma->madr, sif2dma->qwc);
 #endif
 
-	sif2dma->chcr&= ~0x100;
+    sif2dma->chcr&= ~0x100;
 	hwDmacIrq(7);
 	SysPrintf("*PCSX2*: dmaSIF2\n");
 }

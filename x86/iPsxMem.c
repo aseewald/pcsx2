@@ -435,6 +435,8 @@ __declspec(naked) void psxRecMemWrite16()
 		je sifwrite
 		cmp dx, 0x1000
 		je devwrite
+        cmp dx, 0x1600
+        je ignorewrite
 	}
 
 	ASSERT_WRITEOK
@@ -508,6 +510,9 @@ devwrite:
 		call DEV9write16
 		// stack alwritey incremented
 		ret
+
+ignorewrite:
+        ret
 	}
 }
 
@@ -515,6 +520,9 @@ int psxRecMemConstWrite16(u32 mem, int mmreg)
 {
 	u32 t = (mem >> 16) & 0x1fff;
 	switch(t) {
+		case 0x1600:
+			//HACK: DEV9 VM crash fix
+			return 0;
 		case 0x1f80:
 			psxHwConstWrite16(mem&0x1fffffff, mmreg);
 			return 0;

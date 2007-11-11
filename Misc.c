@@ -23,6 +23,7 @@
 #include <sys/stat.h>
 #include <ctype.h>
 
+#include "Plugins.h"
 #include "Common.h"
 #include "PsxCommon.h"
 #include "CDVDisodrv.h"
@@ -37,7 +38,10 @@
 
 #include "GS.h"
 
-u32 dwSaveVersion = 0x7a30000e;
+#include "Cache.h"
+
+u32 dwSaveVersion = 0x7a30000f;
+u32 dwCurSaveStateVer = 0;
 extern u32 s_iLastCOP0Cycle;
 extern u32 s_iLastPERFCycle[2];
 extern int g_psxWriteOk;
@@ -45,6 +49,7 @@ extern int g_psxWriteOk;
 PcsxConfig Config;
 u32 BiosVersion;
 char CdromId[12];
+static int g_Pcsx2Recording = 0; // true 1 if recording video and sound
 
 char *LabelAuthors = { N_(
 	"PCSX2 a PS2 emulator\n\n"
@@ -429,6 +434,13 @@ int Load(char *ExePath) {
 }
 */
 
+FILE *emuLog;
+
+#ifdef PCSX2_DEVBUILD
+int Log;
+u32 varLog;
+#endif
+
 u16 logProtocol;
 u8  logSource;
 int connected=0;
@@ -506,8 +518,6 @@ const char Pcsx2Header[32] = STATE_VERSION " PCSX2 v" PCSX2_VERSION;
 
 extern void gsWaitGS();
 
-extern u32 g_nextBranchCycle, g_psxNextBranchCycle;
-
 int SaveState(char *file) {
 
 	gzFile f;
@@ -567,7 +577,15 @@ int SaveState(char *file) {
 	sio2Freeze(f, 1);
 
 	SysPrintf("Saving GS\n");
-	_PS2Esave(GS);
+    if( CHECK_MULTIGS ) {
+        // have to call in thread, otherwise weird stuff will start happening
+        uptr uf = (uptr)f;
+        GSRingBufSimplePacket(GS_RINGTYPE_SAVE, (int)(uf&0xffffffff), (int)(uf>>32), 0);
+        gsWaitGS();
+    }
+    else {
+        _PS2Esave(GS);
+    }
 	SysPrintf("Saving SPU2\n");
 	_PS2Esave(SPU2);
 	SysPrintf("Saving DEV9\n");
@@ -590,7 +608,6 @@ int LoadState(char *file) {
 	freezeData fP;
 	int i;
 	u32 OldProtect;
-	u32 dwVer;
 
 #ifdef _DEBUG
 	s_vucount = 0;
@@ -601,11 +618,11 @@ int LoadState(char *file) {
 	f = gzopen(file, "rb");
 	if (f == NULL) return -1;
 	
-	gzread(f, &dwVer, 4);
+	gzread(f, &dwCurSaveStateVer, 4);
 
-	if( dwVer != dwSaveVersion ) {
+	if( dwCurSaveStateVer != dwSaveVersion ) {
 
-		if( dwVer != 0x7a30000d ) {
+		if( dwCurSaveStateVer != 0x7a30000d && dwCurSaveStateVer != 0x7a30000e  ) {
 			gzclose(f);
 			SysPrintf("Save state wrong version\n");
 			return 0;
@@ -659,7 +676,7 @@ int LoadState(char *file) {
 	gzread(f, &g_nextBranchCycle, sizeof(g_nextBranchCycle));
 	gzread(f, &g_psxNextBranchCycle, sizeof(g_psxNextBranchCycle));
 	gzread(f, &s_iLastCOP0Cycle, sizeof(s_iLastCOP0Cycle));
-	if( dwVer >= 0x7a30000e ) {
+	if( dwCurSaveStateVer >= 0x7a30000e ) {
 		gzread(f, s_iLastPERFCycle, sizeof(u32)*2);
 	}
 	gzread(f, &g_psxWriteOk, sizeof(g_psxWriteOk));
@@ -689,7 +706,15 @@ int LoadState(char *file) {
 	sio2Freeze(f, 0);
 
 	SysPrintf("Loading GS\n");
-	_PS2Eload(GS);
+    if( CHECK_MULTIGS ) {
+        // have to call in thread, otherwise weird stuff will start happening
+        uptr uf = (uptr)f;
+        GSRingBufSimplePacket(GS_RINGTYPE_LOAD, (int)(uf&0xffffffff), (int)(uf>>32), 0);
+        gsWaitGS();
+    }
+    else {
+        _PS2Eload(GS);
+    }
 	SysPrintf("Loading SPU2\n");
 	_PS2Eload(SPU2);
 	SysPrintf("Loading DEV9\n");
@@ -700,6 +725,7 @@ int LoadState(char *file) {
 	SysPrintf("Loading ok\n");
 
 	gzclose(f);
+    memset(pCache,0,sizeof(_cacheS)*64);
 
 	//dumplog |= 4;
 	WriteCP0Status(cpuRegs.CP0.n.Status.val);
@@ -971,14 +997,28 @@ void ProcessFKeys(int fkey, int shift)
 				SaveGSState(Text);
 			}
 			break;
+#endif
 
 		case 12:
+            if( shift ) {
+#ifdef PCSX2_DEVBUILD
 #ifndef PCSX2_NORECBUILD
-			iDumpRegisters(cpuRegs.pc, 0);
-			SysPrintf("hardware registers dumped EE:%x, IOP:%x\n", cpuRegs.pc, psxRegs.pc);
+			    iDumpRegisters(cpuRegs.pc, 0);
+			    SysPrintf("hardware registers dumped EE:%x, IOP:%x\n", cpuRegs.pc, psxRegs.pc);
 #endif
+#endif
+            }
+            else {
+                g_Pcsx2Recording ^= 1;
+                if( CHECK_MULTIGS ) {
+                    GSRingBufSimplePacket(GS_RINGTYPE_RECORD, g_Pcsx2Recording, 0, 0);
+                }
+                else {
+                    if( GSsetupRecording != NULL ) GSsetupRecording(g_Pcsx2Recording, NULL);
+                    if( SPU2setupRecording != NULL ) SPU2setupRecording(g_Pcsx2Recording, NULL);  
+                }
+            }
 			break;
-#endif
     }
 }
 

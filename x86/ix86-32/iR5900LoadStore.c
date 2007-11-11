@@ -844,8 +844,7 @@ void recLoad64(u32 imm, int align)
 		int dohw;
 		int mmregs = _eePrepareReg(_Rs_);
 
-		mmreg = _allocCheckGPRtoMMX(g_pCurInstInfo, _Rt_, MODE_WRITE);
-		if( _Rt_ && mmreg >= 0 ) {
+		if( _Rt_ && (mmreg = _allocCheckGPRtoMMX(g_pCurInstInfo, _Rt_, MODE_WRITE)) >= 0 ) {
 			dohw = recSetMemLocation(_Rs_, imm, mmregs, align, 0);
 
 			MOVQRmtoROffset(mmreg, ECX, PS2MEM_BASE_+s_nAddMemOffset);
@@ -1896,7 +1895,8 @@ void recStore_raw(EEINST* pinst, int bit, int x86reg, int gprreg, u32 offset)
 			else {
 				if( (mmreg = _allocCheckGPRtoMMX(pinst, gprreg, MODE_READ)) >= 0 ) {	
 					MOVQRtoRmOffset(ECX, mmreg, PS2MEM_BASE_+offset);
-					SetMMXstate();
+                    SetMMXstate();
+                    _freeMMXreg(mmreg);
 				}
 				else if( _hasFreeMMXreg() ) {
 					mmreg = _allocMMXreg(-1, MMX_GPR+gprreg, MODE_READ);

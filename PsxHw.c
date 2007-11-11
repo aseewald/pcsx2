@@ -20,7 +20,9 @@
 #include <string.h>
 
 #include "PsxCommon.h"
+#include "Misc.h"
 #include "iR5900.h"
+
 
 #ifdef _WIN32
 #pragma warning(disable:4244)
@@ -167,56 +169,56 @@ u16 psxHwRead16(u32 add) {
 	
 		case 0x1f801100:
 			hard = (u16)psxRcntRcount16(0);
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T0 count read16: %x\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T0 count read16: %x\n", hard);
 #endif
 			return hard;
 		case 0x1f801104:
 			hard = psxCounters[0].mode;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T0 mode read16: %x\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T0 mode read16: %x\n", hard);
 #endif
 			return hard;
 		case 0x1f801108:
 			hard = psxCounters[0].target;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T0 target read16: %x\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T0 target read16: %x\n", hard);
 #endif
 			return hard;
 		case 0x1f801110:
 			hard = (u16)psxRcntRcount16(1);
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T1 count read16: %x\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T1 count read16: %x\n", hard);
 #endif
 			return hard;
 		case 0x1f801114:
 			hard = psxCounters[1].mode;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T1 mode read16: %x\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T1 mode read16: %x\n", hard);
 #endif
 			return hard;
 		case 0x1f801118:
 			hard = psxCounters[1].target;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T1 target read16: %x\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T1 target read16: %x\n", hard);
 #endif
 			return hard;
 		case 0x1f801120:
 			hard = (u16)psxRcntRcount16(2);
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T2 count read16: %x\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T2 count read16: %x\n", hard);
 #endif
 			return hard;
 		case 0x1f801124:
 			hard = psxCounters[2].mode;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T2 mode read16: %x\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T2 mode read16: %x\n", hard);
 #endif
 			return hard;
 		case 0x1f801128:
 			hard = psxCounters[2].target;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T2 target read16: %x\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T2 target read16: %x\n", hard);
 #endif
 			return hard;
 
@@ -225,56 +227,56 @@ u16 psxHwRead16(u32 add) {
 
 		case 0x1f801480:
 			hard = (u16)psxRcntRcount32(3);
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T3 count read16: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T3 count read16: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801484:
 			hard = psxCounters[3].mode;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T3 mode read16: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T3 mode read16: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801488:
 			hard = psxCounters[3].target;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T3 target read16: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T3 target read16: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801490:
 			hard = (u16)psxRcntRcount32(4);
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T4 count read16: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T4 count read16: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801494:
 			hard = psxCounters[4].mode;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T4 mode read16: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T4 mode read16: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801498:
 			hard = psxCounters[4].target;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T4 target read16: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T4 target read16: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f8014a0:
 			hard = (u16)psxRcntRcount32(5);
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T5 count read16: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T5 count read16: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f8014a4:
 			hard = psxCounters[5].mode;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T5 mode read16: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T5 mode read16: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f8014a8:
 			hard = psxCounters[5].target;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T5 target read16: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T5 target read16: %lx\n", hard);
 #endif
 			return hard;
 
@@ -553,111 +555,111 @@ u32 psxHwRead32(u32 add) {
 		// time for rootcounters :)
 		case 0x1f801100:
 			hard = (u16)psxRcntRcount16(0);
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T0 count read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T0 count read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801104:
 			hard = (u16)psxCounters[0].mode;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T0 mode read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T0 mode read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801108:
 			hard = psxCounters[0].target;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T0 target read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T0 target read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801110:
 			hard = (u16)psxRcntRcount16(1);
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T1 count read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T1 count read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801114:
 			hard = (u16)psxCounters[1].mode;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T1 mode read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T1 mode read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801118:
 			hard = psxCounters[1].target;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T1 target read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T1 target read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801120:
 			hard = (u16)psxRcntRcount16(2);
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T2 count read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T2 count read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801124:
 			hard = (u16)psxCounters[2].mode;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T2 mode read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T2 mode read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801128:
 			hard = psxCounters[2].target;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T2 target read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T2 target read32: %lx\n", hard);
 #endif
 			return hard;
 
 		case 0x1f801480:
 			hard = (u32)psxRcntRcount32(3);
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T3 count read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T3 count read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801484:
 			hard = (u16)psxCounters[3].mode;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T3 mode read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T3 mode read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801488:
 			hard = psxCounters[3].target;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T3 target read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T3 target read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801490:
 			hard = (u32)psxRcntRcount32(4);
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T4 count read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T4 count read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801494:
 			hard = (u16)psxCounters[4].mode;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T4 mode read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T4 mode read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f801498:
 			hard = psxCounters[4].target;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T4 target read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T4 target read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f8014a0:
 			hard = (u32)psxRcntRcount32(5);
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T5 count read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T5 count read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f8014a4:
 			hard = (u16)psxCounters[5].mode;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T5 mode read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T5 mode read32: %lx\n", hard);
 #endif
 			return hard;
 		case 0x1f8014a8:
 			hard = psxCounters[5].target;
-#ifdef PSXHW_LOG
-			PSXHW_LOG("T5 target read32: %lx\n", hard);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("T5 target read32: %lx\n", hard);
 #endif
 			return hard;
 
@@ -874,7 +876,7 @@ void psxHwWrite8(u32 add, u8 value) {
 #ifdef PSXHW_LOG
 			PSXHW_LOG("SIO2 write8 DATAIN <- %08X\n", value);
 #endif
-			sio2_fifoIn(value);return;//serial data feed/fifo
+			sio2_serialIn(value);return;//serial data feed/fifo
 
 		default:
 			psxHu8(add) = value;
@@ -961,50 +963,50 @@ void psxHwWrite16(u32 add, u16 value) {
 			psxHu16(0x10c6) = value; return; // DMA4 bcr_count
 
 		case 0x1f801100:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 0 COUNT 16bit write %x\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 0 COUNT 16bit write %x\n", value);
 #endif
 			psxRcntWcount16(0, value); return;
 		case 0x1f801104:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 0 MODE 16bit write %x\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 0 MODE 16bit write %x\n", value);
 #endif
 			psxRcnt0Wmode(value); return;
 		case 0x1f801108:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 0 TARGET 16bit write %x\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 0 TARGET 16bit write %x\n", value);
 #endif
 			psxRcntWtarget16(0, value); return;
 
 		case 0x1f801110:
 #ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 1 COUNT 16bit write %x\n", value);
+			PSXCNT_LOG("COUNTER 1 COUNT 16bit write %x\n", value);
 #endif
 			psxRcntWcount16(1, value); return;
 		case 0x1f801114:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 1 MODE 16bit write %x\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 1 MODE 16bit write %x\n", value);
 #endif
 			psxRcnt1Wmode(value); return;
 		case 0x1f801118:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 1 TARGET 16bit write %x\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 1 TARGET 16bit write %x\n", value);
 #endif
 			psxRcntWtarget16(1, value); return;
 
 		case 0x1f801120:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 2 COUNT 16bit write %x\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 2 COUNT 16bit write %x\n", value);
 #endif
 			psxRcntWcount16(2, value); return;
 		case 0x1f801124:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 2 MODE 16bit write %x\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 2 MODE 16bit write %x\n", value);
 #endif
 			psxRcnt2Wmode(value); return;
 		case 0x1f801128:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 2 TARGET 16bit write %x\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 2 TARGET 16bit write %x\n", value);
 #endif
 			psxRcntWtarget16(2, value); return;
 
@@ -1016,50 +1018,50 @@ void psxHwWrite16(u32 add, u16 value) {
 			return;
 
 		case 0x1f801480:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 3 COUNT 16bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 3 COUNT 16bit write %lx\n", value);
 #endif
 			psxRcntWcount32(3, value); return;
 		case 0x1f801484:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 3 MODE 16bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 3 MODE 16bit write %lx\n", value);
 #endif
 			psxRcnt3Wmode(value); return;
 		case 0x1f801488:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 3 TARGET 16bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 3 TARGET 16bit write %lx\n", value);
 #endif
 			psxRcntWtarget32(3, value); return;
 
 		case 0x1f801490:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 4 COUNT 16bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 4 COUNT 16bit write %lx\n", value);
 #endif
 			psxRcntWcount32(4, value); return;
 		case 0x1f801494:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 4 MODE 16bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 4 MODE 16bit write %lx\n", value);
 #endif
 			psxRcnt4Wmode(value); return;
 		case 0x1f801498:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 4 TARGET 16bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 4 TARGET 16bit write %lx\n", value);
 #endif
 			psxRcntWtarget32(4, value); return;
 
 		case 0x1f8014a0:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 5 COUNT 16bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 5 COUNT 16bit write %lx\n", value);
 #endif
 			psxRcntWcount32(5, value); return;
 		case 0x1f8014a4:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 5 MODE 16bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 5 MODE 16bit write %lx\n", value);
 #endif
 			psxRcnt5Wmode(value); return;
 		case 0x1f8014a8:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 5 TARGET 16bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 5 TARGET 16bit write %lx\n", value);
 #endif
 			psxRcntWtarget32(5, value); return;
 
@@ -1509,98 +1511,98 @@ void psxHwWrite32(u32 add, u32 value) {
 			mdecWrite1(value); break;
 */
 		case 0x1f801100:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 0 COUNT 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 0 COUNT 32bit write %lx\n", value);
 #endif
 			psxRcntWcount16(0, value ); return;
 		case 0x1f801104:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 0 MODE 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 0 MODE 32bit write %lx\n", value);
 #endif
 			psxRcnt0Wmode(value); return;
 		case 0x1f801108:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 0 TARGET 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 0 TARGET 32bit write %lx\n", value);
 #endif
 			psxRcntWtarget16(0, value ); return;
 
 		case 0x1f801110:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 1 COUNT 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 1 COUNT 32bit write %lx\n", value);
 #endif
 			psxRcntWcount16(1, value ); return;
 		case 0x1f801114:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 1 MODE 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 1 MODE 32bit write %lx\n", value);
 #endif
 			psxRcnt1Wmode(value); return;
 		case 0x1f801118:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 1 TARGET 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 1 TARGET 32bit write %lx\n", value);
 #endif
 			psxRcntWtarget16(1, value ); return;
 
 		case 0x1f801120:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 2 COUNT 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 2 COUNT 32bit write %lx\n", value);
 #endif
 			psxRcntWcount16(2, value ); return;
 		case 0x1f801124:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 2 MODE 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 2 MODE 32bit write %lx\n", value);
 #endif
 			psxRcnt2Wmode(value); return;
 		case 0x1f801128:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 2 TARGET 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 2 TARGET 32bit write %lx\n", value);
 #endif
 			psxRcntWtarget16(2, value); return;
 
 		case 0x1f801480:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 3 COUNT 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 3 COUNT 32bit write %lx\n", value);
 #endif
 			psxRcntWcount32(3, value); return;
 		case 0x1f801484:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 3 MODE 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 3 MODE 32bit write %lx\n", value);
 #endif
 			psxRcnt3Wmode(value); return;
 		case 0x1f801488:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 3 TARGET 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 3 TARGET 32bit write %lx\n", value);
 #endif
 			psxRcntWtarget32(3, value); return;
 
 		case 0x1f801490:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 4 COUNT 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 4 COUNT 32bit write %lx\n", value);
 #endif
 			psxRcntWcount32(4, value); return;
 		case 0x1f801494:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 4 MODE 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 4 MODE 32bit write %lx\n", value);
 #endif
 			psxRcnt4Wmode(value); return;
 		case 0x1f801498:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 4 TARGET 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 4 TARGET 32bit write %lx\n", value);
 #endif
 			psxRcntWtarget32(4, value); return;
 
 		case 0x1f8014a0:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 5 COUNT 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 5 COUNT 32bit write %lx\n", value);
 #endif
 			psxRcntWcount32(5, value); return;
 		case 0x1f8014a4:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 5 MODE 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 5 MODE 32bit write %lx\n", value);
 #endif
 			psxRcnt5Wmode(value); return;
 		case 0x1f8014a8:
-#ifdef PSXHW_LOG
-			PSXHW_LOG("COUNTER 5 TARGET 32bit write %lx\n", value);
+#ifdef PSXCNT_LOG
+			PSXCNT_LOG("COUNTER 5 TARGET 32bit write %lx\n", value);
 #endif
 			psxRcntWtarget32(5, value); return;
 
@@ -1767,6 +1769,7 @@ void psxHw4Write8(u32 add, u8 value) {
 		case 0x1f402016:
 			cdvdWrite16(value);
 			FreezeMMXRegs(0);
+			FreezeXMMRegs(0)
 			return;
 		case 0x1f402017: cdvdWrite17(value); return;
 		case 0x1f402018: cdvdWrite18(value); return;

@@ -224,6 +224,11 @@ void CALLBACK GSsetGameCRC(int crc, int gameoptions);
 // controls frame skipping in the GS, if this routine isn't present, frame skipping won't be done
 void CALLBACK GSsetFrameSkip(int frameskip);
 
+// if start is 1, starts recording spu2 data, else stops
+// returns a non zero value if successful
+// for now, pData is not used
+int CALLBACK GSsetupRecording(int start, void* pData);
+
 void CALLBACK GSreset();
 void CALLBACK GSwriteCSR(u32 value);
 void CALLBACK GSgetDriverInfo(GSdriverInfo *info);
@@ -329,7 +334,12 @@ void CALLBACK SPU2interruptDMA7();
 u32 CALLBACK SPU2ReadMemAddr(int core);
 void CALLBACK SPU2WriteMemAddr(int core,u32 value);
 void CALLBACK SPU2irqCallback(void (*SPU2callback)(),void (*DMA4callback)(),void (*DMA7callback)());
+
 // extended funcs
+// if start is 1, starts recording spu2 data, else stops
+// returns a non zero value if successful
+// for now, pData is not used
+int CALLBACK SPU2setupRecording(int start, void* pData);
 
 void CALLBACK SPU2async(u32 cycles);
 s32  CALLBACK SPU2freeze(int mode, freezeData *data);
@@ -428,6 +438,8 @@ u32  CALLBACK USBread32(u32 addr);
 void CALLBACK USBwrite8(u32 addr,  u8 value);
 void CALLBACK USBwrite16(u32 addr, u16 value);
 void CALLBACK USBwrite32(u32 addr, u32 value);
+void CALLBACK USBasync(u32 cycles);
+
 // cycles = IOP cycles before calling callback,
 // if callback returns 1 the irq is triggered, else not
 void CALLBACK USBirqCallback(USBcallback callback);
@@ -498,6 +510,7 @@ typedef void (CALLBACK* _GSprintf)(int timeout, char *fmt, ...);
 typedef void (CALLBACK* _GSsetBaseMem)(void*);
 typedef void (CALLBACK* _GSsetGameCRC)(int, int);
 typedef void (CALLBACK* _GSsetFrameSkip)(int frameskip);
+typedef int (CALLBACK* _GSsetupRecording)(int, void*);
 typedef void (CALLBACK* _GSreset)();
 typedef void (CALLBACK* _GSwriteCSR)(u32 value);
 typedef void (CALLBACK* _GSgetDriverInfo)(GSdriverInfo *info);
@@ -557,6 +570,7 @@ typedef void (CALLBACK* _SPU2writeDMA7Mem)(u16 *pMem, int size);
 typedef void (CALLBACK* _SPU2setDMABaseAddr)(uptr baseaddr);
 typedef void (CALLBACK* _SPU2interruptDMA7)();
 typedef void (CALLBACK* _SPU2irqCallback)(void (*SPU2callback)(),void (*DMA4callback)(),void (*DMA7callback)());
+typedef int (CALLBACK* _SPU2setupRecording)(int, void*);
 typedef u32 (CALLBACK* _SPU2ReadMemAddr)(int core);
 typedef void (CALLBACK* _SPU2WriteMemAddr)(int core,u32 value);
 typedef void (CALLBACK* _SPU2async)(u32 cycles);
@@ -624,6 +638,9 @@ typedef u32  (CALLBACK* _USBread32)(u32 mem);
 typedef void (CALLBACK* _USBwrite8)(u32 mem, u8 value);
 typedef void (CALLBACK* _USBwrite16)(u32 mem, u16 value);
 typedef void (CALLBACK* _USBwrite32)(u32 mem, u32 value);
+typedef void (CALLBACK* _USBasync)(u32 cycles);
+
+
 typedef void (CALLBACK* _USBirqCallback)(USBcallback callback);
 typedef USBhandler (CALLBACK* _USBirqHandler)(void);
 typedef void (CALLBACK* _USBsetRAM)(void *mem);
@@ -674,6 +691,7 @@ _GSprintf      	   GSprintf;
 _GSsetBaseMem 	   GSsetBaseMem;
 _GSsetGameCRC		GSsetGameCRC;
 _GSsetFrameSkip	   GSsetFrameSkip;
+_GSsetupRecording GSsetupRecording;
 _GSreset		   GSreset;
 _GSwriteCSR		   GSwriteCSR;
 _GSgetDriverInfo   GSgetDriverInfo;
@@ -745,6 +763,7 @@ _SPU2writeDMA7Mem  SPU2writeDMA7Mem;
 _SPU2setDMABaseAddr SPU2setDMABaseAddr;
 _SPU2interruptDMA7 SPU2interruptDMA7;
 _SPU2ReadMemAddr   SPU2ReadMemAddr;
+_SPU2setupRecording SPU2setupRecording;
 _SPU2WriteMemAddr   SPU2WriteMemAddr;
 _SPU2irqCallback   SPU2irqCallback;
 
@@ -807,6 +826,8 @@ _USBread32         USBread32;
 _USBwrite8         USBwrite8;
 _USBwrite16        USBwrite16;
 _USBwrite32        USBwrite32;
+_USBasync          USBasync;
+
 _USBirqCallback    USBirqCallback;
 _USBirqHandler     USBirqHandler;
 _USBsetRAM         USBsetRAM;

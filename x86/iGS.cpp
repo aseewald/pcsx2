@@ -19,6 +19,8 @@
 // stop compiling if NORECBUILD build (only for Visual Studio)
 #if !(defined(_MSC_VER) && defined(PCSX2_NORECBUILD))
 
+#include "PS2Etypes.h"
+
 #if defined(_WIN32)
 #include <windows.h>
 #endif
@@ -31,7 +33,6 @@
 using namespace std;
 
 extern "C" {
-#include "PS2Etypes.h"
 #include "zlib.h"
 #include "Elfheader.h"
 #include "Misc.h"

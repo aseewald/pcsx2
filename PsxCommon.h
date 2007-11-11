@@ -18,17 +18,21 @@
 #ifndef __PSXCOMMON_H__
 #define __PSXCOMMON_H__
 
+#include "PS2Etypes.h"
+
 #ifdef _WIN32
 #include <windows.h>
 #endif
 
-#include "PS2Etypes.h"
+#include <assert.h>
 
 #include "System.h"
 #include <zlib.h>
 
-long LoadCdBios;
-int cdOpenCase;
+extern long LoadCdBios;
+extern int cdOpenCase;
+
+#define PSXCLK	36864000	/* 36.864 Mhz */
 
 #include "Plugins.h"
 #include "R3000A.h"
@@ -42,5 +46,8 @@ int cdOpenCase;
 #include "DebugTools/Debug.h"
 #include "PsxSio2.h"
 #include "CDVD.h"
+#include "Memory.h"
+#include "Hw.h"
+#include "Sif.h"
 
 #endif /* __PSXCOMMON_H__ */

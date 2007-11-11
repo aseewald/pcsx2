@@ -19,25 +19,6 @@
 #define PSX_MEMMASK 0x5fffffff
 
 #ifdef __x86_64__
-
-.globl recCheckF440
-        .type recCheckF440, @function
-recCheckF440:   
-        add dword ptr [b440], 1
-		mov %eax, dword ptr [b440]
-		sub %eax, 3
-		mov %edx, 31
-
-		cmp %eax, 27
-		ja WriteVal
-		shl %eax, 2
-        cdqe
-		mov %edx, dword ptr [%rax+b440table]
-
-WriteVal:
-		mov %rax, PS2MEM_BASE_+0x1000f440
-		mov dword ptr [%rax], %edx
-		ret
                 
 #define REG_PC %edi
 #define REG_BLOCK %r12
@@ -46,7 +27,6 @@ WriteVal:
 .extern EEsCycle
 
 .globl R3000AExecute
-        .type R3000AExecute, @function
 R3000AExecute:  
 
         push %rbx
@@ -106,7 +86,6 @@ Execute_Exit:
         
 // jumped to when invalid psxpc address
 .globl psxDispatcher
-	.type psxDispatcher, @function
 psxDispatcher:
         // EDX contains the current psxpc to jump to, stack contains the jump addr to modify
         push %rdx
@@ -156,7 +135,6 @@ psxDispatcher_CallFn:
         jmp REG_BLOCK
 
 .globl psxDispatcherClear
-	.type psxDispatcherClear, @function
 psxDispatcherClear:
         // %EDX contains the current psxpc
         mov dword ptr [psxRegs + PCOFFSET], %edx
@@ -212,7 +190,6 @@ psxDispatcherClear_Recompile:
 
 // called when jumping to variable psxpc address
 .globl psxDispatcherReg
-	.type psxDispatcherReg, @function
 psxDispatcherReg:
 
         //s_pDispatchBlock = PSX_GETBLOCK(psxRegs.pc);
@@ -251,31 +228,12 @@ psxDispatcherReg_recomp:
         jmp %rax // fnprt
 
 #else // not x86-64
-
-.globl recCheckF440
-        .type recCheckF440, @function
-recCheckF440:
-        add dword ptr [b440], 1
-		mov %eax, [b440]
-		sub %eax, 3
-		mov %edx, 31
-
-		cmp %eax, 27
-		ja WriteVal
-		shl %eax, 2
-		mov %edx, dword ptr [%eax+b440table]
-
-WriteVal:
-		mov %eax, PS2MEM_BASE_+0x1000f440
-		mov dword ptr [%eax], %edx
-		ret
                 
 #define REG_PC %ecx
 #define REG_BLOCK %esi
 
 // jumped to when invalid psxpc address
 .globl psxDispatcher
-	.type psxDispatcher, @function
 psxDispatcher:
         // EDX contains the current psxpc to jump to, stack contains the jump addr to modify
         push %edx
@@ -328,7 +286,6 @@ psxDispatcher_CallFn:
 		jmp REG_BLOCK
 
 .globl psxDispatcherClear
-	.type psxDispatcherClear, @function
 psxDispatcherClear:
         // %EDX contains the current psxpc
         mov dword ptr [psxRegs + PCOFFSET], %edx
@@ -389,7 +346,6 @@ psxDispatcherClear_Recompile:
 
 // called when jumping to variable psxpc address
 .globl psxDispatcherReg
-	.type psxDispatcherReg, @function
 psxDispatcherReg:
 
         //s_pDispatchBlock = PSX_GETBLOCK(psxRegs.pc);

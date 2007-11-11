@@ -20,7 +20,6 @@
 #define REG_BLOCKd %r14d
 
 .globl R5900Execute
-	.type R5900Execute, @function
 R5900Execute:
 		push %rbx
 		push %rbp
@@ -72,7 +71,6 @@ Execute_Function:
 		ret
         
 .globl Dispatcher
-	.type Dispatcher, @function
 Dispatcher:
         // EDX contains the jump addr to modify
         push %rdx
@@ -120,7 +118,6 @@ Dispatcher_CallFn:
 
         
 .globl DispatcherClear
-	.type DispatcherClear, @function
 DispatcherClear:
         // EDX contains the current pc
         mov dword ptr [cpuRegs + PCOFFSET], %edx
@@ -173,7 +170,6 @@ DispatcherClear_Recompile:
         
 // called when jumping to variable pc address
 .globl DispatcherReg
-	.type DispatcherReg, @function
 DispatcherReg:
         //s_pDispatchBlock = PC_GETBLOCK(cpuRegs.pc)
         mov %eax, dword ptr [cpuRegs + PCOFFSET]
@@ -216,7 +212,6 @@ DispatcherReg_recomp:
 
         
 .globl _StartPerfCounter
-	.type _StartPerfCounter, @function
 _StartPerfCounter:
 
 	push %rax
@@ -233,7 +228,6 @@ _StartPerfCounter:
 	ret
 
 .globl _StopPerfCounter
-	.type _StopPerfCounter, @function
 _StopPerfCounter:
 
 	push %rax

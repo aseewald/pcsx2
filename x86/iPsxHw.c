@@ -506,12 +506,14 @@ int psxHwConstRead32(u32 x86reg, u32 add) {
 
 		case 0x1F801C00:
 			iFlushCall(0);
-			CALLFunc((uptr)SPU2ReadMemAddr(0));
+			PUSH32I(0);
+			CALLFunc((uptr)SPU2ReadMemAddr);
 			return 1;
 
 		case 0x1F801500:
 			iFlushCall(0);
-			CALLFunc((uptr)SPU2ReadMemAddr(1));
+			PUSH32I(1);
+			CALLFunc((uptr)SPU2ReadMemAddr);
 			return 1;
 
 		default:
@@ -577,7 +579,7 @@ void psxHwConstWrite8(u32 add, int mmreg)
 		case 0x1f801802: CONSTWRITE_CALL(cdrWrite2); break;
 		case 0x1f801803: CONSTWRITE_CALL(cdrWrite3); break;
 		case 0x1f80380c: CONSTWRITE_CALL(Write8PrintBuffer); break;
-		case 0x1F808260: CONSTWRITE_CALL(sio2_fifoIn); break;
+		case 0x1F808260: CONSTWRITE_CALL(sio2_serialIn); break;
 
 		default:
 			_eeWriteConstMem8((uptr)&psxH[(add) & 0xffff], mmreg);
@@ -769,7 +771,7 @@ void psxHwConstWrite16(u32 add, int mmreg) {
 	TEST32ItoR(EAX, 0x01000000); \
 	j8Ptr[6] = JZ8(0); \
 	\
-	_callFunctionArg3((uptr)psxDma##n, MEM_CONSTTAG, MEM_CONSTTAG, MEM_X86TAG, (uptr)&HW_DMA##n##_MADR, (uptr)&HW_DMA##n##_BCR, EAX); \
+    _callFunctionArg3((uptr)psxDma##n, MEM_MEMORYTAG, MEM_MEMORYTAG, MEM_X86TAG, (uptr)&HW_DMA##n##_MADR, (uptr)&HW_DMA##n##_BCR, EAX); \
 	\
 	x86SetJ8( j8Ptr[5] ); \
 	x86SetJ8( j8Ptr[6] ); \

@@ -19,6 +19,8 @@
 #ifndef __VU_H__
 #define __VU_H__
 
+#include "Vif.h"
+
 #define REG_STATUS_FLAG	16
 #define REG_MAC_FLAG	17
 #define REG_CLIP_FLAG	18
@@ -158,7 +160,7 @@ typedef struct {
 } _VURegsNum;
 
 extern VURegs* g_pVU1;
-extern VURegs VU0;
+extern PCSX2_ALIGNED16_DECL(VURegs VU0);
 
 #define VU1 (*g_pVU1)
 

@@ -20,9 +20,13 @@
 #ifndef __DEBUG_H__
 #define __DEBUG_H__
 
-#include "Common.h"
+#include <stdio.h>
+#include <zlib.h>
 
-FILE *emuLog;
+#include "PS2Edefs.h"
+#include "Misc.h"
+
+extern FILE *emuLog;
 
 char* disR5900F(u32 code, u32 pc);
 char* disR5900Fasm(u32 code, u32 pc);
@@ -47,8 +51,12 @@ extern char *disRNameCP2i[];
 //that way is slower but you now not need to compile every time ;P
 #ifdef PCSX2_DEVBUILD
 
-int Log;
-u32 varLog;
+extern int Log;
+extern u32 varLog;
+extern u16 logProtocol;
+extern u8  logSource;
+
+void __Log(char *fmt, ...);
 
 //memcars has the same number as PAD_LOG
 #define MEMCARDS_LOG if (varLog & 0x02000000) {logProtocol=7; logSource='I';} if (varLog & 0x02000000) __Log
