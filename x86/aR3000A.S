@@ -24,8 +24,6 @@
 #define REG_BLOCK %r12
 #define REG_BLOCKd %r12d
 
-.extern EEsCycle
-
 .globl R3000AExecute
 R3000AExecute:  
 
@@ -36,11 +34,6 @@ R3000AExecute:
         push %r14
         push %r15
 
-        //while (EEsCycle > 0) {		
-Execute_CheckCycles:
-        cmp dword ptr [EEsCycle], 0
-		jle Execute_Exit
-		
         // calc PSX_GETBLOCK
         // ((BASEBLOCK*)(recLUT[((u32)(x)) >> 16] + (sizeof(BASEBLOCK)/4)*((x) & 0xffff)))
         mov %eax, dword ptr [psxRegs + PCOFFSET]
@@ -72,9 +65,6 @@ Execute_Recompile:
 Execute_Function:
 		call %rdx
 
-		jmp Execute_CheckCycles
-				
-Execute_Exit:
 		pop %r15
 		pop %r14
 		pop %r13
@@ -125,7 +115,8 @@ psxDispatcher_CheckPtr:
 psxDispatcher_CallFn:
 #endif
         
-		and REG_BLOCK, 0x0fffffff
+		//and REG_BLOCK, 0x0fffffff
+		shl REG_BLOCK, 4
         mov %rdx, REG_BLOCK
         pop %rcx // x86Ptr to mod
         sub %rdx, %rcx
@@ -171,7 +162,8 @@ psxDispatcherClear:
 psxDispatcherClear_CallFn:
 #endif
 
-        and %rax, 0x0fffffff
+        //and %rax, 0x0fffffff
+	shl %rax, 4
         jmp %rax
                 
 psxDispatcherClear_Recompile:
@@ -179,7 +171,8 @@ psxDispatcherClear_Recompile:
         mov %eax, dword ptr [REG_BLOCK]
 
         // r15 holds the prev x86 pointer
-        and %rax, 0x0fffffff
+        //and %rax, 0x0fffffff
+	shl %rax, 4
         mov byte ptr [%r15], 0xe9 // jmp32
         mov %rdx, %rax
         sub %rdx, %r15
@@ -224,7 +217,8 @@ psxDispatcherReg_recomp:
 		call psxRecRecompile
 	
         mov %eax, dword ptr [REG_BLOCK]
-        and %rax, 0x0fffffff
+        //and %rax, 0x0fffffff
+	shl, REG_BLOCK, 4
         jmp %rax // fnprt
 
 #else // not x86-64
@@ -276,7 +270,8 @@ psxDispatcher_CheckPtr:
 psxDispatcher_CallFn:
 #endif
         
-		and REG_BLOCK, 0x0fffffff
+		//and REG_BLOCK, 0x0fffffff
+		shl REG_BLOCK, 4
 		mov %edx, REG_BLOCK
 		pop %ecx // x86Ptr to mod
 		sub %edx, %ecx
@@ -322,7 +317,8 @@ psxDispatcherClear:
 psxDispatcherClear_CallFn:
 #endif
 
-        and %eax, 0x0fffffff
+        //and %eax, 0x0fffffff
+        shl %eax, 4
         jmp %eax
                 
 psxDispatcherClear_Recompile:
@@ -335,7 +331,8 @@ psxDispatcherClear_Recompile:
 
 		pop %ecx // old fnptr
 
-		and %eax, 0x0fffffff
+		//and %eax, 0x0fffffff
+		shl %eax, 4
 		mov byte ptr [%ecx], 0xe9 // jmp32
 		mov %edx, %eax
 		sub %edx, %ecx
@@ -365,7 +362,6 @@ psxDispatcherReg:
 		
 		// check if startpc == psxRegs.pc
 		mov %eax, %ecx
-		//and %eax, 0x5fffffff // remove higher bits
 		cmp %eax, dword ptr [%edx+BLOCKTYPE_STARTPC]
 		jne psxDispatcherReg_recomp
 
@@ -378,7 +374,8 @@ psxDispatcherReg:
         int 10
 psxDispatcherReg_CallFn2:
 #endif
-		and %eax, 0x0fffffff
+		//and %eax, 0x0fffffff
+		shl %eax, 4
 		jmp %eax // fnptr
 
 psxDispatcherReg_recomp:
@@ -390,7 +387,8 @@ psxDispatcherReg_recomp:
 		add %esp, 8
 		
 		mov %eax, dword ptr [%edx]
-		and %eax, 0x0fffffff
+		//and %eax, 0x0fffffff
+		shl %eax, 4
 		jmp %eax // fnptr
 
 #endif

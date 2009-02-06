@@ -25,7 +25,6 @@
 #ifndef __VLC_H__
 #define __VLC_H__
 
-#include "IPU.h"
 #include "coroutine.h"
 
 static u8 data[2];
@@ -33,7 +32,8 @@ static u8 dword[4];
 extern tIPU_BP g_BP;
 extern decoder_t g_decoder;
 extern void ReorderBitstream();
-static void GETWORD(u32 * bit_buf,int bits)
+
+static __forceinline void GETWORD(u32 * bit_buf,int bits)
 {
 	while(!getBits16(data,1))
 	{
@@ -42,7 +42,7 @@ static void GETWORD(u32 * bit_buf,int bits)
 	*bit_buf |= ((data[0] << 8) | data[1]) << (bits);
 }
 
-static void bitstream_init (decoder_t * decoder){
+static __forceinline void bitstream_init (decoder_t * decoder){
     decoder->bitstream_bits = -16;
 
 	while( !getBits32(dword, 1) )
@@ -75,41 +75,41 @@ do {					\
 /* take num bits from the high part of bit_buf and sign extend them */
 #define SBITS(bit_buf,num) (((s32)(bit_buf)) >> (32 - (num)))
 
-typedef struct {
+struct MBtab {
     u8 modes;
     u8 len;
-} MBtab;
+};
 
-typedef struct {
+struct MVtab {
     u8 delta;
     u8 len;
-} MVtab;
+};
 
-typedef struct {
+struct DMVtab {
     s8 dmv;
     u8 len;
-} DMVtab;
+};
 
-typedef struct {
+struct CBPtab {
     u8 cbp;
     u8 len;
-} CBPtab;
+};
 
-typedef struct {
+struct DCtab {
     u8 size;
     u8 len;
-} DCtab;
+};
 
-typedef struct {
+struct DCTtab {
     u8 run;
     u8 level;
     u8 len;
-} DCTtab;
+};
 
-typedef struct {
+struct MBAtab {
     u8 mba;
     u8 len;
-} MBAtab;
+};
 
 
 #define INTRA MACROBLOCK_INTRA

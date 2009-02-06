@@ -23,7 +23,8 @@
 #include "Decode_XA.h"
 #include "PS2Edefs.h"
 
-typedef struct {
+struct cdrStruct
+{
 	u8 OCUP;
 	u8 Reg1Mode;
 	u8 Reg2;
@@ -69,12 +70,13 @@ typedef struct {
 	unsigned long eCycle;
 
 	char Unused[4087];
-} cdrStruct;
+};
 
-cdrStruct cdr;
+extern cdrStruct cdr;
 
 s32  MSFtoLSN(u8 *Time);
 void LSNtoMSF(u8 *Time, s32 lsn);
+void AddIrqQueue(u8 irq, unsigned long ecycle);
 
 void cdrReset();
 void  cdrInterrupt();
@@ -87,6 +89,5 @@ void cdrWrite0(u8 rt);
 void cdrWrite1(u8 rt);
 void cdrWrite2(u8 rt);
 void cdrWrite3(u8 rt);
-int  cdrFreeze(gzFile f, int Mode);
 
 #endif /* __CDROM_H__ */

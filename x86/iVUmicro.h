@@ -1,56 +1,41 @@
 /*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2008  Pcsx2 Team
+ *  Copyright (C) 2002-2003  Pcsx2 Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation; either version 2 of the License, or
  *  (at your option) any later version.
- *  
+ *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
- *  
+ *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef __IVUMICRO_H__
 #define __IVUMICRO_H__
 
+#include "VUmicro.h"
+
+extern u32 vudump;
+
 #define VU0_MEMSIZE 0x1000
 #define VU1_MEMSIZE 0x4000
 
-#define RECOMPILE_VUMI_ABS
-#define RECOMPILE_VUMI_SUB
-#define RECOMPILE_VUMI_SUBA
-#define RECOMPILE_VUMI_MADD
-#define RECOMPILE_VUMI_MADDA
-#define RECOMPILE_VUMI_MSUB
-#define RECOMPILE_VUMI_MSUBA
+void recResetVU0();
+void recExecuteVU0Block();
+void recClearVU0( u32 Addr, u32 Size );
 
-#define RECOMPILE_VUMI_ADD
-#define RECOMPILE_VUMI_ADDA
-#define RECOMPILE_VUMI_MUL
-#define RECOMPILE_VUMI_MULA
-#define RECOMPILE_VUMI_MAX
-#define RECOMPILE_VUMI_MINI
-#define RECOMPILE_VUMI_FTOI
+void recVU1Init();
+void recVU1Shutdown();
+void recResetVU1();
+void recExecuteVU1Block();
+void recClearVU1( u32 Addr, u32 Size );
 
-#define RECOMPILE_VUMI_MATH
-#define RECOMPILE_VUMI_MISC
-#define RECOMPILE_VUMI_E
-#define RECOMPILE_VUMI_X
-#define RECOMPILE_VUMI_RANDOM
-#define RECOMPILE_VUMI_FLAG
-#define RECOMPILE_VUMI_BRANCH
-#define RECOMPILE_VUMI_ARITHMETIC
-#define RECOMPILE_VUMI_LOADSTORE
-
-#ifdef __x86_64__
-#undef RECOMPILE_VUMI_X
-#endif
 
 u32 GetVIAddr(VURegs * VU, int reg, int read, int info); // returns the correct VI addr
 void recUpdateFlags(VURegs * VU, int reg, int info);
@@ -66,7 +51,7 @@ void _recvuAddLowerStalls(VURegs * VU, _VURegsNum *VUregsn);
 #define VUOP_WRITE 4
 
 // save on mem
-typedef struct {
+struct _vuopinfo {
 	int cycle;
 	int cycles;
 	u8 statusflag;
@@ -76,24 +61,54 @@ typedef struct {
 	u8 q;
 	u8 p;
 	u16 pqinst; // bit of instruction specifying index (srec only)
-} _vuopinfo;
-extern _vuopinfo *cinfo;
+};
 
 void SuperVUAnalyzeOp(VURegs *VU, _vuopinfo *info, _VURegsNum* pCodeRegs);
-
-// allocates all the necessary regs and returns the indices
-int eeVURecompileCode(VURegs *VU, _VURegsNum* regs);
-
+int eeVURecompileCode(VURegs *VU, _VURegsNum* regs); // allocates all the necessary regs and returns the indices
 void VU1XGKICK_MTGSTransfer(u32 *pMem, u32 addr); // used for MTGS in XGKICK
 
-extern _VURegsNum* g_VUregs;
+extern int vucycle;
+typedef void (*vFloat)(int regd, int regTemp);
+extern vFloat vFloats1[16];
+extern vFloat vFloats1_useEAX[16];
+extern vFloat vFloats2[16];
+extern vFloat vFloats2_MUL_MADD[16];
+extern vFloat vFloats4[16];
+extern vFloat vFloats4_useEAX[16];
+extern PCSX2_ALIGNED16(float s_fones[8]);
+extern PCSX2_ALIGNED16(u32 s_mask[4]);
+extern PCSX2_ALIGNED16(u32 s_expmask[4]);
+extern PCSX2_ALIGNED16(u32 g_minvals[4]);
+extern PCSX2_ALIGNED16(u32 g_maxvals[4]);
+extern PCSX2_ALIGNED16(u32 const_clip[8]);
+
+u32 GetVIAddr(VURegs * VU, int reg, int read, int info);
+int _vuGetTempXMMreg(int info);
+void vuFloat(int info, int regd, int XYZW);
+void vuFloat_useEAX(int regd, int regTemp, int XYZW);
+void vuFloat2(int regd, int regTemp, int XYZW);
+void vuFloat3(uptr x86ptr);
+void vuFloat4(int regd, int regTemp, int XYZW);
+void vuFloat4_useEAX(int regd, int regTemp, int XYZW);
+void vuFloat5(int regd, int regTemp, int XYZW);
+void vuFloat5_useEAX(int regd, int regTemp, int XYZW);
+void _vuFlipRegSS(VURegs * VU, int reg);
+void _vuFlipRegSS_xyzw(int reg, int xyzw);
+void _vuMoveSS(VURegs * VU, int dstreg, int srcreg);
+void _unpackVF_xyzw(int dstreg, int srcreg, int xyzw);
+void _unpackVFSS_xyzw(int dstreg, int srcreg, int xyzw);
+void VU_MERGE_REGS_CUSTOM(int dest, int src, int xyzw);
+void VU_MERGE_REGS_SAFE(int dest, int src, int xyzw);
+#define VU_MERGE_REGS(dest, src) { \
+	VU_MERGE_REGS_CUSTOM(dest, src, _X_Y_Z_W); \
+}
+
+// use for allocating vi regs
+#define ALLOCTEMPX86(mode) _allocX86reg(-1, X86TYPE_TEMP, 0, ((info&PROCESS_VU_SUPER)?0:MODE_NOFRAME)|mode)
+#define ALLOCVI(vi, mode) _allocX86reg(-1, X86TYPE_VI|((VU==&VU1)?X86TYPE_VU1:0), vi, ((info&PROCESS_VU_SUPER)?0:MODE_NOFRAME)|mode)
+#define ADD_VI_NEEDED(vi) _addNeededX86reg(X86TYPE_VI|(VU==&VU1?X86TYPE_VU1:0), vi);
 
 #define SWAP(x, y) *(u32*)&y ^= *(u32*)&x ^= *(u32*)&y ^= *(u32*)&x;
-#define VUREC_INFO eeVURecompileCode(VU, g_VUregs)
-
-extern int vucycle;
-extern int vucycleold;
-
 
 /*****************************************
    VU Micromode Upper instructions

@@ -19,30 +19,18 @@
 #ifndef __R5900_H__
 #define __R5900_H__
 
-#include <stdio.h>
+extern bool g_EEFreezeRegs;
 
-typedef struct {
-	int  (*Init)();
-	void (*Reset)();
-	void (*Step)();
-	void (*Execute)();			/* executes up to a break */
-	void (*ExecuteBlock)();		/* executes up to a jump */
-	void (*ExecuteVU0Block)();	/* executes up to a jump */
-	void (*ExecuteVU1Block)();	/* executes up to a jump */
-	void (*EnableVU0micro)(int enable);
-	void (*EnableVU1micro)(int enable);
-	void (*Clear)(u32 Addr, u32 Size);
-	void (*ClearVU0)(u32 Addr, u32 Size);
-	void (*ClearVU1)(u32 Addr, u32 Size);
-	void (*Shutdown)();
-} R5900cpu;
+// EE Bios function name tables.
+namespace R5900 {
+extern const char* const bios[256];
+}
 
-extern R5900cpu *Cpu;
-extern R5900cpu intCpu;
-extern R5900cpu recCpu;
+extern s32 EEsCycle;
+extern u32 EEoCycle;
 extern u32 bExecBIOS;
 
-typedef union {   // Declare union type GPR register
+union GPR_reg {   // Declare union type GPR register
 	u64 UD[2];      //128 bits
 	s64 SD[2];
 	u32 UL[4];
@@ -51,9 +39,9 @@ typedef union {   // Declare union type GPR register
 	s16 SS[8];
 	u8  UC[16];
 	s8  SC[16];
-} GPR_reg;
+};
 
-typedef union {
+union GPRregs {
 	struct {
 		GPR_reg r0, at, v0, v1, a0, a1, a2, a3,
 				t0, t1, t2, t3, t4, t5, t6, t7,
@@ -61,38 +49,38 @@ typedef union {
 				t8, t9, k0, k1, gp, sp, s8, ra;
 	} n;
 	GPR_reg r[32];
-} GPRregs;
+};
 
-typedef union {
+union PERFregs {
 	struct {
 		u32 pccr, pcr0, pcr1, pad;
 	} n;
 	u32 r[4];
-} PERFregs;
+};
 
-typedef union {
+union CP0regs {
 	struct {
 		u32	Index,    Random,    EntryLo0,  EntryLo1,
 			Context,  PageMask,  Wired,     Reserved0,
 			BadVAddr, Count,     EntryHi,   Compare;
 		union {
 			struct {
-				int IE:1;
-				int EXL:1;
-				int ERL:1;
-				int KSU:2;
-				int unused0:3;
-				int IM:8;
-				int EIE:1;
-				int _EDI:1;
-				int CH:1;
-				int unused1:3;
-				int BEV:1;
-				int DEV:1;
-				int unused2:2;
-				int FR:1;
-				int unused3:1;
-				int CU:4;
+				u32 IE:1;		// Bit 0: Interrupt Enable flag.
+				u32 EXL:1;		// Bit 1: Exception Level, set on any exception not covered by ERL.
+				u32 ERL:1;		// Bit 2: Error level, set on Resetm NMI, perf/debug exceptions.
+				u32 KSU:2;		// Bits 3-4: Kernel [clear] / Supervisor [set] mode 
+				u32 unused0:3;
+				u32 IM:8;		// Bits 10-15: Interrupt mask (bits 12,13,14 are unused)
+				u32 EIE:1;		// Bit 16: IE bit enabler.  When cleared, ints are disabled regardless of IE status.
+				u32 _EDI:1;		// Bit 17: Interrupt Enable (set enables ints in all modes, clear enables ints in kernel mode only)
+				u32 CH:1;		// Bit 18: Status of most recent cache instruction (set for hit, clear for miss)
+				u32 unused1:3;
+				u32 BEV:1;		// Bit 22: if set, use bootstrap for TLB/general exceptions
+				u32 DEV:1;		// Bit 23: if set, use bootstrap for perf/debug exceptions
+				u32 unused2:2;
+				u32 FR:1;		// (?)
+				u32 unused3:1;
+				u32 CU:4;		// Bits 28-31: Co-processor Usable flag
 			} b;
 			u32 val;
 		} Status;
@@ -103,9 +91,9 @@ typedef union {
 			TagLo,    TagHi,     ErrorEPC,  DESAVE;
 	} n;
 	u32 r[32];
-} CP0regs;
+};
 
-typedef struct {
+struct cpuRegisters {
     GPRregs GPR;		// GPR regs
 	// NOTE: don't change order since recompiler uses it
 	GPR_reg HI;
@@ -123,14 +111,10 @@ typedef struct {
 	int branch;
 	int opmode;			// operating mode
 	u32 tempcycles;	
-} cpuRegisters;
-
-extern int EEsCycle;
-extern u32 EEoCycle, IOPoCycle;
-extern PCSX2_ALIGNED16_DECL(cpuRegisters cpuRegs);
+};
 
 // used for optimization
-typedef union {
+union GPR_reg64 {
 	u64 UD[1];      //64 bits
 	s64 SD[1];
 	u32 UL[2];
@@ -139,39 +123,21 @@ typedef union {
 	s16 SS[4];
 	u8  UC[8];
 	s8  SC[8];
-} GPR_reg64;
+};
 
-#define GPR_IS_CONST1(reg) ((reg)<32 && (g_cpuHasConstReg&(1<<(reg))))
-#define GPR_IS_CONST2(reg1, reg2) ((g_cpuHasConstReg&(1<<(reg1)))&&(g_cpuHasConstReg&(1<<(reg2))))
-#define GPR_SET_CONST(reg) { \
-	if( (reg) < 32 ) { \
-		g_cpuHasConstReg |= (1<<(reg)); \
-		g_cpuFlushedConstReg &= ~(1<<(reg)); \
-	} \
-}
-
-#define GPR_DEL_CONST(reg) { \
-	if( (reg) < 32 ) g_cpuHasConstReg &= ~(1<<(reg)); \
-}
-
-extern PCSX2_ALIGNED16_DECL(GPR_reg64 g_cpuConstRegs[32]);
-extern u32 g_cpuHasConstReg, g_cpuFlushedConstReg;
-
-typedef union {
+union FPRreg {
 	float f;
 	u32 UL;
-} FPRreg;
+};
 
-typedef struct {
+struct fpuRegisters {
 	FPRreg fpr[32];		// 32bit floating point registers
 	u32 fprc[32];		// 32bit floating point control registers
 	FPRreg ACC;			// 32 bit accumulator 
-} fpuRegisters;
+};
 
-extern PCSX2_ALIGNED16_DECL(fpuRegisters fpuRegs);
-
-
-typedef struct {
+struct tlbs
+{
 	u32 PageMask,EntryHi;
 	u32 EntryLo0,EntryLo1;
 	u32 Mask, nMask;
@@ -180,9 +146,8 @@ typedef struct {
 	u32 VPN2;
 	u32 PFN0;
 	u32 PFN1;
-} tlbs;
-
-extern PCSX2_ALIGNED16_DECL(tlbs tlb[48]);
+	u32 S;
+};
 
 #ifndef _PC_
 
@@ -198,7 +163,9 @@ extern PCSX2_ALIGNED16_DECL(tlbs tlb[48]);
 #define _i8(x) (s8)x
 #define _u8(x) (u8)x
 
-/**** R3000A Instruction Macros ****/
+////////////////////////////////////////////////////////////////////
+// R5900 Instruction Macros
+
 #define _PC_       cpuRegs.pc       // The next PC to be executed
 
 #define _Funct_  ((cpuRegs.code      ) & 0x3F)  // The funct part of the instruction register 
@@ -211,10 +178,9 @@ extern PCSX2_ALIGNED16_DECL(tlbs tlb[48]);
 
 #define _Imm_	((s16)cpuRegs.code) // sign-extended immediate
 #define _ImmU_	(cpuRegs.code&0xffff) // zero-extended immediate
+#define _ImmSB_	(cpuRegs.code&0x8000) // gets the sign-bit of the immediate value
 
-
-//#define _JumpTarget_     ((_Target_ * 4) + (_PC_ & 0xf0000000))   // Calculates the target during a jump instruction
-//#define _BranchTarget_  ((s16)_Im_ * 4 + _PC_)                 // Calculates the target during a branch instruction
+#define _Opcode_ (cpuRegs.code >> 26 )
 
 #define _JumpTarget_     ((_Target_ << 2) + (_PC_ & 0xf0000000))   // Calculates the target during a jump instruction
 #define _BranchTarget_  (((s32)(s16)_Im_ * 4) + _PC_)                 // Calculates the target during a branch instruction
@@ -223,36 +189,66 @@ extern PCSX2_ALIGNED16_DECL(tlbs tlb[48]);
 
 #endif
 
-int  cpuInit();
-void cpuReset();
-void cpuShutdown();
-void cpuException(u32 code, u32 bd);
-void cpuTlbMissR(u32 addr, u32 bd);
-void cpuTlbMissW(u32 addr, u32 bd);
-void IntcpuBranchTest();
-void cpuBranchTest();
-void cpuTestHwInts();
-void cpuTestINTCInts();
-void cpuTestDMACInts();
-void cpuTestTIMRInts();
-void _cpuTestInterrupts();
-void cpuExecuteBios();
-void cpuRestartCPU();
-
-u32  VirtualToPhysicalR(u32 addr);
-u32  VirtualToPhysicalW(u32 addr);
-
-void intDoBranch(u32 target);
-void intSetBranch();
-void intExecuteVU0Block();
-void intExecuteVU1Block();
-
 void JumpCheckSym(u32 addr, u32 pc);
 void JumpCheckSymRet(u32 addr);
 
-extern u32 g_EEFreezeRegs;
+extern PCSX2_ALIGNED16_DECL(cpuRegisters cpuRegs);
+extern PCSX2_ALIGNED16_DECL(fpuRegisters fpuRegs);
+extern PCSX2_ALIGNED16_DECL(tlbs tlb[48]);
 
-//exception code
+extern u32 g_nextBranchCycle;
+extern bool eeEventTestIsActive;
+extern u32 s_iLastCOP0Cycle;
+extern u32 s_iLastPERFCycle[2];
+
+bool intEventTest();
+void intSetBranch();
+
+// This is a special form of the interpreter's doBranch that is run from various
+// parts of the Recs (namely COP0's branch codes and stuff).
+void __fastcall intDoBranch(u32 target);
+
+////////////////////////////////////////////////////////////////////
+// R5900 Public Interface / API
+
+struct R5900cpu
+{
+	void (*Allocate)();		// throws exceptions on failure.
+	void (*Reset)();
+	void (*Step)();
+	void (*Execute)();			/* executes up to a break */
+	void (*ExecuteBlock)();
+	void (*Clear)(u32 Addr, u32 Size);
+	void (*Shutdown)();		// deallocates memory reserved by Allocate
+};
+
+extern R5900cpu *Cpu;
+extern R5900cpu intCpu;
+extern R5900cpu recCpu;
+
+extern void cpuInit();
+extern void cpuReset();		// can throw Exception::FileNotFound.
+extern void cpuShutdown();
+extern void cpuExecuteBios();
+extern void cpuException(u32 code, u32 bd);
+extern void cpuTlbMissR(u32 addr, u32 bd);
+extern void cpuTlbMissW(u32 addr, u32 bd);
+extern void cpuTestHwInts();
+
+extern int cpuSetNextBranch( u32 startCycle, s32 delta );
+extern int cpuSetNextBranchDelta( s32 delta );
+extern int cpuTestCycle( u32 startCycle, s32 delta );
+extern void cpuSetBranch();
+
+extern bool _cpuBranchTest_Shared();		// for internal use by the Dynarecs and Ints inside R5900:
+
+extern void cpuTestINTCInts();
+extern void cpuTestDMACInts();
+extern void cpuTestTIMRInts();
+
+////////////////////////////////////////////////////////////////////
+// Exception Codes
+
 #define EXC_CODE(x)     ((x)<<2)
 
 #define EXC_CODE_Int    EXC_CODE(0)
@@ -276,29 +272,5 @@ extern u32 g_EEFreezeRegs;
 
 #define EXC_TLB_STORE 1
 #define EXC_TLB_LOAD  0
-
-//#define EE_PROFILING //EE Profiling enable
-
-#ifdef EE_PROFILING //EE Profiling code
-
-extern u64 profile_starttick;
-extern u64 profile_totalticks;
-
-#define START_EE_PROFILE() \
-		profile_starttick = GetCPUTick();
-
-#define END_EE_PROFILE() \
-		profile_totalticks += GetCPUTick()-profile_starttick;
-
-#define CLEAR_EE_PROFILE() \
-		profile_totalticks = 0;
-
-#else
-#define START_EE_PROFILE()
-
-#define END_EE_PROFILE()
-
-#define CLEAR_EE_PROFILE()
-#endif
 
 #endif /* __R5900_H__ */

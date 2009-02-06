@@ -15,55 +15,29 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
-#include <stdlib.h>
-#include <string.h>
-#include <assert.h>
-#include <malloc.h>
+#include "PrecompiledHeader.h"
 
-extern "C" {
-
-#include "PS2Etypes.h"
-
-#if defined(_WIN32)
-#include <windows.h>
-#endif
-
-#include "System.h"
-#include "R5900.h"
+#include "Misc.h"
+#include "iR5900.h"
 #include "Vif.h"
 #include "VU.h"
 #include "ix86/ix86.h"
-#include "iCore.h"
-#include "R3000A.h"
+#include "iR3000A.h"
+
+#include <vector>
+
+using namespace std;
 
 u16 x86FpuState, iCWstate;
 u16 g_mmxAllocCounter = 0;
 
-// used to make sure regs don't get changed while in recompiler
-// use FreezeMMXRegs, FreezeXMMRegs
-u8 g_globalMMXSaved = 0;
-
-#ifdef _DEBUG
-char g_globalMMXLocked = 0;
-#endif
-
-PCSX2_ALIGNED16(u64 g_globalMMXData[8]);
-
 // X86 caching
-extern _x86regs x86regs[X86REGS];
 int g_x86checknext;
-extern u16 g_x86AllocCounter;
-
-} // end extern "C"
-
-#include <vector>
-using namespace std;
 
 // use special x86 register allocation for ia32
-#ifndef __x86_64__
 
 void _initX86regs() {
-	memset(x86regs, 0, sizeof(x86regs));
+	memzero_obj(x86regs);
 	g_x86AllocCounter = 0;
 	g_x86checknext = 0;
 }
@@ -87,7 +61,8 @@ u32 _x86GetAddr(int type, int reg)
 			return (u32)&g_recWriteback;
 		case X86TYPE_VUJUMP:
 			return (u32)&g_recWriteback;
-		default: assert(0);
+
+		jNO_DEFAULT;
 	}
 
 	return 0;
@@ -135,10 +110,67 @@ int _getFreeX86reg(int mode)
 		_freeX86reg(tempi);
 		return tempi;
 	}
-	SysPrintf("*PCSX2*: x86 error\n");
+	Console::Error("*PCSX2*: x86 error");
 	assert(0);
 
 	return -1;
+}
+
+void _flushCachedRegs()
+{
+	_flushConstRegs();
+	_flushMMXregs();
+	_flushXMMregs();
+}
+
+void _flushConstReg(int reg)
+{
+	if( GPR_IS_CONST1( reg ) && !(g_cpuFlushedConstReg&(1<<reg)) ) {
+		MOV32ItoM((int)&cpuRegs.GPR.r[reg].UL[0], g_cpuConstRegs[reg].UL[0]);
+		MOV32ItoM((int)&cpuRegs.GPR.r[reg].UL[1], g_cpuConstRegs[reg].UL[1]);
+		g_cpuFlushedConstReg |= (1<<reg);
+	}
+}
+
+void _flushConstRegs()
+{
+	int i;
+
+	// flush constants
+
+	// ignore r0
+	for(i = 1; i < 32; ++i) {
+		if( g_cpuHasConstReg & (1<<i) ) {
+			
+			if( !(g_cpuFlushedConstReg&(1<<i)) ) {
+				MOV32ItoM((uptr)&cpuRegs.GPR.r[i].UL[0], g_cpuConstRegs[i].UL[0]);
+				MOV32ItoM((uptr)&cpuRegs.GPR.r[i].UL[1], g_cpuConstRegs[i].UL[1]);
+				g_cpuFlushedConstReg |= 1<<i;
+			}
+#if defined(_DEBUG)&&0
+			else {
+				// make sure the const regs are the same
+				u8* ptemp[3];
+				CMP32ItoM((u32)&cpuRegs.GPR.r[i].UL[0], g_cpuConstRegs[i].UL[0]);
+				ptemp[0] = JNE8(0);
+				if( EEINST_ISLIVE1(i) ) {
+					CMP32ItoM((u32)&cpuRegs.GPR.r[i].UL[1], g_cpuConstRegs[i].UL[1]);
+					ptemp[1] = JNE8(0);
+				}
+				ptemp[2] = JMP8(0);
+
+				x86SetJ8( ptemp[0] );
+				if( EEINST_ISLIVE1(i) ) x86SetJ8( ptemp[1] );
+				CALLFunc((uptr)checkconstreg);
+
+				x86SetJ8( ptemp[2] );
+			}
+#else
+			if( g_cpuHasConstReg == g_cpuFlushedConstReg )
+				break;
+#endif
+		}
+	}
 }
 
 int _allocX86reg(int x86reg, int type, int reg, int mode)
@@ -257,7 +289,7 @@ int _allocX86reg(int x86reg, int type, int reg, int mode)
 				else MOV32MtoR(x86reg, _x86GetAddr(type, reg));
 			}
 		}
-}
+	}
 
 	return x86reg;
 }
@@ -364,15 +396,13 @@ void _freeX86regs() {
 	}
 }
 
-#endif // __x86_64__
-
 // MMX Caching
 _mmxregs mmxregs[8], s_saveMMXregs[8];
 static int s_mmxchecknext = 0;
 
 void _initMMXregs()
 {
-	memset(mmxregs, 0, sizeof(mmxregs));
+	memzero_obj(mmxregs);
 	g_mmxAllocCounter = 0;
 	s_mmxchecknext = 0;
 }
@@ -452,7 +482,7 @@ int  _getFreeMMXreg()
 		_freeMMXreg(tempi);
 		return tempi;
 	}
-	SysPrintf("*PCSX2*: mmx error\n");
+	Console::Error("*PCSX2*: mmx error");
 	assert(0);
 
 	return -1;
@@ -515,28 +545,15 @@ int _allocMMXreg(int mmxreg, int reg, int mode)
 	else {
 		int xmmreg;
 		if( MMX_ISGPR(reg) && (xmmreg = _checkXMMreg(XMMTYPE_GPRREG, reg-MMX_GPR, 0)) >= 0 ) {
-			if (cpucaps.hasStreamingSIMD2Extensions) {
-				SSE_MOVHPS_XMM_to_M64((u32)_MMXGetAddr(reg)+8, xmmreg);
-				if( mode & MODE_READ )
-					SSE2_MOVDQ2Q_XMM_to_MM(mmxreg, xmmreg);
+			SSE_MOVHPS_XMM_to_M64((u32)_MMXGetAddr(reg)+8, xmmreg);
+			if( mode & MODE_READ )
+				SSE2_MOVDQ2Q_XMM_to_MM(mmxreg, xmmreg);
 
-				if( xmmregs[xmmreg].mode & MODE_WRITE )
-					mmxregs[mmxreg].mode |= MODE_WRITE;
+			if( xmmregs[xmmreg].mode & MODE_WRITE )
+				mmxregs[mmxreg].mode |= MODE_WRITE;
 
-				// don't flush
-				xmmregs[xmmreg].inuse = 0;
-			}
-			else {
-				_freeXMMreg(xmmreg);
-
-				if( (mode & MODE_READHALF) || (MMX_IS32BITS(reg)&&(mode&MODE_READ)) ) {
-					MOVDMtoMMX(mmxreg, (u32)_MMXGetAddr(reg));
-				}
-				else if( mode & MODE_READ ) {
-					MOVQMtoR(mmxreg, (u32)_MMXGetAddr(reg));
-				}
-
-			}
+			// don't flush
+			xmmregs[xmmreg].inuse = 0;
 		}
 		else {
 			if( MMX_ISGPR(reg) ) {
@@ -781,79 +798,6 @@ void _freeMMXregs()
 	}
 }
 
-void FreezeMMXRegs_(int save)
-{
-	assert( g_EEFreezeRegs );
-
-	if( save ) {
-		if( g_globalMMXSaved ){
-			//SysPrintf("MMX Already Saved!\n");
-			return;
-			}
-		g_globalMMXSaved = 1;
-
-#ifdef _MSC_VER
-		__asm {
-			movntq mmword ptr [g_globalMMXData + 0], mm0
-			movntq mmword ptr [g_globalMMXData + 8], mm1
-			movntq mmword ptr [g_globalMMXData + 16], mm2
-			movntq mmword ptr [g_globalMMXData + 24], mm3
-			movntq mmword ptr [g_globalMMXData + 32], mm4
-			movntq mmword ptr [g_globalMMXData + 40], mm5
-			movntq mmword ptr [g_globalMMXData + 48], mm6
-			movntq mmword ptr [g_globalMMXData + 56], mm7
-			emms
-		}
-#else
-        __asm__(".intel_syntax\n"
-                "movq [%0+0x00], %%mm0\n"
-                "movq [%0+0x08], %%mm1\n"
-                "movq [%0+0x10], %%mm2\n"
-                "movq [%0+0x18], %%mm3\n"
-                "movq [%0+0x20], %%mm4\n"
-                "movq [%0+0x28], %%mm5\n"
-                "movq [%0+0x30], %%mm6\n"
-                "movq [%0+0x38], %%mm7\n"
-                "emms\n"
-                ".att_syntax\n" : : "r"(g_globalMMXData) );
-#endif
-
-	}
-	else {
-		if( !g_globalMMXSaved ){
-			//SysPrintf("MMX Not Saved!\n");
-			return;
-			}
-		g_globalMMXSaved = 0;
-
-#ifdef _MSC_VER
-		__asm {
-			movq mm0, mmword ptr [g_globalMMXData + 0]
-			movq mm1, mmword ptr [g_globalMMXData + 8]
-			movq mm2, mmword ptr [g_globalMMXData + 16]
-			movq mm3, mmword ptr [g_globalMMXData + 24]
-			movq mm4, mmword ptr [g_globalMMXData + 32]
-			movq mm5, mmword ptr [g_globalMMXData + 40]
-			movq mm6, mmword ptr [g_globalMMXData + 48]
-			movq mm7, mmword ptr [g_globalMMXData + 56]
-			emms
-		}
-#else
-        __asm__(".intel_syntax\n"
-                "movq %%mm0, [%0+0x00]\n"
-                "movq %%mm1, [%0+0x08]\n"
-                "movq %%mm2, [%0+0x10]\n"
-                "movq %%mm3, [%0+0x18]\n"
-                "movq %%mm4, [%0+0x20]\n"
-                "movq %%mm5, [%0+0x28]\n"
-                "movq %%mm6, [%0+0x30]\n"
-                "movq %%mm7, [%0+0x38]\n"
-                "emms\n"
-                ".att_syntax\n" : : "r"(g_globalMMXData) );
-#endif
-	}
-}
-
 void SetFPUstate() {
 	_freeMMXreg(6);
 	_freeMMXreg(7);
@@ -865,13 +809,13 @@ void SetFPUstate() {
 	}
 }
 
-void _callPushArg(u32 arg, uptr argmem, x86IntRegType X86ARG)
+__forceinline void _callPushArg(u32 arg, uptr argmem)
 {
     if( IS_X86REG(arg) ) PUSH32R(arg&0xff);
     else if( IS_CONSTREG(arg) ) PUSH32I(argmem);
     else if( IS_GPRREG(arg) ) {
         SUB32ItoR(ESP, 4);
-        _eeMoveGPRtoRm(ESP, arg&0xff);
+		_eeMoveGPRtoRm(ESP, arg&0xff);
     }
     else if( IS_XMMREG(arg) ) {
 		SUB32ItoR(ESP, 4);
@@ -895,91 +839,28 @@ void _callPushArg(u32 arg, uptr argmem, x86IntRegType X86ARG)
     }
 }
 
-void _callFunctionArg1(uptr fn, u32 arg1, uptr arg1mem)
+__forceinline void _callFunctionArg1(uptr fn, u32 arg1, uptr arg1mem)
 {
-    _callPushArg(arg1, arg1mem, -1);
+    _callPushArg(arg1, arg1mem);
     CALLFunc((uptr)fn);
     ADD32ItoR(ESP, 4);
 }
 
-void _callFunctionArg2(uptr fn, u32 arg1, u32 arg2, uptr arg1mem, uptr arg2mem)
+__forceinline void _callFunctionArg2(uptr fn, u32 arg1, u32 arg2, uptr arg1mem, uptr arg2mem)
 {
-    _callPushArg(arg2, arg2mem, -1);
-    _callPushArg(arg1, arg1mem, -1);
+    _callPushArg(arg2, arg2mem);
+    _callPushArg(arg1, arg1mem);
     CALLFunc((uptr)fn);
     ADD32ItoR(ESP, 8);
 }
 
-void _callFunctionArg3(uptr fn, u32 arg1, u32 arg2, u32 arg3, uptr arg1mem, uptr arg2mem, uptr arg3mem)
+__forceinline void _callFunctionArg3(uptr fn, u32 arg1, u32 arg2, u32 arg3, uptr arg1mem, uptr arg2mem, uptr arg3mem)
 {
-    _callPushArg(arg3, arg3mem, -1);
-    _callPushArg(arg2, arg2mem, -1);
-    _callPushArg(arg1, arg1mem, -1);
+    _callPushArg(arg3, arg3mem);
+    _callPushArg(arg2, arg2mem);
+    _callPushArg(arg1, arg1mem);
     CALLFunc((uptr)fn);
     ADD32ItoR(ESP, 12);
-}
-
-// EE
-void _eeMoveGPRtoR(x86IntRegType to, int fromgpr)
-{
-	if( GPR_IS_CONST1(fromgpr) )
-		MOV32ItoR( to, g_cpuConstRegs[fromgpr].UL[0] );
-	else {
-		int mmreg;
-		
-		if( (mmreg = _checkXMMreg(XMMTYPE_GPRREG, fromgpr, MODE_READ)) >= 0 && (xmmregs[mmreg].mode&MODE_WRITE)) {
-			SSE2_MOVD_XMM_to_R(to, mmreg);
-		}
-		else if( (mmreg = _checkMMXreg(MMX_GPR+fromgpr, MODE_READ)) >= 0 && (mmxregs[mmreg].mode&MODE_WRITE) ) {
-			MOVD32MMXtoR(to, mmreg);
-			SetMMXstate();
-		}
-		else {
-			MOV32MtoR(to, (int)&cpuRegs.GPR.r[ fromgpr ].UL[ 0 ] );
-		}
-	}
-}
-
-void _eeMoveGPRtoM(u32 to, int fromgpr)
-{
-	if( GPR_IS_CONST1(fromgpr) )
-		MOV32ItoM( to, g_cpuConstRegs[fromgpr].UL[0] );
-	else {
-		int mmreg;
-		
-		if( (mmreg = _checkXMMreg(XMMTYPE_GPRREG, fromgpr, MODE_READ)) >= 0 ) {
-			SSEX_MOVD_XMM_to_M32(to, mmreg);
-		}
-		else if( (mmreg = _checkMMXreg(MMX_GPR+fromgpr, MODE_READ)) >= 0 ) {
-			MOVDMMXtoM(to, mmreg);
-			SetMMXstate();
-		}
-		else {
-			MOV32MtoR(EAX, (int)&cpuRegs.GPR.r[ fromgpr ].UL[ 0 ] );
-			MOV32RtoM(to, EAX );
-		}
-	}
-}
-
-void _eeMoveGPRtoRm(x86IntRegType to, int fromgpr)
-{
-	if( GPR_IS_CONST1(fromgpr) )
-		MOV32ItoRmOffset( to, g_cpuConstRegs[fromgpr].UL[0], 0 );
-	else {
-		int mmreg;
-		
-		if( (mmreg = _checkXMMreg(XMMTYPE_GPRREG, fromgpr, MODE_READ)) >= 0 ) {
-			SSEX_MOVD_XMM_to_Rm(to, mmreg);
-		}
-		else if( (mmreg = _checkMMXreg(MMX_GPR+fromgpr, MODE_READ)) >= 0 ) {
-			MOVD32MMXtoRm(to, mmreg);
-			SetMMXstate();
-		}
-		else {
-			MOV32MtoR(EAX, (int)&cpuRegs.GPR.r[ fromgpr ].UL[ 0 ] );
-			MOV32RtoRm(to, EAX );
-		}
-	}
 }
 
 void _recPushReg(int mmreg)
@@ -1122,6 +1003,8 @@ int _allocCheckGPRtoMMX(EEINST* pinst, int reg, int mode)
 	return _checkMMXreg(MMX_GPR+reg, mode);
 }
 
+// fixme - yay stupid?  This sucks, and is used form iCOp2.cpp only.
+// Surely there is a better way!
 void _recMove128MtoM(u32 to, u32 from)
 {
 	MOV32MtoR(EAX, from);
@@ -1134,6 +1017,7 @@ void _recMove128MtoM(u32 to, u32 from)
 	MOV32RtoM(to+12, EDX);
 }
 
+// fixme - see above function!
 void _recMove128RmOffsettoM(u32 to, u32 offset)
 {
 	MOV32RmtoROffset(EAX, ECX, offset);
@@ -1146,6 +1030,7 @@ void _recMove128RmOffsettoM(u32 to, u32 offset)
 	MOV32RtoM(to+12, EDX);
 }
 
+// fixme - see above function again!
 void _recMove128MtoRmOffset(u32 offset, u32 from)
 {
 	MOV32MtoR(EAX, from);

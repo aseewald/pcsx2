@@ -36,26 +36,27 @@
 
 
 #pragma pack(1)
-typedef struct tag_DECI2_HEADER{
+struct DECI2_HEADER {
 	u16		length,		//+00
 			_pad,		//+02
 			protocol;	//+04
 	char	source,		//+06
 			destination;//+07
-} DECI2_HEADER;			//=08
+};			//=08
 
-typedef struct tag_DECI2_DBGP_BRK{
+struct DECI2_DBGP_BRK{
 	u32	address,			//+00
 		count;				//+04
-} DECI2_DBGP_BRK;			//=08
+};			//=08
 #pragma pack()
 
 #define STOP	0
 #define RUN		1
 
 extern DECI2_DBGP_BRK	ebrk[32], ibrk[32];
-extern int				ebrk_count, ibrk_count;
-extern int				runStatus, runCode, runCount;
+extern int ebrk_count, ibrk_count;
+extern volatile long runStatus;
+extern int runCode, runCount;
 
 #ifdef _WIN32
 extern HANDLE			runEvent;					//i don't like this;
@@ -64,7 +65,7 @@ extern HANDLE			runEvent;					//i don't like this;
 extern int		connected;
 													//when add linux code this might change
 
-int	writeData(char *result);
+int	writeData(const u8 *result);
 void	exchangeSD(DECI2_HEADER *h);
 
 #endif//__DECI2_H__

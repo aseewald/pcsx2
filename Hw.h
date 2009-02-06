@@ -19,15 +19,7 @@
 #ifndef __HW_H__
 #define __HW_H__
 
-#include "PS2Etypes.h"
-#include <assert.h>
-
-#ifndef PCSX2_VIRTUAL_MEM
 extern u8  *psH; // hw mem
-extern u16 *psHW;
-extern u32 *psHL;
-extern u64 *psHD;
-#endif
 
 #define psHs8(mem)	(*(s8 *)&PS2MEM_HW[(mem) & 0xffff])
 #define psHs16(mem)	(*(s16*)&PS2MEM_HW[(mem) & 0xffff])
@@ -38,14 +30,7 @@ extern u64 *psHD;
 #define psHu32(mem)	(*(u32*)&PS2MEM_HW[(mem) & 0xffff])
 #define psHu64(mem)	(*(u64*)&PS2MEM_HW[(mem) & 0xffff])
 
-extern u32 g_nextBranchCycle;
-
-#define	INT(n, ecycle) { \
-	g_nextBranchCycle = min(g_nextBranchCycle, cpuRegs.cycle+ecycle); \
-	cpuRegs.interrupt|= 1 << n; \
-	cpuRegs.sCycle[n] = cpuRegs.cycle; \
-	cpuRegs.eCycle[n] = ecycle; \
-}
+extern void CPU_INT( u32 n, s32 ecycle );
 
 // VIF0   -- 0x10004000 -- psH[0x4000]
 // VIF1   -- 0x10005000 -- psH[0x5000]
@@ -56,7 +41,7 @@ extern u32 g_nextBranchCycle;
 void ReadFIFO(u32 mem, u64 *out);
 void ConstReadFIFO(u32 mem);
 
-void WriteFIFO(u32 mem, u64 *value);
+void WriteFIFO(u32 mem, const u64 *value);
 void ConstWriteFIFO(u32 mem);
 
 
@@ -64,7 +49,7 @@ void ConstWriteFIFO(u32 mem);
 // --- DMA ---
 //
 
-typedef struct {
+struct DMACh {
 	u32 chcr;
 	u32 null0[3];
 	u32 madr;
@@ -78,7 +63,7 @@ typedef struct {
 	u32 asr1;
 	u32 null5[11];
 	u32 sadr;
-} DMACh;
+};
 
 // HW defines
 
@@ -131,23 +116,32 @@ typedef struct {
 #define D1_MADR			0x10009010
 #define D1_QWC			0x10009020
 #define D1_TADR			0x10009030
+#define D1_ASR0			0x10009040
+#define D1_ASR1			0x10009050
+#define D1_SADR			0x10009080
 
 //GS
 #define D2_CHCR			0x1000A000
 #define D2_MADR			0x1000A010
 #define D2_QWC			0x1000A020
 #define D2_TADR			0x1000A030
+#define D2_ASR0			0x1000A040
+#define D2_ASR1			0x1000A050
+#define D2_SADR			0x1000A080
 
 //fromIPU
 #define D3_CHCR			0x1000B000
 #define D3_MADR			0x1000B010
 #define D3_QWC			0x1000B020
+#define D3_TADR			0x1000B030
+#define D3_SADR			0x1000B080
 
 //toIPU
 #define D4_CHCR			0x1000B400
 #define D4_MADR			0x1000B410
 #define D4_QWC			0x1000B420
 #define D4_TADR			0x1000B430
+#define D4_SADR			0x1000B480
 
 //SIF0
 #define D5_CHCR			0x1000C000
@@ -312,29 +306,27 @@ typedef struct {
 extern PSMEMORYMAP* memLUT;
 #endif
 
-extern __forceinline u8* dmaGetAddr(u32 mem)
+// VM-version of dmaGetAddr -- Left in for references purposes for now (air)
+static __forceinline u8* dmaGetAddr(u32 mem)
 {
 	u8* p, *pbase;
 	mem &= ~0xf;
 
-#ifdef _DEBUG
-	if( (mem & 0xffff0000) == 0x10000000 )
-		SysPrintf("dma to/from %x!\n", mem);
-#endif
-	if( mem == 0x50000000 ) // reserved scratch pad mem
-		return NULL;
-
-	p = (u8*)dmaGetAddrBase(mem); //, *pbase;
-	
-#ifdef _WIN32
-    // do manual LUT since IPU/SPR seems to use addrs 0x3000xxxx quite often
-    // linux doesn't suffer from this because it has better vm support
-#ifndef PCSX2_RELEASE
-	if( memLUT[ (p-PS2MEM_BASE)>>12 ].aPFNs == NULL ) {
-		SysPrintf("*PCSX2*: DMA error: %8.8x\n", mem);
-		return NULL;
+	if( (mem&0xffff0000) == 0x50000000 ) {// reserved scratch pad mem
+		SysPrintf("dmaGetAddr: reserved scratch pad mem\n");
+		return NULL;//(u8*)&PS2MEM_SCRATCH[(mem) & 0x3ff0];
 	}
-#endif
+
+	p = (u8*)dmaGetAddrBase(mem);
+
+#ifdef _WIN32	
+	// do manual LUT since IPU/SPR seems to use addrs 0x3000xxxx quite often
+    // linux doesn't suffer from this because it has better vm support
+	if( memLUT[ (p-PS2MEM_BASE)>>12 ].aPFNs == NULL ) {
+		SysPrintf("dmaGetAddr: memLUT PFN warning\n");
+		return NULL;//p;
+	}
+
 	pbase = (u8*)memLUT[ (p-PS2MEM_BASE)>>12 ].aVFNs[0];
 	if( pbase != NULL )
 		p = pbase + ((u32)p&0xfff);
@@ -345,75 +337,85 @@ extern __forceinline u8* dmaGetAddr(u32 mem)
 
 #else
 
-extern u8  *psS; //0.015 mb, scratch pad
-extern uptr *memLUTR;
-
-extern __forceinline void *dmaGetAddr(u32 addr) {
+// Note: Dma addresses are guaranteed to be aligned to 16 bytes (128 bits)
+static __forceinline void *dmaGetAddr(u32 addr) {
 	u8 *ptr;
 
-/*#ifdef DMA_LOG
-	if (addr & 0xf) { DMA_LOG("*PCSX2*: DMA address not 128bit aligned: %8.8x\n", addr); }
-#endif*/
+//	if (addr & 0xf) { DMA_LOG("*PCSX2*: DMA address not 128bit aligned: %8.8x\n", addr); }
+
 	if (addr & 0x80000000) {	//  teh sux why the f00k 0xE0000000
 		return (void*)&psS[addr & 0x3ff0];
 	}
 
-	ptr = (u8*)memLUTR[addr >> 12];
+	ptr = (u8*)vtlb_GetPhyPtr(addr&0x1FFFFFF0);
 	if (ptr == NULL) {
-		SysPrintf("*PCSX2*: DMA error: %8.8x\n", addr);
+		Console::Error("*PCSX2*: DMA error: %8.8x", params addr);
 		return NULL;
 	}
-	return (void*)(ptr + (addr & 0xff0));
+	return ptr;
 }
 
 #endif
 
-int  hwInit();
+void hwInit();
 void hwReset();
 void hwShutdown();
 
 // hw read functions
-u8   hwRead8 (u32 mem);
-int hwConstRead8 (u32 x86reg, u32 mem, u32 sign);
+extern u8   hwRead8 (u32 mem);
+extern u16  hwRead16(u32 mem);
+extern u64  hwRead64(u32 mem);
+extern void hwRead128(u32 mem, u64 *out);
 
-u16  hwRead16(u32 mem);
-int hwConstRead16(u32 x86reg, u32 mem, u32 sign);
+extern mem32_t __fastcall hwRead32_page_00(u32 mem);
+extern mem32_t __fastcall hwRead32_page_01(u32 mem);
+extern mem32_t __fastcall hwRead32_page_02(u32 mem);
+extern mem32_t __fastcall hwRead32_page_0F(u32 mem);
+extern mem32_t __fastcall hwRead32_page_other(u32 mem);
 
-u32  hwRead32(u32 mem);
-int hwConstRead32(u32 x86reg, u32 mem);
-
-u64  hwRead64(u32 mem);
-void hwConstRead64(u32 mem, int mmreg);
-
-void hwRead128(u32 mem, u64 *out);
-void hwConstRead128(u32 mem, int xmmreg);
+extern mem32_t __fastcall hwRead32(u32 mem);
 
 // hw write functions
-void hwWrite8 (u32 mem, u8  value);
-void hwConstWrite8 (u32 mem, int mmreg);
+extern void hwWrite8 (u32 mem, u8  value);
+extern void hwWrite16(u32 mem, u16 value);
+extern void hwWrite64(u32 mem, u64 value);
+extern void hwWrite128(u32 mem, const u64 *value);
 
-void hwWrite16(u32 mem, u16 value);
-void hwConstWrite16(u32 mem, int mmreg);
+extern void __fastcall hwWrite32_page_00( u32 mem, u32 value );
+extern void __fastcall hwWrite32_page_01( u32 mem, u32 value );
+extern void __fastcall hwWrite32_page_02( u32 mem, u32 value );
+extern void __fastcall hwWrite32_page_03( u32 mem, u32 value );
+extern void __fastcall hwWrite32_page_0B( u32 mem, u32 value );
+extern void __fastcall hwWrite32_page_0E( u32 mem, u32 value );
+extern void __fastcall hwWrite32_page_0F( u32 mem, u32 value );
+extern void __fastcall hwWrite32_page_other( u32 mem, u32 value );
 
-void hwWrite32(u32 mem, u32 value);
-void hwConstWrite32(u32 mem, int mmreg);
-
-void hwWrite64(u32 mem, u64 value);
-void hwConstWrite64(u32 mem, int mmreg);
-
-void hwWrite128(u32 mem, u64 *value);
-void hwConstWrite128(u32 mem, int xmmreg);
+extern void __fastcall hwWrite32(u32 mem, u32 value);
 
 void hwIntcIrq(int n);
 void hwDmacIrq(int n);
 
-int  hwMFIFORead(u32 addr, u8 *data, int size);
-int  hwMFIFOWrite(u32 addr, u8 *data, int size);
+int  hwMFIFORead(u32 addr, u8 *data, u32 size);
+int  hwMFIFOWrite(u32 addr, u8 *data, u32 size);
 
 int  hwDmacSrcChainWithStack(DMACh *dma, int id);
 int  hwDmacSrcChain(DMACh *dma, int id);
 
-void  intcInterrupt();
-void  dmacInterrupt();
+int hwConstRead8 (u32 x86reg, u32 mem, u32 sign);
+int hwConstRead16(u32 x86reg, u32 mem, u32 sign);
+int hwConstRead32(u32 x86reg, u32 mem);
+void hwConstRead64(u32 mem, int mmreg);
+void hwConstRead128(u32 mem, int xmmreg);
+
+void hwConstWrite8 (u32 mem, int mmreg);
+void hwConstWrite16(u32 mem, int mmreg);
+void hwConstWrite32(u32 mem, int mmreg);
+void hwConstWrite64(u32 mem, int mmreg);
+void hwConstWrite128(u32 mem, int xmmreg);
+
+extern void  intcInterrupt();
+extern void  dmacInterrupt();
+
+extern int rdram_devices, rdram_sdevid;
 
 #endif /* __HW_H__ */

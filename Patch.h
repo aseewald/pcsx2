@@ -18,6 +18,12 @@
 #ifndef __PATCH_H__
 #define __PATCH_H__
 
+#ifdef _WIN32
+#include<windows.h>
+#endif
+
+#include "PS2Etypes.h"
+
 //
 // Defines
 //
@@ -27,32 +33,51 @@
 
 #define GETNEXT_PARAM() \
 	while ( *param && ( *param != ',' ) ) param++; \
-   if ( *param ) param++; \
+	if ( *param ) param++; \
 	while ( *param && ( *param == ' ' ) ) param++; \
-	if ( *param == 0 ) { SysPrintf( _( "Not enough params for inicommand\n" ) ); return; }
+	if ( *param == 0 ) { Console::Error( _( "Not enough params for inicommand" ) ); return; }
+	
+//
+// Enums
+//
+
+enum patch_cpu_type {
+	NO_CPU,
+	CPU_EE,
+	CPU_IOP
+};
+
+enum patch_data_type {
+	NO_TYPE,
+	BYTE_T,
+	SHORT_T,
+	WORD_T,
+	DOUBLE_T,
+	EXTENDED_T
+};
 
 //
 // Typedefs
 //
 typedef void (*PATCHTABLEFUNC)( char * text1, char * text2 );
 
-typedef struct
+struct PatchTextTable
 {
-   char           * text;
-   int            code;
-   PATCHTABLEFUNC func;
-} PatchTextTable;
-
-typedef struct
+	const char *text;
+	int code;
+	PATCHTABLEFUNC func;
+};
+	
+struct IniPatch
 {
-   int enabled;
-   int group;
-   int type;
-   int cpu;
-   int placetopatch;
-   u32 addr;
-   u64 data;
-} IniPatch;
+	int enabled;
+	int group;
+	patch_data_type type;
+	patch_cpu_type cpu;
+	int placetopatch;
+	u32 addr;
+	u64 data;
+};
 
 //
 // Function prototypes
@@ -65,6 +90,8 @@ void patchFunc_path3hack( char * text1, char * text2 );
 void patchFunc_roundmode( char * text1, char * text2 );
 void patchFunc_zerogs( char * text1, char * text2 );
 void patchFunc_vunanmode( char * text1, char * text2 );
+void patchFunc_ffxhack( char * text1, char * text2 );
+void patchFunc_xkickdelay( char * text1, char * text2 );
 
 void inifile_trim( char * buffer );
 
@@ -72,27 +99,36 @@ void inifile_trim( char * buffer );
 // Variables
 //
 extern PatchTextTable commands[];
-
 extern PatchTextTable dataType[];
-
 extern PatchTextTable cpuCore[];
-
 extern IniPatch patch[ MAX_PATCH ];
 extern int patchnumber;
 
+#ifdef __LINUX__
+// Nasty, currently neccessary hack	
+extern u32 LinuxsseMXCSR;
+extern u32 LinuxsseVUMXCSR;
+#endif
 
 void applypatch( int place );
-void inifile_read( char * name );
+void inifile_read( const char * name );
 void inifile_command( char * cmd );
 void resetpatch( void );
 
 int AddPatch(int Mode, int Place, int Address, int Size, u64 data);
 
-void SetFastMemory(int); // iR5900LoadStore.c
-void SetVUNanMemory(int); // iVUmicro.c
-void SetCPUState(u32 sseMXCSR, u32 sseVUMXCSR);
+extern void SetFastMemory(int); // iR5900LoadStore.c
+extern void SetVUNanMode(int mode);
+
+extern int path3hack;
+extern int g_FFXHack;
+//extern int g_VUGameFixes;
+extern int g_ZeroGSOptions;
+extern u32 g_sseMXCSR;
+extern u32 g_sseVUMXCSR;
 
 void SetRoundMode(u32 ee, u32 vu);
+int LoadPatch(const std::string& patchfile);
 
 #endif /* __PATCH_H__ */
 

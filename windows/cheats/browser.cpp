@@ -15,29 +15,22 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
-#include <stdio.h>
-#include <windows.h>
-#include <commctrl.h>
-#include <stdlib.h>
 
+#include "PrecompiledHeader.h"
+#include "../Win32.h"
+
+#include <commctrl.h>
 #include <vector>
-#include <string>
 
 using namespace std;
 
 #include "../cheatscpp.h"
 
-#include "PS2Etypes.h"
-
-
-extern "C" {
-#include "windows/resource.h"
 #include "PS2Edefs.h"
 #include "Memory.h"
 #include "Elfheader.h"
 #include "cheats.h"
 #include "../../patch.h"
-}
 
 HWND hWndBrowser;
 
@@ -356,10 +349,10 @@ u8 DecryptGS2v3(u32* address, u32* value, u8 ctrl)
 
 }
 
-typedef struct
+struct Cheat
 {
 	unsigned int address, value;
-}Cheat;
+};
 
 int ParseCheats(char *cur, std::vector<Cheat> &Cheats, HWND hWnd)
 {
@@ -607,7 +600,7 @@ int ReadPatch(HWND hWnd, IniPatch &temp)
 	}
 
 	// CPU
-	temp.cpu = SendMessage(GetDlgItem(hWnd, IDC_CPU), CB_GETCURSEL, 0, 0) + 1;
+	temp.cpu = (patch_cpu_type)(SendMessage(GetDlgItem(hWnd, IDC_CPU), CB_GETCURSEL, 0, 0) + 1);
 	if(temp.cpu < 1)
 	{
 		MessageBox(hWnd, "CPU is not selected.", "Error", 0);
@@ -631,7 +624,7 @@ int ReadPatch(HWND hWnd, IniPatch &temp)
 	}
 
 	// Type
-	temp.type = SendMessage(GetDlgItem(hWnd, IDC_TYPE), CB_GETCURSEL, 0, 0) + 1;
+	temp.type = (patch_data_type)(SendMessage(GetDlgItem(hWnd, IDC_TYPE), CB_GETCURSEL, 0, 0) + 1);
 	if(temp.type < 1)
 	{
 		MessageBox(hWnd, "Type is not selected.", "Error", 0);
@@ -691,7 +684,7 @@ BOOL CALLBACK AddPatchProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 			
 			// Spin Control
 			SendMessage(GetDlgItem(hWnd, IDC_SPIN1), UDM_SETBUDDY, (WPARAM)GetDlgItem(hWnd, IDC_GROUP), 0);
-			SendMessage(GetDlgItem(hWnd, IDC_SPIN1), UDM_SETRANGE32, (WPARAM)-2147483648, (LPARAM)2147483647);
+			SendMessage(GetDlgItem(hWnd, IDC_SPIN1), UDM_SETRANGE32, (WPARAM)(0-0x80000000), (LPARAM)0x7FFFFFFF);
 			
 			break;
 		case WM_COMMAND:
@@ -800,7 +793,7 @@ BOOL CALLBACK EditPatch(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 					
 					// Spin Control
 					SendMessage(GetDlgItem(hWnd, IDC_SPIN1), UDM_SETBUDDY, (WPARAM)GetDlgItem(hWnd, IDC_GROUP), 0);
-					SendMessage(GetDlgItem(hWnd, IDC_SPIN1), UDM_SETRANGE32, (WPARAM)-2147483648, (LPARAM)2147483647);
+					SendMessage(GetDlgItem(hWnd, IDC_SPIN1), UDM_SETRANGE32, (WPARAM)(0-0x80000000), (LPARAM)0x7FFFFFFF);
 					break;
 				}
 			}
@@ -1098,7 +1091,7 @@ BOOL CALLBACK BrowserProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 				case IDC_SKIPMPEG:
 				{
 					u8 *p = PS2MEM_BASE;
-					u8 *d = p + 0x02000000;
+					u8 *d = p + Ps2MemSize::Base;
 					d -= 16;
 					u32 *u;
 

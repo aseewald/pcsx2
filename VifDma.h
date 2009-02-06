@@ -18,16 +18,16 @@
 #ifndef __VIFDMA_H__
 #define __VIFDMA_H__
 
-typedef struct {
+struct vifCode {
    u32 addr;
    u32 size;
    u32 cmd;
    u16 wl;
    u16 cl;
-} vifCode;
+};
 
 // NOTE, if debugging vif stalls, use sega classics, spyro, gt4, and taito
-typedef struct {
+struct vifStruct {
 	vifCode tag;
 	int cmd;
 	int irq;
@@ -40,9 +40,10 @@ typedef struct {
 	u8 irqoffset; // 32bit offset where next vif code is
     u32 savedtag; // need this for backwards compat with save states
 	u32 vifpacketsize;
-} vifStruct;
+};
 
 extern vifStruct vif0, vif1;
+extern int Path3transfer;
 
 #define vif0ch ((DMACh*)&PS2MEM_HW[0x8000])
 #define vif1ch ((DMACh*)&PS2MEM_HW[0x9000])
@@ -84,15 +85,13 @@ void UNPACK_V4_5( u32 *dest, u32 *data, int size );
 void vifDmaInit();
 void vif0Init();
 void vif1Init();
-void  vif0Interrupt();
-void  vif1Interrupt();
+extern void  vif0Interrupt();
+extern void  vif1Interrupt();
 
 void vif0Write32(u32 mem, u32 value);
 void vif1Write32(u32 mem, u32 value);
 
 void vif0Reset();
 void vif1Reset();
-int  vif0Freeze(gzFile f, int Mode);
-int  vif1Freeze(gzFile f, int Mode);
 
 #endif

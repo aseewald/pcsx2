@@ -19,7 +19,22 @@
 #ifndef __IPU_H__
 #define __IPU_H__
 
-#include "Common.h"
+// IPU_INLINE_IRQS
+// Scheduling ints into the future is a purist approach to emulation, and
+// is mostly cosmetic since the emulator itself performs all actions instantly
+// (as far as the emulated CPU is concerned).  In some cases this can actually
+// cause more sync problems than it supposedly solves, due to accumulated
+// delays incurred by the recompiler's low cycle update rate and also Pcsx2
+// failing to properly handle pre-emptive DMA/IRQs or cpu exceptions.
+
+// Uncomment the following line to enable inline IRQs for the IPU.  Tests show
+// that it doesn't have any effect on compatibility or audio/video sync, and it
+// speeds up movie playback by some 6-8%. But it lacks the purist touch, so it's
+// not enabled by default.
+
+//#define IPU_INLINE_IRQS
+
+
 #ifdef _MSC_VER
 #pragma pack(1)
 #endif
@@ -27,7 +42,7 @@
 //
 // Bitfield Structure
 //
-typedef union {
+union tIPU_CMD {
 	struct {
 		u32 OPTION : 28;	// VDEC decoded value
 		u32 CMD : 4;	// last command
@@ -37,7 +52,7 @@ typedef union {
 		u32 DATA;
 		u32 BUSY;
 	};
-} tIPU_CMD;
+};
 
 #define IPU_CTRL_IFC_M		(0x0f<< 0)
 #define IPU_CTRL_OFC_M		(0x0f<< 4)
@@ -71,7 +86,7 @@ typedef union {
 //
 // Bitfield Structure
 //
-typedef union {
+union tIPU_CTRL {
 	struct {
 		u32 IFC : 4;	// Input FIFO counter
 		u32 OFC : 4;	// Output FIFO counter
@@ -90,7 +105,7 @@ typedef union {
 		u32 BUSY : 1;	// Busy
 	};
 	u32 _u32;
-} tIPU_CTRL;
+};
 
 #define IPU_BP_BP_M		(0x7f<< 0)
 #define IPU_BP_IFC_M	(0x0f<< 8)
@@ -104,60 +119,91 @@ typedef union {
 //
 // Bitfield Structure
 //
-typedef struct {
+struct tIPU_BP {
 	u32 BP;		// Bit stream point
 	u16 IFC;	// Input FIFO counter
 	u8 FP;		// FIFO point
 	u8 bufferhasnew;
-} tIPU_BP;
+};
 
 #ifdef _WIN32
 #pragma pack()
 #endif
 
-typedef struct {
-	u32 FB  : 6;	
-	u32 UN2 :10;
-	u32 QSC : 5;	
-	u32 UN1 : 3;	
-	u32 DTD : 1;	
-	u32 SGN : 1;	
-	u32 DTE : 1;	
-	u32 OFM : 1;	
-	u32 cmd : 4;	
-} tIPU_CMD_IDEC;
+union tIPU_CMD_IDEC
+{
+	struct
+	{
+		u32 FB  : 6;
+		u32 UN2 :10;
+		u32 QSC : 5;
+		u32 UN1 : 3;
+		u32 DTD : 1;
+		u32 SGN : 1;
+		u32 DTE : 1;
+		u32 OFM : 1;
+		u32 cmd : 4;
+	};
 
-typedef struct {
-	u32 FB  : 6;	
-	u32 UN2 :10;
-	u32 QSC : 5;	
-	u32 UN1 : 4;	
-	u32 DT  : 1;	
-	u32 DCR : 1;	
-	u32 MBI : 1;	
-	u32 cmd : 4;	
-} tIPU_CMD_BDEC;
+	u32 value;
 
-typedef struct {
-	u32 MBC :11;
-	u32 UN2 :15;
-	u32 DTE : 1;	
-	u32 OFM : 1;	
-	u32 cmd : 4;
-} tIPU_CMD_CSC;
+	tIPU_CMD_IDEC( u32 val ) : value( val )
+	{
+	}
+};
 
-#define SCE_IPU_BCLR	0x0
-#define SCE_IPU_IDEC	0x1
-#define SCE_IPU_BDEC	0x2
-#define SCE_IPU_VDEC	0x3
-#define SCE_IPU_FDEC	0x4
-#define SCE_IPU_SETIQ	0x5
-#define SCE_IPU_SETVQ	0x6
-#define SCE_IPU_CSC		0x7
-#define SCE_IPU_PACK	0x8
-#define SCE_IPU_SETTH	0x9
+union tIPU_CMD_BDEC
+{
+	struct
+	{
+		u32 FB  : 6;
+		u32 UN2 :10;
+		u32 QSC : 5;
+		u32 UN1 : 4;
+		u32 DT  : 1;
+		u32 DCR : 1;
+		u32 MBI : 1;
+		u32 cmd : 4;
+	};
+	u32 value;
 
-typedef struct {
+	tIPU_CMD_BDEC( u32 val ) : value( val )
+	{
+	}
+};
+
+union tIPU_CMD_CSC
+{
+	struct
+	{
+		u32 MBC :11;
+		u32 UN2 :15;
+		u32 DTE : 1;
+		u32 OFM : 1;
+		u32 cmd : 4;
+	};
+	u32 value;
+
+	tIPU_CMD_CSC( u32 val ) : value( val )
+	{
+	}
+};
+
+enum SCE_IPU
+{
+	SCE_IPU_BCLR = 0x0
+,	SCE_IPU_IDEC
+,	SCE_IPU_BDEC
+,	SCE_IPU_VDEC
+,	SCE_IPU_FDEC
+,	SCE_IPU_SETIQ
+,	SCE_IPU_SETVQ
+,	SCE_IPU_CSC
+,	SCE_IPU_PACK
+,	SCE_IPU_SETTH
+};
+
+struct IPUregisters {
   tIPU_CMD  cmd;
   u32 dummy0[2];
   tIPU_CTRL ctrl;
@@ -167,9 +213,15 @@ typedef struct {
   u32		top;
   u32		topbusy;
   u32 dummy3[2];
-} IPUregisters, *PIPUregisters;
+};
 
 #define ipuRegs ((IPUregisters*)(PS2MEM_HW+0x2000))
+
+extern tIPU_BP g_BP;
+extern int coded_block_pattern;
+extern int g_nIPU0Data; // or 0x80000000 whenever transferring
+extern u8* g_pIPU0Pointer;
+
 
 void dmaIPU0();
 void dmaIPU1();
@@ -178,26 +230,36 @@ int ipuInit();
 void ipuReset();
 void ipuShutdown();
 int  ipuFreeze(gzFile f, int Mode);
-BOOL ipuCanFreeze();
+bool ipuCanFreeze();
 
-u32 ipuRead32(u32 mem);
+
+extern u32 ipuRead32(u32 mem);
+extern u64 ipuRead64(u32 mem);
+extern void ipuWrite32(u32 mem,u32 value);
+extern void ipuWrite64(u32 mem,u64 value);
+
 int ipuConstRead32(u32 x86reg, u32 mem);
-
-u64 ipuRead64(u32 mem);
 void ipuConstRead64(u32 mem, int mmreg);
-
-void ipuWrite32(u32 mem,u32 value);
 void ipuConstWrite32(u32 mem, int mmreg);
-
-void ipuWrite64(u32 mem,u64 value);
 void ipuConstWrite64(u32 mem, int mmreg);
 
-void ipu0Interrupt();
-void ipu1Interrupt();
+extern void IPUCMD_WRITE(u32 val);
+extern void ipuSoftReset();
+extern void IPUProcessInterrupt();
+extern void ipu0Interrupt();
+extern void ipu1Interrupt();
 
-u8 getBits32(u8 *address, u32 advance);
-u8 getBits16(u8 *address, u32 advance);
-u8 getBits8(u8 *address, u32 advance);
-int getBits(u8 *address, u32 size, u32 advance);
+extern u16 __fastcall FillInternalBuffer(u32 * pointer, u32 advance, u32 size);
+extern u8 __fastcall getBits32(u8 *address, u32 advance);
+extern u8 __fastcall getBits16(u8 *address, u32 advance);
+extern u8 __fastcall getBits8(u8 *address, u32 advance);
+extern int __fastcall getBits(u8 *address, u32 size, u32 advance);
+
+// returns number of qw read
+int FIFOfrom_write(u32 * value, int size);
+void FIFOfrom_read(void *value,int size);
+int FIFOto_read(void *value);
+int FIFOto_write(u32* pMem, int size);
+void FIFOto_clear();
 
 #endif

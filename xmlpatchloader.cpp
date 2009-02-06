@@ -15,39 +15,24 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
-#include <iostream>
-#include <sstream>
-#include <vector>
-#include <string>
+#include "PrecompiledHeader.h"
 
 using namespace std;
-extern "C" int g_ZeroGSOptions;
 
 #include "tinyxml/tinyxml.h"
 
-extern "C" {
-#	include "PS2Etypes.h"
-#	include "Patch.h"
-
-#	ifdef _WIN32
-#   include<windows.h>
-	struct AppData {
-		HWND hWnd;           // Main window handle
-		HINSTANCE hInstance; // Application instance
-		HMENU hMenu;         // Main window menu
-		HANDLE hConsole;
-	} extern gApp;
-#	endif
+#include "Patch.h"
+#include "System.h"
 
 #ifdef _MSC_VER
 #pragma warning(disable:4996) //ignore the stricmp deprecated warning
 #endif
 
-	void SysPrintf(char *fmt, ...);
-	int LoadPatch(char *patchfile);
-}
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
-#if !defined(_WIN32) && !defined(__MINGW32__)
+#if !defined(_WIN32)
 #ifndef strnicmp
 #define strnicmp strncasecmp
 #endif
@@ -55,6 +40,9 @@ extern "C" {
 #ifndef stricmp
 #define stricmp strcasecmp
 #endif
+#else
+#define strnicmp _strnicmp
+#define stricmp _stricmp
 #endif
 
 #include "../cheatscpp.h"
@@ -87,10 +75,10 @@ Patch Patch::operator =(const Patch&p)
 vector<Group> groups;
 vector<Patch> patches;
 
-int LoadPatch(char *crc)
+int LoadPatch( const string& crc)
 {
 	char pfile[256];
-	sprintf(pfile,"patches\\%s.xml",crc);
+	sprintf(pfile,"patches\\%hs.xml",&crc);
 
 	patchnumber=0;
 
@@ -121,16 +109,8 @@ int LoadPatch(char *crc)
 		return result;
 	}
 
-#ifdef _WIN32
-	if (gApp.hConsole) 
-	{
-		if(title)
-			SetConsoleTitle(title);
-		else
-			SetConsoleTitle("<No Title>");
-	}
-		
-#endif
+	Console::SetTitle(
+		((title==NULL) || (strlen(title)==0)) ? "<No Title>" : title );
 
 	return 0;
 }
@@ -138,7 +118,6 @@ int LoadPatch(char *crc)
 
 int LoadGroup(TiXmlNode *group,int gParent)
 {
-
 	TiXmlElement *groupelement = group->ToElement();
 
 	const char *gtitle=groupelement->Attribute("title");
@@ -177,13 +156,10 @@ int LoadGroup(TiXmlNode *group,int gParent)
 
 	int gIndex=groups.size()-1;
 
-
-#ifndef PCSX2_NORECBUILD
 	// only valid for recompilers
 	TiXmlNode *fastmemory=group->FirstChild("FASTMEMORY");
 	if(fastmemory!=NULL)
 		SetFastMemory(1);
-#endif
 
     TiXmlNode *zerogs=group->FirstChild("ZEROGS");
 	if(zerogs!=NULL)
@@ -332,11 +308,11 @@ int LoadGroup(TiXmlNode *group,int gParent)
 		
 		if(strcmp(place,"EE")==0)
 		{
-			patch[patchnumber].cpu=1;
+			patch[patchnumber].cpu= CPU_EE;
 		} else
 		if(strcmp(place,"IOP")==0)
 		{
-			patch[patchnumber].cpu=2;
+			patch[patchnumber].cpu= CPU_IOP;
 		} else
 		{
 			SysPrintf("XML Patch Loader: ERROR: Invalid place attribute.\n");
@@ -346,19 +322,19 @@ int LoadGroup(TiXmlNode *group,int gParent)
 
 		if(strcmp(size,"64")==0)
 		{
-			patch[patchnumber].type=4;
+			patch[patchnumber].type = DOUBLE_T;
 		} else
 		if(strcmp(size,"32")==0)
 		{
-			patch[patchnumber].type=3;
+			patch[patchnumber].type = WORD_T;
 		} else
 		if(strcmp(size,"16")==0)
 		{
-			patch[patchnumber].type=2;
+			patch[patchnumber].type = SHORT_T;
 		} else
 		if(strcmp(size,"8")==0)
 		{
-			patch[patchnumber].type=1;
+			patch[patchnumber].type = BYTE_T;
 		} else
 		{
 			SysPrintf("XML Patch Loader: ERROR: Invalid size attribute.\n");

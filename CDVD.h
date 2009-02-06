@@ -21,7 +21,7 @@
 
 #include "PsxCommon.h"
 
-typedef struct {
+struct cdvdRTC {
 	u8 status;
 	u8 second;
 	u8 minute;
@@ -30,9 +30,9 @@ typedef struct {
 	u8 day;
 	u8 month;
 	u8 year;
-} cdvdRTC;
+};
 
-typedef struct {
+struct cdvdStruct {
 	u8 nCommand;
 	u8 Ready;
 	u8 Error;
@@ -65,7 +65,7 @@ typedef struct {
 	int Readed;
 	int Reading;
 	int ReadMode;
-	int BlockSize;
+	int BlockSize; // Total bytes transfered at 1x speed
 	int Speed;
 	int RetryCnt;
 	int RetryCntP;
@@ -82,17 +82,17 @@ typedef struct {
 	int mg_datatype;//0-data(encrypted); 1-header
 	u8	mg_kbit[16];//last BIT key 'seen'
 	u8	mg_kcon[16];//last content key 'seen'
-//	char Unused[4096];
-} cdvdStruct;
 
-extern cdvdStruct cdvd;
+	u8  Action;			// the currently scheduled emulated action
+	u32 SeekToSector;	// Holds the destination sector during seek operations.
+	u32 ReadTime;		// Avg. time to read one block of data (in Iop cycles)
+	bool Spinning;		// indicates if the Cdvd is spinning or needs a spinup delay
+};
 
 void cdvdReset();
-void cdvdReadTimeRcnt(int mode);
 void cdvdVsync();
-int  cdvdInterrupt();
-int  cdvdFreeze(gzFile f, int Mode);
-void  cdvdReadInterrupt();
+extern void  cdvdActionInterrupt();
+extern void  cdvdReadInterrupt();
 void cdvdNewDiskCB();
 u8   cdvdRead04(void);
 u8   cdvdRead05(void);

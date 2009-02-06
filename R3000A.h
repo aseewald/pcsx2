@@ -21,22 +21,7 @@
 
 #include <stdio.h>
 
-extern u32 g_psxNextBranchCycle;
-
-typedef struct {
-	int  (*Init)();
-	void (*Reset)();
-	void (*Execute)();		/* executes up to a break */
-	void (*ExecuteBlock)();	/* executes up to a jump */
-	void (*Clear)(u32 Addr, u32 Size);
-	void (*Shutdown)();
-} R3000Acpu;
-
-extern R3000Acpu *psxCpu;
-extern R3000Acpu psxInt;
-extern R3000Acpu psxRec;
-
-typedef union {
+union GPRRegs {
 	struct {
 		u32 r0, at, v0, v1, a0, a1, a2, a3,
 			t0, t1, t2, t3, t4, t5, t6, t7,
@@ -44,9 +29,9 @@ typedef union {
 			t8, t9, k0, k1, gp, sp, s8, ra, hi, lo; // hi needs to be at index 32! don't change
 	} n;
 	u32 r[34]; /* Lo, Hi in r[33] and r[32] */
-} GPRRegs;
+};
 
-typedef union {
+union CP0Regs {
 	struct {
 		u32 Index,     Random,    EntryLo0,  EntryLo1,
 			Context,   PageMask,  Wired,     Reserved0,
@@ -58,33 +43,33 @@ typedef union {
 			TagLo,     TagHi,     ErrorEPC,  Reserved6;
 	} n;
 	u32 r[32];
-} CP0Regs;
+};
 
-typedef struct {
+struct SVector2D {
 	short x, y;
-} SVector2D;
+};
 
-typedef struct {
+struct SVector2Dz {
 	short z, pad;
-} SVector2Dz;
+};
 
-typedef struct {
+struct SVector3D {
 	short x, y, z, pad;
-} SVector3D;
+};
 
-typedef struct {
+struct LVector3D {
 	short x, y, z, pad;
-} LVector3D;
+};
 
-typedef struct {
+struct CBGR {
 	unsigned char r, g, b, c;
-} CBGR;
+};
 
-typedef struct {
+struct SMatrix3D {
 	short m11, m12, m13, m21, m22, m23, m31, m32, m33, pad;
-} SMatrix3D;
+};
 
-typedef union {
+union CP2Data {
 	struct {
 		SVector3D     v0, v1, v2;
 		CBGR          rgb;
@@ -99,9 +84,9 @@ typedef union {
 		s32          lzcs, lzcr;
 	} n;
 	u32 r[32];
-} CP2Data;
+};
 
-typedef union {
+union CP2Ctrl {
 	struct {
 		SMatrix3D rMatrix;
 		s32      trX, trY, trZ;
@@ -116,9 +101,9 @@ typedef union {
 		s32      flag;
 	} n;
 	u32 r[32];
-} CP2Ctrl;
+};
 
-typedef struct psxRegisters_t {
+struct psxRegisters {
 	GPRRegs GPR;		/* General Purpose Registers */
 	CP0Regs CP0;		/* Coprocessor0 Registers */
 	CP2Data CP2D; 		/* Cop2 data registers */
@@ -127,29 +112,17 @@ typedef struct psxRegisters_t {
 	u32 code;			/* The instruction */
 	u32 cycle;
 	u32 interrupt;
-	u32 sCycle[64];
-	u32 eCycle[64];
+	u32 sCycle[64];		// start cycle for signaled ints
+	s32 eCycle[64];		// cycle delta for signaled ints (sCycle + eCycle == branch cycle)
 	u32 _msflag[32];
 	u32 _smflag[32];
-} psxRegisters;
+};
 
 extern PCSX2_ALIGNED16_DECL(psxRegisters psxRegs);
 
-#define PSX_IS_CONST1(reg) ((reg)<32 && (g_psxHasConstReg&(1<<(reg))))
-#define PSX_IS_CONST2(reg1, reg2) ((g_psxHasConstReg&(1<<(reg1)))&&(g_psxHasConstReg&(1<<(reg2))))
-#define PSX_SET_CONST(reg) { \
-	if( (reg) < 32 ) { \
-		g_psxHasConstReg |= (1<<(reg)); \
-		g_psxFlushedConstReg &= ~(1<<(reg)); \
-	} \
-}
-
-#define PSX_DEL_CONST(reg) { \
-	if( (reg) < 32 ) g_psxHasConstReg &= ~(1<<(reg)); \
-}
-
-extern u32 g_psxConstRegs[32];
-extern u32 g_psxHasConstReg, g_psxFlushedConstReg;
+extern u32 g_psxNextBranchCycle;
+extern s32 psxBreak;		// used when the IOP execution is broken and control returned to the EE
+extern s32 psxCycleEE;		// tracks IOP's current sych status with the EE
 
 #ifndef _PC_
 
@@ -197,17 +170,48 @@ extern u32 g_psxHasConstReg, g_psxFlushedConstReg;
 
 #define _SetLink(x)     psxRegs.GPR.r[x] = _PC_ + 4;       // Sets the return address in the link register
 
-extern int EEsCycle;
-extern u32 EEoCycle, IOPoCycle;
+extern s32 EEsCycle;
+extern u32 EEoCycle;
 
 #endif
 
-int  psxInit();
+extern s32 psxNextCounter;
+extern u32 psxNextsCounter;
+extern bool iopBranchAction;
+extern bool iopEventTestIsActive;
+
+// Branching status used when throwing exceptions.
+extern bool iopIsDelaySlot;
+
+////////////////////////////////////////////////////////////////////
+// R3000A  Public Interface / API
+
+struct R3000Acpu {
+	void (*Allocate)();
+	void (*Reset)();
+	void (*Execute)();
+	s32 (*ExecuteBlock)( s32 eeCycles );		// executes the given number of EE cycles.
+	void (*Clear)(u32 Addr, u32 Size);
+	void (*Shutdown)();
+};
+
+extern R3000Acpu *psxCpu;
+extern R3000Acpu psxInt;
+extern R3000Acpu psxRec;
+
 void psxReset();
 void psxShutdown();
 void psxException(u32 code, u32 step);
 void psxBranchTest();
 void psxExecuteBios();
-void psxRestartCPU();
+void psxMemReset();
+
+// Subsets
+extern void (*psxBSC[64])();
+extern void (*psxSPC[64])();
+extern void (*psxREG[32])();
+extern void (*psxCP0[32])();
+extern void (*psxCP2[64])();
+extern void (*psxCP2BSC[32])();
 
 #endif /* __R3000A_H__ */

@@ -16,26 +16,18 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
-#include <stdio.h>
-#include <windows.h>
-#include <windowsx.h>
+#include "PrecompiledHeader.h"
+#include "Win32.h"
+
 #include <commctrl.h>
 #include <math.h>
 #include "libintlmsc.h"
-#define _(String) dgettext (PACKAGE, String)
 
-extern "C"{
-#include "PS2Edefs.h"
-#include "resource.h"
-#include "Misc.h"
 #include "System.h"
 #include "McdsDlg.h"
-}
 
 #include <vector>
 using namespace std;
-
-
 
 
 u16 SJISTable[0xFFFF];
@@ -43,7 +35,7 @@ u16 SJISTable[0xFFFF];
 
 void IniSJISTable()
 {
-	memset(SJISTable, 0, 0xFFFF);
+	memzero_obj(SJISTable);
 	//Blow me sony for using this retarded sjis to store the savegame name
 	SJISTable[0x20]	= 0x0020;
 	SJISTable[0x21]	= 0x0021;
@@ -356,7 +348,7 @@ class Dir
 
 		void Release()
 		{
-			for(int i=0;i<Sons.size();i++)
+			for(unsigned int i=0;i<Sons.size();i++)
 			{
 				Sons[i].Release();
 			}
@@ -409,7 +401,7 @@ class Dir
 			u32 NumberOfFrames = *(u32 *)(File + AnimationSegmentOffset + 16);
 
 			u32 Offset = AnimationSegmentOffset + 20;
-			for(int i=0;i<NumberOfFrames;i++)
+			for(u32 i=0;i<NumberOfFrames;i++)
 			{
 				u32 KeyNum = *(u32 *)(File + Offset + 4);
 				Offset += 16 + (KeyNum * 8) - 8; // The -8 is there because the doc with the ico format spec is either wrong or I'm stupid
@@ -501,7 +493,7 @@ class SaveGame
 			D = _Dir;
 
 			// Find icon.sys
-			for(int i=0;i<D->Sons.size();i++)
+			for(unsigned int i=0;i<D->Sons.size();i++)
 			{
 				if(!strcmp("icon.sys", D->Sons[i].Name))
 				{
@@ -546,7 +538,7 @@ class SaveGame
 			}
 
 			// Find the icon now
-			for(int i=0;i<D->Sons.size();i++)
+			for(unsigned int i=0;i<D->Sons.size();i++)
 			{
 				if(!strcmp(IconName, D->Sons[i].Name))
 				{
@@ -665,9 +657,7 @@ class MemoryCard
 				return 0;
 			}
 
-			#ifdef _DEBUG
-			SysPrintf("IFC: %d\n\n", IFC);
-			#endif
+			DbgCon::WriteLn("IFC: %d", params IFC);
 
 			// Read the cluster with the indirect data to the FAT.
 			fseek(fp, 0x420 * IFC, SEEK_SET);
@@ -810,7 +800,7 @@ class MemoryCard
 			{
 				fclose(fp);
 			}
-			memset(FAT, 0, 256*256*4);
+			memzero_obj(FAT);
 			Root.Release();
 
 			SaveGameList.clear();
@@ -840,7 +830,7 @@ class MemoryCard
 		
 		void AddDirToTreeView(HWND hWnd, HTREEITEM tree, Dir *d)
 		{
-			for(int i=0;i<d->Sons.size();i++)
+			for(unsigned int i=0;i<d->Sons.size();i++)
 			{
 				HTREEITEM temptree = AddTreeItem(hWnd, tree, d->Sons[i].Name, 0);
 				if(d->Sons[i].IsDirectory())
@@ -870,7 +860,7 @@ class MemoryCard
 			item.iIndent = 0;
 			item.lParam = 0;
 
-			for(int i=0;i<SaveGameList.size();i++)
+			for(unsigned int i=0;i<SaveGameList.size();i++)
 			{
 				strcpy(item.pszText, SaveGameList[i].Name1);
 				if(SaveGameList[i].Name2[0] != 0)
@@ -895,7 +885,7 @@ class MemoryCard
 		Dir *FindFile(char *dir, char *file)
 		{
 			//Find the dir first
-			int i;
+			unsigned int i;
 			for(i=0;i<Root.Sons.size();i++)
 			{
 				if(!strcmp(dir, Root.Sons[i].Name))
@@ -971,7 +961,7 @@ class MemoryCard
 			u32 NumberOfFrames = *(u32 *)(d->File + AnimationSegmentOffset + 16);
 
 			u32 Offset = AnimationSegmentOffset + 20;
-			for(int i=0;i<NumberOfFrames;i++)
+			for(unsigned int i=0;i<NumberOfFrames;i++)
 			{
 				u32 KeyNum = *(u32 *)(d->File + Offset + 4);
 				Offset += 16 + (KeyNum * 8) - 8; // The -8 is there because the doc with the ico format spec is either wrong or I'm stupid
@@ -1059,7 +1049,7 @@ class MemoryCard
 			// Create the image list
 			ImageList = ImageList_Create(64, 64, ILC_COLOR32, 10, 256);
 
-			for(int i=0;i<Root.Sons.size();i++)
+			for(unsigned int i=0;i<Root.Sons.size();i++)
 			{
 				if(Root.Sons[i].Name[0] != '.')
 				{
@@ -1120,7 +1110,7 @@ class MemoryCard
 			
 			int dircluster = FindEmptyCluster();
 			char dir[512];
-			memset(dir, 0, 512);
+			memzero_obj(dir);
 			*(u16 *)&dir[0] = Dir::DF_EXISTS | Dir::DF_DIRECTORY | Dir::DF_READ; // mode flag
 			*(u32 *)&dir[4] = Di->Sons.size(); // number of files inside the dir
 			*(u8 *)&dir[8] = 0; // creation time seconds
@@ -1173,7 +1163,7 @@ class MemoryCard
 			int numfiles = 5;
 
 			// ADD FILE ENTRIES TO DIR ., ..
-			memset(dir, 0, 512);
+			memzero_obj(dir);
 			*(u16 *)&dir[0] = Dir::DF_EXISTS | Dir::DF_DIRECTORY | Dir::DF_READ; // mode flag
 			*(u32 *)&dir[4] = numfiles; // number of files inside the dir
 			*(u8 *)&dir[8] = 0; // creation time seconds
@@ -1195,7 +1185,7 @@ class MemoryCard
 			fseek(fp, 0xA920 + (((dircluster) * 0x420) + 0), SEEK_SET);
 			fwrite(dir, 512, 1, fp);
 
-			memset(dir, 0, 512);
+			memzero_obj(dir);
 			*(u16 *)&dir[0] = Dir::DF_EXISTS | Dir::DF_DIRECTORY | Dir::DF_READ; // mode flag
 			*(u32 *)&dir[4] = 2; // number of files inside the dir
 			*(u8 *)&dir[8] = 0; // creation time seconds
@@ -1231,7 +1221,7 @@ class MemoryCard
 				dircluster = newcluster;
 
 				// Add first file
-				memset(dir, 0, 512);
+				memzero_obj(dir);
 				*(u16 *)&dir[0] = Dir::DF_EXISTS | Dir::DF_FILE | Dir::DF_READ; // mode flag
 				*(u32 *)&dir[4] = 0; // SIZE OF FILE
 				*(u8 *)&dir[8] = 0; // creation time seconds
@@ -1320,7 +1310,7 @@ class MemoryCard
 			
 			int dircluster = FindEmptyCluster();
 			char dir[512];
-			memset(dir, 0, 512);
+			memzero_obj(dir);
 			*(u16 *)&dir[0] = Dir::DF_EXISTS | Dir::DF_DIRECTORY | Dir::DF_READ; // mode flag
 			*(u32 *)&dir[4] = 2; // number of files inside the dir
 			*(u8 *)&dir[8] = 0; // creation time seconds
@@ -1373,7 +1363,7 @@ class MemoryCard
 			int numfiles = 5;
 
 			// ADD FILE ENTRIES TO DIR ., ..
-			memset(dir, 0, 512);
+			memzero_obj(dir);
 			*(u16 *)&dir[0] = Dir::DF_EXISTS | Dir::DF_DIRECTORY | Dir::DF_READ; // mode flag
 			*(u32 *)&dir[4] = numfiles; // number of files inside the dir
 			*(u8 *)&dir[8] = 0; // creation time seconds
@@ -1395,7 +1385,7 @@ class MemoryCard
 			fseek(fp, 0xA920 + (((dircluster) * 0x420) + 0), SEEK_SET);
 			fwrite(dir, 512, 1, fp);
 
-			memset(dir, 0, 512);
+			memzero_obj(dir);
 			*(u16 *)&dir[0] = Dir::DF_EXISTS | Dir::DF_DIRECTORY | Dir::DF_READ; // mode flag
 			*(u32 *)&dir[4] = 2; // number of files inside the dir
 			*(u8 *)&dir[8] = 0; // creation time seconds
@@ -1431,7 +1421,7 @@ class MemoryCard
 				dircluster = newcluster;
 
 				// Add first file
-				memset(dir, 0, 512);
+				memzero_obj(dir);
 				*(u16 *)&dir[0] = Dir::DF_EXISTS | Dir::DF_FILE | Dir::DF_READ; // mode flag
 				*(u32 *)&dir[4] = 2; // number of files inside the dir
 				*(u8 *)&dir[8] = 0; // creation time seconds
@@ -1524,9 +1514,9 @@ void Open_Mcd_Proc(HWND hW, int mcd) {
 	char szFilter[1024];
 	char *str;
 
-	memset(szFileName,  0, sizeof(szFileName));
-	memset(szFileTitle, 0, sizeof(szFileTitle));
-	memset(szFilter,    0, sizeof(szFilter));
+	memzero_obj(szFileName);
+	memzero_obj(szFileTitle);
+	memzero_obj(szFilter);
 
 
 	strcpy(szFilter, _("Ps2 Memory Card (*.ps2)"));
@@ -1546,12 +1536,13 @@ void Open_Mcd_Proc(HWND hW, int mcd) {
     ofn.nFilterIndex		= 1;
     ofn.lpstrFile			= szFileName;
     ofn.nMaxFile			= 256;
-    ofn.lpstrInitialDir		= "memcards";
+    ofn.lpstrInitialDir		= MEMCARDS_DIR;
     ofn.lpstrFileTitle		= szFileTitle;
     ofn.nMaxFileTitle		= 256;
     ofn.lpstrTitle			= NULL;
     ofn.lpstrDefExt			= "MC2";
-    ofn.Flags				= OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+    ofn.Flags				=
+		OFN_HIDEREADONLY | OFN_NOCHANGEDIR | OFN_EXPLORER;
 
 	if (GetOpenFileName ((LPOPENFILENAME)&ofn)) {
 		Edit_SetText(GetDlgItem(hW,mcd == 1 ? IDC_MCD1 : IDC_MCD2), szFileName);
@@ -1566,9 +1557,9 @@ void SaveFileDialog(HWND hW, int MC, char *dir, char *name) {
 	char szFilter[1024];
 //	char *str;  (unused for now)
 
-	memset(szFileName,  0, sizeof(szFileName));
-	memset(szFileTitle, 0, sizeof(szFileTitle));
-	memset(szFilter,    0, sizeof(szFilter));
+	memzero_obj(szFileName);
+	memzero_obj(szFileTitle);
+	memzero_obj(szFilter);
 
 	strcpy(szFilter, "All Files (*.*)");
 	strcpy(szFileName, name);
@@ -1581,12 +1572,14 @@ void SaveFileDialog(HWND hW, int MC, char *dir, char *name) {
     ofn.nFilterIndex		= 1;
     ofn.lpstrFile			= szFileName;
     ofn.nMaxFile			= 256;
-    ofn.lpstrInitialDir		= "memcards";
+    ofn.lpstrInitialDir		= MEMCARDS_DIR;
     ofn.lpstrFileTitle		= szFileTitle;
     ofn.nMaxFileTitle		= 256;
     ofn.lpstrTitle			= NULL;
     ofn.lpstrDefExt			= "MC2";
-    ofn.Flags				= OFN_HIDEREADONLY | OFN_NOCHANGEDIR | OFN_OVERWRITEPROMPT | OFN_EXTENSIONDIFFERENT;
+    ofn.Flags				=
+		OFN_HIDEREADONLY | OFN_NOCHANGEDIR | OFN_OVERWRITEPROMPT |
+		OFN_EXTENSIONDIFFERENT | OFN_EXPLORER;
 
 	if (GetSaveFileName ((LPOPENFILENAME)&ofn))
 	{
@@ -1599,9 +1592,9 @@ void SaveFileDialog(HWND hW, int MC, char *dir, char *name) {
 
 		if(d != NULL)
 		{
-				FILE *fp = fopen(ofn.lpstrFile, "wb");
-				fwrite(d->File, d->Lenght, 1, fp);
-				fclose(fp);
+			FILE *fp = fopen(ofn.lpstrFile, "wb");
+			fwrite(d->File, d->Lenght, 1, fp);
+			fclose(fp);
 		}
 	}
 }
@@ -1625,8 +1618,8 @@ BOOL CALLBACK ConfigureMcdsDlgProc(HWND hW, UINT uMsg, WPARAM wParam, LPARAM lPa
 			Static_SetText(GetDlgItem(hW, IDC_FRAMEMCD1), _("Memory Card 1"));
 			Static_SetText(GetDlgItem(hW, IDC_FRAMEMCD2), _("Memory Card 2"));
 
-			if (!strlen(Config.Mcd1)) strcpy(Config.Mcd1, "memcards\\Mcd001.ps2");
-			if (!strlen(Config.Mcd2)) strcpy(Config.Mcd2, "memcards\\Mcd002.ps2");
+			if (!strlen(Config.Mcd1)) strcpy(Config.Mcd1, MEMCARDS_DIR "\\" DEFAULT_MEMCARD1);
+			if (!strlen(Config.Mcd2)) strcpy(Config.Mcd2, MEMCARDS_DIR "\\" DEFAULT_MEMCARD2);
 			Edit_SetText(GetDlgItem(hW,IDC_MCD1), Config.Mcd1);
 			Edit_SetText(GetDlgItem(hW,IDC_MCD2), Config.Mcd2);
 

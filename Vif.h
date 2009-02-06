@@ -19,12 +19,12 @@
 #ifndef __VIF_H__
 #define __VIF_H__
 
-typedef struct {
+struct vifCycle {
 	u8 cl, wl;
 	u8 pad[2];
-} vifCycle;
+};
 
-typedef struct {
+struct VIFregisters {
 	u32 stat;
 	u32 pad0[3];
 	u32 fbrst;
@@ -75,7 +75,16 @@ typedef struct {
 	u32 pad23[3];
 	u32 offset;    // internal UNPACK offset
 	u32 addr;
-} VIFregisters;
+};
+
+extern "C"
+{
+	// these use cdecl for Asm code references.
+	extern VIFregisters *_vifRegs;
+	extern u32* _vifMaskRegs;
+	extern u32* _vifRow;
+	extern u32* _vifCol;
+}
 
 #define vif0Regs ((VIFregisters*)&PS2MEM_HW[0x3800])
 #define vif1Regs ((VIFregisters*)&PS2MEM_HW[0x3c00])
@@ -87,11 +96,7 @@ int  VIF0transfer(u32 *data, int size, int istag);
 int  VIF1transfer(u32 *data, int size, int istag);
 void  vifMFIFOInterrupt();
 
-#ifndef PCSX2_NORECBUILD
 void SetNewMask(u32* vif1masks, u32* hasmask, u32 mask, u32 oldmask);
-#else
-#define SetNewMask 0&&
-#endif
 
 #define XMM_R0			xmm0
 #define XMM_R1			xmm1

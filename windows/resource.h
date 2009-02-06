@@ -1,26 +1,8 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2008  Pcsx2 Team
- *  Original code (2.0 and earlier )copyright (c) 2000-2002 Lee Thomason (www.grinninglizard.com)
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
- */
 //{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ generated include file.
 // Used by pcsx2.rc
 //
-#define IDR_MENU                        101
+#define IDDEFAULT                       3
 #define IDD_CONFIG                      101
 #define IDD_MCDCONF                     102
 #define IDD_BPEXEC                      103
@@ -51,10 +33,12 @@
 #define IDD_USERNAME                    129
 #define IDB_PS2SILVER                   132
 #define IDD_CHEATS                      133
+#define IDD_GAMEFIXES                   134
 #define IDD_HACKS                       135
 #define IDD_DUMP                        136
 #define IDD_DUMPMEM                     137
 #define IDD_PATCHBROWSER                138
+#define IDD_ADVANCED_OPTIONS            140
 #define IDD_FINDER                      174
 #define IDD_ADD                         175
 #define IDD_ADDGS                       176
@@ -83,11 +67,9 @@
 #define IDC_VU0_VF07                    1012
 #define IDC_VU0_VF08                    1013
 #define IDC_PCSX_ABOUT_TEXT             1014
-#define IDC_PSXOUT                      1014
 #define IDC_VU0_VF09                    1014
 #define IDC_CPU                         1015
 #define IDC_VU0_VF10                    1015
-#define IDC_VSYNCHACK                   1016
 #define IDC_VU0_VF11                    1016
 #define IDC_ENABLED                     1016
 #define IDC_VU0_VF12                    1017
@@ -175,12 +157,10 @@
 #define IDC_VU0_VI14                    1052
 #define IDC_DEBUG_L15                   1053
 #define IDC_GPR6                        1053
-#define IDC_LISTSPU                     1053
 #define IDC_VU0_VI15                    1053
 #define IDC_LISTSPU2                    1053
 #define IDC_DEBUG_L16                   1054
 #define IDC_GPR7                        1054
-#define IDC_LISTCDR                     1054
 #define IDC_VU0_VI16                    1054
 #define IDC_LISTCDVD                    1054
 #define IDC_DEBUG_L17                   1055
@@ -199,49 +179,39 @@
 #define IDC_ABOUTGS                     1058
 #define IDC_VU0_VI20                    1058
 #define IDC_DEBUG_L21                   1059
-#define IDC_CONFIGSPU                   1059
 #define IDC_VU0_VI21                    1059
 #define IDC_CONFIGSPU2                  1059
 #define IDC_DEBUG_L22                   1060
-#define IDC_TESTSPU                     1060
 #define IDC_VU0_VI22                    1060
 #define IDC_TESTSPU2                    1060
 #define IDC_DEBUG_L23                   1061
-#define IDC_ABOUTSPU                    1061
 #define IDC_VU0_VI23                    1061
 #define IDC_ABOUTSPU2                   1061
 #define IDC_DEBUG_L24                   1062
-#define IDC_CONFIGCDR                   1062
 #define IDC_VU0_VI24                    1062
 #define IDC_CONFIGCDVD                  1062
 #define IDC_DEBUG_L25                   1063
 #define IDC_GPR11                       1063
-#define IDC_TESTCDR                     1063
 #define IDC_VU0_VI25                    1063
 #define IDC_TESTCDVD                    1063
 #define IDC_DEBUG_L26                   1064
-#define IDC_ABOUTCDR                    1064
 #define IDC_VU0_VI26                    1064
 #define IDC_ABOUTCDVD                   1064
 #define IDC_DEBUG_L27                   1065
 #define IDC_VU0_VI27                    1065
 #define IDC_LISTDEV9                    1065
 #define IDC_DEBUG_L28                   1066
-#define IDC_LISTPAD                     1066
 #define IDC_LISTPAD1                    1066
 #define IDC_VU0_VI28                    1066
 #define IDC_DEBUG_L29                   1067
-#define IDC_CONFIGPAD                   1067
 #define IDC_CONFIGPAD1                  1067
 #define IDC_VU0_VI29                    1067
 #define IDC_DEBUG_R1                    1068
 #define IDC_GPR12                       1068
-#define IDC_TESTPAD                     1068
 #define IDC_TESTPAD1                    1068
 #define IDC_VU0_VI30                    1068
 #define IDC_DEBUG_R2                    1069
 #define IDC_GPR13                       1069
-#define IDC_ABOUTPAD                    1069
 #define IDC_ABOUTPAD1                   1069
 #define IDC_VU0_VI31                    1069
 #define IDC_DEBUG_R3                    1070
@@ -343,7 +313,6 @@
 #define IDC_JUMP_PC                     1097
 #define IDC_VU1_VF26                    1097
 #define IDC_CP05                        1098
-#define IDC_DEBUG_DUMPRAW               1098
 #define IDC_DUMP_END                    1098
 #define IDC_VU1_VF27                    1098
 #define IDC_DEBUG_LOGGING               1098
@@ -459,7 +428,6 @@
 #define IDC_SECONDCONTROLLER            1168
 #define IDC_CDVDROM                     1169
 #define IDC_BIOS                        1170
-#define IDC_MISCOPTIONS                 1171
 #define IDC_DEV9                        1171
 #define IDC_DUMP_START                  1172
 #define IDC_TIP                         1172
@@ -472,22 +440,14 @@
 #define IDC_STOPAT                      1178
 #define IDC_STOPAFTER                   1179
 #define IDC_PATCH                       1180
-#define IDC_REGCACHE                    1181
-#define IDC_RECOPTIONS                  1182
-#define IDC_PADHACK                     1183
-#define IDC_VUREC                       1184
 #define IDC_LOGS                        1186
-#define IDDELREG                        1187
-#define IDC_TAB_DEBUG                   1188
 #define IDC_DUMPMEM_FNAME               1188
 #define IDC_DUMPMEM_END                 1189
 #define IDC_DUMPMEM_START               1190
 #define IDC_DUMPRAW                     1191
 #define IDC_DEBUG_DISASM_IOP            1193
 #define IDC_DEBUG_SCROLL_IOP            1194
-#define IDC_THPRIORITY                  1195
 #define IDC_EXITPB                      1196
-#define IDC_CPUOPTION                   1196
 #define IDC_VENDORNAME                  1197
 #define IDC_FAMILYNAME                  1198
 #define IDC_CPUSPEEDNAME                1199
@@ -496,19 +456,12 @@
 #define IDC_FAMILYINPUT                 1202
 #define IDC_CPUSPEEDINPUT               1203
 #define IDC_FEATURESINPUT               1204
-#define IDC_RADIOINTEPRETER             1205
-#define IDC_RADIORECOMPILER             1206
-#define IDC_RADIORECOMPILERVU           1207
 #define IDC_REGCACHING                  1208
-#define IDC_INTERLACEHACK               1210
-#define IDC_SAFECOUNTERS                1211
-#define IDC_IOPCLK                      1213
 #define IDC_ADVRESET                    1214
-#define IDC_FASTIOPCLK                  1215
-#define IDC_CHECK2                      1217
 #define IDC_SYNCHACK                    1217
 #define IDC_SPU2HACK                    1218
-#define IDC_VSYNCRATE                   1219
+#define IDC_SYNCHACK2                   1218
+#define IDC_SYNCHACK3                   1219
 #define IDC_IOPGPR0                     1220
 #define IDC_IOPGPR1                     1221
 #define IDC_IOPGPR2                     1222
@@ -546,27 +499,17 @@
 #define IDC_BIOSDIR                     1254
 #define IDC_IOPGPR3                     1254
 #define IDC_PLUGINSDIR                  1255
-#define IDC_EDIT2                       1256
-#define IDC_BIAS                        1256
 #define IDC_USER_NAME                   1257
-#define IDC_CPU_MULTI                   1258
-#define IDC_CPU_MULTI2                  1259
 #define IDC_CPU_GSMULTI                 1259
 #define IDC_PS2SILVER_RECT              1259
-#define IDC_CPU_MULTI3                  1260
-#define IDC_CPU_FRAMELIMIT              1260
-#define IDC_CPU_FRAMELIMIT2             1261
 #define IDC_CPU_EEREC                   1262
 #define IDC_CPU_VU1REC                  1263
-#define IDC_CHECK4                      1264
 #define IDC_CPU_VU0REC                  1264
 #define IDC_CPU_FL_NORMAL               1265
-#define IDC_IDC_CPU_FL_LIMIT            1266
 #define IDC_CPU_FL_LIMIT                1266
 #define IDC_CPU_FL_SKIP                 1267
 #define IDC_CPU_FL_SKIPVU               1268
 #define IDC_CPU_VUGROUP                 1269
-#define IDC_MONTHCALENDAR1              1270
 #define IDC_GROUPS                      1272
 #define IDC_PATCHES                     1273
 #define IDC_DEBUG_STEP_EE               1274
@@ -576,22 +519,31 @@
 #define IDC_CUSTOM_FPS                  1276
 #define IDC_DEBUG_STEP_TO_CURSOR        1277
 #define IDC_ENABLEBUTTON                1277
+#define IDC_CUSTOM_FRAMESKIP            1277
 #define IDC_DEBUG_BREAK                 1278
-#define IDC_ABSHACK                     1278
 #define IDC_ADDGS                       1278
 #define IDC_CONVERTEDCODE               1278
+#define IDC_CUSTOM_CONSECUTIVE_FRAMES   1278
+#define IDC_VU_OVERFLOWHACK             1278
 #define IDC_HACKDESC                    1279
 #define IDC_CONVERT                     1279
 #define IDC_EDITPATCH                   1279
+#define IDC_FRAMESKIP_LABEL1            1279
 #define IDC_READY                       1280
 #define IDC_ADDPATCH                    1280
+#define IDC_FRAMESKIP_LABEL2            1280
 #define IDC_GROUP                       1281
 #define IDC_ADDRAW                      1281
+#define IDC_FRAMESKIP_LABEL3            1281
 #define IDC_DATA                        1282
 #define IDC_PNACHWRITER                 1282
+#define IDC_CUSTOM_CONSECUTIVE_SKIP     1282
 #define IDC_PNACHWRITER2                1283
 #define IDC_SKIPMPEG                    1283
+#define IDC_FRAMESKIP_LABEL4            1283
 #define IDC_SPIN1                       1284
+#define IDC_FRAMESKIP_LABEL5            1284
+#define IDC_FRAMESKIP_LABEL6            1285
 #define IDC_SAVE                        1286
 #define IDC_CRC                         1287
 #define IDC_COMMENT                     1288
@@ -606,9 +558,43 @@
 #define IDC_TREE2                       1298
 #define IDC_ICON1                       1299
 #define IDC_ICON2                       1300
-#define IDC_CHECK1                      1300
-#define IDC_SOUNDHACK                   1300
-#define IDC_LOG                         1500
+#define IDC_EE_CHECK1                   1300
+#define IDC_EE_CHECK2                   1301
+#define IDC_GAMEFIX2                    1301
+#define IDC_VU_CHECK1                   1302
+#define IDC_VU_FLAGS                    1302
+#define IDC_GAMEFIX3                    1302
+#define IDC_FRAMELIMIT_OPTIONS          1303
+#define IDC_VU_CHECK2                   1303
+#define IDC_GAMEFIX4                    1303
+#define IDC_SOUNDHACK2                  1304
+#define IDC_ESCHACK                     1304
+#define IDC_VU_CHECK3                   1304
+#define IDC_GAMEFIX5                    1304
+#define IDC_GAMEFIX1                    1304
+#define IDC_EE_ROUNDMODE0               1305
+#define IDC_EE_ROUNDMODE1               1306
+#define IDC_EE_ROUNDMODE2               1307
+#define IDC_EE_ROUNDMODE3               1308
+#define IDC_EESYNC_DEFAULT              1308
+#define IDC_VU_CHECK4                   1309
+#define IDC_EESYNC1                     1309
+#define IDC_EESYNC2                     1310
+#define IDC_VU_ROUNDMODE0               1311
+#define IDC_EESYNC3                     1311
+#define IDC_VU_ROUNDMODE1               1312
+#define IDC_IOPSYNC                     1312
+#define IDC_VU_ROUNDMODE2               1313
+#define IDC_CHECK2                      1313
+#define IDC_WAITCYCLES                  1313
+#define IDC_VU_ROUNDMODE3               1314
+#define IDC_VU_CLAMPMODE0               1315
+#define IDC_VU_CLAMPMODE1               1316
+#define IDC_VU_CLAMPMODE2               1317
+#define IDC_VU_CLAMPMODE3               1318
+#define IDC_EE_CLAMPMODE0               1319
+#define IDC_EE_CLAMPMODE1               1320
+#define IDC_EE_CLAMPMODE2               1321
 #define IDC_CPULOG                      1500
 #define IDC_MEMLOG                      1501
 #define IDC_HWLOG                       1502
@@ -632,9 +618,7 @@
 #define IDC_IOPBIOSLOG                  1523
 #define IDC_IOPDMALOG                   1524
 #define IDC_IOPPADLOG                   1525
-#define IDC_IOPGTELOG                   1526
 #define IDC_IOPCDRLOG                   1527
-#define IDC_IOPGPULOG                   1527
 #define IDC_IOPCNTLOG                   1529
 #define IDC_EECNTLOG                    1530
 #define IDC_SYMLOG                      1531
@@ -653,7 +637,6 @@
 #define IDC_IOP                         1712
 #define IDC_RESET                       1713
 #define IDC_ADD                         1714
-#define IDC_LRESULTS                    1715
 #define IDC_STATUS                      1716
 #define IDC_FW                          1716
 #define IDC_FRAMELIMIT                  1716
@@ -731,18 +714,23 @@
 #define ID_SPU2HACK                     40061
 #define ID_VSYNCRATE                    40062
 #define ID_HELP_HELP                    40063
+#define ID_PROFILER                     40066
+#define ID_CDVDPRINT                    40067
+#define ID_CLOSEGS                      40070
 #define ID_CHEAT_FINDER_SHOW            40100
 #define ID_CHEAT_BROWSER_SHOW           40101
 #define ID_HACKS                        40102
+#define ID_GAMEFIXES                    40103
+#define ID_ADVANCED_OPTIONS             40104
 #define ID_LANGS                        50000
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        136
+#define _APS_NEXT_RESOURCE_VALUE        141
 #define _APS_NEXT_COMMAND_VALUE         40018
-#define _APS_NEXT_CONTROL_VALUE         1301
-#define _APS_NEXT_SYMED_VALUE           102
+#define _APS_NEXT_CONTROL_VALUE         1314
+#define _APS_NEXT_SYMED_VALUE           104
 #endif
 #endif

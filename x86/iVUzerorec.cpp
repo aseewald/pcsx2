@@ -18,81 +18,43 @@
 
 // Super VU recompiler - author: zerofrog(@gmail.com)
 
-// stop compiling if NORECBUILD build (only for Visual Studio)
-#if !(defined(_MSC_VER) && defined(PCSX2_NORECBUILD))
+#include "PrecompiledHeader.h"
 
-#include <stdlib.h>
-#include <string.h>
 #include <float.h>
-#include <malloc.h>
-#include <assert.h>
-
-#include "PS2Etypes.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-
-#define PLUGINtypedefs // for GSgifTransfer1
-
-#if defined(_WIN32)
-#include <windows.h>
-#else
-#include <sys/stat.h>
-#include <sys/types.h>
-#endif
-
-#include "PS2Edefs.h"
-#include "zlib.h"
-#include "Misc.h"
-#include "System.h"
-#include "R5900.h"
-#include "Vif.h"
-#include "VU.h"
-
-#include "Memory.h"
-#include "Hw.h"
-#include "GS.h"
-
-#include "ix86/ix86.h"
-#include "iR5900.h"
-
-#include "iVUzerorec.h"
-
-// temporary externs
-extern u32 vudump;
-extern void iDumpVU0Registers();
-extern void iDumpVU1Registers();
-
-extern char* disVU1MicroUF(u32 code, u32 pc);
-extern char* disVU1MicroLF(u32 code, u32 pc);
-
-extern _GSgifTransfer1 GSgifTransfer1;
-
-#ifdef __cplusplus
-}
-#endif
-
 #include <vector>
 #include <list>
 #include <map>
 #include <algorithm>
-using namespace std;
 
-#ifdef _WIN32
-#pragma warning(disable:4244)
-#pragma warning(disable:4761)
+#ifndef _WIN32
+#include <sys/types.h>
 #endif
 
+#include "Common.h"
+
+#include "GS.h"
+#include "R5900.h"
+#include "VU.h"
+#include "ix86/ix86.h"
+#include "iR5900.h"
+
+#include "iVUzerorec.h"
+#include "SamplProf.h"
+
+using namespace std;
+
+// temporary externs
+extern void iDumpVU0Registers();
+extern void iDumpVU1Registers();
+
 // SuperVURec optimization options, uncomment only for debugging purposes
-#define SUPERVU_CACHING			// vu programs are saved and queried via CRC (might query the wrong program)
-								// disable when in doubt
+#define SUPERVU_CACHING			// vu programs are saved and queried via memcompare (should be no reason to disable this)
 #define SUPERVU_WRITEBACKS		// don't flush the writebacks after every block
 #define SUPERVU_X86CACHING		// use x86reg caching (faster)
 #define SUPERVU_VIBRANCHDELAY   // when integers are modified right before a branch that uses the integer,
                                 // the old integer value is used in the branch
                                 // fixes kh2
+
 #define SUPERVU_PROPAGATEFLAGS  // the correct behavior of VUs, for some reason superman breaks gfx with it on...
 
 #ifndef _DEBUG
@@ -103,8 +65,8 @@ using namespace std;
 
 #define VU_EXESIZE 0x00800000
 
-#define _Imm11_ 	((s32)(vucode & 0x400 ? 0xfffffc00 | (vucode & 0x3ff) : vucode & 0x3ff)&0x3fff)
-#define _UImm11_	((s32)(vucode & 0x7ff)&0x3fff)
+#define _Imm11_ 	(s32)( (vucode & 0x400) ? (0xfffffc00 | (vucode & 0x3ff)) : (vucode & 0x3ff) )
+#define _UImm11_	(s32)(vucode & 0x7ff)
 
 #define _Ft_ ((VU->code >> 16) & 0x1F)  // The rt part of the instruction register 
 #define _Fs_ ((VU->code >> 11) & 0x1F)  // The rd part of the instruction register 
@@ -116,11 +78,11 @@ static const u32 PWaitTimes[] = { 53, 43, 28, 23, 17, 11, 10 };
 static u32 s_vuInfo; // info passed into rec insts
 
 static const u32 s_MemSize[2] = {VU0_MEMSIZE, VU1_MEMSIZE};
-static char* s_recVUMem = NULL, *s_recVUPtr = NULL;
+static u8* s_recVUMem = NULL, *s_recVUPtr = NULL;
 
-// tables
-extern void (*recSVU_UPPER_OPCODE[64])();
-extern void (*recSVU_LOWER_OPCODE[128])();
+// tables which are defined at the bottom of this massive file.
+extern void (*recVU_UPPER_OPCODE[64])( VURegs* VU, s32 info );
+extern void (*recVU_LOWER_OPCODE[128])( VURegs* VU, s32 info );
 
 #define INST_Q_READ			0x0001 // flush Q
 #define INST_P_READ			0x0002 // flush P
@@ -130,12 +92,22 @@ extern void (*recSVU_LOWER_OPCODE[128])();
 #define INST_MAC_WRITE		0x0100
 #define INST_Q_WRITE		0x0200
 #define INST_CACHE_VI       0x0400 // write old vi value to s_VIBranchDelay
+
+// Let's tempt fate by defining two different constants with almost identical names
 #define INST_DUMMY_			0x8000
 #define INST_DUMMY			0x83c0
 
 #define VFFREE_INVALID0     0x80000000 // (vffree[i]&0xf) is invalid
 
 #define FORIT(it, v) for(it = (v).begin(); it != (v).end(); ++(it))
+
+#ifdef _DEBUG
+u32 s_vucount=0;
+
+static u32 g_vu1lastrec = 0, skipparent = -1;
+static u32 s_svulast = 0, s_vufnheader;
+static u32 badaddrs[][2] = {0,0xffff};
+#endif
 
 union VURecRegs
 {
@@ -186,7 +158,7 @@ struct VuBlockHeader
 class VuInstruction
 {
 public:
-	VuInstruction() { memset(this, 0, sizeof(VuInstruction)); nParentPc = -1; vicached = -1; }
+	VuInstruction() { memzero_obj(*this); nParentPc = -1; vicached = -1; }
 
 	int nParentPc; // used for syncing with flag writes, -1 for no parent
 
@@ -229,9 +201,6 @@ public:
 	// returns true if the leads to a EOP (ALL VU blocks must ret true)
 	void AssignVFRegs();
 	void AssignVIRegs(int parent);
-
-	// returns true if only xyz of the reg has been used so far
-	u32 GetModeXYZW(u32 curpc, int vfreg);
 
 	list<VuInstruction>::iterator GetInstIterAtPc(int instpc);
 	void GetInstsAtPc(int instpc, list<VuInstruction*>& listinsts);
@@ -304,9 +273,9 @@ struct VUPIPELINES
 VuBaseBlock::VuBaseBlock()
 {
 	type = 0; endpc = 0; cycles = 0; pcode = NULL; id = 0;
-	memset(pChildJumps, 0, sizeof(pChildJumps));
-	memset(startregs, 0, sizeof(startregs));
-	memset(endregs, 0, sizeof(endregs));
+	memzero_obj(pChildJumps);
+	memzero_obj(startregs);
+	memzero_obj(endregs);
 	allocX86Regs = nStartx86 = nEndx86 = -1;
     prevFlagsOutOfBlock = 0;
 }
@@ -327,8 +296,14 @@ static u32 s_UnconditionalDelay = 0; // 1 if there are two sequential branches a
 static u32 g_nLastBlockExecuted = 0;
 
 // Global functions
-extern "C" void* SuperVUGetProgram(u32 startpc, int vuindex);
-extern "C" void SuperVUCleanupProgram(u32 startpc, int vuindex);
+#ifdef __LINUX__
+extern "C" {
+#endif
+void* SuperVUGetProgram(u32 startpc, int vuindex);
+void SuperVUCleanupProgram(u32 startpc, int vuindex);
+#ifdef __LINUX__
+}
+#endif
 static VuFunctionHeader* SuperVURecompileProgram(u32 startpc, int vuindex);
 static VuBaseBlock* SuperVUBuildBlocks(VuBaseBlock* parent, u32 startpc, const VUPIPELINES& pipes);
 static void SuperVUInitLiveness(VuBaseBlock* pblock);
@@ -342,24 +317,43 @@ void SuperVUFreeXMMregs(u32* livevars);
 
 static u32* SuperVUStaticAlloc(u32 size);
 static void SuperVURecompile();
-extern "C" void SuperVUEndProgram();
 
 // allocate VU resources
-void SuperVUInit(int vuindex)
+void SuperVUAlloc(int vuindex)
 {
-	if( vuindex < 0 ) {
-        // upper 4 bits cannot be nonzero!
-		s_recVUMem = (char*)SysMmap(0x0c000000, VU_EXESIZE);
-        if( (uptr)s_recVUMem > 0x80000000 )
-            SysPrintf("bad SuperVU alloc %x\n", s_recVUMem);
-		memset(s_recVUMem, 0xcd, VU_EXESIZE);
-		s_recVUPtr = s_recVUMem;
-		recVUStack = new u8[SUPERVU_STACKSIZE * 4];
+	// The old -1 crap has been depreciated on this function.  Please
+	// specify either 0 or 1, thanks.
+	jASSUME( vuindex >= 0 );
+	
+	// upper 4 bits must be zero!
+	if( s_recVUMem == NULL )
+	{
+		// upper 4 bits must be zero!
+		// Changed "first try base" to 0xb800000, since 0x0c000000 liked to fail a lot. (air)
+		s_recVUMem = SysMmapEx(0x0e000000, VU_EXESIZE, 0x10000000, "SuperVUAlloc");
+
+		if( s_recVUMem == NULL )
+		{
+			throw Exception::OutOfMemory(
+				fmt_string( "SuperVU Error > failed to allocate recompiler memory (addr: 0x%x)", (u32)s_recVUMem )
+			);
+		}
+
+		ProfilerRegisterSource( "VURec", s_recVUMem, VU_EXESIZE);
+
+		if( recVUStack == NULL ) recVUStack = new u8[SUPERVU_STACKSIZE * 4];
 	}
-	else {
-		recVUHeaders[vuindex] = new VuFunctionHeader* [s_MemSize[vuindex]/8];
-		recVUBlocks[vuindex] = new VuBlockHeader[s_MemSize[vuindex]/8];
-		s_plistCachedHeaders[vuindex] = new list<VuFunctionHeader*>[s_MemSize[vuindex]/8];
+
+	if( vuindex >= 0 )
+	{
+		jASSUME( s_recVUMem != NULL );
+
+		if( recVUHeaders[vuindex] == NULL )
+			recVUHeaders[vuindex] = new VuFunctionHeader* [s_MemSize[vuindex]/8];
+		if( recVUBlocks[vuindex] == NULL )
+			recVUBlocks[vuindex] = new VuBlockHeader[s_MemSize[vuindex]/8];
+		if( s_plistCachedHeaders[vuindex] == NULL )
+			s_plistCachedHeaders[vuindex] = new list<VuFunctionHeader*>[s_MemSize[vuindex]/8];
 	}
 }
 
@@ -368,23 +362,25 @@ void SuperVUDestroy(int vuindex)
 {
 	list<VuFunctionHeader*>::iterator it;
 
-	if( vuindex < 0 ) {
+	if( vuindex < 0 )
+	{
 		SuperVUDestroy(0);
 		SuperVUDestroy(1);
-		SysMunmap((uptr)s_recVUMem, VU_EXESIZE);
-		s_recVUPtr = NULL;
-		delete[] recVUStack; recVUStack = NULL;
+		ProfilerTerminateSource( "VURec" );
+		SafeSysMunmap(s_recVUMem, VU_EXESIZE);
+		safe_delete_array( recVUStack );
 	}
-	else {
-		delete[] recVUHeaders[vuindex]; recVUHeaders[vuindex] = NULL;
-		delete[] recVUBlocks[vuindex]; recVUBlocks[vuindex] = NULL;
+	else
+	{
+		safe_delete_array( recVUHeaders[vuindex] );
+		safe_delete_array( recVUBlocks[vuindex] );
 
 		if( s_plistCachedHeaders[vuindex] != NULL ) {
 			for(u32 j = 0; j < s_MemSize[vuindex]/8; ++j) {
 				FORIT(it, s_plistCachedHeaders[vuindex][j]) delete *it;
 				s_plistCachedHeaders[vuindex][j].clear();
 			}
-			delete[] s_plistCachedHeaders[vuindex]; s_plistCachedHeaders[vuindex] = NULL;
+			safe_delete_array( s_plistCachedHeaders[vuindex] );
 		}
 
 		FORIT(it, s_listVUHeaders[vuindex]) delete *it;
@@ -395,18 +391,27 @@ void SuperVUDestroy(int vuindex)
 // reset VU
 void SuperVUReset(int vuindex)
 {
-	list<VuFunctionHeader*>::iterator it;
+#ifdef _DEBUG
+	s_vucount = 0;
+#endif
 
-	if( vuindex < 0 ) {
-		SuperVUReset(0);
-		SuperVUReset(1);
+	if( s_recVUMem == NULL )
+		return;
 
-		//memset(s_recVUMem, 0xcd, VU_EXESIZE);
+	//jASSUME( s_recVUMem != NULL );
+
+	if( vuindex < 0 )
+	{
+		DbgCon::Status( "SuperVU reset > Resetting recompiler memory and structures." );
+		memset_8<0xcd, VU_EXESIZE>(s_recVUMem);
+		memzero_ptr<SUPERVU_STACKSIZE>(recVUStack);
+
 		s_recVUPtr = s_recVUMem;
-
-		memset(recVUStack, 0, SUPERVU_STACKSIZE);
 	}
-	else {
+	else
+	{
+		DbgCon::Status( "SuperVU reset [VU%d] > Resetting the recs and junk", params vuindex );
+		list<VuFunctionHeader*>::iterator it;
 		if( recVUHeaders[vuindex] ) memset( recVUHeaders[vuindex], 0, sizeof(VuFunctionHeader*) * (s_MemSize[vuindex]/8) );
 		if( recVUBlocks[vuindex] ) memset( recVUBlocks[vuindex], 0, sizeof(VuBlockHeader) * (s_MemSize[vuindex]/8) );
 		
@@ -423,11 +428,11 @@ void SuperVUReset(int vuindex)
 }
 
 // clear the block and any joining blocks
-void SuperVUClear(u32 startpc, u32 size, int vuindex)
+void __fastcall SuperVUClear(u32 startpc, u32 size, int vuindex)
 {
 	vector<VuFunctionHeader::RANGE>::iterator itrange;
 	list<VuFunctionHeader*>::iterator it = s_listVUHeaders[vuindex].begin();
-	u32 endpc = startpc+size;
+	u32 endpc = startpc+(size+(8-(size&7))); // Adding this code to ensure size is always a multiple of 8, it can be simplified to startpc+size if size is always a multiple of 8 (cottonvibes)
 	while( it != s_listVUHeaders[vuindex].end() ) {
 
 		// for every fn, check if it has code in the range
@@ -462,20 +467,12 @@ static VuInstruction* s_pCurInst = NULL;
 static u32 s_StatusRead = 0, s_MACRead = 0, s_ClipRead = 0; // read addrs
 static u32 s_PrevStatusWrite = 0, s_PrevMACWrite = 0, s_PrevClipWrite = 0, s_PrevIWrite = 0;
 static u32 s_WriteToReadQ = 0;
-static u32 s_VIBranchDelay = 0; // value of register to use in a vi branch delayed situation
 
-extern "C" {
+static u32 s_VIBranchDelay = 0; //Value of register to use in a vi branch delayed situation
+
+
 u32 s_TotalVUCycles; // total cycles since start of program execution
-}
 
-int SuperVUGetLiveness(int vfreg)
-{
-	assert( s_pCurInst != NULL );
-	if( vfreg == 32 ) return ((s_pCurInst->livevars[0]&(1<<REG_ACC_FLAG))?1:0)|((s_pCurInst->usedvars[0]&(1<<REG_ACC_FLAG))?2:0);
-	else if( vfreg == 0 ) return ((s_pCurInst->livevars[0]&(1<<REG_VF0_FLAG))?1:0)|((s_pCurInst->usedvars[0]&(1<<REG_VF0_FLAG))?2:0);
-
-	return ((s_pCurInst->livevars[1]&(1<<vfreg))?1:0)|((s_pCurInst->usedvars[1]&(1<<vfreg))?2:0);
-}
 
 u32 SuperVUGetVIAddr(int reg, int read)
 {
@@ -504,10 +501,12 @@ u32 SuperVUGetVIAddr(int reg, int read)
 	}
 
 #ifdef SUPERVU_VIBRANCHDELAY
-    if( read != 0 && (s_pCurInst->regs[0].pipe == VUPIPE_BRANCH) && s_pCurInst->vicached >= 0 && s_pCurInst->vicached == reg ) {
-        // test for branch delays
-        return (uptr)&s_VIBranchDelay;
-    }
+    if( (read != 0) && (s_pCurInst->regs[0].pipe == VUPIPE_BRANCH) && (s_pCurInst->vicached >= 0) && (s_pCurInst->vicached == reg) ) {
+		if (!CHECK_VUBRANCHHACK) {
+			return (uptr)&s_VIBranchDelay; // test for branch delays
+		}
+		//else SysPrintf("VIBRANCHDELAY hack! Please report if this breaks anything (rama)\n");
+	}
 #endif
 
 	return (uptr)&VU->VI[reg];
@@ -516,14 +515,13 @@ u32 SuperVUGetVIAddr(int reg, int read)
 void SuperVUDumpBlock(list<VuBaseBlock*>& blocks, int vuindex)
 {
 	FILE *f;
-	char filename[ 256 ], str[256];
+	char filename[ g_MaxPath ], str[256];
 	u32 *mem;
 	u32 i;
-	static int gid = 0;
 
 #ifdef _WIN32
 	CreateDirectory("dumps", NULL);
-	sprintf( filename, "dumps\\svu%c_%.4X.txt", s_vu?'1':'0', s_pFnHeader->startpc );
+	sprintf_s( filename, g_MaxPath, "dumps\\svu%c_%.4X.txt", s_vu?'1':'0', s_pFnHeader->startpc );
 #else
 	mkdir("dumps", 0755);
 	sprintf( filename, "dumps/svu%c_%.4X.txt", s_vu?'1':'0', s_pFnHeader->startpc );
@@ -626,11 +624,7 @@ void SuperVUDumpBlock(list<VuBaseBlock*>& blocks, int vuindex)
             //SysPrintf("writing: %x, %x\n", (*itblock)->startpc, (uptr)(*itblock)->pendcode - (uptr)(*itblock)->pcode);
             fwrite( (*itblock)->pcode, 1, (uptr)(*itblock)->pendcode - (uptr)(*itblock)->pcode, fasm );
             fclose( fasm );
-#ifdef __x86_64__
-            sprintf( command, "objdump -D --target=binary --architecture=i386:x86-64 -M intel mydump1 > tempdump");
-#else
             sprintf( command, "objdump -D --target=binary --architecture=i386 -M intel mydump1 > tempdump");
-#endif
             system( command );
             fasm = fopen("tempdump", "r");
             // read all of it and write it to f
@@ -651,19 +645,11 @@ void SuperVUDumpBlock(list<VuBaseBlock*>& blocks, int vuindex)
 	fclose( f );
 }
 
-extern "C" {
 LARGE_INTEGER svubase, svufinal;
 static u64 svutime;
-}
 
 // uncomment to count svu exec time
 //#define SUPERVU_COUNT
-u64 SuperVUGetRecTimes(int clear)
-{
-	u64 temp = svutime;
-	if( clear ) svutime = 0;
-	return temp;
-}
 
 // Private methods
 void* SuperVUGetProgram(u32 startpc, int vuindex)
@@ -732,10 +718,10 @@ bool VuFunctionHeader::IsSame(void* pmem)
 		//if( checksum[0] != it->checksum[0] || checksum[1] != it->checksum[1] )
 		//	return false;
         // memcmp_mmx doesn't work on x86-64 machines
-#ifdef __x86_64__
-        if( memcmp((u8*)pmem+it->start, it->pmem, it->size) )
+#if defined(_MSC_VER)
+	if( memcmp_mmx((u8*)pmem+it->start, it->pmem, it->size) )
 #else
-		if( memcmp_mmx((u8*)pmem+it->start, it->pmem, it->size) )
+        if( memcmp((u8*)pmem+it->start, it->pmem, it->size) )
 #endif
 			return false;
 	}
@@ -810,6 +796,8 @@ static VuFunctionHeader* SuperVURecompileProgram(u32 startpc, int vuindex)
 	if ( ( (uptr)s_recVUPtr - (uptr)s_recVUMem ) >= VU_EXESIZE-0x40000 ) { 
 		//SysPrintf("SuperVU reset mem\n");
 		SuperVUReset(-1); 
+		SuperVUReset(0); 
+		SuperVUReset(1); 
 		if( s_TotalVUCycles > 0 ) {
 			// already executing, so return NULL
 			return NULL;
@@ -829,9 +817,9 @@ static VuFunctionHeader* SuperVURecompileProgram(u32 startpc, int vuindex)
 	// analyze the global graph
 	s_listBlocks.clear();
 	VUPIPELINES pipes;
-	memset(pipes.fmac, 0, sizeof(pipes.fmac));
-	memset(&pipes.fdiv, 0, sizeof(pipes.fdiv));
-	memset(&pipes.efu, 0, sizeof(pipes.efu));
+	memzero_obj(pipes.fmac);
+	memzero_obj(pipes.fdiv);
+	memzero_obj(pipes.efu);
 	SuperVUBuildBlocks(NULL, startpc, pipes);
 
 	// fill parents
@@ -861,7 +849,6 @@ static VuFunctionHeader* SuperVURecompileProgram(u32 startpc, int vuindex)
 
 	// code generation
 	x86SetPtr(s_recVUPtr);
-	_initXMMregs();
 	branch = 0;
 
 	SuperVURecompile();
@@ -878,9 +865,7 @@ static VuFunctionHeader* SuperVURecompileProgram(u32 startpc, int vuindex)
 #ifdef SUPERVU_CACHING
 		//memxor_mmx(r.checksum, &VU->Micro[r.start], r.size);
 		r.pmem = malloc(r.size);
-		FreezeMMXRegs(1);
 		memcpy_fast(r.pmem, &VU->Micro[r.start], r.size);
-		FreezeMMXRegs(0);
 #endif
 		s_pFnHeader->ranges.push_back(r);
 	}
@@ -903,10 +888,12 @@ static VuFunctionHeader* SuperVURecompileProgram(u32 startpc, int vuindex)
 }
 
 static int _recbranchAddr(u32 vucode) {
-	u32 bpc = pc + (_Imm11_ << 3);
-	if (bpc < 0) {
+	s32 bpc = pc + (_Imm11_ << 3);
+/*
+	if ( bpc < 0 ) {
+		SysPrintf("zerorec branch warning: bpc < 0 ( %x ); Using unsigned imm11\n", bpc);
 		bpc = pc + (_UImm11_ << 3); 
-	}
+	}*/
 	bpc &= (s_MemSize[s_vu]-1);
 
 	return bpc;
@@ -966,8 +953,7 @@ static VuBaseBlock* SuperVUBuildBlocks(VuBaseBlock* parent, u32 startpc, const V
 
 		// count inst non-dummy insts
 		itinst = pblock->insts.begin();
-		u32 inst = 0;
-        int cycleoff = 0;
+		int cycleoff = 0;
 
 		while(dummyinst > 0) {
 			if( itinst->type & INST_DUMMY )
@@ -1109,7 +1095,7 @@ static VuBaseBlock* SuperVUBuildBlocks(VuBaseBlock* parent, u32 startpc, const V
 			break;
 
         if( pc >= s_MemSize[s_vu] ) {
-            SysPrintf("inf vu0 prog %x\n", startpc);
+			Console::Error( "inf vu0 prog %x",params  startpc);
             break;
         }
 	}
@@ -1147,7 +1133,7 @@ static VuBaseBlock* SuperVUBuildBlocks(VuBaseBlock* parent, u32 startpc, const V
 
 #ifdef SUPERVU_VIBRANCHDELAY
         if( pinst->regs[0].pipe == VUPIPE_BRANCH && pblock->insts.size() > 1 ) {
-
+		
             if( pprevinst != NULL && pprevinst->info.cycle+1==pinst->info.cycle && 
                 (pprevinst->regs[0].pipe == VUPIPE_IALU||pprevinst->regs[0].pipe == VUPIPE_FMAC) && ((pprevinst->regs[0].VIwrite & pinst->regs[0].VIread) & 0xffff) 
                 && !(pprevinst->regs[0].VIread&((1<<REG_STATUS_FLAG)|(1<<REG_MAC_FLAG)|(1<<REG_CLIP_FLAG))) ) {
@@ -1162,12 +1148,13 @@ static VuBaseBlock* SuperVUBuildBlocks(VuBaseBlock* parent, u32 startpc, const V
                     ((ppprevinst->regs[0].VIwrite & pinst->regs[0].VIread) & 0xffff) == ((ppprevinst->regs[0].VIwrite & pprevinst->regs[0].VIread) & 0xffff) &&
                     !(ppprevinst->regs[0].VIread&((1<<REG_STATUS_FLAG)|(1<<REG_MAC_FLAG)|(1<<REG_CLIP_FLAG)))) {
                 
-                    SysPrintf("supervu: 2 cycle branch delay detected: %x %x\n", pc, s_pFnHeader->startpc);
+						Console::WriteLn("supervu: 2 cycle branch delay detected: %x %x", params pc, s_pFnHeader->startpc);
 
                     // ignore if prev instruction is ILW or ILWR (xenosaga 2)
                     lowercode = *(int*)&VU->Micro[pc-24]; 
                     pdelayinst = ppprevinst;
                 }
+				
 
                 //SysPrintf("vurec: %x\n", pc);
                 // ignore if prev instruction is ILW or ILWR (xenosaga 2)
@@ -1282,7 +1269,7 @@ static VuBaseBlock* SuperVUBuildBlocks(VuBaseBlock* parent, u32 startpc, const V
 		// make sure there is always a branch
         // sensible soccer overflows on vu0, so increase the limit...
 		if( (s_vu==1 && i >= 0x799) || (s_vu==0 && i >= 0x201) ) {
-			SysPrintf("VuRec base block doesn't terminate!\n");
+			Console::Error("VuRec base block doesn't terminate!");
             assert(0);
 			break;
 		}
@@ -1375,6 +1362,7 @@ static VuBaseBlock* SuperVUBuildBlocks(VuBaseBlock* parent, u32 startpc, const V
 		case 0x24: // jr
 			pblock->type |= BLOCKTYPE_EOP; // jump out of procedure, since not returning, set EOP
 			pblock->insts.push_back(SuperVUFlushInst());
+			firstbranch = 0xff; //Non-Conditional Jump
 			break;
 
 		case 0x25: // jalr
@@ -1389,6 +1377,7 @@ static VuBaseBlock* SuperVUBuildBlocks(VuBaseBlock* parent, u32 startpc, const V
 			assert( pblock != NULL );
 
 			pblock->blocks.push_back(pjumpblock);
+			firstbranch = 0xff; //Non-Conditional Jump
 			break;
 		}
 		case 0x20: // B
@@ -1400,6 +1389,7 @@ static VuBaseBlock* SuperVUBuildBlocks(VuBaseBlock* parent, u32 startpc, const V
 			assert( pblock != NULL );
 
 			pblock->blocks.push_back(pbranchblock);
+			firstbranch = 0xff; //Non-Conditional Jump
 			break;
 		}
 		case 0x21: // BAL
@@ -1410,6 +1400,7 @@ static VuBaseBlock* SuperVUBuildBlocks(VuBaseBlock* parent, u32 startpc, const V
 			pblock = recVUBlocks[s_vu][lastpc/8-2].pblock;
 			assert( pblock != NULL );
 			pblock->blocks.push_back(pbranchblock);
+			firstbranch = 0xff; //Non-Conditional Jump
 			break;
 		}
 		case 0x28: // IBEQ
@@ -1444,20 +1435,29 @@ static VuBaseBlock* SuperVUBuildBlocks(VuBaseBlock* parent, u32 startpc, const V
 
 	pblock = recVUBlocks[s_vu][lastpc/8-2].pblock;
 
-	if( hasSecondBranch ) {
+#ifdef SUPERVU_VIBRANCHDELAY
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///// NOTE! This could still be a hack for KH2/GoW, but until we know how it properly works, this will do for now.///
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	if( hasSecondBranch && firstbranch != 0xff ) { //check the previous jump was conditional and there is a second branch
+#else
+	if( hasSecondBranch) {
+#endif
+
 		u32 vucode = *(u32*)(VU->Micro+lastpc-8);
 		pc = lastpc;
 		int bpc = _recbranchAddr(vucode);
 
 		switch(vucode>>25) {
 			case 0x24: // jr
-				SysPrintf("svurec bad jr jump!\n");
+				Console::Error("svurec bad jr jump!");
 				assert(0);
 				break;
 
 			case 0x25: // jalr
 			{
-				SysPrintf("svurec bad jalr jump!\n");
+				Console::Error("svurec bad jalr jump!");
 				assert(0);
 				break;
 			}
@@ -1503,8 +1503,8 @@ static VuBaseBlock* SuperVUBuildBlocks(VuBaseBlock* parent, u32 startpc, const V
 
 				break;
 			}
-			default:
-				assert(0);
+
+			jNO_DEFAULT;
 		}
 	}
 
@@ -1861,65 +1861,6 @@ static void SuperVUEliminateDeadCode()
 	}
 }
 
-// assigns xmm/x86 regs to all instructions, ignore mode field
-// returns true if changed
-bool AlignStartRegsToEndRegs(_xmmregs* startregs, const list<VuBaseBlock*>& parents)
-{
-	list<VuBaseBlock*>::const_iterator itblock, itblock2;
-	int bestscore;
-	_xmmregs bestregs;
-	bool bchanged = false;
-
-	// find the best merge of regs that minimizes writes/reads
-	for(int i = 0; i < XMMREGS; ++i) {
-		
-		bestscore = 1000;
-		memset(&bestregs, 0, sizeof(bestregs));
-
-		FORIT(itblock, parents) {
-			int curscore = 0;
-			if( ((*itblock)->type & BLOCKTYPE_ANALYZED) && (*itblock)->endregs[i].inuse ) {
-				int type = (*itblock)->endregs[i].type;
-				int reg = (*itblock)->endregs[i].reg;
-
-				FORIT(itblock2, parents) {
-					if( (*itblock2)->type & BLOCKTYPE_ANALYZED ) {
-						if( (*itblock2)->endregs[i].inuse ) {
-							if( (*itblock2)->endregs[i].type != type || (*itblock2)->endregs[i].reg != reg ) {
-								curscore += 1;
-							}
-						}
-						else curscore++;
-					}
-				}
-			}
-
-			if( curscore < 1 && curscore < bestscore ) {
-				memcpy(&bestregs, &(*itblock)->endregs[i], sizeof(bestregs));
-				bestscore = curscore;
-			}
-		}
-
-		if( bestscore < 1 ) {
-			if( startregs[i].inuse == bestregs.inuse ) {
-				if( bestregs.inuse && (startregs[i].type != bestregs.type || startregs[i].reg != bestregs.reg) )
-					bchanged = true;
-			}
-			else bchanged = true;
-
-			memcpy(&startregs[i], &bestregs, sizeof(bestregs));
-			FORIT(itblock, parents) memcpy(&(*itblock)->endregs[i], &bestregs, sizeof(bestregs));
-		}
-		else {
-			if( startregs[i].inuse ) bchanged = true;
-			startregs[i].inuse = 0;
-			FORIT(itblock, parents) (*itblock)->endregs[i].inuse = 0;
-		}
-	}
-
-	return bchanged;
-}
-
 void VuBaseBlock::AssignVFRegs()
 {
 	int i;
@@ -1943,7 +1884,7 @@ void VuBaseBlock::AssignVFRegs()
 		if( i == XMMREGS ) return; // nothing changed
 	}
 
-	s8* oldX86 = x86Ptr;
+	u8* oldX86 = x86Ptr;
 
 	FORIT(itinst, insts) {
 
@@ -2230,56 +2171,9 @@ void VuBaseBlock::AssignVIRegs(int parent)
 	}
 }
 
-u32 VuBaseBlock::GetModeXYZW(u32 curpc, int vfreg)
-{
-	if( vfreg <= 0 ) return false;
-
-	list<VuInstruction>::iterator itinst = insts.begin();
-	advance(itinst, (curpc-startpc)/8);
-
-	u8 mxy = 1;
-	u8 mxyz = 1;
-
-	while(itinst != insts.end()) {
-		for(int i = 0; i < 2; ++i ) {
-			if( itinst->regs[i].VFwrite == vfreg ) {
-				if( itinst->regs[i].VFwxyzw != 0xe ) mxyz = 0;
-				if( itinst->regs[i].VFwxyzw != 0xc ) mxy = 0;
-			}
-			if( itinst->regs[i].VFread0 == vfreg ) {
-				if( itinst->regs[i].VFr0xyzw != 0xe ) mxyz = 0;
-				if( itinst->regs[i].VFr0xyzw != 0xc ) mxy = 0;
-			}
-			if( itinst->regs[i].VFread1 == vfreg ) {
-				if( itinst->regs[i].VFr1xyzw != 0xe ) mxyz = 0;
-				if( itinst->regs[i].VFr1xyzw != 0xc ) mxy = 0;
-			}
-
-			if( !mxy && !mxyz ) return 0;
-		}
-		++itinst;
-	}
-
-	return (mxy?MODE_VUXY:0)|(mxyz?MODE_VUXYZ:0);
-}
-
 static void SuperVUAssignRegs()
 {
 	list<VuBaseBlock*>::iterator itblock, itblock2;
-
-	// assign xyz regs
-//	FORIT(itblock, s_listBlocks) {
-//		(*itblock)->vuxyz = 0;
-//		(*itblock)->vuxy = 0;
-//
-//		for(int i = 0; i < 32; ++i) {
-//			u32 mode = (*itblock)->GetModeXYZW((*itblock)->startpc, i);
-//			if( mode & MODE_VUXYZ ) {
-//				 if( mode & MODE_VUZ ) (*itblock)->vuxyz |= 1<<i;
-//				 else (*itblock)->vuxy |= 1<<i;
-//			}
-//		}
-//	}
 
 	FORIT(itblock, s_listBlocks) (*itblock)->type &= ~BLOCKTYPE_ANALYZED;
 	s_listBlocks.front()->AssignVFRegs();
@@ -2365,7 +2259,6 @@ static void SuperVUAssignRegs()
 // Recompilation
 //////////////////
 
-extern "C" {
 // cycles in which the last Q,P regs were finished (written to VU->VI[])
 // the write occurs before the instruction is executed at that cycle
 // compare with s_TotalVUCycles
@@ -2374,22 +2267,15 @@ int s_writeQ, s_writeP;
 
 // declare the saved registers
 uptr s_vu1esp, s_callstack;//, s_vu1esp
-#ifndef __x86_64__
 uptr s_vu1ebp, s_vuebx, s_vuedi, s_vu1esi;
-#endif
-
-}
 
 static int s_recWriteQ, s_recWriteP; // wait times during recompilation
 static int s_needFlush; // first bit - Q, second bit - P, third bit - Q has been written, fourth bit - P has been written
 
-static u32 s_ssecsr;
 static int s_JumpX86;
 static int s_ScheduleXGKICK = 0, s_XGKICKReg = -1;
 
-extern "C" u32 g_sseVUMXCSR, g_sseMXCSR;
-
-void recSVUMI_XGKICK_( VURegs *VU );
+void recVUMI_XGKICK_( VURegs *VU );
 
 void SuperVUCleanupProgram(u32 startpc, int vuindex)
 {
@@ -2398,9 +2284,7 @@ void SuperVUCleanupProgram(u32 startpc, int vuindex)
 	svutime += (u32)(svufinal.QuadPart-svubase.QuadPart);
 #endif
 
-#ifdef _DEBUG
 	assert( s_vu1esp == 0 );
-#endif
 
 	VU = vuindex ? &VU1 : &VU0;
 	VU->cycle += s_TotalVUCycles;
@@ -2410,10 +2294,15 @@ void SuperVUCleanupProgram(u32 startpc, int vuindex)
 		VU1.VI[REG_P] = VU1.p; // only VU1
 	}
 
-    //memset(recVUStack, 0, SUPERVU_STACKSIZE * 4);
+	//memset(recVUStack, 0, SUPERVU_STACKSIZE * 4);
+
+	// Clear allocation info to prevent bad data being used in other parts of pcsx2; doing this just incase (cottonvibes)
+	_initXMMregs();
+	_initMMXregs();
+	_initX86regs();
 }
 
-#if defined(_MSC_VER) && !defined(__x86_64__)
+#if defined(_MSC_VER)
 
 // entry point of all vu programs from emulator calls
 __declspec(naked) void SuperVUExecuteProgram(u32 startpc, int vuindex)
@@ -2598,26 +2487,16 @@ static void SuperVURecompile()
 }
 
 // debug
-static u32 s_svulast = 0, s_vufnheader;
-extern "C" u32 s_vucount;
-u32 g_vu1lastrec = 0, skipparent = -1;
-static u32 badaddrs[][2] = {0,0xffff};
-extern "C" {
 
-#ifndef __x86_64__
+
 u32 s_saveecx, s_saveedx, s_saveebx, s_saveesi, s_saveedi, s_saveebp;
-#endif
-
 u32 g_curdebugvu;
-}
 				
-//extern "C" float vuDouble(u32 f);
+//float vuDouble(u32 f);
 
-#if defined(_MSC_VER) && !defined(__x86_64__)
+#if defined(_MSC_VER)
 __declspec(naked) static void svudispfn()
 {
-	static u32 i;
-
 	__asm {
 		mov g_curdebugvu, eax
 		mov s_saveecx, ecx
@@ -2628,21 +2507,22 @@ __declspec(naked) static void svudispfn()
 		mov s_saveebp, ebp
 	}
 #else
-
-extern "C" void svudispfn();
-
-extern "C" void svudispfntemp()
-{
-    static u32 i;
+#ifdef __LINUX__
+extern "C" {
+#endif
+void svudispfn();
+#ifdef __LINUX__
+}
 #endif
 
-//    VU1.VF[7].F[0] = vuDouble(VU1.VF[7].UL[0]);
-//    VU1.VF[7].F[1] = vuDouble(VU1.VF[7].UL[1]);
-//    VU1.VF[7].F[2] = vuDouble(VU1.VF[7].UL[2]);
-//    VU1.VF[7].F[3] = vuDouble(VU1.VF[7].UL[3]);
+void svudispfntemp()
+{
+#endif
 
 #ifdef _DEBUG
-    if( ((vudump&8) && g_curdebugvu) || ((vudump&0x80) && !g_curdebugvu) ) { //&& g_vu1lastrec != g_vu1last ) {
+	static u32 i;
+	
+	if( ((vudump&8) && g_curdebugvu) || ((vudump&0x80) && !g_curdebugvu) ) { //&& g_vu1lastrec != g_vu1last ) {
 
 		if( skipparent != g_vu1lastrec ) {
 			for(i = 0; i < ARRAYSIZE(badaddrs); ++i) {
@@ -2654,7 +2534,7 @@ extern "C" void svudispfntemp()
 			{
                 //static int curesp;
                 //__asm mov curesp, esp
-				__Log("tVU: %x %x %x\n", s_svulast, s_vucount, s_vufnheader);
+				//Console::WriteLn("tVU: %x %x %x", s_svulast, s_vucount, s_vufnheader);
 				if( g_curdebugvu ) iDumpVU1Registers();
 				else iDumpVU0Registers();
 				s_vucount++;
@@ -2665,7 +2545,7 @@ extern "C" void svudispfntemp()
 	}
 #endif
 
-#if defined(_MSC_VER) && !defined(__x86_64__)
+#if defined(_MSC_VER)
 	__asm {
 		mov ecx, s_saveecx
 		mov edx, s_saveedx
@@ -2677,32 +2557,6 @@ extern "C" void svudispfntemp()
 	}
 #endif
 }
-
-// frees an xmmreg depending on the liveness info of hte current inst
-//void SuperVUFreeXMMreg(int xmmreg, int xmmtype, int reg)
-//{
-//	if( !xmmregs[xmmreg].inuse ) return;
-//	if( xmmregs[xmmreg].type == xmmtype && xmmregs[xmmreg].reg == reg ) return;
-//
-//	if( s_pNextInst == NULL ) {
-//		// last inst, free
-//		_freeXMMreg(xmmreg);
-//		return;
-//	}
-//
-//	if( xmmregs[xmmreg].type == XMMTYPE_VFREG ) {
-//		if( (s_pCurInst->livevars[1]|s_pNextInst->livevars[1]) & (1<<xmmregs[xmmreg].reg) )
-//			_freeXMMreg(xmmreg);
-//		else
-//			xmmregs[xmmreg].inuse = 0;
-//	}
-//	else if( xmmregs[xmmreg].type == XMMTYPE_ACC ) {
-//		if( (s_pCurInst->livevars[0]|s_pNextInst->livevars[0]) & (1<<REG_ACC_FLAG) )
-//			_freeXMMreg(xmmreg);
-//		else
-//			xmmregs[xmmreg].inuse = 0;
-//	}
-//}
 
 // frees all regs taking into account the livevars
 void SuperVUFreeXMMregs(u32* livevars)
@@ -2744,7 +2598,6 @@ void SuperVUFreeXMMregs(u32* livevars)
 	//_freeXMMregs();
 }
 
-//void timeout() { SysPrintf("VU0 timeout\n"); }
 void SuperVUTestVU0Condition(u32 incstack)
 {
 	if( s_vu && !SUPERVU_CHECKCONDITION ) return; // vu0 only
@@ -2752,22 +2605,16 @@ void SuperVUTestVU0Condition(u32 incstack)
 	CMP32ItoM((uptr)&s_TotalVUCycles, 512);	// sometimes games spin on vu0, so be careful with this value
 											// woody hangs if too high
 
-#ifndef __x86_64__
-    // x86-64 doesn't use a stack
 	if( incstack ) {
 		u8* ptr = JB8(0);
 
-		if( incstack ) ADD32ItoR(ESP, incstack);
+		ADD32ItoR(ESP, incstack);
 		//CALLFunc((u32)timeout);
 		JMP32( (uptr)SuperVUEndProgram - ( (uptr)x86Ptr + 5 ));
 
 		x86SetJ8(ptr);
 	}
-	else
-#endif
-    {
-		JAE32( (uptr)SuperVUEndProgram - ( (uptr)x86Ptr + 6 ) );
-	}
+	else JAE32( (uptr)SuperVUEndProgram - ( (uptr)x86Ptr + 6 ) );
 }
 
 void VuBaseBlock::Recompile()
@@ -2830,12 +2677,7 @@ void VuBaseBlock::Recompile()
 			}
 			x86regs[s_JumpX86].needed = 1; 
 		}
-#ifdef __x86_64__
-        // check X86ARG1
-        if( x86regs[X86ARG1].inuse && x86regs[X86ARG1].type == X86TYPE_FNARG ) {
-            x86regs[X86ARG1].needed = 1;
-        }
-#endif
+
 		if( s_ScheduleXGKICK && s_XGKICKReg > 0 ) {
 			assert( x86regs[s_XGKICKReg].inuse );
 			x86regs[s_XGKICKReg].needed = 1;
@@ -2844,7 +2686,7 @@ void VuBaseBlock::Recompile()
 
 		if( s_ScheduleXGKICK > 0 ) {
 			if( s_ScheduleXGKICK-- == 1 ) {
-				recSVUMI_XGKICK_(VU);
+				recVUMI_XGKICK_(VU);
 			}
 		}
 	}
@@ -2857,13 +2699,11 @@ void VuBaseBlock::Recompile()
 		MOV32RtoM((uptr)&VU->VI[REG_CLIP_FLAG], EAX);
 	}
 	if( s_PrevStatusWrite != (uptr)&VU->VI[REG_STATUS_FLAG] ) {
-        // only lower 8 bits valid!
-		MOVZX32M8toR(EAX, s_PrevStatusWrite);
+		MOV32MtoR(EAX, s_PrevStatusWrite);
 		MOV32RtoM((uptr)&VU->VI[REG_STATUS_FLAG], EAX);
 	}
 	if( s_PrevMACWrite != (uptr)&VU->VI[REG_MAC_FLAG] ) {
-        // only lower 8 bits valid!
-		MOVZX32M8toR(EAX, s_PrevMACWrite);
+		MOV32MtoR(EAX, s_PrevMACWrite);
 		MOV32RtoM((uptr)&VU->VI[REG_MAC_FLAG], EAX);
 	}
 //    if( s_StatusRead != (uptr)&VU->VI[REG_STATUS_FLAG] ) {
@@ -2922,15 +2762,6 @@ void VuBaseBlock::Recompile()
 
 		// get rid of any writes, otherwise _freeX86regs will write
 		x86regs[s_JumpX86].mode &= ~MODE_WRITE;
-
-#ifdef __x86_64__
-        bool bValidX86Arg = false; // if false, then use _x86GetAddr(X86TYPE_FNARG, reg);
-        if( x86regs[X86ARG1].inuse ) {
-            bValidX86Arg = true;
-            if( x86regs[X86ARG1].type==X86TYPE_FNARG )
-                x86regs[X86ARG1].mode &= ~MODE_WRITE;
-        }
-#endif
 
 		if( branch == 1 ) {
 			if( !x86regs[s_JumpX86].inuse ) {
@@ -3013,19 +2844,10 @@ void VuBaseBlock::Recompile()
 				
 				SuperVUTestVU0Condition(8);
 
-#ifdef __x86_64__
-                // check that X86ARG1 is still valid
-                if( !bValidX86Arg )
-                    MOV32MtoR(X86ARG1, _x86GetAddr(X86TYPE_FNARG, 0));
-                MOV32ItoR(X86ARG2, s_vu);
-#endif
 				// already onto stack
 				CALLFunc((uptr)SuperVUGetProgram);
-#ifndef __x86_64__
 				ADD32ItoR(ESP, 8);
-#endif
 				JMPR(EAX);
-
 				break;
 			}
             
@@ -3033,11 +2855,9 @@ void VuBaseBlock::Recompile()
             {
 //                s32 delta = (s32)(VU->code & 0x400 ? 0xfffffc00 | (VU->code & 0x3ff) : VU->code & 0x3ff) << 3;
 //                ADD32ItoRmOffset(ESP, delta, 0);
-#ifndef __x86_64__
-                ADD32ItoR(ESP, 8); // restore
-#endif
-                pChildJumps[0] = (u32*)((uptr)JMP32(0)|0x80000000);
 
+                ADD32ItoR(ESP, 8); // restore
+                pChildJumps[0] = (u32*)((uptr)JMP32(0)|0x80000000);
 				break;
             }
 			case 0:
@@ -3046,9 +2866,7 @@ void VuBaseBlock::Recompile()
 				break;
 
 			default:
-#ifdef PCSX2_DEVBUILD
-				SysPrintf("Bad branch %x\n", branch);
-#endif
+				DevCon::Error("Bad branch %x\n", params branch);
 				assert(0);
 				break;
 		}
@@ -3146,18 +2964,13 @@ int VuInstruction::SetCachedRegs(int upper, u32 vuxyz)
 	return info;
 }
 
-static void checkvucodefn(u32 curpc, u32 vuindex, u32 oldcode)
-{
-	SysPrintf("vu%c code changed (old:%x, new: %x)! %x %x\n", '0'+vuindex, oldcode, s_vu?*(u32*)&VU1.Micro[curpc]:*(u32*)&VU0.Micro[curpc], curpc, cpuRegs.cycle);
-}
-
 void VuInstruction::Recompile(list<VuInstruction>::iterator& itinst, u32 vuxyz)
 {
 	static PCSX2_ALIGNED16(VECTOR _VF);
-    static PCSX2_ALIGNED16(VECTOR _VFc);
+	static PCSX2_ALIGNED16(VECTOR _VFc);
 	u32 *ptr;
 	u8* pjmp;
-	int vfregstore=0, viregstore=0;
+	int vfregstore=0;
 
 	assert( s_pCurInst == this);
 	s_WriteToReadQ = 0;
@@ -3213,6 +3026,7 @@ void VuInstruction::Recompile(list<VuInstruction>::iterator& itinst, u32 vuxyz)
 				s_ClipRead = (uptr)&VU->VI[REG_CLIP_FLAG];
 			else {
 				s_ClipRead = s_pCurBlock->GetInstIterAtPc(nParentPc)->pClipWrite;
+				if (s_ClipRead == 0) SysPrintf("super ClipRead allocation error! \n");
 			}
 		}
 
@@ -3228,7 +3042,7 @@ void VuInstruction::Recompile(list<VuInstruction>::iterator& itinst, u32 vuxyz)
                     if( pparentinst != NULL ) { //&& pparentinst->pStatusWrite != NULL ) {
 
                         // might not have processed it yet, so reserve a mem loc
-                        if( pparentinst->pStatusWrite == NULL ) {
+                        if( pparentinst->pStatusWrite == 0 ) {
                             pparentinst->pStatusWrite = (uptr)SuperVUStaticAlloc(4);
                             //MOV32ItoM(pparentinst->pStatusWrite, 0);
                         }
@@ -3249,7 +3063,7 @@ void VuInstruction::Recompile(list<VuInstruction>::iterator& itinst, u32 vuxyz)
 //                            else
 //                                MOV32MtoR(EAX, (uptr)&VU->VI[REG_STATUS_FLAG]);
 //                            s_StatusRead = tempstatus;
-                            if( s_StatusRead == NULL )
+                            if( s_StatusRead == 0 )
                                 s_StatusRead = (uptr)&VU->VI[REG_STATUS_FLAG];
 
                             CMP32ItoM((uptr)&g_nLastBlockExecuted, nParentCheckForExecution);
@@ -3274,6 +3088,7 @@ void VuInstruction::Recompile(list<VuInstruction>::iterator& itinst, u32 vuxyz)
                 }
 				else {
 					s_StatusRead = s_pCurBlock->GetInstIterAtPc(nParentPc)->pStatusWrite;
+					if (s_StatusRead == 0) SysPrintf("super StatusRead allocation error! \n");
 //                    if( pc >= (u32)s_pCurBlock->endpc-8 ) {
 //                        // towards the end, so variable might be leaded to another block (silent hill 4)
 //                        uptr tempstatus = (uptr)SuperVUStaticAlloc(4);
@@ -3294,7 +3109,7 @@ void VuInstruction::Recompile(list<VuInstruction>::iterator& itinst, u32 vuxyz)
                         // towards the end, so variable might be leaked to another block (silent hill 4)
                         
                         // might not have processed it yet, so reserve a mem loc
-                        if( pparentinst->pMACWrite == NULL ) {
+                        if( pparentinst->pMACWrite == 0 ) {
                             pparentinst->pMACWrite = (uptr)SuperVUStaticAlloc(4);
                             //MOV32ItoM(pparentinst->pMACWrite, 0);
                         }
@@ -3315,7 +3130,7 @@ void VuInstruction::Recompile(list<VuInstruction>::iterator& itinst, u32 vuxyz)
 //                                MOV32MtoR(EAX, (uptr)&VU->VI[REG_MAC_FLAG]);
 //                            s_MACRead = tempmac;
 
-                            if( s_MACRead == NULL )
+                            if( s_MACRead == 0 )
                                 s_MACRead = (uptr)&VU->VI[REG_MAC_FLAG];
 
                             CMP32ItoM((uptr)&g_nLastBlockExecuted, nParentCheckForExecution);
@@ -3356,9 +3171,9 @@ void VuInstruction::Recompile(list<VuInstruction>::iterator& itinst, u32 vuxyz)
 		}
         else if( pparentinst != NULL) {
             // make sure to reset the mac and status flags! (katamari)
-            if( pparentinst->pStatusWrite != NULL )
+            if( pparentinst->pStatusWrite)
                 MOV32ItoM(pparentinst->pStatusWrite, 0);
-            if( pparentinst->pMACWrite != NULL )
+            if( pparentinst->pMACWrite)
                 MOV32ItoM(pparentinst->pMACWrite, 0);
         }
 
@@ -3372,16 +3187,6 @@ void VuInstruction::Recompile(list<VuInstruction>::iterator& itinst, u32 vuxyz)
     s_pCurBlock->prevFlagsOutOfBlock = 0;
 
 #ifdef _DEBUG
-//	CMP32ItoM((u32)ptr, ptr[0]);
-//	j8Ptr[0] = JNE8(0);
-//	CMP32ItoM((u32)(ptr+1), ptr[1]);
-//	j8Ptr[1] = JNE8(0);
-//	j8Ptr[2] = JMP8(0);
-//	x86SetJ8( j8Ptr[0] );
-//	x86SetJ8( j8Ptr[1] );
-//    _callFunctionArg3((uptr)checkvucodefn, MEM_CONSTTAG, MEM_CONSTTAG, MEM_CONSTTAG, pc, s_vu, ptr[0]);
-//	x86SetJ8( j8Ptr[ 2 ] );
-
 	MOV32ItoR(EAX, pc);
 #endif
 
@@ -3409,7 +3214,7 @@ void VuInstruction::Recompile(list<VuInstruction>::iterator& itinst, u32 vuxyz)
 		}
 	}
 
-    if( pClipWrite == 0 && ((regs[0].VIwrite|regs[1].VIwrite) & (1<<REG_CLIP_FLAG)) ) {
+	if( (pClipWrite == 0) && ((regs[0].VIwrite|regs[1].VIwrite) & (1<<REG_CLIP_FLAG)) ) {
 		pClipWrite = (uptr)SuperVUStaticAlloc(4);
         //MOV32ItoM(pClipWrite, 0);
     }
@@ -3462,7 +3267,7 @@ void VuInstruction::Recompile(list<VuInstruction>::iterator& itinst, u32 vuxyz)
 		if( s_JumpX86 > 0 ) x86regs[s_JumpX86].needed = 1;
 		if( s_ScheduleXGKICK && s_XGKICKReg > 0 ) x86regs[s_XGKICKReg].needed = 1;
 
-		recSVU_UPPER_OPCODE[ VU->code & 0x3f ]();
+		recVU_UPPER_OPCODE[ VU->code & 0x3f ]( VU, s_vuInfo );
 		
 		s_PrevIWrite = (uptr)ptr;
 		_clearNeededXMMregs();
@@ -3618,7 +3423,7 @@ void VuInstruction::Recompile(list<VuInstruction>::iterator& itinst, u32 vuxyz)
 		if( s_JumpX86 > 0 ) x86regs[s_JumpX86].needed = 1;
 		if( s_ScheduleXGKICK && s_XGKICKReg > 0 ) x86regs[s_XGKICKReg].needed = 1;
 
-		recSVU_UPPER_OPCODE[ VU->code & 0x3f ]();
+		recVU_UPPER_OPCODE[ VU->code & 0x3f ]( VU, s_vuInfo );
 		_clearNeededXMMregs();
 		_clearNeededX86regs();
 	
@@ -3658,15 +3463,15 @@ void VuInstruction::Recompile(list<VuInstruction>::iterator& itinst, u32 vuxyz)
 		if( s_ScheduleXGKICK && s_XGKICKReg > 0 ) x86regs[s_XGKICKReg].needed = 1;
 
 #ifdef SUPERVU_VIBRANCHDELAY
-        if( type & INST_CACHE_VI ) {
-            assert( vicached >= 0 );
-            int cachedreg = _allocX86reg(-1, X86TYPE_VI|(s_vu?X86TYPE_VU1:0), vicached, MODE_READ);
-            MOV32RtoM((uptr)&s_VIBranchDelay, cachedreg);
-        }
+		if ( (!CHECK_VUBRANCHHACK) && (type & INST_CACHE_VI) ) {
+			assert( vicached >= 0 );
+			int cachedreg = _allocX86reg(-1, X86TYPE_VI|(s_vu?X86TYPE_VU1:0), vicached, MODE_READ);
+			MOV32RtoM((uptr)&s_VIBranchDelay, cachedreg);
+		}
 #endif
 
         // check if inst before branch and the write is the same as the read in the branch (wipeout)
-		int oldreg=0;
+//		int oldreg=0;
 //		if( pc == s_pCurBlock->endpc-16 ) {
 //			itinst2 = itinst; ++itinst2;
 //			if( itinst2->regs[0].pipe == VUPIPE_BRANCH && (itinst->regs[0].VIwrite&itinst2->regs[0].VIread) ) {
@@ -3695,7 +3500,7 @@ void VuInstruction::Recompile(list<VuInstruction>::iterator& itinst, u32 vuxyz)
 //			x86regs[oldreg].type = X86TYPE_VITEMP;
 //		}
 
-		recSVU_LOWER_OPCODE[ VU->code >> 25 ]();
+		recVU_LOWER_OPCODE[ VU->code >> 25 ]( VU, s_vuInfo );
 
 //		if( pc == s_pCurBlock->endpc-8 && s_CacheVIReg >= 0 ) {
 //			// revert
@@ -3728,7 +3533,7 @@ void VuInstruction::Recompile(list<VuInstruction>::iterator& itinst, u32 vuxyz)
 // Super VU Recompilation Tables //
 ///////////////////////////////////
 
-void recSVUMI_BranchHandle()
+void recVUMI_BranchHandle()
 {
 	int bpc = _recbranchAddr(VU->code); 
 	int curjump = 0;
@@ -3768,7 +3573,7 @@ void recSVUMI_BranchHandle()
 }
 
 // supervu specific insts
-void recSVUMI_IBQ_prep()
+void recVUMI_IBQ_prep()
 {
 	int fsreg, ftreg;
 
@@ -3860,14 +3665,14 @@ void recSVUMI_IBQ_prep()
 	}
 }
 
-void recSVUMI_IBEQ()
+void recVUMI_IBEQ( VURegs* vuu, s32 info )
 {
-	recSVUMI_IBQ_prep();
+	recVUMI_IBQ_prep();
 	j8Ptr[ 0 ] = JNE8( 0 );
-	recSVUMI_BranchHandle();
+	recVUMI_BranchHandle();
 }
 
-void recSVUMI_IBGEZ()
+void recVUMI_IBGEZ( VURegs* vuu, s32 info )
 {
 	int fsreg = _checkX86reg(X86TYPE_VI|(VU==&VU1?X86TYPE_VU1:0), _Fs_, MODE_READ);
 	s_JumpX86 = _allocX86reg(-1, X86TYPE_VUJUMP, 0, MODE_WRITE);
@@ -3881,10 +3686,10 @@ void recSVUMI_IBGEZ()
 		j8Ptr[ 0 ] = JL8( 0 );
 	}
 
-	recSVUMI_BranchHandle();
+	recVUMI_BranchHandle();
 }
 
-void recSVUMI_IBGTZ()
+void recVUMI_IBGTZ( VURegs* vuu, s32 info )
 {
 	int fsreg = _checkX86reg(X86TYPE_VI|(VU==&VU1?X86TYPE_VU1:0), _Fs_, MODE_READ);
 	s_JumpX86 = _allocX86reg(-1, X86TYPE_VUJUMP, 0, MODE_WRITE);
@@ -3897,10 +3702,10 @@ void recSVUMI_IBGTZ()
 		CMP16ItoM( SuperVUGetVIAddr(_Fs_, 1), 0x0 );
 		j8Ptr[ 0 ] = JLE8( 0 );
 	}
-	recSVUMI_BranchHandle();
+	recVUMI_BranchHandle();
 }
 
-void recSVUMI_IBLEZ()
+void recVUMI_IBLEZ( VURegs* vuu, s32 info )
 {
 	int fsreg = _checkX86reg(X86TYPE_VI|(VU==&VU1?X86TYPE_VU1:0), _Fs_, MODE_READ);
 	s_JumpX86 = _allocX86reg(-1, X86TYPE_VUJUMP, 0, MODE_WRITE);
@@ -3913,10 +3718,10 @@ void recSVUMI_IBLEZ()
 		CMP16ItoM( SuperVUGetVIAddr(_Fs_, 1), 0x0 );
 		j8Ptr[ 0 ] = JG8( 0 );
 	}
-	recSVUMI_BranchHandle();
+	recVUMI_BranchHandle();
 }
 
-void recSVUMI_IBLTZ()
+void recVUMI_IBLTZ( VURegs* vuu, s32 info )
 {
 	int fsreg = _checkX86reg(X86TYPE_VI|(VU==&VU1?X86TYPE_VU1:0), _Fs_, MODE_READ);
 	s_JumpX86 = _allocX86reg(-1, X86TYPE_VUJUMP, 0, MODE_WRITE);
@@ -3929,17 +3734,17 @@ void recSVUMI_IBLTZ()
 		CMP16ItoM( SuperVUGetVIAddr(_Fs_, 1), 0x0 );
 		j8Ptr[ 0 ] = JGE8( 0 );
 	}
-	recSVUMI_BranchHandle();
+	recVUMI_BranchHandle();
 }
 
-void recSVUMI_IBNE()
+void recVUMI_IBNE( VURegs* vuu, s32 info )
 {
-	recSVUMI_IBQ_prep();
+	recVUMI_IBQ_prep();
 	j8Ptr[ 0 ] = JE8( 0 );
-	recSVUMI_BranchHandle();
+	recVUMI_BranchHandle();
 }
 
-void recSVUMI_B()
+void recVUMI_B( VURegs* vuu, s32 info )
 {
 	// supervu will take care of the rest
 	int bpc = _recbranchAddr(VU->code); 
@@ -3961,7 +3766,7 @@ void recSVUMI_B()
 	branch |= 3;
 }
 
-void recSVUMI_BAL()
+void recVUMI_BAL( VURegs* vuu, s32 info )
 {
 	int bpc = _recbranchAddr(VU->code); 
 	if( (s_pCurBlock->type & BLOCKTYPE_HASEOP) || s_vu == 0 || SUPERVU_CHECKCONDITION )
@@ -3987,7 +3792,7 @@ void recSVUMI_BAL()
 	branch |= 3;
 }
 
-void recSVUMI_JR()
+void recVUMI_JR( VURegs* vuu, s32 info )
 {
 	int fsreg = _allocX86reg(-1, X86TYPE_VI|(s_vu?X86TYPE_VU1:0), _Fs_, MODE_READ);
 	LEA32RStoR(EAX, fsreg, 3);
@@ -3996,18 +3801,13 @@ void recSVUMI_JR()
 	if( (s_pCurBlock->type & BLOCKTYPE_HASEOP) || s_vu == 0 ) MOV32RtoM(SuperVUGetVIAddr(REG_TPC, 0), EAX);
 	
 	if( !(s_pCurBlock->type & BLOCKTYPE_HASEOP) ) {
-#ifdef __x86_64__
-        _allocX86reg(X86ARG1, X86TYPE_FNARG, 0, MODE_READ|MODE_WRITE);
-        MOV32RtoR(X86ARG1, EAX);
-#else
 		PUSH32I(s_vu);
 		PUSH32R(EAX);
-#endif
 	}
 	branch |= 0x10; // 0x08 is reserved
 }
 
-void recSVUMI_JALR()
+void recVUMI_JALR( VURegs* vuu, s32 info )
 {
 	_addNeededX86reg(X86TYPE_VI|(s_vu?X86TYPE_VU1:0), _Ft_);
 
@@ -4023,13 +3823,8 @@ void recSVUMI_JALR()
 	if( (s_pCurBlock->type & BLOCKTYPE_HASEOP) || s_vu == 0 ) MOV32RtoM(SuperVUGetVIAddr(REG_TPC, 0), EAX);
 	
 	if( !(s_pCurBlock->type & BLOCKTYPE_HASEOP) ) {
-#ifdef __x86_64__
-        _allocX86reg(X86ARG1, X86TYPE_FNARG, 0, MODE_READ|MODE_WRITE);
-        MOV32RtoR(X86ARG1, EAX);
-#else
 		PUSH32I(s_vu);
 		PUSH32R(EAX);
-#endif
 	}
 
 	branch |= 4;
@@ -4056,47 +3851,15 @@ void vu1xgkick(u32* pMem, u32 addr)
 	StopSVUCounter();
 #endif
 
-#ifdef _DEBUG
-	static int scount = 0;
-    //static int curesp;
-    //__asm mov curesp, esp;
-	scount++;
-
-//    if( scount > 1500 ) {
-//        __Log("xgkick 0x%x (%d)\n", addr, scount);
-//        iDumpVU1Registers();
-//        for(int i = 0; i < 0x400; ++i) {
-//            __Log("%x: %x %x %x %x\n", i, *(int*)(VU1.Mem+16*i), *(int*)(VU1.Mem+16*i+4), *(int*)(VU1.Mem+16*i+8), *(int*)(VU1.Mem+16*i+12));
-//        }
-//    }
-
-	if( vudump & 8 ) {
-		__Log("xgkick 0x%x (%d)\n", addr, scount);
-	}
-#endif
-
 	GSGIFTRANSFER1(pMem, addr);
 
 #ifdef SUPERVU_COUNT
 	StartSVUCounter();
 #endif
 }
-
-//extern u32 vudump;
-//void countfn()
-//{
-//	static int scount = 0;
-//	scount++;
-//
-//	if( scount > 16 ) {
-//		__Log("xgkick %d\n", scount);
-//		vudump |= 8;
-//	}
-//}
-
 #endif
 
-void recSVUMI_XGKICK_( VURegs *VU )
+void recVUMI_XGKICK_( VURegs *VU )
 {
 	assert( s_XGKICKReg > 0 && x86regs[s_XGKICKReg].inuse && x86regs[s_XGKICKReg].type == X86TYPE_VITEMP);
 
@@ -4104,29 +3867,19 @@ void recSVUMI_XGKICK_( VURegs *VU )
 	_freeX86regs();
 	_freeXMMregs();
 
-#ifdef __x86_64__
-    if( X86ARG2 != s_XGKICKReg )
-        MOV32RtoR(X86ARG2, s_XGKICKReg);
-    MOV32ItoR(X86ARG1, (uptr)VU->Mem);
-#else
 	PUSH32R(s_XGKICKReg);
 	PUSH32I((uptr)VU->Mem);
-#endif
 
 	//CALLFunc((u32)countfn);
 
-	if( CHECK_MULTIGS ) {
+	if( mtgsThread != NULL ) {
 		CALLFunc((uptr)VU1XGKICK_MTGSTransfer);
-#ifndef __x86_64__
 		ADD32ItoR(ESP, 8);
-#endif
 	}
 	else {
 #ifdef PCSX2_DEVBUILD
 		CALLFunc((uptr)vu1xgkick);
-#ifndef __x86_64__
 		ADD32ItoR(ESP, 8);
-#endif
 #else
 		CALLFunc((uptr)GSgifTransfer1);	
 #endif
@@ -4135,11 +3888,11 @@ void recSVUMI_XGKICK_( VURegs *VU )
 	s_ScheduleXGKICK = 0;
 }
 
-void recSVUMI_XGKICK( VURegs *VU, int info )
+void recVUMI_XGKICK( VURegs *VU, int info )
 {
 	if( s_ScheduleXGKICK ) {
 		// second xgkick, so launch the first
-		recSVUMI_XGKICK_(VU);
+		recVUMI_XGKICK_(VU);
 	}
 
 	int fsreg = _allocX86reg(X86ARG2, X86TYPE_VI|(s_vu?X86TYPE_VU1:0), _Fs_, MODE_READ);
@@ -4153,7 +3906,7 @@ void recSVUMI_XGKICK( VURegs *VU, int info )
 	s_XGKICKReg = fsreg;
 
     if( !SUPERVU_XGKICKDELAY || pc == s_pCurBlock->endpc ) {
-		recSVUMI_XGKICK_(VU);
+		recVUMI_XGKICK_(VU);
 	}
 	else {
         if( g_VUGameFixes & VUFIX_XGKICKDELAY2 ) 
@@ -4163,416 +3916,224 @@ void recSVUMI_XGKICK( VURegs *VU, int info )
 	}
 }
 
-// upper inst
-void recSVUMI_ABS()   { recVUMI_ABS(VU, s_vuInfo); } 
+void recVU_UPPER_FD_00( VURegs* VU, s32 info );
+void recVU_UPPER_FD_01( VURegs* VU, s32 info );
+void recVU_UPPER_FD_10( VURegs* VU, s32 info );
+void recVU_UPPER_FD_11( VURegs* VU, s32 info );
+void recVULowerOP( VURegs* VU, s32 info );
+void recVULowerOP_T3_00( VURegs* VU, s32 info );
+void recVULowerOP_T3_01( VURegs* VU, s32 info );
+void recVULowerOP_T3_10( VURegs* VU, s32 info );
+void recVULowerOP_T3_11( VURegs* VU, s32 info );
+void recVUunknown( VURegs* VU, s32 info );
 
-void recSVUMI_ADD()  { recVUMI_ADD(VU, s_vuInfo); }
-void recSVUMI_ADDi() { recVUMI_ADDi(VU, s_vuInfo); } 
-void recSVUMI_ADDq() { recVUMI_ADDq(VU, s_vuInfo); } 
-void recSVUMI_ADDx() { recVUMI_ADDx(VU, s_vuInfo); } 
-void recSVUMI_ADDy() { recVUMI_ADDy(VU, s_vuInfo); } 
-void recSVUMI_ADDz() { recVUMI_ADDz(VU, s_vuInfo); } 
-void recSVUMI_ADDw() { recVUMI_ADDw(VU, s_vuInfo); }
+void (*recVU_LOWER_OPCODE[128])( VURegs* VU, s32 info ) = { 
+	recVUMI_LQ    , recVUMI_SQ    , recVUunknown , recVUunknown,  
+	recVUMI_ILW   , recVUMI_ISW   , recVUunknown , recVUunknown,  
+	recVUMI_IADDIU, recVUMI_ISUBIU, recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown, 
+	recVUMI_FCEQ  , recVUMI_FCSET , recVUMI_FCAND, recVUMI_FCOR, /* 0x10 */ 
+	recVUMI_FSEQ  , recVUMI_FSSET , recVUMI_FSAND, recVUMI_FSOR, 
+	recVUMI_FMEQ  , recVUunknown  , recVUMI_FMAND, recVUMI_FMOR, 
+	recVUMI_FCGET , recVUunknown  , recVUunknown , recVUunknown, 
+	recVUMI_B     , recVUMI_BAL   , recVUunknown , recVUunknown, /* 0x20 */  
+	recVUMI_JR    , recVUMI_JALR  , recVUunknown , recVUunknown, 
+	recVUMI_IBEQ  , recVUMI_IBNE  , recVUunknown , recVUunknown, 
+	recVUMI_IBLTZ , recVUMI_IBGTZ , recVUMI_IBLEZ, recVUMI_IBGEZ, 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown, /* 0x30 */ 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVULowerOP  , recVUunknown  , recVUunknown , recVUunknown, /* 0x40*/  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown, /* 0x50 */ 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown, /* 0x60 */ 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown, /* 0x70 */ 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+}; 
+ 
+void (*recVULowerOP_T3_00_OPCODE[32])(VURegs* VU, s32 info) = { 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown, 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUMI_MOVE  , recVUMI_LQI   , recVUMI_DIV  , recVUMI_MTIR,  
+	recVUMI_RNEXT , recVUunknown  , recVUunknown , recVUunknown, /* 0x10 */ 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUMI_MFP   , recVUMI_XTOP , recVUMI_XGKICK,  
+	recVUMI_ESADD , recVUMI_EATANxy, recVUMI_ESQRT, recVUMI_ESIN,  
+}; 
+ 
+void (*recVULowerOP_T3_01_OPCODE[32])(VURegs* VU, s32 info) = { 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown, 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUMI_MR32  , recVUMI_SQI   , recVUMI_SQRT , recVUMI_MFIR,  
+	recVUMI_RGET  , recVUunknown  , recVUunknown , recVUunknown, /* 0x10 */ 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUMI_XITOP, recVUunknown,  
+	recVUMI_ERSADD, recVUMI_EATANxz, recVUMI_ERSQRT, recVUMI_EATAN, 
+}; 
+ 
+void (*recVULowerOP_T3_10_OPCODE[32])(VURegs* VU, s32 info) = { 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown, 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUMI_LQD   , recVUMI_RSQRT, recVUMI_ILWR,  
+	recVUMI_RINIT , recVUunknown  , recVUunknown , recVUunknown, /* 0x10 */ 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUMI_ELENG , recVUMI_ESUM  , recVUMI_ERCPR, recVUMI_EEXP,  
+}; 
+ 
+void (*recVULowerOP_T3_11_OPCODE[32])(VURegs* VU, s32 info) = { 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown, 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUMI_SQD   , recVUMI_WAITQ, recVUMI_ISWR,  
+	recVUMI_RXOR  , recVUunknown  , recVUunknown , recVUunknown, /* 0x10 */ 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUMI_ERLENG, recVUunknown  , recVUMI_WAITP, recVUunknown,  
+}; 
+ 
+void (*recVULowerOP_OPCODE[64])(VURegs* VU, s32 info) = { 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown, 
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown, /* 0x10 */  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown, /* 0x20 */  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVUMI_IADD  , recVUMI_ISUB  , recVUMI_IADDI, recVUunknown, /* 0x30 */ 
+	recVUMI_IAND  , recVUMI_IOR   , recVUunknown , recVUunknown,  
+	recVUunknown  , recVUunknown  , recVUunknown , recVUunknown,  
+	recVULowerOP_T3_00, recVULowerOP_T3_01, recVULowerOP_T3_10, recVULowerOP_T3_11,  
+}; 
+ 
+void (*recVU_UPPER_OPCODE[64])(VURegs* VU, s32 info) = { 
+	recVUMI_ADDx  , recVUMI_ADDy  , recVUMI_ADDz  , recVUMI_ADDw, 
+	recVUMI_SUBx  , recVUMI_SUBy  , recVUMI_SUBz  , recVUMI_SUBw, 
+	recVUMI_MADDx , recVUMI_MADDy , recVUMI_MADDz , recVUMI_MADDw, 
+	recVUMI_MSUBx , recVUMI_MSUBy , recVUMI_MSUBz , recVUMI_MSUBw, 
+	recVUMI_MAXx  , recVUMI_MAXy  , recVUMI_MAXz  , recVUMI_MAXw,  /* 0x10 */  
+	recVUMI_MINIx , recVUMI_MINIy , recVUMI_MINIz , recVUMI_MINIw, 
+	recVUMI_MULx  , recVUMI_MULy  , recVUMI_MULz  , recVUMI_MULw, 
+	recVUMI_MULq  , recVUMI_MAXi  , recVUMI_MULi  , recVUMI_MINIi, 
+	recVUMI_ADDq  , recVUMI_MADDq , recVUMI_ADDi  , recVUMI_MADDi, /* 0x20 */ 
+	recVUMI_SUBq  , recVUMI_MSUBq , recVUMI_SUBi  , recVUMI_MSUBi, 
+	recVUMI_ADD   , recVUMI_MADD  , recVUMI_MUL   , recVUMI_MAX, 
+	recVUMI_SUB   , recVUMI_MSUB  , recVUMI_OPMSUB, recVUMI_MINI, 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown,  /* 0x30 */ 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown, 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown, 
+	recVU_UPPER_FD_00, recVU_UPPER_FD_01, recVU_UPPER_FD_10, recVU_UPPER_FD_11,  
+}; 
+ 
+void (*recVU_UPPER_FD_00_TABLE[32])(VURegs* VU, s32 info) = { 
+	recVUMI_ADDAx, recVUMI_SUBAx , recVUMI_MADDAx, recVUMI_MSUBAx, 
+	recVUMI_ITOF0, recVUMI_FTOI0, recVUMI_MULAx , recVUMI_MULAq , 
+	recVUMI_ADDAq, recVUMI_SUBAq, recVUMI_ADDA  , recVUMI_SUBA  , 
+	recVUunknown , recVUunknown , recVUunknown  , recVUunknown  , 
+	recVUunknown , recVUunknown , recVUunknown  , recVUunknown  , 
+	recVUunknown , recVUunknown , recVUunknown  , recVUunknown  , 
+	recVUunknown , recVUunknown , recVUunknown  , recVUunknown  , 
+	recVUunknown , recVUunknown , recVUunknown  , recVUunknown  , 
+}; 
+ 
+void (*recVU_UPPER_FD_01_TABLE[32])(VURegs* VU, s32 info) = { 
+	recVUMI_ADDAy , recVUMI_SUBAy  , recVUMI_MADDAy, recVUMI_MSUBAy, 
+	recVUMI_ITOF4 , recVUMI_FTOI4 , recVUMI_MULAy , recVUMI_ABS   , 
+	recVUMI_MADDAq, recVUMI_MSUBAq, recVUMI_MADDA , recVUMI_MSUBA , 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown  , 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown  , 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown  , 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown  , 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown  , 
+}; 
+ 
+void (*recVU_UPPER_FD_10_TABLE[32])(VURegs* VU, s32 info) = { 
+	recVUMI_ADDAz , recVUMI_SUBAz  , recVUMI_MADDAz, recVUMI_MSUBAz, 
+	recVUMI_ITOF12, recVUMI_FTOI12, recVUMI_MULAz , recVUMI_MULAi , 
+	recVUMI_ADDAi, recVUMI_SUBAi , recVUMI_MULA  , recVUMI_OPMULA, 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown  , 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown  , 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown  , 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown  , 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown  , 
+}; 
+ 
+void (*recVU_UPPER_FD_11_TABLE[32])(VURegs* VU, s32 info) = { 
+	recVUMI_ADDAw , recVUMI_SUBAw  , recVUMI_MADDAw, recVUMI_MSUBAw, 
+	recVUMI_ITOF15, recVUMI_FTOI15, recVUMI_MULAw , recVUMI_CLIP  , 
+	recVUMI_MADDAi, recVUMI_MSUBAi, recVUunknown  , recVUMI_NOP   , 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown  , 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown  , 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown  , 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown  , 
+	recVUunknown  , recVUunknown  , recVUunknown  , recVUunknown  , 
+}; 
 
-void recSVUMI_ADDA()  { recVUMI_ADDA(VU, s_vuInfo); } 
-void recSVUMI_ADDAi() { recVUMI_ADDAi(VU, s_vuInfo); } 
-void recSVUMI_ADDAq() { recVUMI_ADDAq(VU, s_vuInfo); } 
-void recSVUMI_ADDAx() { recVUMI_ADDAx(VU, s_vuInfo); } 
-void recSVUMI_ADDAy() { recVUMI_ADDAy(VU, s_vuInfo); } 
-void recSVUMI_ADDAz() { recVUMI_ADDAz(VU, s_vuInfo); } 
-void recSVUMI_ADDAw() { recVUMI_ADDAw(VU, s_vuInfo); } 
-
-void recSVUMI_SUB()  { recVUMI_SUB(VU, s_vuInfo); } 
-void recSVUMI_SUBi() { recVUMI_SUBi(VU, s_vuInfo); } 
-void recSVUMI_SUBq() { recVUMI_SUBq(VU, s_vuInfo); } 
-void recSVUMI_SUBx() { recVUMI_SUBx(VU, s_vuInfo); } 
-void recSVUMI_SUBy() { recVUMI_SUBy(VU, s_vuInfo); } 
-void recSVUMI_SUBz() { recVUMI_SUBz(VU, s_vuInfo); } 
-void recSVUMI_SUBw() { recVUMI_SUBw(VU, s_vuInfo); } 
-
-void recSVUMI_SUBA()  { recVUMI_SUBA(VU, s_vuInfo); } 
-void recSVUMI_SUBAi() { recVUMI_SUBAi(VU, s_vuInfo); } 
-void recSVUMI_SUBAq() { recVUMI_SUBAq(VU, s_vuInfo); } 
-void recSVUMI_SUBAx() { recVUMI_SUBAx(VU, s_vuInfo); } 
-void recSVUMI_SUBAy() { recVUMI_SUBAy(VU, s_vuInfo); } 
-void recSVUMI_SUBAz() { recVUMI_SUBAz(VU, s_vuInfo); } 
-void recSVUMI_SUBAw() { recVUMI_SUBAw(VU, s_vuInfo); } 
-
-void recSVUMI_MUL()  { recVUMI_MUL(VU, s_vuInfo); }
-void recSVUMI_MULi() { recVUMI_MULi(VU, s_vuInfo); } 
-void recSVUMI_MULq() { recVUMI_MULq(VU, s_vuInfo); }
-void recSVUMI_MULx() { recVUMI_MULx(VU, s_vuInfo); } 
-void recSVUMI_MULy() { recVUMI_MULy(VU, s_vuInfo); } 
-void recSVUMI_MULz() { recVUMI_MULz(VU, s_vuInfo); } 
-void recSVUMI_MULw() { recVUMI_MULw(VU, s_vuInfo); }
-
-void recSVUMI_MULA()  { recVUMI_MULA(VU, s_vuInfo); } 
-void recSVUMI_MULAi() { recVUMI_MULAi(VU, s_vuInfo); } 
-void recSVUMI_MULAq() { recVUMI_MULAq(VU, s_vuInfo); } 
-void recSVUMI_MULAx() { recVUMI_MULAx(VU, s_vuInfo); } 
-void recSVUMI_MULAy() { recVUMI_MULAy(VU, s_vuInfo); } 
-void recSVUMI_MULAz() { recVUMI_MULAz(VU, s_vuInfo); } 
-void recSVUMI_MULAw() { recVUMI_MULAw(VU, s_vuInfo); } 
-
-void recSVUMI_MADD()  { recVUMI_MADD(VU, s_vuInfo); } 
-void recSVUMI_MADDi() { recVUMI_MADDi(VU, s_vuInfo); } 
-void recSVUMI_MADDq() { recVUMI_MADDq(VU, s_vuInfo); } 
-void recSVUMI_MADDx() { recVUMI_MADDx(VU, s_vuInfo); } 
-void recSVUMI_MADDy() { recVUMI_MADDy(VU, s_vuInfo); } 
-void recSVUMI_MADDz() { recVUMI_MADDz(VU, s_vuInfo); } 
-void recSVUMI_MADDw() { recVUMI_MADDw(VU, s_vuInfo); } 
-
-void recSVUMI_MADDA()  { recVUMI_MADDA(VU, s_vuInfo); } 
-void recSVUMI_MADDAi() { recVUMI_MADDAi(VU, s_vuInfo); } 
-void recSVUMI_MADDAq() { recVUMI_MADDAq(VU, s_vuInfo); } 
-void recSVUMI_MADDAx() { recVUMI_MADDAx(VU, s_vuInfo); } 
-void recSVUMI_MADDAy() { recVUMI_MADDAy(VU, s_vuInfo); } 
-void recSVUMI_MADDAz() { recVUMI_MADDAz(VU, s_vuInfo); } 
-void recSVUMI_MADDAw() { recVUMI_MADDAw(VU, s_vuInfo); } 
-
-void recSVUMI_MSUB()  { recVUMI_MSUB(VU, s_vuInfo); } 
-void recSVUMI_MSUBi() { recVUMI_MSUBi(VU, s_vuInfo); } 
-void recSVUMI_MSUBq() { recVUMI_MSUBq(VU, s_vuInfo); } 
-void recSVUMI_MSUBx() { recVUMI_MSUBx(VU, s_vuInfo); } 
-void recSVUMI_MSUBy() { recVUMI_MSUBy(VU, s_vuInfo); } 
-void recSVUMI_MSUBz() { recVUMI_MSUBz(VU, s_vuInfo); } 
-void recSVUMI_MSUBw() { recVUMI_MSUBw(VU, s_vuInfo); } 
-
-void recSVUMI_MSUBA()  { recVUMI_MSUBA(VU, s_vuInfo); } 
-void recSVUMI_MSUBAi() { recVUMI_MSUBAi(VU, s_vuInfo); } 
-void recSVUMI_MSUBAq() { recVUMI_MSUBAq(VU, s_vuInfo); } 
-void recSVUMI_MSUBAx() { recVUMI_MSUBAx(VU, s_vuInfo); } 
-void recSVUMI_MSUBAy() { recVUMI_MSUBAy(VU, s_vuInfo); } 
-void recSVUMI_MSUBAz() { recVUMI_MSUBAz(VU, s_vuInfo); } 
-void recSVUMI_MSUBAw() { recVUMI_MSUBAw(VU, s_vuInfo); } 
-
-void recSVUMI_MAX()  { recVUMI_MAX(VU, s_vuInfo); } 
-void recSVUMI_MAXi() { recVUMI_MAXi(VU, s_vuInfo); } 
-void recSVUMI_MAXx() { recVUMI_MAXx(VU, s_vuInfo); } 
-void recSVUMI_MAXy() { recVUMI_MAXy(VU, s_vuInfo); } 
-void recSVUMI_MAXz() { recVUMI_MAXz(VU, s_vuInfo); } 
-void recSVUMI_MAXw() { recVUMI_MAXw(VU, s_vuInfo); } 
-
-void recSVUMI_MINI()  { recVUMI_MINI(VU, s_vuInfo); } 
-void recSVUMI_MINIi() { recVUMI_MINIi(VU, s_vuInfo); } 
-void recSVUMI_MINIx() { recVUMI_MINIx(VU, s_vuInfo); } 
-void recSVUMI_MINIy() { recVUMI_MINIy(VU, s_vuInfo); } 
-void recSVUMI_MINIz() { recVUMI_MINIz(VU, s_vuInfo); } 
-void recSVUMI_MINIw() { recVUMI_MINIw(VU, s_vuInfo); }
-
-void recSVUMI_FTOI0()  { recVUMI_FTOI0(VU, s_vuInfo); }
-void recSVUMI_FTOI4()  { recVUMI_FTOI4(VU, s_vuInfo); } 
-void recSVUMI_FTOI12() { recVUMI_FTOI12(VU, s_vuInfo); } 
-void recSVUMI_FTOI15() { recVUMI_FTOI15(VU, s_vuInfo); } 
-void recSVUMI_ITOF0()  { recVUMI_ITOF0(VU, s_vuInfo); } 
-void recSVUMI_ITOF4()  { recVUMI_ITOF4(VU, s_vuInfo); } 
-void recSVUMI_ITOF12() { recVUMI_ITOF12(VU, s_vuInfo); } 
-void recSVUMI_ITOF15() { recVUMI_ITOF15(VU, s_vuInfo); } 
-
-void recSVUMI_OPMULA() { recVUMI_OPMULA(VU, s_vuInfo); } 
-void recSVUMI_OPMSUB() { recVUMI_OPMSUB(VU, s_vuInfo); } 
-void recSVUMI_NOP()
-{
-    //ffxii text disappearing bug
-    // NOP gets set that it will write the status flag. If it leaves it alone
-    // s_PrevStatusWrite will get replaced with pStatusWrite, which is garbage and stuff breaks
-    /*if( (s_vuInfo & PROCESS_VU_UPDATEFLAGS) )
-		return;*/
-
-    // this is just a hack
-    //s_pCurInst->regs[1].VIwrite &= ~((1<<REG_STATUS_FLAG)|(1<<REG_MAC_FLAG));
+void recVU_UPPER_FD_00( VURegs* VU, s32 info )
+{ 
+	recVU_UPPER_FD_00_TABLE[ ( VU->code >> 6 ) & 0x1f ]( VU, info ); 
+} 
+ 
+void recVU_UPPER_FD_01( VURegs* VU, s32 info )
+{ 
+	recVU_UPPER_FD_01_TABLE[ ( VU->code >> 6 ) & 0x1f ]( VU, info ); 
+} 
+ 
+void recVU_UPPER_FD_10( VURegs* VU, s32 info )
+{ 
+	recVU_UPPER_FD_10_TABLE[ ( VU->code >> 6 ) & 0x1f ]( VU, info ); 
+} 
+ 
+void recVU_UPPER_FD_11( VURegs* VU, s32 info )
+{ 
+	recVU_UPPER_FD_11_TABLE[ ( VU->code >> 6 ) & 0x1f ]( VU, info ); 
+} 
+ 
+void recVULowerOP( VURegs* VU, s32 info )
+{ 
+	recVULowerOP_OPCODE[ VU->code & 0x3f ]( VU, info ); 
+} 
+ 
+void recVULowerOP_T3_00( VURegs* VU, s32 info )
+{ 
+	recVULowerOP_T3_00_OPCODE[ ( VU->code >> 6 ) & 0x1f ]( VU, info ); 
+} 
+ 
+void recVULowerOP_T3_01( VURegs* VU, s32 info )
+{ 
+	recVULowerOP_T3_01_OPCODE[ ( VU->code >> 6 ) & 0x1f ]( VU, info ); 
+} 
+ 
+void recVULowerOP_T3_10( VURegs* VU, s32 info )
+{ 
+	recVULowerOP_T3_10_OPCODE[ ( VU->code >> 6 ) & 0x1f ]( VU, info ); 
+} 
+ 
+void recVULowerOP_T3_11( VURegs* VU, s32 info )
+{ 
+	recVULowerOP_T3_11_OPCODE[ ( VU->code >> 6 ) & 0x1f ]( VU, info ); 
 }
 
-void recSVUMI_CLIP() { recVUMI_CLIP(VU, s_vuInfo); }
-
-// lower inst
-void recSVUMI_MTIR()    { recVUMI_MTIR(VU, s_vuInfo); }
-void recSVUMI_MR32()    { recVUMI_MR32(VU, s_vuInfo); } 
-void recSVUMI_MFIR()    { recVUMI_MFIR(VU, s_vuInfo); }
-void recSVUMI_MOVE()    { recVUMI_MOVE(VU, s_vuInfo); } 
-void recSVUMI_WAITQ()   { recVUMI_WAITQ(VU, s_vuInfo); }
-void recSVUMI_MFP()     { recVUMI_MFP(VU, s_vuInfo); } 
-void recSVUMI_WAITP()   { recVUMI_WAITP(VU, s_vuInfo); }
-
-void recSVUMI_SQRT() { recVUMI_SQRT(VU, s_vuInfo); }
-void recSVUMI_RSQRT() { recVUMI_RSQRT(VU, s_vuInfo); }
-void recSVUMI_DIV() { recVUMI_DIV(VU, s_vuInfo); }
-
-void recSVUMI_ESADD()   { recVUMI_ESADD(VU, s_vuInfo); } 
-void recSVUMI_ERSADD()  { recVUMI_ERSADD(VU, s_vuInfo); } 
-void recSVUMI_ELENG()   { recVUMI_ELENG(VU, s_vuInfo); } 
-void recSVUMI_ERLENG()  { recVUMI_ERLENG(VU, s_vuInfo); } 
-void recSVUMI_EATANxy() { recVUMI_EATANxy(VU, s_vuInfo); } 
-void recSVUMI_EATANxz() { recVUMI_EATANxz(VU, s_vuInfo); } 
-void recSVUMI_ESUM()    { recVUMI_ESUM(VU, s_vuInfo); } 
-void recSVUMI_ERCPR()   { recVUMI_ERCPR(VU, s_vuInfo); } 
-void recSVUMI_ESQRT()   { recVUMI_ESQRT(VU, s_vuInfo); } 
-void recSVUMI_ERSQRT()  { recVUMI_ERSQRT(VU, s_vuInfo); } 
-void recSVUMI_ESIN()    { recVUMI_ESIN(VU, s_vuInfo); } 
-void recSVUMI_EATAN()   { recVUMI_EATAN(VU, s_vuInfo); } 
-void recSVUMI_EEXP()    { recVUMI_EEXP(VU, s_vuInfo); } 
-
-void recSVUMI_XITOP()   { recVUMI_XITOP(VU, s_vuInfo); }
-void recSVUMI_XGKICK()  { recSVUMI_XGKICK(VU, s_vuInfo); }
-void recSVUMI_XTOP()    { recVUMI_XTOP(VU, s_vuInfo); }
-
-void recSVUMI_RINIT()     { recVUMI_RINIT(VU, s_vuInfo); }
-void recSVUMI_RGET()      { recVUMI_RGET(VU, s_vuInfo); }
-void recSVUMI_RNEXT()     { recVUMI_RNEXT(VU, s_vuInfo); }
-void recSVUMI_RXOR()      { recVUMI_RXOR(VU, s_vuInfo); }
-
-void recSVUMI_FSAND()   { recVUMI_FSAND(VU, s_vuInfo); } 
-void recSVUMI_FSEQ()    { recVUMI_FSEQ(VU, s_vuInfo); }
-void recSVUMI_FSOR()    { recVUMI_FSOR(VU, s_vuInfo); }
-void recSVUMI_FSSET()   { recVUMI_FSSET(VU, s_vuInfo); } 
-void recSVUMI_FMEQ()    { recVUMI_FMEQ(VU, s_vuInfo); }
-void recSVUMI_FMOR()    { recVUMI_FMOR(VU, s_vuInfo); }
-void recSVUMI_FCEQ()    { recVUMI_FCEQ(VU, s_vuInfo); }
-void recSVUMI_FCOR()    { recVUMI_FCOR(VU, s_vuInfo); }
-void recSVUMI_FCSET()   { recVUMI_FCSET(VU, s_vuInfo); }
-void recSVUMI_FCGET()   { recVUMI_FCGET(VU, s_vuInfo); }
-void recSVUMI_FCAND()   { recVUMI_FCAND(VU, s_vuInfo); }
-void recSVUMI_FMAND()   { recVUMI_FMAND(VU, s_vuInfo); }
-
-void recSVUMI_LQ()      { recVUMI_LQ(VU, s_vuInfo); } 
-void recSVUMI_LQD()     { recVUMI_LQD(VU, s_vuInfo); } 
-void recSVUMI_LQI()     { recVUMI_LQI(VU, s_vuInfo); } 
-void recSVUMI_SQ()      { recVUMI_SQ(VU, s_vuInfo); }
-void recSVUMI_SQD()     { recVUMI_SQD(VU, s_vuInfo); }
-void recSVUMI_SQI()     { recVUMI_SQI(VU, s_vuInfo); }
-void recSVUMI_ILW()     { recVUMI_ILW(VU, s_vuInfo); }  
-void recSVUMI_ISW()     { recVUMI_ISW(VU, s_vuInfo); }
-void recSVUMI_ILWR()    { recVUMI_ILWR(VU, s_vuInfo); }
-void recSVUMI_ISWR()    { recVUMI_ISWR(VU, s_vuInfo); }
-
-void recSVUMI_IADD()    { recVUMI_IADD(VU, s_vuInfo); }
-void recSVUMI_IADDI()   { recVUMI_IADDI(VU, s_vuInfo); }
-void recSVUMI_IADDIU()  { recVUMI_IADDIU(VU, s_vuInfo); } 
-void recSVUMI_IOR()     { recVUMI_IOR(VU, s_vuInfo); }
-void recSVUMI_ISUB()    { recVUMI_ISUB(VU, s_vuInfo); }
-void recSVUMI_IAND()    { recVUMI_IAND(VU, s_vuInfo); }
-void recSVUMI_ISUBIU()  { recVUMI_ISUBIU(VU, s_vuInfo); } 
-
-void recSVU_UPPER_FD_00( void );
-void recSVU_UPPER_FD_01( void );
-void recSVU_UPPER_FD_10( void );
-void recSVU_UPPER_FD_11( void );
-void recSVULowerOP( void );
-void recSVULowerOP_T3_00( void );
-void recSVULowerOP_T3_01( void );
-void recSVULowerOP_T3_10( void );
-void recSVULowerOP_T3_11( void );
-void recSVUunknown( void );
-
-void (*recSVU_LOWER_OPCODE[128])() = { 
-	recSVUMI_LQ    , recSVUMI_SQ    , recSVUunknown , recSVUunknown,  
-	recSVUMI_ILW   , recSVUMI_ISW   , recSVUunknown , recSVUunknown,  
-	recSVUMI_IADDIU, recSVUMI_ISUBIU, recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown, 
-	recSVUMI_FCEQ  , recSVUMI_FCSET , recSVUMI_FCAND, recSVUMI_FCOR, /* 0x10 */ 
-	recSVUMI_FSEQ  , recSVUMI_FSSET , recSVUMI_FSAND, recSVUMI_FSOR, 
-	recSVUMI_FMEQ  , recSVUunknown  , recSVUMI_FMAND, recSVUMI_FMOR, 
-	recSVUMI_FCGET , recSVUunknown  , recSVUunknown , recSVUunknown, 
-	recSVUMI_B     , recSVUMI_BAL   , recSVUunknown , recSVUunknown, /* 0x20 */  
-	recSVUMI_JR    , recSVUMI_JALR  , recSVUunknown , recSVUunknown, 
-	recSVUMI_IBEQ  , recSVUMI_IBNE  , recSVUunknown , recSVUunknown, 
-	recSVUMI_IBLTZ , recSVUMI_IBGTZ , recSVUMI_IBLEZ, recSVUMI_IBGEZ, 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown, /* 0x30 */ 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVULowerOP  , recSVUunknown  , recSVUunknown , recSVUunknown, /* 0x40*/  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown, /* 0x50 */ 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown, /* 0x60 */ 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown, /* 0x70 */ 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-}; 
- 
-void (*recSVULowerOP_T3_00_OPCODE[32])() = { 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown, 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUMI_MOVE  , recSVUMI_LQI   , recSVUMI_DIV  , recSVUMI_MTIR,  
-	recSVUMI_RNEXT , recSVUunknown  , recSVUunknown , recSVUunknown, /* 0x10 */ 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUMI_MFP   , recSVUMI_XTOP , recSVUMI_XGKICK,  
-	recSVUMI_ESADD , recSVUMI_EATANxy, recSVUMI_ESQRT, recSVUMI_ESIN,  
-}; 
- 
-void (*recSVULowerOP_T3_01_OPCODE[32])() = { 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown, 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUMI_MR32  , recSVUMI_SQI   , recSVUMI_SQRT , recSVUMI_MFIR,  
-	recSVUMI_RGET  , recSVUunknown  , recSVUunknown , recSVUunknown, /* 0x10 */ 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUMI_XITOP, recSVUunknown,  
-	recSVUMI_ERSADD, recSVUMI_EATANxz, recSVUMI_ERSQRT, recSVUMI_EATAN, 
-}; 
- 
-void (*recSVULowerOP_T3_10_OPCODE[32])() = { 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown, 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUMI_LQD   , recSVUMI_RSQRT, recSVUMI_ILWR,  
-	recSVUMI_RINIT , recSVUunknown  , recSVUunknown , recSVUunknown, /* 0x10 */ 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUMI_ELENG , recSVUMI_ESUM  , recSVUMI_ERCPR, recSVUMI_EEXP,  
-}; 
- 
-void (*recSVULowerOP_T3_11_OPCODE[32])() = { 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown, 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUMI_SQD   , recSVUMI_WAITQ, recSVUMI_ISWR,  
-	recSVUMI_RXOR  , recSVUunknown  , recSVUunknown , recSVUunknown, /* 0x10 */ 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUMI_ERLENG, recSVUunknown  , recSVUMI_WAITP, recSVUunknown,  
-}; 
- 
-void (*recSVULowerOP_OPCODE[64])() = { 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown, 
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown, /* 0x10 */  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown, /* 0x20 */  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVUMI_IADD  , recSVUMI_ISUB  , recSVUMI_IADDI, recSVUunknown, /* 0x30 */ 
-	recSVUMI_IAND  , recSVUMI_IOR   , recSVUunknown , recSVUunknown,  
-	recSVUunknown  , recSVUunknown  , recSVUunknown , recSVUunknown,  
-	recSVULowerOP_T3_00, recSVULowerOP_T3_01, recSVULowerOP_T3_10, recSVULowerOP_T3_11,  
-}; 
- 
-void (*recSVU_UPPER_OPCODE[64])() = { 
-	recSVUMI_ADDx  , recSVUMI_ADDy  , recSVUMI_ADDz  , recSVUMI_ADDw, 
-	recSVUMI_SUBx  , recSVUMI_SUBy  , recSVUMI_SUBz  , recSVUMI_SUBw, 
-	recSVUMI_MADDx , recSVUMI_MADDy , recSVUMI_MADDz , recSVUMI_MADDw, 
-	recSVUMI_MSUBx , recSVUMI_MSUBy , recSVUMI_MSUBz , recSVUMI_MSUBw, 
-	recSVUMI_MAXx  , recSVUMI_MAXy  , recSVUMI_MAXz  , recSVUMI_MAXw,  /* 0x10 */  
-	recSVUMI_MINIx , recSVUMI_MINIy , recSVUMI_MINIz , recSVUMI_MINIw, 
-	recSVUMI_MULx  , recSVUMI_MULy  , recSVUMI_MULz  , recSVUMI_MULw, 
-	recSVUMI_MULq  , recSVUMI_MAXi  , recSVUMI_MULi  , recSVUMI_MINIi, 
-	recSVUMI_ADDq  , recSVUMI_MADDq , recSVUMI_ADDi  , recSVUMI_MADDi, /* 0x20 */ 
-	recSVUMI_SUBq  , recSVUMI_MSUBq , recSVUMI_SUBi  , recSVUMI_MSUBi, 
-	recSVUMI_ADD   , recSVUMI_MADD  , recSVUMI_MUL   , recSVUMI_MAX, 
-	recSVUMI_SUB   , recSVUMI_MSUB  , recSVUMI_OPMSUB, recSVUMI_MINI, 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown,  /* 0x30 */ 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown, 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown, 
-	recSVU_UPPER_FD_00, recSVU_UPPER_FD_01, recSVU_UPPER_FD_10, recSVU_UPPER_FD_11,  
-}; 
- 
-void (*recSVU_UPPER_FD_00_TABLE[32])() = { 
-	recSVUMI_ADDAx, recSVUMI_SUBAx , recSVUMI_MADDAx, recSVUMI_MSUBAx, 
-	recSVUMI_ITOF0, recSVUMI_FTOI0, recSVUMI_MULAx , recSVUMI_MULAq , 
-	recSVUMI_ADDAq, recSVUMI_SUBAq, recSVUMI_ADDA  , recSVUMI_SUBA  , 
-	recSVUunknown , recSVUunknown , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown , recSVUunknown , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown , recSVUunknown , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown , recSVUunknown , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown , recSVUunknown , recSVUunknown  , recSVUunknown  , 
-}; 
- 
-void (*recSVU_UPPER_FD_01_TABLE[32])() = { 
-	recSVUMI_ADDAy , recSVUMI_SUBAy  , recSVUMI_MADDAy, recSVUMI_MSUBAy, 
-	recSVUMI_ITOF4 , recSVUMI_FTOI4 , recSVUMI_MULAy , recSVUMI_ABS   , 
-	recSVUMI_MADDAq, recSVUMI_MSUBAq, recSVUMI_MADDA , recSVUMI_MSUBA , 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown  , 
-}; 
- 
-void (*recSVU_UPPER_FD_10_TABLE[32])() = { 
-	recSVUMI_ADDAz , recSVUMI_SUBAz  , recSVUMI_MADDAz, recSVUMI_MSUBAz, 
-	recSVUMI_ITOF12, recSVUMI_FTOI12, recSVUMI_MULAz , recSVUMI_MULAi , 
-	recSVUMI_ADDAi, recSVUMI_SUBAi , recSVUMI_MULA  , recSVUMI_OPMULA, 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown  , 
-}; 
- 
-void (*recSVU_UPPER_FD_11_TABLE[32])() = { 
-	recSVUMI_ADDAw , recSVUMI_SUBAw  , recSVUMI_MADDAw, recSVUMI_MSUBAw, 
-	recSVUMI_ITOF15, recSVUMI_FTOI15, recSVUMI_MULAw , recSVUMI_CLIP  , 
-	recSVUMI_MADDAi, recSVUMI_MSUBAi, recSVUunknown  , recSVUMI_NOP   , 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown  , 
-	recSVUunknown  , recSVUunknown  , recSVUunknown  , recSVUunknown  , 
-}; 
-
-void recSVU_UPPER_FD_00( void )
-{ 
-	recSVU_UPPER_FD_00_TABLE[ ( VU->code >> 6 ) & 0x1f ]( ); 
-} 
- 
-void recSVU_UPPER_FD_01( void )
-{ 
-	recSVU_UPPER_FD_01_TABLE[ ( VU->code >> 6 ) & 0x1f ]( ); 
-} 
- 
-void recSVU_UPPER_FD_10( void )
-{ 
-	recSVU_UPPER_FD_10_TABLE[ ( VU->code >> 6 ) & 0x1f ]( ); 
-} 
- 
-void recSVU_UPPER_FD_11( void )
-{ 
-	recSVU_UPPER_FD_11_TABLE[ ( VU->code >> 6 ) & 0x1f ]( ); 
-} 
- 
-void recSVULowerOP( void )
-{ 
-	recSVULowerOP_OPCODE[ VU->code & 0x3f ]( ); 
-} 
- 
-void recSVULowerOP_T3_00( void )
-{ 
-	recSVULowerOP_T3_00_OPCODE[ ( VU->code >> 6 ) & 0x1f ]( ); 
-} 
- 
-void recSVULowerOP_T3_01( void )
-{ 
-	recSVULowerOP_T3_01_OPCODE[ ( VU->code >> 6 ) & 0x1f ]( ); 
-} 
- 
-void recSVULowerOP_T3_10( void )
-{ 
-	recSVULowerOP_T3_10_OPCODE[ ( VU->code >> 6 ) & 0x1f ]( ); 
-} 
- 
-void recSVULowerOP_T3_11( void )
-{ 
-	recSVULowerOP_T3_11_OPCODE[ ( VU->code >> 6 ) & 0x1f ]( ); 
-}
-
-void recSVUunknown( void )
+void recVUunknown( VURegs* VU, s32 info )
 { 
 	SysPrintf("Unknown SVU micromode opcode called\n"); 
 }
-
-#endif // PCX2_NORECBUILD

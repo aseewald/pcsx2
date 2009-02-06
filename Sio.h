@@ -20,7 +20,25 @@
 #ifndef _SIO_H_
 #define _SIO_H_
 
-typedef struct {
+// SIO IRQ Timings...
+// Scheduling ints into the future is a purist approach to emulation, and
+// is mostly cosmetic since the emulator itself performs all actions instantly
+// (as far as the emulated CPU is concerned).  In some cases this can actually
+// cause more sync problems than it supposedly solves, due to accumulated
+// delays incurred by the recompiler's low cycle update rate and also Pcsx2
+// failing to properly handle pre-emptive DMA/IRQs or cpu exceptions.
+
+// The SIO is one of these cases, where-by many games seem to be a lot happier
+// if the SIO handles its IRQs instantly instead of scheduling them.
+// Uncomment the line below for SIO instant-IRQ mode.  It improves responsiveness 
+// considerably, fixes PAD latency problems in some games, and may even reduce the
+// chance of saves getting corrupted (untested).  But it lacks the purist touch,
+// so it's not enabled by default.
+
+//#define SIO_INLINE_IRQS
+
+
+struct _sio {
 	u16 StatReg;
 	u16 ModeReg;
 	u16 CtrlReg;
@@ -42,8 +60,9 @@ typedef struct {
 	u32 sector;
 	u32 k;
 	u32 count;
-} _sio;
-_sio sio;
+};
+
+extern _sio sio;
 
 #define MCD_SIZE	(1024 *  8  * 16)
 #define MC2_SIZE	(1024 * 528 * 16)
@@ -69,32 +88,29 @@ _sio sio;
 #define RTS			0x0020
 #define SIO_RESET	0x0040
 
-int Mcd1Size, Mcd2Size;
-
-int  sioInit();
+void sioInit();
 void sioShutdown();
 void psxSIOShutdown();
-unsigned char sioRead8();
-void sioWrite8(unsigned char value);
-void sioWriteCtrl16(unsigned short value);
-void sioInterrupt();
-int  sioFreeze(gzFile f, int Mode);
+u8 sioRead8();
+void sioWrite8(u8 value);
+void sioWriteCtrl16(u16 value);
+extern void sioInterrupt();
 void InitializeSIO(u8 value);
 
 FILE *LoadMcd(int mcd);
-void ReadMcd(int mcd, char *data, u32 adr, int size);
-void SaveMcd(int mcd, char *data, u32 adr, int size);
+void ReadMcd(int mcd, u8 *data, u32 adr, int size);
+void SaveMcd(int mcd, const u8 *data, u32 adr, int size);
 void EraseMcd(int mcd, u32 adr);
 void CreateMcd(char *mcd);
 
-typedef struct {
+struct McdBlock {
 	char Title[48];
 	char ID[14];
 	char Name[16];
 	int IconCount;
-	short Icon[16*16*3];
-	unsigned char Flags;
-} McdBlock;
+	u16 Icon[16*16*3];
+	u8 Flags;
+};
 
 #ifdef _MSC_VER
 #pragma pack(1)
@@ -104,7 +120,7 @@ struct mc_command_0x26_tag{
 	u16	sectorSize;	//+03 divide to it
 	u16 field_2C;	//+05 divide to it
 	u32	mc_size;	//+07
-	u8	xor;		//+0b don't forget to recalculate it!!!
+	u8	mc_xor;		//+0b don't forget to recalculate it!!!
 	u8	Z;			//+0c
 #ifdef _MSC_VER
 };

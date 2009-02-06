@@ -18,7 +18,18 @@
 #ifndef _R3000A_SUPERREC_
 #define _R3000A_SUPERREC_
 
-extern void __Log(char *fmt, ...);
+#include "R3000A.h"
+#include "iCore.h"
+#include "BaseblockEx.h"
+
+// Cycle penalties for particularly slow instructions.
+static const int psxInstCycles_Mult = 7;
+static const int psxInstCycles_Div = 40;
+
+// Currently unused (iop mod incomplete)
+static const int psxInstCycles_Peephole_Store = 0;
+static const int psxInstCycles_Store = 0;
+static const int psxInstCycles_Load = 0;
 
 // to be consistent with EE
 #define PSX_HI XMMGPR_HI
@@ -39,10 +50,16 @@ void _psxDeleteReg(int reg, int flush);
 void _psxFlushCall(int flushtype);
 
 void _psxOnWriteReg(int reg);
+
+void _psxMoveGPRtoR(x86IntRegType to, int fromgpr);
+void _psxMoveGPRtoM(u32 to, int fromgpr);
+void _psxMoveGPRtoRm(x86IntRegType to, int fromgpr);
+
 void PSX_CHECK_SAVE_REG(int reg);
 
 extern u32 psxpc;			// recompiler pc
 extern int psxbranch;		// set for branch
+extern u32 g_iopCyclePenalty;
 
 void psxSaveBranchState();
 void psxLoadBranchState();
@@ -50,11 +67,29 @@ void psxLoadBranchState();
 void psxSetBranchReg(u32 reg);
 void psxSetBranchImm( u32 imm );
 void psxRecompileNextInstruction(int delayslot);
+void psxRecClearMem(BASEBLOCK* p);
+
+////////////////////////////////////////////////////////////////////
+// IOP Constant Propagation Defines, Vars, and API - From here down!
+
+#define PSX_IS_CONST1(reg) ((reg)<32 && (g_psxHasConstReg&(1<<(reg))))
+#define PSX_IS_CONST2(reg1, reg2) ((g_psxHasConstReg&(1<<(reg1)))&&(g_psxHasConstReg&(1<<(reg2))))
+#define PSX_SET_CONST(reg) { \
+	if( (reg) < 32 ) { \
+		g_psxHasConstReg |= (1<<(reg)); \
+		g_psxFlushedConstReg &= ~(1<<(reg)); \
+	} \
+}
+
+#define PSX_DEL_CONST(reg) { \
+	if( (reg) < 32 ) g_psxHasConstReg &= ~(1<<(reg)); \
+}
+
+extern u32 g_psxConstRegs[32];
+extern u32 g_psxHasConstReg, g_psxFlushedConstReg;
 
 typedef void (*R3000AFNPTR)();
 typedef void (*R3000AFNPTR_INFO)(int info);
-
-void psxRecClearMem(BASEBLOCK* p);
 
 //
 // non mmx/xmm version, slower
@@ -64,28 +99,35 @@ void psxRecClearMem(BASEBLOCK* p);
 void rpsx##fn(void) \
 { \
 	psxRecompileCodeConst0(rpsx##fn##_const, rpsx##fn##_consts, rpsx##fn##_constt, rpsx##fn##_); \
-} \
+}
 
 // rt = rs op imm16
 #define PSXRECOMPILE_CONSTCODE1(fn) \
 void rpsx##fn(void) \
 { \
 	psxRecompileCodeConst1(rpsx##fn##_const, rpsx##fn##_); \
-} \
+}
 
 // rd = rt op sa
 #define PSXRECOMPILE_CONSTCODE2(fn) \
 void rpsx##fn(void) \
 { \
 	psxRecompileCodeConst2(rpsx##fn##_const, rpsx##fn##_); \
-} \
+}
 
 // [lo,hi] = rt op rs
 #define PSXRECOMPILE_CONSTCODE3(fn, LOHI) \
 void rpsx##fn(void) \
 { \
 	psxRecompileCodeConst3(rpsx##fn##_const, rpsx##fn##_consts, rpsx##fn##_constt, rpsx##fn##_, LOHI); \
-} \
+}
+
+#define PSXRECOMPILE_CONSTCODE3_PENALTY(fn, LOHI, cycles) \
+void rpsx##fn(void) \
+{ \
+	psxRecompileCodeConst3(rpsx##fn##_const, rpsx##fn##_consts, rpsx##fn##_constt, rpsx##fn##_, LOHI); \
+	g_iopCyclePenalty = cycles; \
+}
 
 // rd = rs op rt
 void psxRecompileCodeConst0(R3000AFNPTR constcode, R3000AFNPTR_INFO constscode, R3000AFNPTR_INFO consttcode, R3000AFNPTR_INFO noconstcode);

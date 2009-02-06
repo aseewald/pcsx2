@@ -1,6 +1,5 @@
-AC_INIT(pcsx2,0.9.4,zerofrog@gmail.com)
-
-AM_INIT_AUTOMAKE(pcsx2,0.9.4)
+AC_INIT(pcsx2,0.9.5,zerofrog@gmail.com)
+AM_INIT_AUTOMAKE(pcsx2,0.9.5)
 
 AC_PROG_CC([gcc g++ cl KCC CC cxx cc++ xlC aCC c++])
 AC_PROG_CXX([gcc g++ cl KCC CC cxx cc++ xlC aCC c++])
@@ -11,10 +10,35 @@ AC_PROG_RANLIB
 dnl necessary for compiling assembly
 AM_PROG_AS
 
+svnrev="`svn info | grep Revision:`"
+
+if test -n "${svnrev}" ; then
+  AC_REVISION("${svnrev}") 
+  AC_DEFINE_UNQUOTED(SVN_REV,"${svnrev}",
+    [Define to be the subversion revision number])
+else
+  AC_REVISION([$Revision: 0 $])
+  AC_DEFINE(SVN_REV,"$Revision: 0 $",
+    [Define to be the subversion revision number])
+fi
+
+AC_ARG_ENABLE(customcflags, AC_HELP_STRING([--enable-customcflags], [Use custom CFLAGS]),
+customcflags=$enableval,customcflags=no)
+
+if test "x$customcflags" == xno
+then
 CFLAGS=
 CPPFLAGS=
 CXXFLAGS=
 CCASFLAGS=
+else
+DEBUG_FLAGS=" -O0 -g "
+fi
+
+WARNING_FLAGS="-Wall -Wno-format -Wno-unused-value"
+#Pcsx2 now crashes if --fomit-frame-pointer is enabled and MTGS is off 
+NORMAL_FLAGS=" -pipe -O3 -fno-omit-frame-pointer -msse "
+DEBUG_FLAGS+=" -g -msse ${WARNING_FLAGS} "
 
 dnl Check for debug build
 AC_MSG_CHECKING(debug build)
@@ -23,16 +47,14 @@ AC_ARG_ENABLE(debug, AC_HELP_STRING([--enable-debug], [debug build]),
 if test "x$debug" == xyes
 then
  AC_DEFINE(_DEBUG,1,[_DEBUG])
- CFLAGS+=" -g "
- CPPFLAGS+=" -g "
- CXXFLAGS+=" -g "
- CCASFLAGS+=" -D_DEBUG -g "
+ CFLAGS+=" ${DEBUG_FLAGS}  -fpermissive -Xlinker -zmuldefs "
+ CXXFLAGS+=" ${DEBUG_FLAGS} -fpermissive -Xlinker -zmuldefs "
+ CCASFLAGS+=" -D_DEBUG ${DEBUG_FLAGS} "
  MYOBJDIR="Debug"
 else
  AC_DEFINE(NDEBUG,1,[NDEBUG])
- CFLAGS+=" -O3 -fomit-frame-pointer "
- CPPFLAGS+=" -O3 -fomit-frame-pointer "
- CXXFLAGS+=" -O3 -fomit-frame-pointer "
+ CFLAGS+=" ${NORMAL_FLAGS}"
+ CXXFLAGS+=" ${NORMAL_FLAGS} -fpermissive -Xlinker -zmuldefs "
  MYOBJDIR="Release"
 fi
 AC_MSG_RESULT($debug)
@@ -59,55 +81,14 @@ then
 fi
 AC_MSG_RESULT(sse3)
 
-dnl Check for virtual memory build
-AC_MSG_CHECKING(for virtual memory build)
-AC_ARG_ENABLE(vmbuild, AC_HELP_STRING([--enable-vmbuild], [Adds low level virtual memory support to run pcsx2 faster]),
- vmbuild=$enableval,vmbuild=no)
-if test "x$vmbuild" == xyes
+AC_MSG_CHECKING(force sse4 instructions)
+AC_ARG_ENABLE(sse4, AC_HELP_STRING([--enable-sse4], [Forces sse4 detection on CPUs]),
+ sse4=$enableval,sse4=no)
+if test "x$sse4" == xyes
 then
- AC_DEFINE(PCSX2_VIRTUAL_MEM,1,[PCSX2_VIRTUAL_MEM])
- MYOBJDIR=$MYOBJDIR"VM"
+ AC_DEFINE(PCSX2_FORCESSE4,1,[PCSX2_DEVBUILD])
 fi
-AC_MSG_RESULT($vmbuild)
-
-dnl Check for recompilation
-AC_MSG_CHECKING(for using platform dependent recompilers)
-AC_ARG_ENABLE(recbuild, AC_HELP_STRING([--disable-recbuild], [Disable all architecture dependent recompilers]),
- recbuild=$enableval,recbuild=yes)
-if test "x$recbuild" == xno
-then
- AC_DEFINE(PCSX2_NORECBUILD,1,[PCSX2_NORECBUILD])
-fi
-AC_MSG_RESULT($recbuild)
-AM_CONDITIONAL(RECBUILD, test x$recbuild = xyes)
-
-dnl Check for 64bit CPU
-AC_MSG_CHECKING(for a x86-64 CPU)
-dnl if test "$build_os" == "target_os"
-dnl then
-AC_TRY_RUN([
-int main()
-{
-int a = 0;
-int*pa = &a;
-asm(".intel_syntax\n"
-	"mov %%rax, %0\n"
-    "mov %%eax, [%%rax]\n"
-    ".att_syntax\n"
-    : : "r"(pa) : "%rax");
-return 0;
-}
-],cpu64=yes,cpu64=no,)
-dnl else
-dnl cpu64=no
-dnl fi
-if test "x$cpu64" == xyes
-then
-AC_DEFINE(__x86_64__,1,[__x86_64__])
-CCASFLAGS="$CCASFLAGS -D__x86_64__"
-fi
-AC_MSG_RESULT($cpu64)
-AM_CONDITIONAL(X86_64, test x$cpu64 = xyes)
+AC_MSG_RESULT(sse4)
 
 dnl gtk
 AC_MSG_CHECKING(gtk+)
@@ -118,7 +99,19 @@ dnl AC_CHECK_LIB(pthread,main,[LIBS="$LIBS -lpthread"])
 AC_CHECK_LIB(stdc++,main,[LIBS="$LIBS -lstdc++"])
 AC_CHECK_LIB(z,main,[LIBS="$LIBS -lz"])
 
+AC_ARG_ENABLE(nls, AC_HELP_STRING([--disable-nls], [Disable nls support]),
+nls=$enableval,nls=yes)
+if test "x$nls" == xyes
+then
 AC_CHECK_HEADER([libintl.h], [AC_DEFINE(ENABLE_NLS,1,[__x86_64__])])
+fi
+
+AC_ARG_ENABLE(local-inis, AC_HELP_STRING([--enable-local-inis], [Enable local plugin inis]),
+localinis=$enableval, localinis=no)
+if test "x$localinis" == xyes
+then
+AC_DEFINE(LOCAL_PLUGIN_INIS)
+fi
 
 AC_OUTPUT([
  Makefile
@@ -130,16 +123,16 @@ AC_OUTPUT([
  tinyxml/Makefile
  x86/Makefile
  x86/ix86/Makefile
- zlib/Makefile
+ 3rdparty/zlib/Makefile
  ])
 
 dnl bindir = pcsx2exe
 
 echo "Configuration:"
 echo "  Target system type:    $target"
-echo "  x86-64 build?	       $cpu64"
 echo "  Debug build?	       $debug"
 echo "  Dev build?	           $devbuild"
 echo "  Force sse3?	           $sse3"
-echo "  Recompilers enabled?   $recbuild"
-echo "  Virtual memory build?  $vmbuild"
+echo " nls support?   $nls"
+echo " local plugin inis? $localinis"
+echo " custom cflags? $customcflags"

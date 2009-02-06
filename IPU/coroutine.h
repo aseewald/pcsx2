@@ -19,21 +19,19 @@
 #ifndef PCSX2_COROUTINE_LIB
 #define PCSX2_COROUTINE_LIB
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 // low level coroutine library
 typedef void *coroutine_t;
 
 coroutine_t so_create(void (*func)(void *), void *data, void *stack, int size);
 void so_delete(coroutine_t coro);
+
+#ifdef __LINUX__
+extern "C" {
+#endif
 void so_call(coroutine_t coro);
 void so_resume(void);
 void so_exit(void);
-
-#ifdef __cplusplus
+#ifdef __LINUX__
 }
 #endif
-
 #endif

@@ -21,10 +21,63 @@
 
 #include "VU.h"
 
+struct VUmicroCpu
+{
+	void (*Reset)();
+	void (*Step)();
+	void (*ExecuteBlock)();	// VUs should support block-level execution only.
+	void (__fastcall *Clear)(u32 Addr, u32 Size);
+};
+
+extern VUmicroCpu CpuVU0;
+extern const VUmicroCpu intVU0;
+extern const VUmicroCpu recVU0;
+
+extern VUmicroCpu CpuVU1;
+extern const VUmicroCpu intVU1;
+extern const VUmicroCpu recVU1;
+
+namespace VU0micro
+{
+	extern void recAlloc();
+	extern void recShutdown();
+	extern void __fastcall recClear(u32 Addr, u32 Size);
+
+	// Note: Interpreter functions are dummies -- they don't actually do anything.
+	extern void intAlloc();
+	extern void intShutdown();
+	extern void __fastcall intClear(u32 Addr, u32 Size);
+}
+
+namespace VU1micro
+{
+	extern void recAlloc();
+	extern void recShutdown();
+	extern void __fastcall recClear(u32 Addr, u32 Size);
+
+	// Note: Interpreter functions are dummies -- they don't actually do anything.
+	extern void intAlloc();
+	extern void intShutdown();
+	extern void __fastcall intClear(u32 Addr, u32 Size);
+}
+
+/////////////////////////////////////////////////////////////////
+// These functions initialize memory for both VUs.
+//
+void vuMicroMemAlloc();
+void vuMicroMemShutdown();
+void vuMicroMemReset();
+
+// Resets VUs and assigns the cpuVU0 / cpuVU1 pointers as according to 
+// the CHECK_VU0REC / CHECK_VU1REC config options.
+void vuMicroCpuReset();
+
+/////////////////////////////////////////////////////////////////
+// Everything else does stuff on a per-VU basis.
+//
 void iDumpVU0Registers();
 void iDumpVU1Registers();
 
-//both for VU0 VU1 micromode
 
 extern void (*VU0_LOWER_OPCODE[128])();
 extern void (*VU0_UPPER_OPCODE[64])();
@@ -59,25 +112,20 @@ extern void (*VU1regs_UPPER_FD_10_TABLE[32])(_VURegsNum *VUregsn);
 extern void (*VU1regs_UPPER_FD_11_TABLE[32])(_VURegsNum *VUregsn);
 
 // VU0
-int  vu0Init();
-void vu0Reset();
-void vu0ResetRegs();
-void vu0Freeze(gzFile f, int Mode);
-void vu0Shutdown();
-void vu0ExecMicro(u32 addr);
-void vu0Exec(VURegs* VU);
-void vu0Finish();
-void recResetVU0( void );
+extern void vu0ResetRegs();
+extern void vu0ExecMicro(u32 addr);
+extern void vu0Exec(VURegs* VU);
+extern void vu0Finish();
+extern void recResetVU0( void );
 
 // VU1
-int  vu1Init();
-void vu1Reset();
-void vu1ResetRegs();
-void recResetVU1( void );
-void vu1Freeze(gzFile f, int Mode);
-void vu1Shutdown();
-void vu1ExecMicro(u32 addr);
-void vu1Exec(VURegs* VU);
+extern void vu1ResetRegs();
+extern void vu1ExecMicro(u32 addr);
+extern void vu1Exec(VURegs* VU);
+
+extern void vu1MicroEnableSkip();
+extern void vu1MicroDisableSkip();
+extern bool vu1MicroIsSkipping();
 
 void VU0_UPPER_FD_00();
 void VU0_UPPER_FD_01();
@@ -1242,9 +1290,9 @@ void (*PREFIX##_LOWER_OPCODE[128])(_VURegsNum *VUregsn) = { \
 #ifdef VUM_LOG
 
 #define IdebugUPPER(VU) \
-	if (Log) { VUM_LOG("%s\n", dis##VU##MicroUF(VU.code, VU.VI[REG_TPC].UL)); }
+	VUM_LOG("%s\n", dis##VU##MicroUF(VU.code, VU.VI[REG_TPC].UL));
 #define IdebugLOWER(VU) \
-	if (Log) { VUM_LOG("%s\n", dis##VU##MicroLF(VU.code, VU.VI[REG_TPC].UL)); }
+	VUM_LOG("%s\n", dis##VU##MicroLF(VU.code, VU.VI[REG_TPC].UL));
 
 #else
 

@@ -16,56 +16,32 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
-// stop compiling if NORECBUILD build (only for Visual Studio)
-#if !(defined(_MSC_VER) && defined(PCSX2_NORECBUILD))
-
-extern "C" {
-#include <stdlib.h>
-#include <string.h>
+#include "PrecompiledHeader.h"
 #include <time.h>
-#include <assert.h>
-#include <malloc.h>
 
-#include "PS2Etypes.h"
-
-#if defined(_WIN32)
-#include <windows.h>
-#endif
-
-#include "System.h"
-#include "Memory.h"
-#include "Misc.h"
-#include "Vif.h"
-#include "VU.h"
-
-#include "R3000A.h"
-#include "PsxMem.h"
-
+#include "PsxCommon.h"
 #include "ix86/ix86.h"
-
-#include "iCore.h"
 #include "iR3000A.h"
+#include "IopMem.h"
+#include "IopDma.h"
+
+extern int g_psxWriteOk;
+extern u32 g_psxMaxRecMem;
+
+// R3000A instruction implementation
+#define REC_FUNC(f) \
+static void rpsx##f() { \
+	MOV32ItoM((uptr)&psxRegs.code, (u32)psxRegs.code); \
+	_psxFlushCall(FLUSH_EVERYTHING); \
+	CALLFunc((uptr)psx##f); \
+	PSX_DEL_CONST(_Rt_); \
+/*	branch = 2; */\
+}
 
 extern void psxLWL();
 extern void psxLWR();
 extern void psxSWL();
 extern void psxSWR();
-
-extern int g_psxWriteOk;
-extern u32 g_psxMaxRecMem;
-}
-
-// R3000A instruction implementation
-#define REC_FUNC(f) \
-void psx##f(); \
-static void rpsx##f() { \
-	MOV32ItoM((uptr)&psxRegs.code, (u32)psxRegs.code); \
-	_psxFlushCall(FLUSH_EVERYTHING); \
-	/*MOV32ItoM((u32)&psxRegs.pc, (u32)pc);*/ \
-	CALLFunc((uptr)psx##f); \
-	PSX_DEL_CONST(_Rt_); \
-/*	branch = 2; */\
-}
 
 //// 
 void rpsxADDIU_const()
@@ -485,7 +461,7 @@ void rpsxMULT_consts(int info) { rpsxMULTsuperconst(info, _Rt_, g_psxConstRegs[_
 void rpsxMULT_constt(int info) { rpsxMULTsuperconst(info, _Rs_, g_psxConstRegs[_Rt_], 1); }
 void rpsxMULT_(int info) { rpsxMULTsuper(info, 1); }
 
-PSXRECOMPILE_CONSTCODE3(MULT, 1);
+PSXRECOMPILE_CONSTCODE3_PENALTY(MULT, 1, psxInstCycles_Mult);
 
 //// MULTU
 void rpsxMULTU_const()
@@ -500,7 +476,7 @@ void rpsxMULTU_consts(int info) { rpsxMULTsuperconst(info, _Rt_, g_psxConstRegs[
 void rpsxMULTU_constt(int info) { rpsxMULTsuperconst(info, _Rs_, g_psxConstRegs[_Rt_], 0); }
 void rpsxMULTU_(int info) { rpsxMULTsuper(info, 0); }
 
-PSXRECOMPILE_CONSTCODE3(MULTU, 1);
+PSXRECOMPILE_CONSTCODE3_PENALTY(MULTU, 1, psxInstCycles_Mult);
 
 //// DIV
 void rpsxDIV_const()
@@ -598,7 +574,7 @@ void rpsxDIV_consts(int info) { rpsxDIVsuperconsts(info, 1); }
 void rpsxDIV_constt(int info) { rpsxDIVsuperconstt(info, 1); }
 void rpsxDIV_(int info) { rpsxDIVsuper(info, 1); }
 
-PSXRECOMPILE_CONSTCODE3(DIV, 1);
+PSXRECOMPILE_CONSTCODE3_PENALTY(DIV, 1, psxInstCycles_Div);
 
 //// DIVU
 void rpsxDIVU_const()
@@ -617,7 +593,7 @@ void rpsxDIVU_consts(int info) { rpsxDIVsuperconsts(info, 0); }
 void rpsxDIVU_constt(int info) { rpsxDIVsuperconstt(info, 0); }
 void rpsxDIVU_(int info) { rpsxDIVsuper(info, 0); }
 
-PSXRECOMPILE_CONSTCODE3(DIVU, 1);
+PSXRECOMPILE_CONSTCODE3_PENALTY(DIVU, 1, psxInstCycles_Div);
 
 //// LoadStores
 #ifdef PCSX2_VIRTUAL_MEM
@@ -634,11 +610,11 @@ int _psxPrepareReg(int gprreg)
 
 static u32 s_nAddMemOffset = 0;
 
-#define SET_HWLOC() { \
-	x86SetJ8(j8Ptr[0]); \
-	SHR32ItoR(ECX, 3); \
-	if( s_nAddMemOffset ) ADD32ItoR(ECX, s_nAddMemOffset); \
-} \
+static __forceinline void SET_HWLOC_R3000A() { 
+	x86SetJ8(j8Ptr[0]); 
+	SHR32ItoR(ECX, 3); 
+	if( s_nAddMemOffset ) ADD32ItoR(ECX, s_nAddMemOffset); 
+} 
 
 int rpsxSetMemLocation(int regs, int mmreg)
 {
@@ -710,7 +686,7 @@ void recLoad32(u32 bit, u32 sign)
 		if( dohw ) {
 			j8Ptr[1] = JMP8(0);
 
-			SET_HWLOC();
+			SET_HWLOC_R3000A();
 
 			switch(bit) {
 				case 8:
@@ -874,7 +850,7 @@ void recStore(int bit)
 		if( dohw ) {
 			j8Ptr[2] = JMP8(0);
 
-			SET_HWLOC();
+			SET_HWLOC_R3000A();
 
 			if( PSX_IS_CONST1(_Rt_) ) {
 				switch(bit) {
@@ -1287,7 +1263,7 @@ void rpsxJALR()
 static void* s_pbranchjmp;
 static u32 s_do32 = 0;
 
-#define JUMPVALID(pjmp) (( x86Ptr - (s8*)pjmp ) <= 0x80)
+#define JUMPVALID(pjmp) (( x86Ptr - (u8*)pjmp ) <= 0x80)
 
 void rpsxSetBranchEQ(int info, int process)
 {
@@ -1334,7 +1310,7 @@ void rpsxBEQ_process(int info, int process)
 	else
 	{
 		_psxFlushAllUnused();
-		s8* prevx86 = x86Ptr;
+		u8* prevx86 = x86Ptr;
 		s_do32 = 0;
 		psxSaveBranchState();
 
@@ -1398,7 +1374,7 @@ void rpsxBNE_process(int info, int process)
 	}
 
 	_psxFlushAllUnused();
-	s8* prevx86 = x86Ptr;
+	u8* prevx86 = x86Ptr;
 	s_do32 = 0;
 	rpsxSetBranchEQ(info, process);
 
@@ -1452,7 +1428,7 @@ void rpsxBLTZ()
 	}
 
 	CMP32ItoM((uptr)&psxRegs.GPR.r[_Rs_], 0);
-	s8* prevx86 = x86Ptr;
+	u8* prevx86 = x86Ptr;
 	u8* pjmp = JL8(0);
 
 	psxSaveBranchState();
@@ -1490,7 +1466,7 @@ void rpsxBGEZ()
 	_psxFlushAllUnused();
 
 	if( PSX_IS_CONST1(_Rs_) ) {
-		if( g_psxConstRegs[_Rs_] < 0 )
+		if ( (int)g_psxConstRegs[_Rs_] < 0 )
 			branchTo = psxpc+4;
 
 		psxRecompileNextInstruction(1);
@@ -1499,7 +1475,7 @@ void rpsxBGEZ()
 	}
 
 	CMP32ItoM((uptr)&psxRegs.GPR.r[_Rs_], 0);
-	s8* prevx86 = x86Ptr;
+	u8* prevx86 = x86Ptr;
 	u8* pjmp = JGE8(0);
 
 	psxSaveBranchState();
@@ -1553,7 +1529,7 @@ void rpsxBLTZAL()
 	}
 
 	CMP32ItoM((uptr)&psxRegs.GPR.r[_Rs_], 0);
-	s8* prevx86 = x86Ptr;
+	u8* prevx86 = x86Ptr;
 	u8* pjmp = JL8(0);
 
 	psxSaveBranchState();
@@ -1606,7 +1582,7 @@ void rpsxBGEZAL()
 	}
 
 	CMP32ItoM((uptr)&psxRegs.GPR.r[_Rs_], 0);
-	s8* prevx86 = x86Ptr;
+	u8* prevx86 = x86Ptr;
 	u8* pjmp = JGE8(0);
 
 	MOV32ItoM((uptr)&psxRegs.GPR.r[31], psxpc+4);
@@ -1660,7 +1636,7 @@ void rpsxBLEZ()
 	_clearNeededX86regs();
 
 	CMP32ItoM((uptr)&psxRegs.GPR.r[_Rs_], 0);
-	s8* prevx86 = x86Ptr;
+	u8* prevx86 = x86Ptr;
 	u8* pjmp = JLE8(0);
 
 	psxSaveBranchState();
@@ -1708,7 +1684,7 @@ void rpsxBGTZ()
 	_clearNeededX86regs();
 
 	CMP32ItoM((uptr)&psxRegs.GPR.r[_Rs_], 0);
-	s8* prevx86 = x86Ptr;
+	u8* prevx86 = x86Ptr;
 	u8* pjmp = JG8(0);
 
 	psxSaveBranchState();
@@ -1783,6 +1759,11 @@ void rpsxRFE()
 	SHR32ItoR(ECX, 2);
 	OR32RtoR (EAX, ECX);
 	MOV32RtoM((uptr)&psxRegs.CP0.n.Status, EAX);
+
+	// Test the IOP's INTC status, so that any pending ints get raised.
+
+	_psxFlushCall(0);
+	CALLFunc( (uptr)&iopTestIntc );
 }
 
 // R3000A tables
@@ -1858,7 +1839,7 @@ void (*rpsxBSC_co[64] )() = {
 		pinst->regs[reg] |= EEINST_LASTUSE; \
 	prev->regs[reg] |= EEINST_LIVE0|EEINST_USED; \
 	pinst->regs[reg] |= EEINST_USED; \
-	_recFillRegister(pinst, XMMTYPE_GPRREG, reg, 0); \
+	_recFillRegister(*pinst, XMMTYPE_GPRREG, reg, 0); \
 } \
 
 #define rpsxpropSetWrite(reg) { \
@@ -1867,7 +1848,7 @@ void (*rpsxBSC_co[64] )() = {
 		pinst->regs[reg] |= EEINST_LASTUSE; \
 	pinst->regs[reg] |= EEINST_USED; \
 	prev->regs[reg] |= EEINST_USED; \
-	_recFillRegister(pinst, XMMTYPE_GPRREG, reg, 1); \
+	_recFillRegister(*pinst, XMMTYPE_GPRREG, reg, 1); \
 }
 
 void rpsxpropBSC(EEINST* prev, EEINST* pinst);
@@ -2021,9 +2002,7 @@ void rpsxpropREGIMM(EEINST* prev, EEINST* pinst)
 			rpsxpropSetRead(_Rs_);
 			break;
 
-		default:
-			assert(0);
-			break;
+		jNO_DEFAULT
 	}
 }
 
@@ -2045,9 +2024,7 @@ void rpsxpropCP0(EEINST* prev, EEINST* pinst)
 			break;
 		case 16: // rfe
 			break;
-		default:
-			assert(0);
+
+		jNO_DEFAULT
 	}
 }
-
-#endif // PCSX2_NORECBUILD

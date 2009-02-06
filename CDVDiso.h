@@ -25,9 +25,9 @@
 
 #include "CDVDlib.h"
 
-int CDVD_findfile(char* fname, struct TocEntry* tocEntry);
+int CDVD_findfile(const char* fname, TocEntry* tocEntry);
 int CDVD_GetDir_RPC_request(char* pathname, char* extensions, unsigned int inc_dirs);
-int CDVD_GetDir_RPC_get_entries(struct TocEntry tocEntry[], int req_entries);
+int CDVD_GetDir_RPC_get_entries(TocEntry tocEntry[], int req_entries);
 
 #if defined(_MSC_VER)
 #pragma pack(1)
@@ -90,13 +90,13 @@ struct cdVolDesc
 	u32		secDirTableLBA;	// LBA of Secondary Dir Table	//+94
 	u32		reserved8;										//+98
 	struct rootDirTocHeader	rootToc;
-	u8		volSetName[128];
-	u8		publisherName[128];
-	u8		preparerName[128];
-	u8		applicationName[128];
-	u8		copyrightFileName[37];
-	u8		abstractFileName[37];
-	u8		bibliographyFileName[37];
+	s8		volSetName[128];
+	s8		publisherName[128];
+	s8		preparerName[128];
+	s8		applicationName[128];
+	s8		copyrightFileName[37];
+	s8		abstractFileName[37];
+	s8		bibliographyFileName[37];
 	struct	asciiDate	creationDate;
 	struct	asciiDate	modificationDate;
 	struct	asciiDate	effectiveDate;
@@ -125,16 +125,16 @@ struct dirTableEntry
 struct dirTocEntry
 {
 	short	length;
-	unsigned int	fileLBA;
-	unsigned int	fileLBA_bigend;
-	unsigned int	fileSize;
-	unsigned int	fileSize_bigend;
-	unsigned char	dateStamp[6];
-	unsigned char	reserved1;
-	unsigned char	fileProperties;
-	unsigned char	reserved2[6];
-	unsigned char	filenameLength;
-	unsigned char	filename[128];
+	u32 fileLBA;
+	u32 fileLBA_bigend;
+	u32 fileSize;
+	u32 fileSize_bigend;
+	u8	dateStamp[6];
+	u8	reserved1;
+	u8	fileProperties;
+	u8	reserved2[6];
+	u8	filenameLength;
+	char filename[128];
 #if defined(_MSC_VER)
 };
 #else

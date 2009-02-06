@@ -15,23 +15,19 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
-#include <stdio.h>
-#include <windows.h>
-#include <commctrl.h>
-#include <stdlib.h>
 
+#include "PrecompiledHeader.h"
+#include "../Win32.h"
+
+#include <commctrl.h>
 #include <vector>
 
-#include "PS2Etypes.h"
-
-extern "C" {
-#include "windows/resource.h"
 #include "PS2Edefs.h"
 #include "Memory.h"
+#include "IopMem.h"
 
 #include "cheats.h"
 #include "../../patch.h"
-}
 
 class result
 {
@@ -67,18 +63,13 @@ bool FirstSearch;
 
 bool FirstShow;
 
-char olds[0x02000000];
+char olds[Ps2MemSize::Base];
 
 char tn[100];
 char to[100];
 char tv[100];
 
-#ifdef PCSX2_VIRTUAL_MEM
-u8 *mptr[2]={PS2MEM_BASE,PS2MEM_PSX};
-#else
-char *mptr[2];
-extern "C" extern s8 *psxM;
-#endif
+u8 *mptr[2];
 
 int  msize[2]={0x02000000,0x00200000};
 
@@ -442,13 +433,10 @@ BOOL CALLBACK FinderProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 		case WM_PAINT:
 			INIT_CHECK(IDC_UNSIGNED,Unsigned);
 			return FALSE;
+
 		case WM_INITDIALOG:
-
-#ifndef PCSX2_VIRTUAL_MEM
-			mptr[0]=(char*)psM;
+			mptr[0]=psM;
 			mptr[1]=psxM;
-#endif
-
 
 			hWndFinder=hWnd;
 
@@ -515,7 +503,6 @@ BOOL CALLBACK FinderProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 				case IDC_RESET:
 					ENABLE_CONTROL(IDC_EE,		true);
 					ENABLE_CONTROL(IDC_IOP,		true);
-					ENABLE_CONTROL(IDC_LRESULTS,true);
 					ENABLE_CONTROL(IDC_STATUS,	true);
 					ENABLE_CONTROL(IDC_UNSIGNED,true);
 					ENABLE_CONTROL(IDC_8B,		true);
@@ -537,7 +524,6 @@ BOOL CALLBACK FinderProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 					if(FirstSearch) {
 						ENABLE_CONTROL(IDC_EE,		false);
 						ENABLE_CONTROL(IDC_IOP,		false);
-						ENABLE_CONTROL(IDC_LRESULTS,false);
 						ENABLE_CONTROL(IDC_STATUS,	false);
 						ENABLE_CONTROL(IDC_UNSIGNED,false);
 						ENABLE_CONTROL(IDC_8B,		false);

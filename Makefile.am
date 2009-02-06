@@ -1,29 +1,23 @@
 AUTOMAKE_OPTIONS = foreign
-INCLUDES = -I@srcdir@/x86/
+INCLUDES = -I@srcdir@/x86/  -I@srcdir@/common/
 noinst_LIBRARIES = libpcsx2.a
 
 libpcsx2_a_SOURCES = \
-CdRom.c       Decode_XA.h    Mdec.h          PsxBios.h         R3000A.c  Vif.h \
-CdRom.h       EEregs.h       PsxCommon.h       R3000A.h  VU0.c \
-CDVD.c        Elfheader.c    Memory.c        PsxCounters.c     R5900.c   VU0.h \
-CDVD.h        Elfheader.h    Memory.h        PsxCounters.h     R5900.h   VU0micro.c \
-CDVDiso.c     FiFo.c         Misc.c          PsxDma.c          Sif.c     VU1micro.c \
-CDVDisodrv.c  FPU2.cpp       PsxDma.h          Sifcmd.h  VUflags.c \
-CDVDisodrv.h  FPU.c          MMI.c           Sif.h     VUflags.h \
-CDVDiso.h     GS.cpp         Patch.c         Sio.c     VU.h \
-CDVDlib.h     GS.h           Patch.h         PsxHw.c           Sio.h     VUmicro.h \
-Common.h      Hw.c           Plugins.c       PsxHw.h           SPR.c     VUops.c \
-COP0.c        Hw.h           Plugins.h       PsxInterpreter.c  SPR.h     VUops.h \
-COP0.h        Interpreter.c  PS2Edefs.h      PsxMem.c          System.h \
-Counters.c    InterTables.c  PS2Etypes.h     PsxMem.h          Vif.c \
-Counters.h    InterTables.h  PsxBios2.h      PsxSio2.c         VifDma.c \
-Decode_XA.c   Mdec.c         PsxBios.c       PsxSio2.h         VifDma.h Cache.c \
-xmlpatchloader.cpp
+CDVD.cpp CDVDiso.cpp CDVDisodrv.cpp COP0.cpp COP2.cpp Cache.cpp CdRom.cpp Console.cpp \
+Counters.cpp Decode_XA.cpp Elfheader.cpp FPU.cpp FPU2.cpp FiFo.cpp Gif.cpp GS.cpp Hw.cpp Interpreter.cpp \
+IopBios.cpp IopCounters.cpp IopDma.cpp IopHw.cpp IopMem.cpp IopSio2.cpp MMI.cpp MTGS.cpp \
+Memory.cpp Misc.cpp Patch.cpp PathUtils.cpp Plugins.cpp PrecompiledHeader.cpp R3000A.cpp \
+R3000AInterpreter.cpp R3000AOpcodeTables.cpp R5900.cpp R5900OpcodeImpl.cpp R5900OpcodeTables.cpp \
+SPR.cpp SaveState.cpp Sif.cpp Sio.cpp SourceLog.cpp Stats.cpp System.cpp ThreadTools.cpp \
+VU0.cpp VU0micro.cpp VU0microInterp.cpp VU1micro.cpp VU1microInterp.cpp VUflags.cpp VUmicroMem.cpp VUops.cpp \
+Vif.cpp VifDma.cpp vssprintf.cpp vtlb.cpp xmlpatchloader.cpp  AlignedMalloc.cpp
 
-if RECBUILD
-recdir = x86
-else
-recdir=
-endif
 
-SUBDIRS = $(recdir) . DebugTools IPU RDebug tinyxml Linux
+libpcsx2_a_SOURCES += \
+CDVD.h CDVDiso.h CDVDisodrv.h CDVDlib.h COP0.h Cache.h CdRom.h Common.h Counters.h Decode_XA.h EEregs.h \
+Elfheader.h Exceptions.h GS.h Hw.h IopBios.h IopBios2.h IopCounters.h IopDma.h IopHw.h IopMem.h IopSio2.h Memcpyfast.h \
+Memory.h Misc.h Patch.h Paths.h Plugins.h PrecompiledHeader.h PsxCommon.h R3000A.h R5900.h R5900OpcodeTables.h \
+SPR.h SamplProf.h SaveState.h Sif.h Sifcmd.h Sio.h SafeArray.h Stats.h StringUtils.h System.h Threading.h \
+VU.h VUflags.h VUmicro.h VUops.h Vif.h VifDma.h cheatscpp.h vtlb.h 
+
+SUBDIRS = x86 . DebugTools IPU RDebug tinyxml Linux

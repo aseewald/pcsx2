@@ -28,7 +28,7 @@
 #define REG_R			20
 #define REG_I			21
 #define REG_Q			22
-#define REG_P           23 //only exists in micromode 
+#define REG_P           23 // only exists in micromode 
 #define REG_VF0_FLAG	24 // dummy flag that indicates VF0 is read (nothing to do with VI[24])
 #define REG_TPC			26
 #define REG_CMSAR0		27
@@ -36,13 +36,17 @@
 #define REG_VPU_STAT	29
 #define REG_CMSAR1		31
 
+//interpreter hacks, WIP
+//#define INT_VUSTALLHACK //some games work without those, big speedup
+//#define INT_VUDOUBLEHACK
+
 enum VUStatus {
 	VU_Ready = 0,
 	VU_Run   = 1,
 	VU_Stop  = 2,
 };
 
-typedef union {
+union VECTOR {
 	struct {
 		float x,y,z,w;
 	} f;
@@ -60,37 +64,41 @@ typedef union {
 	s16 SS[8];
 	u8  UC[16];
 	s8  SC[16];
-} VECTOR;
+};
 
-typedef union {
-	float F;
-	s32   SL;
-	u32	  UL;
-	s16   SS[2];
-	u16   US[2];
-	s8    SC[4];
-	u8    UC[4];
-} REG_VI;
+struct REG_VI {
+	union {
+		float F;
+		s32   SL;
+		u32	  UL;
+		s16   SS[2];
+		u16   US[2];
+		s8    SC[4];
+		u8    UC[4];
+	};
+	u32 padding[3]; // needs padding to make them 128bit; VU0 maps VU1's VI regs as 128bits to addr 0x4xx0 in
+					// VU0 mem, with only lower 16 bits valid, and the upper 112bits are hardwired to 0 (cottonvibes)
+};
 
 #define VUFLAG_BREAKONMFLAG		0x00000001
 #define VUFLAG_MFLAGSET			0x00000002
 
-typedef struct {
+struct fdivPipe {
 	int enable;
 	REG_VI reg;
 	u32 sCycle;
 	u32 Cycle;
 	u32 statusflag;
-} fdivPipe;
+};
 
-typedef struct {
+struct efuPipe {
 	int enable;
 	REG_VI reg;
 	u32 sCycle;
 	u32 Cycle;
-} efuPipe;
+};
 
-typedef struct {
+struct fmacPipe {
 	int enable;
 	int reg;
 	int xyzw;
@@ -99,11 +107,11 @@ typedef struct {
 	u32 macflag;
 	u32 statusflag;
 	u32 clipflag;
-} fmacPipe;
+};
 
-typedef struct _VURegs {
-	VECTOR	VF[32];
-	REG_VI	VI[32];
+struct VURegs {
+	VECTOR	VF[32]; // VF and VI need to be first in this struct for proper mapping
+	REG_VI	VI[32]; // needs to be 128bit x 32 (cottonvibes)
 	VECTOR ACC;
 	REG_VI q;
 	REG_VI p;
@@ -115,7 +123,7 @@ typedef struct _VURegs {
 	u32 cycle;
 	u32 flags;
 
-	void (*vuExec)(struct _VURegs*);
+	void (*vuExec)(VURegs*);
 	VIFregisters *vifRegs;
 
 	u8 *Mem;
@@ -133,7 +141,12 @@ typedef struct _VURegs {
 	fdivPipe fdiv;
 	efuPipe efu;
 
-} VURegs;
+	VURegs() :
+		Mem( NULL )
+	,	Micro( NULL )
+	{
+	}
+};
 
 #define VUPIPE_NONE		0
 #define VUPIPE_FMAC		1
@@ -146,7 +159,7 @@ typedef struct _VURegs {
 #define VUREG_READ		0x1
 #define VUREG_WRITE		0x2
 
-typedef struct {
+struct _VURegsNum {
 	u8 pipe; // if 0xff, COP2
 	u8 VFwrite;
 	u8 VFwxyzw;
@@ -157,20 +170,25 @@ typedef struct {
 	u32 VIwrite;
 	u32 VIread;
 	int cycles;
-} _VURegsNum;
+};
 
 extern VURegs* g_pVU1;
 extern PCSX2_ALIGNED16_DECL(VURegs VU0);
 
 #define VU1 (*g_pVU1)
 
+
+#ifdef _WIN32
 extern __forceinline u32* GET_VU_MEM(VURegs* VU, u32 addr)
+#else
+static __forceinline u32* GET_VU_MEM(VURegs* VU, u32 addr)
+#endif
 {
 	if( VU == g_pVU1 ) return (u32*)(VU1.Mem+(addr&0x3fff));
 	
-	if( addr >= 0x4200 ) return &VU1.VI[(addr>>2)&0x1f].UL;
+	if( addr >= 0x4000 ) return (u32*)(VU0.Mem+(addr&0x43f0)); // get VF and VI regs (they're mapped to 0x4xx0 in VU0 mem!)
 	
-	return (u32*)(VU0.Mem+(addr&0x0fff));	
+	return (u32*)(VU0.Mem+(addr&0x0fff)); // for addr 0x0000 to 0x4000 just wrap around
 }
 
 
