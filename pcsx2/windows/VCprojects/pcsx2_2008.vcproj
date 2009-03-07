@@ -1954,6 +1954,14 @@
 					Name="Dynarec"
 					>
 					<File
+						RelativePath="..\..\x86\blockmanager.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\x86\blockmanager.h"
+						>
+					</File>
+					<File
 						RelativePath="..\..\x86\iCOP0.cpp"
 						>
 					</File>
