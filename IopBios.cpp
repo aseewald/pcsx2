@@ -20,9 +20,159 @@
 
 #include <ctype.h>
 #include "PsxCommon.h"
+#include "Common.h"
 
-namespace R3000A {
+namespace R3000A
+{
 
+struct irxlib
+{
+	const char *name;
+	const char *names[64];
+	const int maxn;
+};
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+#define IRXLIBS 14
+const irxlib irxlibs[] =
+{
+/*00*/	{ { "sysmem" } ,
+    { "start", "init_memory", "retonly", "return_addr_of_memsize",
+      "AllocSysMemory", "FreeSysMemory", "QueryMemSize", "QueryMaxFreeMemSize",
+      "QueryTotalFreeMemSize", "QueryBlockTopAddress", "QueryBlockSize", "retonly",
+      "retonly", "retonly", "Kprintf", "set_Kprintf" } ,
+    16 },
+/*01*/	{ { "loadcore" } ,
+    { "start", "retonly", "retonly_", "return_LibraryEntryTable",
+      "FlushIcache", "FlushDcache", "RegisterLibraryEntries", "ReleaseLibraryEntries",
+      "findFixImports", "restoreImports", "RegisterNonAutoLinkEntries", "QueryLibraryEntryTable",
+      "QueryBootMode", "RegisterBootMode", "setFlag", "resetFlag",
+      "linkModule", "unlinkModule", "retonly_", "retonly_",
+      "registerFunc", "jumpA0001B34", "read_header", "load_module",
+      "findImageInfo" },
+    25 },
+/*02*/	{ { "excepman" } ,
+    { "start", "reinit", "deinit", "getcommon",
+      "RegisterExceptionHandler", "RegisterPriorityExceptionHandler",
+      "RegisterDefaultExceptionHandler", "ReleaseExceptionHandler",
+      "ReleaseDefaultExceptionHandler" } ,
+    9 },
+/*03_4*/{ { "intrman" } ,
+    { "start", "return_0", "deinit", "call3",
+      "RegisterIntrHandler", "ReleaseIntrHandler", "EnableIntr", "DisableIntr",
+      "CpuDisableIntr", "CpuEnableIntr", "syscall04", "syscall08",
+      "resetICTRL", "setICTRL", "syscall0C", "call15",
+      "call16", "CpuSuspendIntr", "CpuResumeIntr", "CpuSuspendIntr",
+      "CpuResumeIntr",  "syscall10", "syscall14", "QueryIntrContext",
+      "QueryIntrStack", "iCatchMultiIntr", "retonly", "call27",
+      "set_h1", "reset_h1", "set_h2", "reset_h2" } ,
+    0x20 },
+/*05*/	{ { "ssbusc" } ,
+    { "start", "retonly", "return_0", "retonly",
+      "setTable1", "getTable1", "setTable2", "getTable2",
+      "setCOM_DELAY_1st", "getCOM_DELAY_1st", "setCOM_DELAY_2nd", "getCOM_DELAY_2nd",
+      "setCOM_DELAY_3rd", "getCOM_DELAY_3rd", "setCOM_DELAY_4th", "getCOM_DELAY_4th",
+      "setCOM_DELAY", "getCOM_DELAY" } ,
+    18 },
+/*06*/	{ { "dmacman" } ,
+    { "start", "retonly", "deinit", "retonly",
+      "SetD_MADR", "GetD_MADR", "SetD_BCR", "GetD_BCR",
+      "SetD_CHCR", "GetD_CHCR", "SetD_TADR", "GetD_TADR",
+      "Set_4_9_A", "Get_4_9_A", "SetDPCR", "GetDPCR",
+      "SetDPCR2", "GetDPCR2", "SetDPCR3", "GetDPCR3",
+      "SetDICR", "GetDICR", "SetDICR2", "GetDICR2",
+      "SetBF80157C", "GetBF80157C", "SetBF801578", "GetBF801578",
+      "SetDMA", "SetDMA_chainedSPU_SIF0", "SetDMA_SIF0", "SetDMA_SIF1",
+      "StartTransfer", "SetVal", "EnableDMAch", "DisableDMAch" } ,
+    36 },
+/*07_8*/{ { "timrman" } ,
+    { "start", "retonly", "retonly", "call3",
+      "AllocHardTimer", "ReferHardTimer", "FreeHardTimer", "SetTimerMode",
+      "GetTimerStatus", "SetTimerCounter", "GetTimerCounter", "SetTimerCompare",
+      "GetTimerCompare", "SetHoldMode", "GetHoldMode", "GetHoldReg",
+      "GetHardTimerIntrCode" } ,
+    17 },
+/*09*/	{ { "sysclib" } ,
+    { "start", "reinit", "retonly", "retonly",
+      "setjmp", "longjmp", "toupper", "tolower",
+	  "look_ctype_table", "get_ctype_table", "memchr", "memcmp",
+	  "memcpy", "memmove", "memset", "bcmp",
+	  "bcopy", "bzero", "prnt", "sprintf",
+	  "strcat", "strchr", "strcmp", "strcpy",
+	  "strcspn", "index", "rindex", "strlen",
+	  "strncat", "strncmp", "strncpy", "strpbrk",
+	  "strrchr", "strspn", "strstr", "strtok",
+	  "strtol", "atob", "strtoul", "wmemcopy",
+	  "wmemset", "vsprintf" } ,
+    0x2b },
+/*0A*/	{ { "heaplib" } ,
+    { "start", "retonly", "retonly", "retonly",
+      "CreateHeap", "DestroyHeap", "HeapMalloc", "HeapFree",
+      "HeapSize", "retonly", "retonly", "call11",
+      "call12", "call13", "call14", "call15",
+      "retonly", "retonly" } ,
+    18 },
+/*13*/	{ { "stdio" } ,
+    { "start", "unknown", "unknown", "unknown",
+      "printf" } ,
+    5 },
+/*14*/	{ { "sifman" } ,
+    { "start", "retonly", "deinit", "retonly",
+      "sceSif2Init", "sceSifInit", "sceSifSetDChain", "sceSifSetDma",
+      "sceSifDmaStat", "sceSifSend", "sceSifSendSync", "sceSifIsSending",
+      "sceSifSetSIF0DMA", "sceSifSendSync0", "sceSifIsSending0", "sceSifSetSIF1DMA",
+      "sceSifSendSync1", "sceSifIsSending1", "sceSifSetSIF2DMA", "sceSifSendSync2",
+      "sceSifIsSending2", "getEEIOPflags", "setEEIOPflags", "getIOPEEflags",
+      "setIOPEEflags", "getEErcvaddr", "getIOPrcvaddr", "setIOPrcvaddr",
+      "call28", "sceSifCheckInit", "setSif0CB", "resetSif0CB",
+      "retonly", "retonly", "retonly", "retonly" } ,
+    36 },
+/*16*/	{ { "sifcmd" } ,
+    { "start", "retonly", "deinit", "retonly",
+      "sceSifInitCmd", "sceSifExitCmd", "sceSifGetSreg", "sceSifSetSreg",
+      "sceSifSetCmdBuffer", "sceSifSetSysCmdBuffer",
+      "sceSifAddCmdHandler", "sceSifRemoveCmdHandler",
+      "sceSifSendCmd", "isceSifSendCmd", "sceSifInitRpc", "sceSifBindRpc",
+      "sceSifCallRpc", "sceSifRegisterRpc",
+      "sceSifCheckStatRpc", "sceSifSetRpcQueue",
+      "sceSifGetNextRequest", "sceSifExecRequest",
+      "sceSifRpcLoop", "sceSifGetOtherData",
+      "sceSifRemoveRpc", "sceSifRemoveRpcQueue",
+      "setSif1CB", "resetSif1CB",
+      "retonly", "retonly", "retonly", "retonly" } ,
+    32 },
+/*19*/	{ { "cdvdman" } ,
+    { "start", "retonly", "retonly", "retonly",
+      "sceCdInit", "sceCdStandby", "sceCdRead", "sceCdSeek",
+      "sceCdGetError", "sceCdGetToc", "sceCdSearchFile", "sceCdSync",
+      "sceCdGetDiskType", "sceCdDiskReady", "sceCdTrayReq", "sceCdStop",
+      "sceCdPosToInt", "sceCdIntToPos", "retonly", "call19",
+      "sceDvdRead", "sceCdCheckCmd", "_sceCdRI", "sceCdWriteILinkID",
+      "sceCdReadClock", "sceCdWriteRTC", "sceCdReadNVM", "sceCdWriteNVM",
+      "sceCdStatus", "sceCdApplySCmd", "setHDmode", "sceCdOpenConfig",
+      "sceCdCloseConfig", "sceCdReadConfig", "sceCdWriteConfig", "sceCdReadKey",
+      "sceCdDecSet", "sceCdCallback", "sceCdPause", "sceCdBreak",
+      "call40", "sceCdReadConsoleID", "sceCdWriteConsoleID", "sceCdGetMecaconVersion",
+      "sceCdGetReadPos", "AudioDigitalOut", "sceCdNop", "_sceGetFsvRbuf",
+      "_sceCdstm0Cb", "_sceCdstm1Cb", "_sceCdSC", "_sceCdRC",
+      "sceCdForbidDVDP", "sceCdReadSubQ", "sceCdApplyNCmd", "AutoAdjustCtrl",
+      "sceCdStInit", "sceCdStRead", "sceCdStSeek", "sceCdStStart",
+      "sceCdStStat", "sceCdStStop" } ,
+    62 },
+/*??*/	{ { "sio2man" } ,
+    { "start", "retonly", "deinit", "retonly",
+      "set8268_ctrl", "get8268_ctrl", "get826C_recv1", "call7_send1",
+      "call8_send1", "call9_send2", "call10_send2", "get8270_recv2",
+      "call12_set_params", "call13_get_params", "get8274_recv3", "set8278",
+      "get8278", "set827C", "get827C", "set8260_datain",
+      "get8264_dataout", "set8280_intr", "get8280_intr", "signalExchange1",
+      "signalExchange2", "packetExchange" } ,
+    26 }
+};
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//
 const char *biosA0n[256] = {
 // 0x00
 	"open",		"lseek",	"read",		"write",
@@ -84,6 +234,8 @@ const char *biosA0n[256] = {
 	"?? sub_function",
 };
 
+//////////////////////////////////////////////////////////////////////////////////////////
+//
 const char *biosB0n[256] = {
 // 0x00
 	"SysMalloc",		"sys_b0_01",	"sys_b0_02",	"sys_b0_03",
@@ -117,6 +269,8 @@ const char *biosB0n[256] = {
 	"_card_status",		"_card_wait",
 };
 
+//////////////////////////////////////////////////////////////////////////////////////////
+//
 const char *biosC0n[256] = {
 // 0x00
 	"InitRCnt",			  "InitException",		"SysEnqIntRP",		"SysDeqIntRP",
@@ -130,39 +284,64 @@ const char *biosC0n[256] = {
 	"PatchAOTable",
 };
 
-//#define r0 (psxRegs.GPR.n.r0)
-#define at (psxRegs.GPR.n.at)
-#define v0 (psxRegs.GPR.n.v0)
-#define v1 (psxRegs.GPR.n.v1)
-#define a0 (psxRegs.GPR.n.a0)
-#define a1 (psxRegs.GPR.n.a1)
-#define a2 (psxRegs.GPR.n.a2)
-#define a3 (psxRegs.GPR.n.a3)
-#define t0 (psxRegs.GPR.n.t0)
-#define t1 (psxRegs.GPR.n.t1)
-#define t2 (psxRegs.GPR.n.t2)
-#define t3 (psxRegs.GPR.n.t3)
-#define t4 (psxRegs.GPR.n.t4)
-#define t5 (psxRegs.GPR.n.t5)
-#define t6 (psxRegs.GPR.n.t6)
-#define t7 (psxRegs.GPR.n.t7)
-#define s0 (psxRegs.GPR.n.s0)
-#define s1 (psxRegs.GPR.n.s1)
-#define s2 (psxRegs.GPR.n.s2)
-#define s3 (psxRegs.GPR.n.s3)
-#define s4 (psxRegs.GPR.n.s4)
-#define s5 (psxRegs.GPR.n.s5)
-#define s6 (psxRegs.GPR.n.s6)
-#define s7 (psxRegs.GPR.n.s7)
-#define t8 (psxRegs.GPR.n.t6)
-#define t9 (psxRegs.GPR.n.t7)
-#define k0 (psxRegs.GPR.n.k0)
-#define k1 (psxRegs.GPR.n.k1)
-#define gp (psxRegs.GPR.n.gp)
-#define sp (psxRegs.GPR.n.sp)
-#define fp (psxRegs.GPR.n.s8)
-#define ra (psxRegs.GPR.n.ra)
-#define pc0 (psxRegs.pc)
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+const char* intrname[] =
+{
+	"INT_VBLANK",   "INT_GM",       "INT_CDROM",   "INT_DMA",	//00
+	"INT_RTC0",     "INT_RTC1",     "INT_RTC2",    "INT_SIO0",	//04
+	"INT_SIO1",     "INT_SPU",      "INT_PIO",     "INT_EVBLANK",	//08
+	"INT_DVD",      "INT_PCMCIA",   "INT_RTC3",    "INT_RTC4",	//0C
+	"INT_RTC5",     "INT_SIO2",     "INT_HTR0",    "INT_HTR1",	//10
+	"INT_HTR2",     "INT_HTR3",     "INT_USB",     "INT_EXTR",	//14
+	"INT_FWRE",     "INT_FDMA",     "INT_1A",      "INT_1B",	//18
+	"INT_1C",       "INT_1D",       "INT_1E",      "INT_1F",	//1C
+	"INT_dmaMDECi", "INT_dmaMDECo", "INT_dmaGPU",  "INT_dmaCD",	//20
+	"INT_dmaSPU",   "INT_dmaPIO",   "INT_dmaOTC",  "INT_dmaBERR",	//24
+	"INT_dmaSPU2",  "INT_dma8",     "INT_dmaSIF0", "INT_dmaSIF1",	//28
+	"INT_dmaSIO2i", "INT_dmaSIO2o", "INT_2E",      "INT_2F",	//2C
+	"INT_30",       "INT_31",       "INT_32",      "INT_33",	//30
+	"INT_34",       "INT_35",       "INT_36",      "INT_37",	//34
+	"INT_38",       "INT_39",       "INT_3A",      "INT_3B",	//38
+	"INT_3C",       "INT_3D",       "INT_3E",      "INT_3F",	//3C
+	"INT_MAX"							//40
+};
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+//#define r0 (iopRegs.GPR.n.r0)
+#define at (iopRegs.GPR.n.at.UL)
+#define v0 (iopRegs.GPR.n.v0.UL)
+#define v1 (iopRegs.GPR.n.v1.UL)
+#define a0 (iopRegs.GPR.n.a0.UL)
+#define a1 (iopRegs.GPR.n.a1.UL)
+#define a2 (iopRegs.GPR.n.a2.UL)
+#define a3 (iopRegs.GPR.n.a3.UL)
+#define t0 (iopRegs.GPR.n.t0.UL)
+#define t1 (iopRegs.GPR.n.t1.UL)
+#define t2 (iopRegs.GPR.n.t2.UL)
+#define t3 (iopRegs.GPR.n.t3.UL)
+#define t4 (iopRegs.GPR.n.t4.UL)
+#define t5 (iopRegs.GPR.n.t5.UL)
+#define t6 (iopRegs.GPR.n.t6.UL)
+#define t7 (iopRegs.GPR.n.t7.UL)
+#define s0 (iopRegs.GPR.n.s0.UL)
+#define s1 (iopRegs.GPR.n.s1.UL)
+#define s2 (iopRegs.GPR.n.s2.UL)
+#define s3 (iopRegs.GPR.n.s3.UL)
+#define s4 (iopRegs.GPR.n.s4.UL)
+#define s5 (iopRegs.GPR.n.s5.UL)
+#define s6 (iopRegs.GPR.n.s6.UL)
+#define s7 (iopRegs.GPR.n.s7.UL)
+#define t8 (iopRegs.GPR.n.t6.UL)
+#define t9 (iopRegs.GPR.n.t7.UL)
+#define k0 (iopRegs.GPR.n.k0.UL)
+#define k1 (iopRegs.GPR.n.k1.UL)
+#define gp (iopRegs.GPR.n.gp.UL)
+#define sp (iopRegs.GPR.n.sp.UL)
+#define fp (iopRegs.GPR.n.s8.UL)
+#define ra (iopRegs.GPR.n.ra.UL)
+#define pc0 (iopRegs.pc)
 
 #define Ra0 (iopVirtMemR<char>(a0))
 #define Ra1 (iopVirtMemR<char>(a1))
@@ -171,6 +350,8 @@ const char *biosC0n[256] = {
 #define Rv0 (iopVirtMemR<char>(v0))
 #define Rsp (iopVirtMemR<char>(sp))
 
+//////////////////////////////////////////////////////////////////////////////////////////
+//
 void bios_write() { // 0x35/0x03
 
 
@@ -298,5 +479,145 @@ void psxBiosInit() {
 
 void psxBiosShutdown() {
 }
+
+void zeroEx()
+{
+#ifdef PCSX2_DEVBUILD
+	u32 pc;
+	u32 code;
+	const char *lib;
+	const char *fname = NULL;
+	int i;
+
+	if (!Config.PsxOut) return;
+
+	pc = iopRegs.pc;
+	while (iopMemRead32(pc) != 0x41e00000) pc-=4;
+
+	lib  = iopVirtMemR<char>(pc+12);
+	code = iopMemRead32(iopRegs.pc - 4) & 0xffff;
+
+	for (i=0; i<IRXLIBS; i++) {
+		if (!strncmp(lib, irxlibs[i].name, 8)) {
+			if (code >= (u32)irxlibs[i].maxn) break;
+
+			fname = irxlibs[i].names[code];
+            //if( strcmp(fname, "setIOPrcvaddr") == 0 ) {
+//                SysPrintf("yo\n");
+//                varLog |= 0x100000;
+//                Log = 1;
+//            }
+            break;
+		}
+	}
+
+	{
+		char libz[9]; memcpy(libz, lib, 8); libz[8]=0;
+		PSXBIOS_LOG(
+			"%s: %s (%x) (%x, %x, %x, %x)",
+			libz, fname == NULL ? "unknown" : fname, code,
+			a0, a1, a2, a3
+		);
+	}
+
+//	Log=0;
+//	if (!strcmp(lib, "intrman") && code == 0x11) Log=1;
+//	if (!strcmp(lib, "sifman") && code == 0x5) Log=1;
+//	if (!strcmp(lib, "sifcmd") && code == 0x4) Log=1;
+//	if (!strcmp(lib, "thbase") && code == 0x6) Log=1;
+/*
+	if (!strcmp(lib, "sifcmd") && code == 0xe) {
+		branchPC = iopRegs.GPR.n.ra;
+		iopRegs.GPR.n.v0 = 0;
+		return;
+	}
+*/
+	if (!strncmp(lib, "ioman", 5) && code == 7) {
+		if (a0 == 1) {
+			pc = iopRegs.pc;
+			bios_write();
+			iopRegs.pc = pc;
+		}
+	}
+
+	if (!strncmp(lib, "sysmem", 6) && code == 0xe) {
+		bios_printf();
+		iopRegs.pc = ra;
+	}
+
+	if (!strncmp(lib, "loadcore", 8) && code == 6) {
+		DevCon::WriteLn("loadcore RegisterLibraryEntries (%x): %8.8s", params iopRegs.pc, iopVirtMemR<char>(a0+12));
+	}
+
+	if (!strncmp(lib, "intrman", 7) && code == 4) {
+		DevCon::WriteLn("intrman RegisterIntrHandler (%x): intr %s, handler %x", params iopRegs.pc, intrname[a0], a2);
+	}
+
+	if (!strncmp(lib, "sifcmd", 6) && code == 17) {
+		DevCon::WriteLn("sifcmd sceSifRegisterRpc (%x): rpc_id %x", params iopRegs.pc, a1);
+	}
+
+	if (!strncmp(lib, "sysclib", 8))
+	{
+		switch (code)
+		{
+			case 0x16: // strcmp
+				PSXBIOS_LOG(" \"%s\": \"%s\"", Ra0, Ra1);
+				break;
+
+			case 0x1e: // strncpy
+				PSXBIOS_LOG(" \"%s\"", Ra1);
+				break;
+		}
+	}
+
+/*	iopRegs.pc = branchPC;
+	pc = iopRegs.GPR.n.ra;
+	while (iopRegs.pc != pc) psxCpu->ExecuteBlock();
+
+	PSXBIOS_LOG("%s: %s (%x) END\n", lib, fname == NULL ? "unknown" : fname, code);*/
+#endif
+
+}
+/*/==========================================CALL LOG
+char* getName(char *file, u32 addr){
+	FILE *f; u32 a;
+	static char name[100];
+
+	f=fopen(file, "r");
+	if (!f)
+		name[0]=0;
+	else{
+		while (!feof(f)){
+			fscanf(f, "%08X %s\n", &a, name);
+			if (a==addr)break;
+		}
+		fclose(f);
+	}
+	return name;
+}
+
+void spyFunctions(){
+	register irxImageInfo *iii;
+	if (iopRegs.pc >= 0x200000)	return;
+	for (iii=(irxImageInfo*)PSXM(0x800); iii && iii->text_size;
+		iii=iii->next ? (irxImageInfo*)PSXM(iii->next) : NULL)
+			if (iii->vaddr<=iopRegs.pc && iopRegs.pc<iii->vaddr+iii->text_size+iii->data_size+iii->bss_size){
+				if (strcmp("secrman_for_cex", PSXM(iii->name))==0){
+					char *name=getName("secrman.fun", iopRegs.pc-iii->vaddr);
+					if (strncmp("__push_params", name, 13)==0){
+						PAD_LOG(PSXM(iopRegs.GPR.n.a0), iopRegs.GPR.n.a1, iopRegs.GPR.n.a2, iopRegs.GPR.n.a3);
+					}else{
+						PAD_LOG("secrman: %s (ra=%06X cycle=%d)\n", name, iopRegs.GPR.n.ra-iii->vaddr, iopRegs.cycle);}}else
+				if (strcmp("mcman", PSXM(iii->name))==0){
+					PAD_LOG("mcman: %s (ra=%06X cycle=%d)\n",  getName("mcman.fun", iopRegs.pc-iii->vaddr), iopRegs.GPR.n.ra-iii->vaddr, iopRegs.cycle);}else
+				if (strcmp("padman", PSXM(iii->name))==0){
+					PAD_LOG("padman: %s (ra=%06X cycle=%d)\n",  getName("padman.fun", iopRegs.pc-iii->vaddr), iopRegs.GPR.n.ra-iii->vaddr, iopRegs.cycle);}else
+				if (strcmp("sio2man", PSXM(iii->name))==0){
+					PAD_LOG("sio2man: %s (ra=%06X cycle=%d)\n", getName("sio2man.fun", iopRegs.pc-iii->vaddr), iopRegs.GPR.n.ra-iii->vaddr, iopRegs.cycle);}
+				break;
+			}
+}
+*/
 
 }	// end namespace R3000A

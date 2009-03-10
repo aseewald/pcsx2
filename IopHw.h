@@ -19,7 +19,6 @@
 #ifndef __PSXHW_H__
 #define __PSXHW_H__
 
-#include "R3000A.h"
 #include "IopMem.h"
 
 #define HW_DMA0_MADR (psxHu32(0x1080)) // MDEC in DMA
@@ -98,8 +97,10 @@ enum IopEventId
 
 extern void PSX_INT( IopEventId n, s32 ecycle);
 
-extern void psxSetNextBranch( u32 startCycle, s32 delta );
-extern void psxSetNextBranchDelta( s32 delta );
+extern void iopSetNextBranch( u32 startCycle, s32 delta );
+extern void iopSetNextBranchDelta( s32 delta );
+extern int iopTestCycle( u32 startCycle, s32 delta );
+extern void _iopTestInterrupts();
 
 void psxHwReset();
 u8   psxHwRead8 (u32 add);

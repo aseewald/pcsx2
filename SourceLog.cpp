@@ -134,8 +134,8 @@ void SourceLog( u16 protocol, u8 source, u32 cpuPc, u32 cpuCycle, const char *fm
 		va_list list; \
 		va_start( list, fmt ); \
 		_vSourceLog( protocol, source, \
-			(source == 'E') ? cpuRegs.pc : psxRegs.pc, \
-			(source == 'E') ? cpuRegs.cycle : psxRegs.cycle, fmt, list ); \
+			(source == 'E') ? cpuRegs.pc : iopRegs.pc, \
+			(source == 'E') ? cpuRegs.cycle : iopRegs.cycle, fmt, list ); \
 		va_end( list ); \
 		return false; \
 	} \

@@ -512,7 +512,7 @@ u32 psxHwRead32(u32 add) {
 
 		case 0x1f801450:
 			hard = psxHu32(add);
-			PSXHW_LOG("%08X ICFG 32bit read %x\n", psxRegs.pc, hard);
+			PSXHW_LOG("%08X ICFG 32bit read %x\n", iopRegs.pc, hard);
 			return hard;
 
 
@@ -666,7 +666,7 @@ void psxHwWrite8(u32 add, u8 value) {
 		return;
 
 		case 0x1f801450:
-			if (value) { PSXHW_LOG("%08X ICFG 8bit write %lx\n", psxRegs.pc, value); }
+			if (value) { PSXHW_LOG("%08X ICFG 8bit write %lx\n", iopRegs.pc, value); }
 			psxHu8(0x1450) = value;
 		return;
 
@@ -792,7 +792,7 @@ void psxHwWrite16(u32 add, u16 value) {
 			psxRcntWtarget16(2, value); return;
 
 		case 0x1f801450:
-			if (value) { PSXHW_LOG("%08X ICFG 16bit write %lx\n", psxRegs.pc, value); }
+			if (value) { PSXHW_LOG("%08X ICFG 16bit write %lx\n", iopRegs.pc, value); }
 			psxHu16(0x1450) = value/* & (~0x8)*/;
 			return;
 
@@ -1247,7 +1247,7 @@ void psxHwWrite32(u32 add, u32 value) {
 			break;
 
 		case 0x1f801450:
-			if (value) { PSXHW_LOG("%08X ICFG 32bit write %lx\n", psxRegs.pc, value); }
+			if (value) { PSXHW_LOG("%08X ICFG 32bit write %lx\n", iopRegs.pc, value); }
 /*			if (value &&
 				psxSu32(0x20) == 0x20000 &&
 				(psxSu32(0x30) == 0x20000 ||
@@ -1392,16 +1392,20 @@ void psxHw4Write8(u32 add, u8 value) {
 	PSXHW_LOG("Known 8bit write to addr 0x%x = 0x%x\n", add, value);
 }
 
-void psxDmaInterrupt(int n) {
-	if (HW_DMA_ICR & (1 << (16 + n))) {
+void psxDmaInterrupt(int n)
+{
+	if (HW_DMA_ICR & (1 << (16 + n)))
+	{
 		HW_DMA_ICR|= (1 << (24 + n));
-		psxRegs.CP0.n.Cause |= 1 << (9 + n);
+		iopRegs.CP0.n.Cause |= 1 << (9 + n);
 		iopIntcIrq( 3 );
 	}
 }
 
-void psxDmaInterrupt2(int n) {
-	if (HW_DMA_ICR2 & (1 << (16 + n))) {
+void psxDmaInterrupt2(int n)
+{
+	if (HW_DMA_ICR2 & (1 << (16 + n)))
+	{
 /*		if (HW_DMA_ICR2 & (1 << (24 + n))) {
 			SysPrintf("*PCSX2*: HW_DMA_ICR2 n=%d already set\n", n);
 		}
@@ -1409,7 +1413,7 @@ void psxDmaInterrupt2(int n) {
 			SysPrintf("*PCSX2*: psxHu32(0x1070) 8 already set (n=%d)\n", n);
 		}*/
 		HW_DMA_ICR2|= (1 << (24 + n));
-		psxRegs.CP0.n.Cause |= 1 << (16 + n);
+		iopRegs.CP0.n.Cause |= 1 << (16 + n);
 		iopIntcIrq( 3 );
 	}
 }

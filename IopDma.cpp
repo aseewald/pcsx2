@@ -43,14 +43,14 @@ static void __fastcall psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore, _
 
 	if(SPU2async)
 	{
-		SPU2async(psxRegs.cycle - psxCounters[6].sCycleT);	
-		//Console::Status("cycles sent to SPU2 %x\n", psxRegs.cycle - psxCounters[6].sCycleT);
+		SPU2async(iopRegs.cycle - psxCounters[6].sCycleT);	
+		//Console::Status("cycles sent to SPU2 %x\n", iopRegs.cycle - psxCounters[6].sCycleT);
 		
-		psxCounters[6].sCycleT = psxRegs.cycle;
+		psxCounters[6].sCycleT = iopRegs.cycle;
 		psxCounters[6].CycleT = size * 3;
 
-		psxNextCounter -= (psxRegs.cycle-psxNextsCounter);
-		psxNextsCounter = psxRegs.cycle;
+		psxNextCounter -= (iopRegs.cycle-psxNextsCounter);
+		psxNextsCounter = iopRegs.cycle;
 		if(psxCounters[6].CycleT < psxNextCounter)
 			psxNextCounter = psxCounters[6].CycleT;
 	}

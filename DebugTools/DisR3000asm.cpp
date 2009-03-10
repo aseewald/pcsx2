@@ -210,21 +210,21 @@ static char dbuf2[1024];
 static char obuf2[1024];
 
 char *disR3000Fasm(u32 code, u32 pc) {
-	u32 scode = psxRegs.code;
+	u32 scode = iopRegs.code;
 	IOP_opcode_addr = pc;
-	psxRegs.code = code;
+	iopRegs.code = code;
 	IOP_DEBUG_BSC[(code) >> 26](dbuf2);
 
 	sprintf(obuf2, "%08lX:\t%s", pc, dbuf2);
 
-	psxRegs.code = scode;
+	iopRegs.code = scode;
 	return obuf2;
 }
 char *IOP_jump_decode(void)
 {
     static char buf[256];
     unsigned long addr;
-    addr = (IOP_opcode_addr & 0xf0000000)|((psxRegs.code&0x3ffffff)<<2);
+    addr = (IOP_opcode_addr & 0xf0000000)|((iopRegs.code&0x3ffffff)<<2);
     sprintf(buf, "0x%08lX", addr);
     return buf;
 }
@@ -232,12 +232,12 @@ char *IOP_offset_decode(void)
 {
     static char buf[256];
     unsigned long addr;
-    addr = ((((short)( psxRegs.code & 0xFFFF) * 4) + IOP_opcode_addr + 4));
+    addr = ((((short)( iopRegs.code & 0xFFFF) * 4) + IOP_opcode_addr + 4));
     sprintf(buf, "0x%08lX", addr);
     return buf;
 }
 //basic table
-void IOPD_SPECIAL(char *buf){IOP_DEBUG_SPC[((psxRegs.code) & 0x3F)](buf);}
+void IOPD_SPECIAL(char *buf){IOP_DEBUG_SPC[((iopRegs.code) & 0x3F)](buf);}
 void IOPD_REGIMM(char *buf){IOP_DEBUG_REG[DECODE_RT_IOP](buf);} 
 void IOPD_J(char *buf)  { sprintf(buf, "j\t%s",                   IOP_jump_decode());}   
 void IOPD_JAL(char *buf){sprintf(buf, "jal\t%s",                  IOP_jump_decode());}  
@@ -254,7 +254,7 @@ void IOPD_ORI(char *buf){sprintf(buf, "ori\t%s, %s, 0x%04lX",     GPR_IOP_REG[DE
 void IOPD_XORI(char *buf){sprintf(buf, "xori\t%s, %s, 0x%04lX",   GPR_IOP_REG[DECODE_RT_IOP], GPR_IOP_REG[DECODE_RS_IOP], DECODE_IMMED_IOP); }
 void IOPD_LUI(char *buf){sprintf(buf, "lui\t%s, 0x%04lX",         GPR_IOP_REG[DECODE_RT_IOP], DECODE_IMMED_IOP); } 
 void IOPD_COP0(char *buf){IOP_DEBUG_CP0[DECODE_RS_IOP](buf);}  
-void IOPD_COP2(char *buf){IOP_DEBUG_CP2[((psxRegs.code) & 0x3F)](buf);}		
+void IOPD_COP2(char *buf){IOP_DEBUG_CP2[((iopRegs.code) & 0x3F)](buf);}		
 void IOPD_LB(char *buf){sprintf(buf, "lb\t%s, 0x%04lX(%s)",     GPR_IOP_REG[DECODE_RT_IOP], DECODE_IMMED_IOP, GPR_IOP_REG[DECODE_RS_IOP]); }    
 void IOPD_LH(char *buf){sprintf(buf, "lh\t%s, 0x%04lX(%s)",     GPR_IOP_REG[DECODE_RT_IOP], DECODE_IMMED_IOP, GPR_IOP_REG[DECODE_RS_IOP]); }    
 void IOPD_LWL(char *buf){sprintf(buf, "lwl\t%s, 0x%04lX(%s)",   GPR_IOP_REG[DECODE_RT_IOP], DECODE_IMMED_IOP, GPR_IOP_REG[DECODE_RS_IOP]); } 
@@ -272,7 +272,7 @@ void IOPD_SWC2(char *buf){strcpy(buf, "swc2");}
 //special table
 void IOPD_SLL(char *buf)
 {
-   if (psxRegs.code == 0x00000000)
+   if (iopRegs.code == 0x00000000)
         strcpy(buf, "nop");
     else
         sprintf(buf, "sll\t%s, %s, 0x%02lX", GPR_IOP_REG[DECODE_RD_IOP], GPR_IOP_REG[DECODE_RT_IOP], DECODE_SA_IOP);

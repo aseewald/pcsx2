@@ -39,7 +39,6 @@
 
 extern u32 g_psxNextBranchCycle;
 extern void psxBREAK();
-extern void zeroEx();
 
 u32 g_psxMaxRecMem = 0;
 u32 s_psxrecblocks[] = {0};
@@ -432,10 +431,10 @@ void psxRecompileCodeConst1(R3000AFNPTR constcode, R3000AFNPTR_INFO noconstcode)
         if( (psxRegs.code>>26) == 9 ) {
             //ADDIU, call bios
 #ifdef _DEBUG
-            MOV32ItoM( (uptr)&psxRegs.code, psxRegs.code );
-	        MOV32ItoM( (uptr)&psxRegs.pc, psxpc );
-            _psxFlushCall(FLUSH_NODESTROY);
-            CALLFunc((uptr)zeroEx);
+            //MOV32ItoM( (uptr)&psxRegs.code, psxRegs.code );
+	        //MOV32ItoM( (uptr)&psxRegs.pc, psxpc );
+            //_psxFlushCall(FLUSH_NODESTROY);
+            //CALLFunc((uptr)zeroEx);
 #endif
 			// Bios Call: Force the IOP to do a Branch Test ASAP.
 			// Important! This helps prevent game freeze-ups during boot-up and stage loads.
@@ -945,7 +944,7 @@ static void iPsxBranchTest(u32 newpc, u32 cpuBranch)
 	SUB32MtoR(ECX, (uptr)&g_psxNextBranchCycle);
 	j8Ptr[0] = JS8( 0 );
 
-	CALLFunc((uptr)psxBranchTest);
+	CALLFunc((uptr)iopEventTest);
 
 	if( newpc != 0xffffffff )
 	{
@@ -979,7 +978,7 @@ void rpsxSYSCALL()
 	MOV32ItoM((uptr)&psxRegs.pc, psxpc - 4);
 	_psxFlushCall(FLUSH_NODESTROY);
 
-	_callFunctionArg2((uptr)psxException, MEM_CONSTTAG, MEM_CONSTTAG, 0x20, psxbranch==1);
+	_callFunctionArg2((uptr)iopException, MEM_CONSTTAG, MEM_CONSTTAG, 0x20, psxbranch==1);
 
 	CMP32ItoM((uptr)&psxRegs.pc, psxpc-4);
 	j8Ptr[0] = JE8(0);

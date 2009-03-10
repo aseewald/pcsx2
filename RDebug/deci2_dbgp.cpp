@@ -138,17 +138,17 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 				for (i=0; i<in->count; i++)
 					switch (iregs[i].kind){
 					case 1:switch (iregs[i].number){
-							case 0:iregs[i].value=psxRegs.GPR.n.lo;break;
-							case 1:iregs[i].value=psxRegs.GPR.n.hi;break;
+							case 0:iregs[i].value=iopRegs.GPR.n.lo.UL;break;
+							case 1:iregs[i].value=iopRegs.GPR.n.hi.UL;break;
 						   }
 						   break;
-					case 2:iregs[i].value=psxRegs.GPR.r[iregs[i].number]; break;
+					case 2:iregs[i].value=iopRegs.GPR.r[iregs[i].number].UL; break;
 					case 3:
-						if (iregs[i].number==14) psxRegs.CP0.n.EPC=psxRegs.pc;
-						iregs[i].value=psxRegs.CP0.r[iregs[i].number];
+						if (iregs[i].number==14) iopRegs.CP0.n.EPC=iopRegs.pc;
+						iregs[i].value=iopRegs.CP0.r[iregs[i].number].UL;
 						break;
-					case 6:iregs[i].value=psxRegs.CP2D.r[iregs[i].number]; break;
-					case 7:iregs[i].value=psxRegs.CP2C.r[iregs[i].number]; break;
+					case 6:iregs[i].value=iopRegs.CP2D.r[iregs[i].number]; break;
+					case 7:iregs[i].value=iopRegs.CP2C.r[iregs[i].number]; break;
 					default:
 						iregs[0].value++;//dummy; might be assert(0)
 					}
@@ -187,17 +187,17 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 				for (i=0; i<in->count; i++)
 					switch (iregs[i].kind){
 					case 1:switch (iregs[i].number){
-							case 0:psxRegs.GPR.n.lo=iregs[i].value;break;
-							case 1:psxRegs.GPR.n.hi=iregs[i].value;break;
+							case 0:iopRegs.GPR.n.lo.UL=iregs[i].value;break;
+							case 1:iopRegs.GPR.n.hi.UL=iregs[i].value;break;
 						   }
 						   break;
-					case 2:psxRegs.GPR.r[iregs[i].number]=iregs[i].value; break;
+					case 2:iopRegs.GPR.r[iregs[i].number].UL=iregs[i].value; break;
 					case 3:
-						psxRegs.CP0.r[iregs[i].number]=iregs[i].value;
-						if (iregs[i].number==14) psxRegs.pc=psxRegs.CP0.n.EPC;
+						iopRegs.CP0.r[iregs[i].number].UL=iregs[i].value;
+						if (iregs[i].number==14) iopRegs.pc=iopRegs.CP0.n.EPC;
 						break;
-					case 6:psxRegs.CP2D.r[iregs[i].number]=iregs[i].value; break;
-					case 7:psxRegs.CP2C.r[iregs[i].number]=iregs[i].value; break;
+					case 6:iopRegs.CP2D.r[iregs[i].number]=iregs[i].value; break;
+					case 7:iopRegs.CP2C.r[iregs[i].number]=iregs[i].value; break;
 					default:
 						;//dummy; might be assert(0)
 					}
@@ -407,9 +407,9 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 	}
 	sprintf(message, "[DBGP %c->%c/%04X] %s", in->h.source, in->h.destination, in->h.length, line);
 	sprintf(eepc,  "%08X", cpuRegs.pc);
-	sprintf(ioppc, "%08X", psxRegs.pc);
+	sprintf(ioppc, "%08X", iopRegs.pc);
 	sprintf(eecy,  "%d", cpuRegs.cycle);
-	sprintf(iopcy, "%d", psxRegs.cycle);
+	sprintf(iopcy, "%d", iopRegs.cycle);
 	writeData(outbuffer);
 }
 

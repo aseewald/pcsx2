@@ -755,7 +755,7 @@ int OpenPlugins(const char* pTitleFilename)
 			SPU2setDMABaseAddr((uptr)psxM);
 
 		if(SPU2setClockPtr != NULL)
-			SPU2setClockPtr(&psxRegs.cycle);
+			SPU2setClockPtr(&iopRegs.cycle);
 
 		ret = SPU2open((void*)&pDsp);
 		if (ret != 0) { Msgbox::Alert("Error Opening SPU2 Plugin"); goto OpenError; }
@@ -767,7 +767,7 @@ int OpenPlugins(const char* pTitleFilename)
 	{
 		DEV9irqCallback(dev9Irq);
 		dev9Handler = DEV9irqHandler();
-		ret = DEV9open(&psxRegs.pc); //((void *)&pDsp);
+		ret = DEV9open(&iopRegs.pc); //((void *)&pDsp);
 		if (ret != 0) { Msgbox::Alert("Error Opening DEV9 Plugin"); goto OpenError; }
 		OpenStatus.DEV9 = true;
 	}

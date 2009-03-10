@@ -52,11 +52,6 @@ void MakeDebugOpcode(void)
 	cpuRegs.code = memRead32( opcode_addr );
 }
 
-void MakeIOPDebugOpcode(void)
-{
-	psxRegs.code = iopMemRead32( opcode_addr );
-}
-
 BOOL HasBreakpoint()
 {
 	int t;
@@ -127,7 +122,7 @@ BOOL APIENTRY DumpProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
             SetDlgItemText(hDlg, IDC_DUMP_END,   tmp);
 			SetDlgItemText(hDlg, IDC_DUMP_FNAME, "EEdisasm.txt");
 
-			sprintf(tmp, "%08X", psxRegs.pc);
+			sprintf(tmp, "%08X", iopRegs.pc);
             SetDlgItemText(hDlg, IDC_DUMP_STARTIOP, tmp);
             SetDlgItemText(hDlg, IDC_DUMP_ENDIOP,   tmp);
 			SetDlgItemText(hDlg, IDC_DUMP_FNAMEIOP, "IOPdisasm.txt");
@@ -203,10 +198,10 @@ BOOL APIENTRY DumpProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 					fprintf(fp,"----------------------------------\n");
 					for (temp = start_pc; temp <= end_pc; temp += 4)
 					{
-						opcode_addr=temp;
-						MakeIOPDebugOpcode();											
-						R3000A::IOP_DEBUG_BSC[(psxRegs.code) >> 26](tmp);
-						fprintf(fp, "%08X %08X: %s\n", temp, psxRegs.code, tmp);
+						opcode_addr = temp;
+						R3000Air::Instruction inst( opcode_addr );
+						//R3000A::IOP_DEBUG_BSC[inst._Opcode_](tmp);
+						fprintf(fp, "%08X %08X: %s\n", temp, inst.U32, tmp);
 					}
 
 					fprintf(fp,"\n\n\n----------------------------------\n");
@@ -432,10 +427,10 @@ BOOL APIENTRY DebuggerProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
             switch (LOWORD(wParam))
             {
                 case IDC_DEBUG_STEP:
-					oldpc = psxRegs.pc;
+					oldpc = iopRegs.pc;
 					EnterRunningState(hDlg);
                     Cpu->Step();
-					while(oldpc == psxRegs.pc) Cpu->Step();
+					while(oldpc == iopRegs.pc) Cpu->Step();
                     DebuggerPC = 0;
 					DebuggerIOPPC=0;
 					EnterHaltedState(hDlg);
@@ -661,7 +656,7 @@ void RefreshIOPDebugger(void)
     int cnt;
 	
 	if (DebuggerIOPPC == 0){
-		DebuggerIOPPC = psxRegs.pc; //- 0x00000038;
+		DebuggerIOPPC = iopRegs.pc; //- 0x00000038;
 	}
     SendMessage(hWnd_IOP_debugdisasm, LB_RESETCONTENT, 0, 0);
 
@@ -669,8 +664,8 @@ void RefreshIOPDebugger(void)
     {
 		// Make the opcode.
 		u32 mem = iopMemRead32( t );
-		char *str = R3000A::disR3000Fasm(mem, t);
-        SendMessage(hWnd_IOP_debugdisasm, LB_ADDSTRING, 0, (LPARAM)str);
+		//char *str = R3000A::disR3000Fasm(mem, t);
+        //SendMessage(hWnd_IOP_debugdisasm, LB_ADDSTRING, 0, (LPARAM)str);
 	}
     
 }

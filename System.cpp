@@ -102,7 +102,7 @@ void SysDetect()
 	Notice("Savestate version: %x", params g_SaveVersion);
 
 	// fixme: This line is here for the purpose of creating external ASM code.  Yah. >_<
-	DevCon::Notice( "EE pc offset: 0x%x, IOP pc offset: 0x%x", params (u32)&cpuRegs.pc - (u32)&cpuRegs, (u32)&psxRegs.pc - (u32)&psxRegs );
+	DevCon::Notice( "EE pc offset: 0x%x, IOP pc offset: 0x%x", params (u32)&cpuRegs.pc - (u32)&cpuRegs, (u32)&iopRegs.pc - (u32)&iopRegs );
 
 	cpudetectInit();
 
@@ -202,7 +202,7 @@ void SysAllocateDynarecs()
 	{
 		// R5900 and R3000a must be rec-enabled together for now so if either fails they both fail.
 		recCpu.Allocate();
-		psxRec.Allocate();
+		//psxRec.Allocate();
 	}
 	catch( Exception::BaseException& ex )
 	{
@@ -216,7 +216,7 @@ void SysAllocateDynarecs()
 		g_Session.ForceDisableEErec = true;
 
 		recCpu.Shutdown();
-		psxRec.Shutdown();
+		//psxRec.Shutdown();
 	}
 
 	try
@@ -277,7 +277,7 @@ void SysShutdownDynarecs()
 	// Special SuperVU "complete" terminator.
 	SuperVUDestroy( -1 );
 
-	psxRec.Shutdown();
+	//psxRec.Shutdown();
 	recCpu.Shutdown();
 }
 
@@ -295,12 +295,12 @@ void SysClearExecutionCache()
 	if( CHECK_EEREC )
 	{
 		Cpu = &recCpu;
-		psxCpu = &psxRec;
+		psxCpu = &iopInt;
 	}
 	else
 	{
 		Cpu = &intCpu;
-		psxCpu = &psxInt;
+		psxCpu = &iopInt;
 	}
 
 	Cpu->Reset();

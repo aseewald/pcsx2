@@ -379,8 +379,8 @@ int HasBreakPoint(u32 pc)
 	}
 	else
 	{
-		if ((psxRegs.cycle - 100) <= dBPC &&
-		        (psxRegs.cycle + 100) >= dBPC) return 1;
+		if ((iopRegs.cycle - 100) <= dBPC &&
+		        (iopRegs.cycle + 100) >= dBPC) return 1;
 	}
 	return 0;
 }
@@ -414,7 +414,7 @@ void OnDebug_EEMode(GtkToggleButton *togglebutton, gpointer user_data)
 void OnDebug_IOPMode(GtkToggleButton *togglebutton, gpointer user_data)
 {
 	DebugMode = 1;
-	dPC = psxRegs.pc;
+	dPC = iopRegs.pc;
 	UpdateDebugger();
 }
 

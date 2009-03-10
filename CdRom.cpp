@@ -103,7 +103,7 @@ static __forceinline void StartReading(unsigned long type) {
 static __forceinline void StopReading() {
 	if (cdr.Reading) {
 		cdr.Reading = 0;
-		psxRegs.interrupt &= ~(1<<IopEvt_CdromRead);
+		iopRegs.interrupt &= ~(1<<IopEvt_CdromRead);
 	}
 }
 

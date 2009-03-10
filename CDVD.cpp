@@ -205,7 +205,7 @@ static void cdvdSetIrq( uint id = (1<<Irq_CommandComplete) )
 	cdvd.PwOff |= id;
 	iopIntcIrq( 2 );
 	hwIntcIrq(INTC_SBUS);
-	psxSetNextBranchDelta( 20 );
+	iopSetNextBranchDelta( 20 );
 }
 
 static int mg_BIToffset(u8 *buffer){
@@ -962,7 +962,7 @@ __forceinline void cdvdReadInterrupt() {
 		cdvd.Sector = cdvd.SeekToSector;
 
 		CDR_LOG( "Cdvd Seek Complete > Scheduling block read interrupt at iopcycle=%8.8x.\n",
-			psxRegs.cycle + cdvd.ReadTime );
+			iopRegs.cycle + cdvd.ReadTime );
 
 		CDVDREAD_INT(cdvd.ReadTime);
 		return;
@@ -1523,7 +1523,7 @@ void cdvdWrite07(u8 rt)		// BREAK
 	// Aborts any one of several CD commands:
 	// Pause, Seek, Read, Status, Standby, and Stop
 
-	psxRegs.interrupt &= ~( (1<<IopEvt_Cdvd) | (1<<IopEvt_CdvdRead) );
+	iopRegs.interrupt &= ~( (1<<IopEvt_Cdvd) | (1<<IopEvt_CdvdRead) );
 
 	cdvd.Action = cdvdAction_Break;
 	CDVD_INT( 64 );
@@ -1550,15 +1550,15 @@ void cdvdWrite0F(u8 rt) { // TYPE
 }
 
 void cdvdWrite14(u8 rt) { // PS1 MODE??
-	u32 cycle = psxRegs.cycle;
+	u32 cycle = iopRegs.cycle;
 
 	if (rt == 0xFE)	Console::Notice("*PCSX2*: go PS1 mode DISC SPEED = FAST\n");
 	else			Console::Notice("*PCSX2*: go PS1 mode DISC SPEED = %dX\n", params rt);
 
-	psxReset();
+	iopReset();
 	psxHu32(0x1f801450) = 0x8;
 	psxHu32(0x1f801078) = 1;
-	psxRegs.cycle = cycle;
+	iopRegs.cycle = cycle;
 }
 
 void cdvdWrite16(u8 rt)		 // SCOMMAND

@@ -90,13 +90,14 @@ void SaveState::FreezeAll()
 	FreezeMem(PS2MEM_SCRATCH, Ps2MemSize::Scratch);	// scratch pad 
 	FreezeMem(PS2MEM_HW, Ps2MemSize::Hardware);			// hardware memory
 
-	Freeze(cpuRegs);   // cpu regs + COP0
-	Freeze(psxRegs);   // iop regs
+	Freeze( cpuRegs );   // cpu regs + COP0
+	Freeze( iopRegs );   // iop regs
+
 	if (GetVersion() >= 0x6)
 		Freeze(fpuRegs);
 	else 
 	{
-		// Old versiosn didn't save the ACCflags...
+		// Old versions didn't save the ACCflags...
 		FreezeLegacy(fpuRegs, sizeof(u32));   // fpu regs
 		fpuRegs.ACCflag = 0;
 	}
@@ -104,9 +105,9 @@ void SaveState::FreezeAll()
 
 	Freeze(EEsCycle);
 	Freeze(EEoCycle);
-	Freeze(psxRegs.cycle);		// used to be IOPoCycle.  This retains compatibility.
+	//Freeze(iopRegs.cycle);		// used to be IOPoCycle.  This retains compatibility.
 	Freeze(g_nextBranchCycle);
-	Freeze(g_psxNextBranchCycle);
+	//Freeze(NextBranchCycle);
 
 	Freeze(s_iLastCOP0Cycle);
 	Freeze(s_iLastPERFCycle);

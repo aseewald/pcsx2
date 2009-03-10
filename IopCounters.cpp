@@ -65,7 +65,7 @@ static void psxRcntReset(int index)
 {
 	psxCounters[index].count = 0;
 	psxCounters[index].mode&= ~0x18301C00;
-	psxCounters[index].sCycleT = psxRegs.cycle;
+	psxCounters[index].sCycleT = iopRegs.cycle;
 }
 
 static void _rcntSet( int cntidx )
@@ -75,7 +75,7 @@ static void _rcntSet( int cntidx )
 
 	const psxCounter& counter = psxCounters[cntidx];
 
-	// psxNextCounter is relative to the psxRegs.cycle when rcntUpdate() was last called.
+	// psxNextCounter is relative to the iopRegs.cycle when rcntUpdate() was last called.
 	// However, the current _rcntSet could be called at any cycle count, so we need to take
 	// that into account.  Adding the difference from that cycle count to the current one
 	// will do the trick!
@@ -90,15 +90,15 @@ static void _rcntSet( int cntidx )
 		return;
 	}
 
-	c = (u64)((overflowCap - counter.count) * counter.rate) - (psxRegs.cycle - counter.sCycleT);
-	c += psxRegs.cycle - psxNextsCounter;		// adjust for time passed since last rcntUpdate();
+	c = (u64)((overflowCap - counter.count) * counter.rate) - (iopRegs.cycle - counter.sCycleT);
+	c += iopRegs.cycle - psxNextsCounter;		// adjust for time passed since last rcntUpdate();
 	if(c < (u64)psxNextCounter) psxNextCounter = (u32)c;
 
 	//if((counter.mode & 0x10) == 0 || psxCounters[i].target > 0xffff) continue;
 	if( counter.target & IOPCNT_FUTURE_TARGET ) return;
 
-	c = (s64)((counter.target - counter.count) * counter.rate) - (psxRegs.cycle - counter.sCycleT);
-	c += psxRegs.cycle - psxNextsCounter;		// adjust for time passed since last rcntUpdate();
+	c = (s64)((counter.target - counter.count) * counter.rate) - (iopRegs.cycle - counter.sCycleT);
+	c += iopRegs.cycle - psxNextsCounter;		// adjust for time passed since last rcntUpdate();
 	if(c < (u64)psxNextCounter) psxNextCounter = (u32)c;
 }
 
@@ -142,12 +142,12 @@ void psxRcntInit() {
 	}
 
 	for (i=0; i<8; i++)
-		psxCounters[i].sCycleT = psxRegs.cycle;
+		psxCounters[i].sCycleT = iopRegs.cycle;
 
 	// Tell the IOP to branch ASAP, so that timers can get
 	// configured properly.
 	psxNextCounter = 1;
-	psxNextsCounter = psxRegs.cycle;
+	psxNextsCounter = iopRegs.cycle;
 }
 
 static void __fastcall _rcntTestTarget( int i )
@@ -260,7 +260,7 @@ static void _psxCheckStartGate( int i )
 
 		case 0x2: //GATE_ON_Clear_OFF_Start - start counting on gate start, stop on gate end
 			psxCounters[i].count = 0;
-			psxCounters[i].sCycleT = psxRegs.cycle;
+			psxCounters[i].sCycleT = iopRegs.cycle;
 			psxCounters[i].mode &= ~IOPCNT_STOPPED;
 		break;
 
@@ -280,7 +280,7 @@ static void _psxCheckEndGate(int i)
 		case 0x0: //GATE_ON_count - reset and start counting
 		case 0x1: //GATE_ON_ClearStart - count normally with resets after every end gate
 			psxCounters[i].count = 0;
-			psxCounters[i].sCycleT = psxRegs.cycle;
+			psxCounters[i].sCycleT = iopRegs.cycle;
 			psxCounters[i].mode &= ~IOPCNT_STOPPED;
 		break;
 
@@ -294,7 +294,7 @@ static void _psxCheckEndGate(int i)
 			if( psxCounters[i].mode & IOPCNT_STOPPED )
 			{
 				psxCounters[i].count = 0;
-				psxCounters[i].sCycleT = psxRegs.cycle;
+				psxCounters[i].sCycleT = iopRegs.cycle;
 				psxCounters[i].mode &= ~IOPCNT_STOPPED;
 			}
 		break;
@@ -380,7 +380,7 @@ void psxRcntUpdate()
 
 	for (i=0; i<=5; i++)
 	{
-		s32 change = psxRegs.cycle - psxCounters[i].sCycleT;
+		s32 change = iopRegs.cycle - psxCounters[i].sCycleT;
 
 		// don't count disabled, gated, or hblank counters...
 		// We can't check the ALTSOURCE flag because the PSXCLOCK source *should*
@@ -394,10 +394,10 @@ void psxRcntUpdate()
 		if(psxCounters[i].rate != 1)
 		{
 			change -= (change / psxCounters[i].rate) * psxCounters[i].rate;
-			psxCounters[i].sCycleT = psxRegs.cycle - change;
+			psxCounters[i].sCycleT = iopRegs.cycle - change;
 		}
 		else
-			psxCounters[i].sCycleT = psxRegs.cycle;
+			psxCounters[i].sCycleT = iopRegs.cycle;
 	}
 
 	// Do target/overflow testing
@@ -421,17 +421,17 @@ void psxRcntUpdate()
 	}
 
 	psxNextCounter = 0xffffff;
-	psxNextsCounter = psxRegs.cycle;
+	psxNextsCounter = iopRegs.cycle;
 
 	if(SPU2async)
 	{	
-		const s32 difference = psxRegs.cycle - psxCounters[6].sCycleT;
+		const s32 difference = iopRegs.cycle - psxCounters[6].sCycleT;
 		s32 c = psxCounters[6].CycleT;
 
 		if(difference >= psxCounters[6].CycleT)
 		{
 			SPU2async(difference);
-			psxCounters[6].sCycleT = psxRegs.cycle;
+			psxCounters[6].sCycleT = iopRegs.cycle;
 			psxCounters[6].CycleT = psxCounters[6].rate;
 		}
 		else c -= difference;
@@ -440,13 +440,13 @@ void psxRcntUpdate()
 
 	if(USBasync)
 	{
-		const s32 difference = psxRegs.cycle - psxCounters[7].sCycleT;
+		const s32 difference = iopRegs.cycle - psxCounters[7].sCycleT;
 		s32 c = psxCounters[7].CycleT;
 
 		if(difference >= psxCounters[7].CycleT)
 		{
 			USBasync(difference);
-			psxCounters[7].sCycleT = psxRegs.cycle;
+			psxCounters[7].sCycleT = iopRegs.cycle;
 			psxCounters[7].CycleT = psxCounters[7].rate;
 		}
 		else c -= difference;
@@ -468,8 +468,8 @@ void psxRcntWcount16(int index, u32 value)
 		// Re-adjust the sCycleT to match where the counter is currently
 		// (remainder of the rate divided into the time passed will do the trick)
 
-		change = psxRegs.cycle - psxCounters[index].sCycleT;
-		psxCounters[index].sCycleT = psxRegs.cycle - (change % psxCounters[index].rate);
+		change = iopRegs.cycle - psxCounters[index].sCycleT;
+		psxCounters[index].sCycleT = iopRegs.cycle - (change % psxCounters[index].rate);
 	}
 
 	psxCounters[index].count = value & 0xffff;
@@ -489,8 +489,8 @@ void psxRcntWcount32(int index, u32 value)
 		// Re-adjust the sCycleT to match where the counter is currently
 		// (remainder of the rate divided into the time passed will do the trick)
 
-		change = psxRegs.cycle - psxCounters[index].sCycleT;
-		psxCounters[index].sCycleT = psxRegs.cycle - (change % psxCounters[index].rate);
+		change = iopRegs.cycle - psxCounters[index].sCycleT;
+		psxCounters[index].sCycleT = iopRegs.cycle - (change % psxCounters[index].rate);
 	}
 
 	psxCounters[index].count = value & 0xffffffff;
@@ -518,7 +518,7 @@ void psxRcnt0Wmode(u32 value)
 	else psxhblankgate &= ~1;
 
 	psxCounters[0].count = 0;
-	psxCounters[0].sCycleT = psxRegs.cycle;
+	psxCounters[0].sCycleT = iopRegs.cycle;
 	psxCounters[0].target &= 0xffff;
 
 	_rcntSet( 0 );
@@ -543,7 +543,7 @@ void psxRcnt1Wmode(u32 value)
 	else psxvblankgate &= ~(1<<1);
 
 	psxCounters[1].count = 0;
-	psxCounters[1].sCycleT = psxRegs.cycle;
+	psxCounters[1].sCycleT = iopRegs.cycle;
 	psxCounters[1].target &= 0xffff;
 	_rcntSet( 1 );
 }
@@ -568,7 +568,7 @@ void psxRcnt2Wmode(u32 value)
 	}
 	
 	psxCounters[2].count = 0;
-	psxCounters[2].sCycleT = psxRegs.cycle;
+	psxCounters[2].sCycleT = iopRegs.cycle;
 	psxCounters[2].target &= 0xffff;
 	_rcntSet( 2 );
 }
@@ -592,7 +592,7 @@ void psxRcnt3Wmode(u32 value)
 	else psxvblankgate &= ~(1<<3);
 
 	psxCounters[3].count = 0;
-	psxCounters[3].sCycleT = psxRegs.cycle;
+	psxCounters[3].sCycleT = iopRegs.cycle;
 	psxCounters[3].target &= 0xffffffff;
 	_rcntSet( 3 );
 }
@@ -619,7 +619,7 @@ void psxRcnt4Wmode(u32 value)
 	}
 	
 	psxCounters[4].count = 0;
-	psxCounters[4].sCycleT = psxRegs.cycle;
+	psxCounters[4].sCycleT = iopRegs.cycle;
 	psxCounters[4].target &= 0xffffffff;
 	_rcntSet( 4 );
 }
@@ -646,7 +646,7 @@ void psxRcnt5Wmode(u32 value)
 	}
 	
 	psxCounters[5].count = 0;
-	psxCounters[5].sCycleT = psxRegs.cycle;
+	psxCounters[5].sCycleT = iopRegs.cycle;
 	psxCounters[5].target &= 0xffffffff;
 	_rcntSet( 5 );
 }
@@ -698,7 +698,7 @@ u16 psxRcntRcount16(int index)
 	if( !( psxCounters[index].mode & IOPCNT_STOPPED ) &&
 		( psxCounters[index].rate != PSXHBLANK ) )
 	{
-		u32 delta = (u32)((psxRegs.cycle - psxCounters[index].sCycleT) / psxCounters[index].rate);
+		u32 delta = (u32)((iopRegs.cycle - psxCounters[index].sCycleT) / psxCounters[index].rate);
 		retval += delta;
 		PSXCNT_LOG("              (delta = %lx)\n", delta );
 	}
@@ -717,7 +717,7 @@ u32 psxRcntRcount32(int index)
 	if( !( psxCounters[index].mode & IOPCNT_STOPPED ) &&
 		( psxCounters[index].rate != PSXHBLANK ) )
 	{
-		u32 delta = (u32)((psxRegs.cycle - psxCounters[index].sCycleT) / psxCounters[index].rate);
+		u32 delta = (u32)((iopRegs.cycle - psxCounters[index].sCycleT) / psxCounters[index].rate);
 		retval += delta;
 		PSXCNT_LOG("               (delta = %lx)\n", delta );
 	}
@@ -728,7 +728,7 @@ u32 psxRcntRcount32(int index)
 u64 psxRcntCycles(int index)
 {
 	if(psxCounters[index].mode & IOPCNT_STOPPED || psxCounters[index].rate == PSXHBLANK ) return psxCounters[index].count;
-	return (u64)(psxCounters[index].count + (u32)((psxRegs.cycle - psxCounters[index].sCycleT) / psxCounters[index].rate));
+	return (u64)(psxCounters[index].count + (u32)((iopRegs.cycle - psxCounters[index].sCycleT) / psxCounters[index].rate));
 }
 
 void psxRcntSetGates()

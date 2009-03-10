@@ -28,10 +28,6 @@
 
 using namespace std;
 
-// yay sloppy crap needed until we can remove dependency on this hippopotamic
-// landmass of shared code. (air)
-extern u32 g_psxConstRegs[32];
-
 
 u16 x86FpuState, iCWstate;
 u16 g_mmxAllocCounter = 0;
@@ -61,7 +57,7 @@ u32 _x86GetAddr(int type, int reg)
 		case X86TYPE_VUPREAD: return (type&X86TYPE_VU1)?(u32)&VU1.VI[REG_P]:(u32)&VU0.VI[REG_P];
 		case X86TYPE_VUQWRITE: return (type&X86TYPE_VU1)?(u32)&VU1.q:(u32)&VU0.q;
 		case X86TYPE_VUPWRITE: return (type&X86TYPE_VU1)?(u32)&VU1.p:(u32)&VU0.p;
-		case X86TYPE_PSX: return (u32)&psxRegs.GPR.r[reg];
+		case X86TYPE_PSX: return (u32)&iopRegs.GPR.r[reg];
 		case X86TYPE_PCWRITEBACK:
 			return (u32)&g_recWriteback;
 		case X86TYPE_VUJUMP:
@@ -833,9 +829,6 @@ __forceinline void _callPushArg(u32 arg, uptr argmem)
 	else if( IS_EECONSTREG(arg) ) {
 		PUSH32I(g_cpuConstRegs[(arg>>16)&0x1f].UL[0]);
 	}
-	else if( IS_PSXCONSTREG(arg) ) {
-		PUSH32I(g_psxConstRegs[(arg>>16)&0x1f]);
-	}
     else if( IS_MEMORYREG(arg) ) PUSH32M(argmem);
     else {
         assert( (arg&0xfff0) == 0 );
@@ -880,9 +873,6 @@ void _recPushReg(int mmreg)
 	}
 	else if( IS_EECONSTREG(mmreg) ) {
 		PUSH32I(g_cpuConstRegs[(mmreg>>16)&0x1f].UL[0]);
-	}
-	else if( IS_PSXCONSTREG(mmreg) ) {
-		PUSH32I(g_psxConstRegs[(mmreg>>16)&0x1f]);
 	}
 	else {
         assert( (mmreg&0xfff0) == 0 );

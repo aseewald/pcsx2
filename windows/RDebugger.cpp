@@ -79,14 +79,14 @@ int CreateSocket(HWND hDlg, int port){
 	ListBox_AddString(GetDlgItem(hDlg, IDC_COMMUNICATION), message);
 	
 	cpuRegs.CP0.n.EPC=cpuRegs.pc;
-	psxRegs.CP0.n.EPC=psxRegs.pc;
+	iopRegs.CP0.n.EPC=iopRegs.pc;
 	sprintf(message, "%08X", cpuRegs.pc);
 	Edit_SetText(GetDlgItem(hDlg, IDC_EEPC), message);
-	sprintf(message, "%08X", psxRegs.pc);
+	sprintf(message, "%08X", iopRegs.pc);
 	Edit_SetText(GetDlgItem(hDlg, IDC_IOPPC), message);
 	sprintf(message, "%d", cpuRegs.cycle);
 	Edit_SetText(GetDlgItem(hDlg, IDC_EECYCLE), message);
-	sprintf(message, "%d", psxRegs.cycle);
+	sprintf(message, "%d", iopRegs.cycle);
 	Edit_SetText(GetDlgItem(hDlg, IDC_IOPCYCLE), message);
 	Button_SetCheck(GetDlgItem(hDlg, IDC_DEBUGEE),  (debuggedCpu==0));
 	Button_SetCheck(GetDlgItem(hDlg, IDC_DEBUGIOP), (debuggedCpu==1));
@@ -221,9 +221,9 @@ DWORD WINAPI Run2(LPVOID lpParam){
 				Cpu->Step();		//use this with breakpoints & step-by-step
 //				Cpu->ExecuteBlock();	//use this to run faster, but not for stepping
 //			sprintf(pc, "%08X", cpuRegs.pc);Edit_SetText(GetDlgItem(hDlg, IDC_EEPC), pc);
-//			sprintf(pc, "%08X", psxRegs.pc);Edit_SetText(GetDlgItem(hDlg, IDC_IOPPC), pc);
+//			sprintf(pc, "%08X", iopRegs.pc);Edit_SetText(GetDlgItem(hDlg, IDC_IOPPC), pc);
 //			sprintf(pc, "%d", cpuRegs.cycle);Edit_SetText(GetDlgItem(hDlg, IDC_EECYCLE), pc);
-//			sprintf(pc, "%d", psxRegs.cycle);Edit_SetText(GetDlgItem(hDlg, IDC_IOPCYCLE), pc);
+//			sprintf(pc, "%d", iopRegs.cycle);Edit_SetText(GetDlgItem(hDlg, IDC_IOPCYCLE), pc);
 			if (runCount!=0 && --runCount==0){
 				sendBREAK('E', 0, runCode, 0x23, runCount);
 				InterlockedExchange(&runStatus, STOP);
@@ -252,7 +252,7 @@ DWORD WINAPI Run2(LPVOID lpParam){
 		}
 		else{
 			cpuRegs.CP0.n.EPC=cpuRegs.pc;
-			psxRegs.CP0.n.EPC=psxRegs.pc;
+			iopRegs.CP0.n.EPC=iopRegs.pc;
 			runEvent->Wait();
 			//WaitForSingleObject(runEvent, INFINITE);
 			runStatus=RUN;

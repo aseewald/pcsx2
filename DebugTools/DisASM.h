@@ -43,10 +43,10 @@
 
 //IOP
 
-#define DECODE_RD_IOP     ((psxRegs.code >> 11) & 0x1F) 
-#define DECODE_RT_IOP     ((psxRegs.code >> 16) & 0x1F) 
-#define DECODE_RS_IOP     ((psxRegs.code >> 21) & 0x1F) 
-#define DECODE_IMMED_IOP   ( psxRegs.code & 0xFFFF)  
-#define DECODE_SA_IOP    ((psxRegs.code >>  6) & 0x1F)
+#define DECODE_RD_IOP     ((iopRegs.code >> 11) & 0x1F) 
+#define DECODE_RT_IOP     ((iopRegs.code >> 16) & 0x1F) 
+#define DECODE_RS_IOP     ((iopRegs.code >> 21) & 0x1F) 
+#define DECODE_IMMED_IOP   ( iopRegs.code & 0xFFFF)  
+#define DECODE_SA_IOP    ((iopRegs.code >>  6) & 0x1F)
 #define DECODE_FS_IOP           (DECODE_RD_IOP)
 

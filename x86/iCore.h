@@ -209,7 +209,6 @@ int _signExtendXMMtoM(u32 to, x86SSERegType from, int candestroy); // returns tr
 #define MEM_CONSTTAG 0x1000 // argument is a const
 
 #define IS_EECONSTREG(reg) (reg>=0&&((reg)&MEM_EECONSTTAG))
-#define IS_PSXCONSTREG(reg) (reg>=0&&((reg)&MEM_PSXCONSTTAG))
 #define IS_MMXREG(reg) (reg>=0&&((reg)&MEM_MMXTAG))
 #define IS_XMMREG(reg) (reg>=0&&((reg)&MEM_XMMTAG))
 

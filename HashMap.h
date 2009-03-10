@@ -544,7 +544,7 @@ public:
 	///   Constructor.
 	/// </summary>
 	/// <remarks>
-	///   Both the <c>emptyKey</c>a nd c>deletedKey</c> parameters must be unique values that
+	///   Both the <c>emptyKey</c> and <c>deletedKey</c> parameters must be unique values that
 	///   are *not* used as actual values in the set.
 	/// </remarks>
 	HashMap( Key emptyKey, Key deletedKey, int initialCapacity=33 ) :

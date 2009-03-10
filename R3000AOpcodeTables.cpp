@@ -21,8 +21,6 @@
 #include "PsxCommon.h"
 #include "Common.h"
 
-extern void zeroEx();
-
 // Note: Branch instructions of the Interpreter are defined externally because
 // the recompiler shouldn't be using them (it isn't entirely safe, due to the
 // delay slot and event handling differences between recs and ints)
@@ -47,11 +45,11 @@ void psxJALR();
 *********************************************************/
 void psxADDI() 	{ if (!_Rt_) return; _rRt_ = _u32(_rRs_) + _Imm_ ; }		// Rt = Rs + Im 	(Exception on Integer Overflow)
 void psxADDIU() {															// Rt = Rs + Im
-	if (!_Rt_)
+	/*if (!_Rt_)
 	{
 		zeroEx();
 		return;
-	}
+	}*/
 	_rRt_ = _u32(_rRs_) + _Imm_ ;
 }
 void psxANDI() 	{ if (!_Rt_) return; _rRt_ = _u32(_rRs_) & _ImmU_; }		// Rt = Rs And Im
@@ -150,12 +148,12 @@ void psxMTLO() { _rLo_ = _rRs_; } // Lo = Rs
 void psxBREAK() {
 	// Break exception - psx rom doens't handles this
 	psxRegs.pc -= 4;
-	psxException(0x24, iopIsDelaySlot);
+	iopException(0x24, iopIsDelaySlot);
 }
 
 void psxSYSCALL() {
 	psxRegs.pc -= 4;
-	psxException(0x20, iopIsDelaySlot);
+	iopException(0x20, iopIsDelaySlot);
 
 }
 

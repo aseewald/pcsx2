@@ -2207,19 +2207,7 @@
 					>
 				</File>
 				<File
-					RelativePath="..\..\R3000A.cpp"
-					>
-				</File>
-				<File
 					RelativePath="..\..\R3000A.h"
-					>
-				</File>
-				<File
-					RelativePath="..\..\R3000AInterpreter.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\..\R3000AOpcodeTables.cpp"
 					>
 				</File>
 				<File
@@ -2233,18 +2221,94 @@
 				<Filter
 					Name="Dynarec"
 					>
-					<File
-						RelativePath="..\..\x86\iR3000A.cpp"
+					<Filter
+						Name="iR3000air"
 						>
-					</File>
-					<File
-						RelativePath="..\..\x86\iR3000A.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\x86\iR3000Atables.cpp"
-						>
-					</File>
+						<File
+							RelativePath="..\..\R3000air\iR3000air.cpp"
+							>
+							<FileConfiguration
+								Name="Debug|Win32"
+								ExcludedFromBuild="true"
+								>
+								<Tool
+									Name="VCCLCompilerTool"
+								/>
+							</FileConfiguration>
+							<FileConfiguration
+								Name="Devel|Win32"
+								ExcludedFromBuild="true"
+								>
+								<Tool
+									Name="VCCLCompilerTool"
+								/>
+							</FileConfiguration>
+							<FileConfiguration
+								Name="Release|Win32"
+								ExcludedFromBuild="true"
+								>
+								<Tool
+									Name="VCCLCompilerTool"
+								/>
+							</FileConfiguration>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\iR3000air.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\iR3000airIntermediate.cpp"
+							>
+							<FileConfiguration
+								Name="Debug|Win32"
+								ExcludedFromBuild="true"
+								>
+								<Tool
+									Name="VCCLCompilerTool"
+								/>
+							</FileConfiguration>
+							<FileConfiguration
+								Name="Devel|Win32"
+								ExcludedFromBuild="true"
+								>
+								<Tool
+									Name="VCCLCompilerTool"
+								/>
+							</FileConfiguration>
+							<FileConfiguration
+								Name="Release|Win32"
+								ExcludedFromBuild="true"
+								>
+								<Tool
+									Name="VCCLCompilerTool"
+								/>
+							</FileConfiguration>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\R3000Air.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\R3000air.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\R3000airInstruction.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\R3000airInterpreter.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\R3000airOpcodeImpl.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\R3000AirOpcodeTables.cpp"
+							>
+						</File>
+					</Filter>
 				</Filter>
 			</Filter>
 			<Filter
@@ -2545,6 +2609,30 @@
 				<File
 					RelativePath="..\..\DebugTools\DisR3000asm.cpp"
 					>
+					<FileConfiguration
+						Name="Debug|Win32"
+						ExcludedFromBuild="true"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+						/>
+					</FileConfiguration>
+					<FileConfiguration
+						Name="Devel|Win32"
+						ExcludedFromBuild="true"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+						/>
+					</FileConfiguration>
+					<FileConfiguration
+						Name="Release|Win32"
+						ExcludedFromBuild="true"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+						/>
+					</FileConfiguration>
 				</File>
 				<File
 					RelativePath="..\..\DebugTools\DisR5900.cpp"
@@ -3066,6 +3154,10 @@
 				>
 			</File>
 		</Filter>
+		<File
+			RelativePath=".\ClassDiagram1.cd"
+			>
+		</File>
 		<File
 			RelativePath="..\..\Common.h"
 			>

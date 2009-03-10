@@ -64,8 +64,8 @@ void statsVSync() {
 
 	stats.eeCycles+= cpuRegs.cycle - stats.eeSCycle;
 	stats.eeSCycle = cpuRegs.cycle;
-	stats.iopCycles+= psxRegs.cycle - stats.iopSCycle;
-	stats.iopSCycle = psxRegs.cycle;
+	stats.iopCycles+= iopRegs.cycle - stats.iopSCycle;
+	stats.iopSCycle = iopRegs.cycle;
 	stats.vsyncCount++;
 	stats.vif1count = 0;
 	stats.vu1count = 0;

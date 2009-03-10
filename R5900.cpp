@@ -24,7 +24,6 @@
 #include "Memory.h"
 #include "Hw.h"
 #include "DebugTools/Debug.h"
-#include "R3000A.h"
 #include "VUmicro.h"
 #include "COP0.h"
 
@@ -38,6 +37,9 @@
 #include "Paths.h"
 
 #include "R5900Exceptions.h"
+
+#include "PsxCommon.h"
+
 
 using namespace R5900;	// for R5900 disasm tools
 
@@ -93,7 +95,7 @@ void cpuReset()
 	vif0Reset();
     vif1Reset();
 	rcntInit();
-	psxReset();
+	iopReset();
 }
 
 void cpuShutdown()
@@ -102,7 +104,7 @@ void cpuShutdown()
 
 	hwShutdown();
 //	biosShutdown();
-	psxShutdown();
+	iopShutdown();
 	disR5900FreeSyms();
 }
 
@@ -448,7 +450,7 @@ __forceinline bool _cpuBranchTest_Shared()
 		_cpuTestInterrupts();
 
 	// ---- IOP -------------
-	// * It's important to run a psxBranchTest before calling ExecuteBlock. This
+	// * It's important to run a iopEventTest before calling ExecuteBlock. This
 	//   is because the IOP does not always perform branch tests before returning
 	//   (during the prev branch) and also so it can act on the state the EE has
 	//   given it before executing any code.
@@ -456,7 +458,7 @@ __forceinline bool _cpuBranchTest_Shared()
 	// * The IOP cannot always be run.  If we run IOP code every time through the
 	//   cpuBranchTest, the IOP generally starts to run way ahead of the EE.
 
-	psxBranchTest();
+	iopEventTest();
 
 	if( iopBranchAction )
 	{
@@ -526,7 +528,7 @@ __forceinline bool _cpuBranchTest_Shared()
 
 	// The IOP could be running ahead/behind of us, so adjust the iop's next branch by its
 	// relative position to the EE (via EEsCycle)
-	cpuSetNextBranchDelta( ((g_psxNextBranchCycle-psxRegs.cycle)*8) - EEsCycle );
+	cpuSetNextBranchDelta( ((iopRegs.NextBranchCycle-iopRegs.cycle)*8) - EEsCycle );
 
 	// Apply the hsync counter's nextCycle
 	cpuSetNextBranch( counters[4].sCycle, counters[4].CycleT );

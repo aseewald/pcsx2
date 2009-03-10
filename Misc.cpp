@@ -704,7 +704,7 @@ void ProcessFKeys(int fkey, int shift)
             if( shift ) {
 #ifdef PCSX2_DEVBUILD
 			    iDumpRegisters(cpuRegs.pc, 0);
-				Console::Notice("hardware registers dumped EE:%x, IOP:%x\n", params cpuRegs.pc, psxRegs.pc);
+				Console::Notice("hardware registers dumped EE:%x, IOP:%x\n", params cpuRegs.pc, iopRegs.pc);
 #endif
             }
             else {
