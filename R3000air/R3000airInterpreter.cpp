@@ -29,6 +29,8 @@
 
 #include "R3000airOpcodeTables.inl"
 
+#include "DebugTools/Debug.h"
+
 namespace R3000Exception
 {
 	BaseExcept::~BaseExcept() {}
@@ -53,7 +55,7 @@ static bool intInterruptTest()
 	if( (psxHu32(0x1070) & psxHu32(0x1074)) == 0 ) return false;
 	if( (iopRegs.CP0.n.Status & 0xFE01) < 0x401 ) return false;
 
-	iopException(0, 0);
+	iopRegs.pc = iopException(0, 0);
 	return true;
 }
 
@@ -79,23 +81,22 @@ static void intEventTest()
 
 static void Process( Instruction& inst )
 {
-	//if( (iopRegs.pc >= 0x1200 && iopRegs.pc <= 0x1400) || (iopRegs.pc >= 0x0b40 && iopRegs.pc <= 0xe00))
+#ifdef _DEBUG
+	if( inst.U32 == 0 )
+		PSXCPU_LOG( "NOP\n" );
+	else
 	{
-		if( inst.U32 == 0 )
-			Console::WriteLn( "0x%8.8x: NOP", params inst._Pc_ );
-		else
-		{
-			InstructionDiagnostic::Process( inst );
-			Console::WriteLn( "0x%8.8x: %-34s ; %s", params
-				inst._Pc_, inst.GetDisasm().c_str(), inst.GetValuesComment().c_str() );
-		}
-
-		if( inst.IsDelaySlot )
-			Console::WriteLn("");
+		InstructionDiagnostic::Process( inst );
+		PSXCPU_LOG( "%-34s ; %s\n", inst.GetDisasm().c_str(), inst.GetValuesComment().c_str() );
 	}
 
+	if( inst.IsDelaySlot )
+		PSXCPU_LOG("\n");
+#endif
+
 	InstructionInterpreter::Process( inst );
-	
+	jASSUME( iopRegs.GPR.n.r0.UL == 0 );		//zero reg should always be zero!
+
 	iopRegs.cycle++;
 	psxCycleEE -= 8;
 }
@@ -103,8 +104,6 @@ static void Process( Instruction& inst )
 // Steps over the next instruction.
 static void intStep()
 {
-	intEventTest();
-
 	// Fetch current instruction, and interpret!
 
 	Instruction inst( iopRegs.pc );
@@ -115,13 +114,16 @@ static void intStep()
 		// Execute the delay slot before branching (but after the branch
 		// target has already been calculated above!)
 
+		const s32 result = iopRegs.NextBranchCycle - iopRegs.cycle;
+		if( result <= 0 ) intEventTest();
+
 		// Now's a good time to test for interrupts, which might vector us
 		// to a new location.
 		if( intInterruptTest() ) return;
 
 		Instruction delaySlot( iopRegs.pc+4, true );
 		Process( delaySlot );
-		
+
 		if( delaySlot.IsBranchType() )
 			Console::Error( "Branch in the delay slot!!" );
 	

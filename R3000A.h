@@ -50,7 +50,7 @@ extern R3000Acpu iopInt;
 
 void iopReset();
 void iopShutdown();
-void iopException(u32 code, u32 step);
+u32 iopException(u32 code, u32 step);
 void iopBranchTest();
 void iopExecuteBios();
 void iopMemReset();

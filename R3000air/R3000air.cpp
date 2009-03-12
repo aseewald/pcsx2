@@ -70,7 +70,8 @@ void iopShutdown() {
 	//psxCpu->Shutdown();
 }
 
-void iopException(u32 code, u32 bd)
+// Returns the new PC to vector to.
+u32 iopException(u32 code, u32 bd)
 {
 	PSXCPU_LOG("psxException 0x%x: 0x%x, 0x%x %s\n",
 		code, psxHu32(0x1070), psxHu32(0x1074), bd ? "(branch delay)" : ""
@@ -89,10 +90,7 @@ void iopException(u32 code, u32 bd)
 	else
 		iopRegs.CP0.n.EPC = iopRegs.pc;
 
-	if (iopRegs.CP0.n.Status & 0x400000)
-		iopRegs.pc = 0xbfc00180;
-	else
-		iopRegs.pc = 0x80000080;
+	u32 newpc = (iopRegs.CP0.n.Status & 0x400000) ? 0xbfc00180 : 0x80000080;
 
 	// Set the Status
 	iopRegs.CP0.n.Status = (iopRegs.CP0.n.Status &~0x3f) |
@@ -134,6 +132,7 @@ void iopException(u32 code, u32 bd)
 		}
 	}
 
+	return newpc;
 	/*if (iopRegs.CP0.n.Cause == 0x400 && (!(psxHu32(0x1450) & 0x8))) {
 		hwIntcIrq(1);
 	}*/
@@ -249,7 +248,7 @@ void iopEventTest()
 	if ((iopRegs.CP0.n.Status & 0xFE01) >= 0x401)
 	{
 		PSXCPU_LOG("Interrupt: %x  %x\n", psxHu32(0x1070), psxHu32(0x1074));
-		iopException(0, 0);
+		iopRegs.pc = iopException(0, 0);
 		iopBranchAction = true;
 	}
 }

@@ -86,11 +86,11 @@ void InstInterp::JALR() { SetLinkRd(); JR(); }
 // Rt = Rs + Im 	(Exception on Integer Overflow)
 void InstInterp::ADDI()
 {
-	s64 result = RsValue.SL + Imm();
+	s64 result = (s64)RsValue.SL + Imm();
 	_OverflowCheck( *this, result );
 
 	if(!_Rt_) return;
-	RtValue.UL = (u32)result;
+	RtValue.SL = (s32)result;
 	IsConstOutput.Rt = IsConstInput.Rs;
 }
 
@@ -103,6 +103,7 @@ void InstInterp::ADDIU()
 		zeroEx();
 		return;
 	}*/
+	if( !_Rt_ ) return;
 	RtValue.SL = RsValue.SL + Imm();
 	IsConstOutput.Rt = IsConstInput.Rs;
 }
@@ -138,7 +139,7 @@ void InstInterp::SLTI()	// Rt = Rs < Im		(Signed)
 void InstInterp::SLTIU()	// Rt = Rs < Im		(Unsigned)
 {
 	if (!_Rt_) return;
-	RtValue.UL = (RsValue.UL < ImmU()) ? 1 : 0; 
+	RtValue.UL = (RsValue.UL < (u32)Imm()) ? 1 : 0; 
 	IsConstOutput.Rt = IsConstInput.Rs;
 }
 
@@ -149,24 +150,24 @@ void InstInterp::SLTIU()	// Rt = Rs < Im		(Unsigned)
 // Rd = Rs + Rt		(Exception on Integer Overflow)
 void InstInterp::ADD()
 {
-	if (!_Rd_) return;
-	s64 result = RsValue.SL + RtValue.SL;
+	s64 result = (s64)RsValue.SL + RtValue.SL;
 	
 	_OverflowCheck( *this, result );
+	if (!_Rd_) return;
 	
-	RdValue.UL = (u32)result;
+	RdValue.SL = (s32)result;
 	IsConstOutput.Rd = IsConstInput.Rs && IsConstInput.Rt;
 }
 
 // Rd = Rs - Rt		(Exception on Integer Overflow)
 void InstInterp::SUB()
 {
-	if (!_Rd_) return;
-	s64 result = RsValue.SL - RtValue.SL;
+	s64 result = (s64)RsValue.SL - RtValue.SL;
 
 	_OverflowCheck( *this, result );
+	if (!_Rd_) return;
 
-	RdValue.UL = (u32)result;
+	RdValue.SL = (s32)result;
 	IsConstOutput.Rd = IsConstInput.Rs && IsConstInput.Rt;
 }
 
@@ -392,7 +393,7 @@ void InstInterp::BREAK()
 void InstInterp::SYSCALL()
 {
 	//iopRegs.pc -= 4;
-	iopException(IopExcCode::Syscall, IsDelaySlot);
+	m_NextPC = iopException( IopExcCode::Syscall, IsDelaySlot );
 
 	//throw R3000Exception::SystemCall( *this );
 }

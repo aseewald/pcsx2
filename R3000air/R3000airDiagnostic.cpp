@@ -262,7 +262,9 @@ string Instruction::GetValuesComment() const
 #define Form_RtImm16		Param_Rt, Param_Imm16, Param_None
 #define Form_RtAddrImm		Param_Rt, Param_AddrImm, Param_None
 #define Form_RtStore		Param_None, Param_Rt, Param_AddrImm
-#define Form_Cop0_RtRd		Param_Rt, Param_Fs, Param_None
+
+#define Form_Cop0Load_RtRd		Param_Rt, Param_Fs, Param_None
+#define Form_Cop0Store_RtRd		Param_None, Param_Rt, Param_Fs
 
 #define Form_HiRd			Param_Hi, Param_Rd, Param_None
 #define Form_LoRd			Param_Lo, Param_Rd, Param_None
@@ -338,7 +340,7 @@ MakeDiagU( OR,		Form_RdRsRt )
 MakeDiagU( XOR,		Form_RdRsRt )
 
 MakeDiagS( SLT,		Form_RdRsRt )
-MakeDiagU( SLTU,	Form_RdRsRt )
+MakeDiagU( SLTU,	Form_RdRsRt )	// tricky!  sign-extended immediate, unsigned comparison
 
 
 /*********************************************************
@@ -415,10 +417,10 @@ MakeDiagS( SWR,		Form_RtStore )
 * Moves between GPR and COPx                             *
 * Format:  OP rt, fs                                     *
 *********************************************************/
-MakeDiagS( MFC0,	Form_Cop0_RtRd )
-MakeDiagS( MTC0,	Form_Cop0_RtRd )
-MakeDiagS( CFC0,	Form_Cop0_RtRd )
-MakeDiagS( CTC0,	Form_Cop0_RtRd )
+MakeDiagS( MFC0,	Form_Cop0Load_RtRd )
+MakeDiagS( MTC0,	Form_Cop0Store_RtRd )
+MakeDiagS( CFC0,	Form_Cop0Load_RtRd )
+MakeDiagS( CTC0,	Form_Cop0Store_RtRd )
 
 /*********************************************************
 * Unknown instruction (would generate an exception)      *

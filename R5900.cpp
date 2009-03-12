@@ -458,7 +458,7 @@ __forceinline bool _cpuBranchTest_Shared()
 		//if( EEsCycle < -450 )
 		//	Console::WriteLn( " IOP ahead by: %d cycles", params -EEsCycle );
 
-		// Experimental and Probably Unnecessry Logic -->
+		// Experimental and Probably Unnecessary Logic -->
 		// Check if the EE already has an exception pending, and if so we shouldn't
 		// waste too much time updating the IOP.  Theory being that the EE and IOP should
 		// run closely in sync during raised exception events.  But in practice it didn't
