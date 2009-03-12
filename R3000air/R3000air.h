@@ -170,6 +170,123 @@ struct GprConstStatus
 #undef _PC_
 
 //////////////////////////////////////////////////////////////////////////////////////////
+//
+#define INSTRUCTION_API(retval, postfix) \
+	retval BGEZ() postfix; \
+	retval BGEZAL() postfix; \
+	retval BGTZ() postfix; \
+	retval BLEZ() postfix; \
+	retval BLTZ() postfix; \
+	retval BLTZAL() postfix; \
+	retval BEQ() postfix; \
+	retval BNE() postfix; \
+ \
+	retval J() postfix; \
+	retval JAL() postfix; \
+	retval JR() postfix; \
+	retval JALR() postfix; \
+ \
+	retval ADDI() postfix; \
+	retval ADDIU() postfix; \
+	retval ANDI() postfix; \
+	retval ORI() postfix; \
+	retval XORI() postfix; \
+	retval SLTI() postfix; \
+	retval SLTIU() postfix; \
+ \
+	retval ADD() postfix; \
+	retval ADDU() postfix; \
+	retval SUB() postfix; \
+	retval SUBU() postfix; \
+	retval AND() postfix; \
+	retval OR() postfix; \
+	retval XOR() postfix; \
+	retval NOR() postfix; \
+	retval SLT() postfix; \
+	retval SLTU() postfix; \
+ \
+	retval DIV() postfix; \
+	retval DIVU() postfix; \
+	retval MULT() postfix; \
+	retval MULTU() postfix; \
+ \
+	retval SLL() postfix; \
+	retval SRA() postfix; \
+	retval SRL() postfix; \
+	retval SLLV() postfix; \
+	retval SRAV() postfix; \
+	retval SRLV() postfix; \
+	retval LUI() postfix; \
+ \
+	retval MFHI() postfix; \
+	retval MFLO() postfix; \
+	retval MTHI() postfix; \
+	retval MTLO() postfix; \
+ \
+	retval BREAK() postfix; \
+	retval SYSCALL() postfix; \
+	retval RFE() postfix; \
+ \
+	retval LB() postfix; \
+	retval LBU() postfix; \
+	retval LH() postfix; \
+	retval LHU() postfix; \
+	retval LW() postfix; \
+	retval LWL() postfix; \
+	retval LWR() postfix; \
+ \
+	retval SB() postfix; \
+	retval SH() postfix; \
+	retval SW() postfix; \
+	retval SWL() postfix; \
+	retval SWR() postfix; \
+ \
+	retval MFC0() postfix; \
+	retval CFC0() postfix; \
+	retval MTC0() postfix; \
+	retval CTC0() postfix; \
+	retval Unknown() postfix;
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+// This enumerator is used to describe the display of each instruction/opcode.
+// All instructions are allowed three parameters.
+enum ParamType
+{
+	Param_None,
+	Param_Rt,
+	Param_Rs,
+	Param_Rd,
+	Param_Sa,
+
+	Param_Fs,			// Used by Cop0 load/store
+
+	Param_Hi,
+	Param_Lo,
+	Param_HiLo,			// 64 bit operand (allowed as destination only)
+
+	Param_Imm,
+	Param_Imm16,		// Immediate, shifted up by 16. [used by LUI]
+
+	Param_AddrImm,		// Address Immediate (Rs + Imm()), used by load/store
+	Param_BranchOffset,
+	Param_JumpTarget,	// 26 bit immediate used as a jump target
+	Param_RsJumpTarget	// 32 bit register used as a jump target
+};
+
+struct InstDiagInfo
+{
+	const char* Name;			// display name
+	const ParamType Param[3];	// parameter mappings
+
+	// indicates if this is an unsigned operation or not.
+	// Source registers will be displayed as unsigned (zero-extended) if set.
+	const bool IsUnsigned;
+};
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
 // This object is immutable.  Do not modify, just create new ones. :)
 // See R3000AirInstruction.cpp for code implementations.
 class Instruction 
@@ -209,13 +326,21 @@ protected:
 	bool m_Branching;		// set true by the interpretation process when the program has branched.
 	u32 m_NextPC;			// new PC after instruction has finished execution.
 
+	const InstDiagInfo* m_Syntax;
+
 	//////////////////////////////////////////////////////////////////////////////////////
 	// Instances Methods and Functions (public and private)
 
 public:
 	Instruction( u32 srcPc, GprConstStatus constStatus, bool isDelaySlot=false );
 	Instruction( u32 srcPc, bool isDelaySlot=false );
-	void Interpret();
+	template< typename T> static void Process( T& Inst );
+
+	string GetParamName( const uint pidx ) const;
+	string GetParamValue( const uint pidx ) const;
+	string GetDisasm() const;
+	string GetValuesComment() const;
+
 
 	// Returns true if this instruction is a branch/jump type (which means it
 	// will have a delay slot which should execute prior to the jump but *after*
@@ -237,10 +362,12 @@ public:
 	// Zero-extended immediate
 	u32 ImmU() const { return (u16)U32; }
 
+	u32 AddrImm() const { return RsValue.UL + Imm(); }
+
 	// Calculates the target for a jump instruction (26 bit immediate added with the upper 4 bits of
 	// the current pc address)
 	uint JumpTarget() const { return (Target()<<2) + ((_Pc_+4) & 0xf0000000); }
-	u32 BranchTarget() { return (_Pc_+4) + (Imm() * 4); }
+	u32 BranchTarget() const { return (_Pc_+4) + (Imm() * 4); }
 
 	u32 TrapCode() const { return (u16)(U32 >> 6); };
 	
@@ -278,197 +405,49 @@ protected:
 	u8 Opcode() const { return U32 >> 26; }
 	
 protected:
-	void _interpret_SPECIAL();
-	void _interpret_REGIMM();
-	void _interpret_COP0();
-	void _interpret_COP2();
-
-	// ------------------------------------------------------------------------
-	//                  IOP Interpreted Instruction Tables
-
-protected:
-
-	// used by MULT and MULTU.
-	void MultHelper();
-
-	/*********************************************************
-	* Register branch logic                                  *
-	* Format:  OP rs, offset                                 *
-	*********************************************************/
-	void BGEZ();
-	void BGEZAL();
-	void BGTZ();
-	void BLEZ();
-	void BLTZ();
-	void BLTZAL();
-
-	// Likely Branches (not implemented!)
-	void BGEZL();
-	void BGEZALL();
-	void BGTZL();
-	void BLEZL();
-	void BLTZL();
-	void BLTZALL();
-
-	/*********************************************************
-	* Register branch logic                                  *
-	* Format:  OP rs, rt, offset                             *
-	*********************************************************/
-	void BEQ();
-	void BNE();
-	void BEQL();		// likely branch (not implemented)
-	void BNEL();		// likely branch (not implemented)
-
-	/*********************************************************
-	* Jump to target                                         *
-	* Format:  OP target                                     *
-	*********************************************************/
-	void J();
-	void JAL();
-
-	/*********************************************************
-	* Register jump                                          *
-	* Format:  OP rs, rd                                     *
-	*********************************************************/
-	void JR();
-	void JALR();
-	
-	/*********************************************************
-	* Arithmetic with immediate operand                      *
-	* Format:  OP rt, rs, immediate                          *
-	*********************************************************/
-	void ADDI();
-	void ADDIU();
-	void ANDI();
-	void ORI();
-	void XORI();
-	void SLTI();
-	void SLTIU();
-
-	/*********************************************************
-	* Register arithmetic                                    *
-	* Format:  OP rd, rs, rt                                 *
-	*********************************************************/
-	void ADD();	// Rd = Rs + Rt		(Exception on Integer Overflow)
-	void ADDU();	// Rd = Rs + Rt
-	void SUB();	// Rd = Rs - Rt		(Exception on Integer Overflow)
-	void SUBU();	// Rd = Rs - Rt
-	void AND();	// Rd = Rs And Rt
-	void OR();	// Rd = Rs Or  Rt
-	void XOR();	// Rd = Rs Xor Rt
-	void NOR();	// Rd = Rs Nor Rt
-	void SLT();	// Rd = Rs < Rt		(Signed)
-	void SLTU();	// Rd = Rs < Rt		(Unsigned)
-
-	/*********************************************************
-	* Register mult/div & Register trap logic                *
-	* Format:  OP rs, rt                                     *
-	*********************************************************/
-	void DIV();
-	void DIVU();
-	void MULT();
-	void MULTU();
-
-	/*********************************************************
-	* Shift arithmetic with constant shift                   *
-	* Format:  OP rd, rt, sa                                 *
-	*********************************************************/
-	void SLL();	 // Rd = Rt << sa
-	void SRA();	 // Rd = Rt >> sa (arithmetic)
-	void SRL();	 // Rd = Rt >> sa (logical)
-
-	/*********************************************************
-	* Shift arithmetic with variant register shift           *
-	* Format:  OP rd, rt, rs                                 *
-	*********************************************************/
-	void SLLV(); // Rd = Rt << rs
-	void SRAV();	// Rd = Rt >> rs (arithmetic)
-	void SRLV();	// Rd = Rt >> rs (logical)
-
-	/*********************************************************
-	* Load higher 16 bits of the first word in GPR with imm  *
-	* Format:  OP rt, immediate                              *
-	*********************************************************/
-	void LUI();	// Upper halfword of Rt = Im
-
-	/*********************************************************
-	* Move from HI/LO to GPR                                 *
-	* Format:  OP rd                                         *
-	*********************************************************/
-	void MFHI();	// Rd = Hi
-	void MFLO();	// Rd = Lo
-
-	/*********************************************************
-	* Move to GPR to HI/LO & Register jump                   *
-	* Format:  OP rs                                         *
-	*********************************************************/
-	void MTHI();	// Hi = Rs
-	void MTLO();	// Lo = Rs
-
-	/*********************************************************
-	* Special purpose instructions                           *
-	* Format:  OP                                            *
-	*********************************************************/
-	void BREAK();	// Break exception -  psxrom doesn't't handles this
-	void SYSCALL();
-	void RFE();
-
-	/*********************************************************
-	* Load and store for GPR                                 *
-	* Format:  OP rt, offset(base)                           *
-	*********************************************************/
-	void LB();
-	void LBU();
-	void LH();
-	void LHU();
-	void LW();
-	void LWL();
-	void LWR();
-
-	void SB();
-	void SH();
-	void SW();
-	void SWL();
-	void SWR();
-
-	/*********************************************************
-	* Moves between GPR and COPx                             *
-	* Format:  OP rt, fs                                     *
-	*********************************************************/
-	void MFC0();
-	void CFC0();
-
-	void MTC0();
-	void CTC0();
-
-	/*********************************************************
-	* Register trap                                          *
-	* Format:  OP rs, rt                                     *
-	*********************************************************/
-	void TGE();
-	void TGEU();
-	void TLT();
-	void TLTU();
-	void TEQ();
-	void TNE();
-
-	/*********************************************************
-	* Trap with immediate operand                            *
-	* Format:  OP rs, rt                                     *
-	*********************************************************/
-	void TGEI();
-	void TGEIU();
-	void TLTI();
-	void TLTIU();
-	void TEQI();
-	void TNEI();
-
-
-	/*********************************************************
-	* Unknown instruction (would generate an exception)      *
-	* Format:  ?                                             *
-	*********************************************************/
-	void Unknown();
+	template< typename T > static void _dispatch_SPECIAL( T& Inst );
+	template< typename T > static void _dispatch_REGIMM( T& Inst );
+	template< typename T > static void _dispatch_COP0( T& Inst );
+	template< typename T > static void _dispatch_COP2( T& Inst );
 
 };
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//                        IOP Interpreted Instruction Tables
+//
+class InstructionInterpreter : public Instruction
+{
+public:
+	static void Process( Instruction& inst )
+	{
+		Instruction::Process( (InstructionInterpreter&) inst );
+	}
+
+public:
+	INSTRUCTION_API(void, )
+	
+protected:
+	// used by MULT and MULTU.
+	void MultHelper( u64 result );
+};
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//                         IOP Diagnostic Information Tables
+//
+class InstructionDiagnostic : public Instruction
+{
+public:
+	static void Process( Instruction& inst )
+	{
+		Instruction::Process( (InstructionDiagnostic&) inst );
+	}
+
+protected:
+	InstDiagInfo MakeInfoS( const char* name, ParamType one=Param_None, ParamType two=Param_None, ParamType three=Param_None ) const;
+	InstDiagInfo MakeInfoU( const char* name, ParamType one=Param_None, ParamType two=Param_None, ParamType three=Param_None ) const;
+
+public:
+	INSTRUCTION_API(void, )
+};
+
 }

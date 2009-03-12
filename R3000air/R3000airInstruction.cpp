@@ -68,6 +68,8 @@ namespace R3000Air {
 	,	m_IsBranchType( false )
 	,	m_Branching( false )
 	,	m_NextPC( _Pc_ + 4 )
+	
+	,	m_Syntax( NULL )
 	{
 	}
 
@@ -92,6 +94,8 @@ namespace R3000Air {
 	,	m_IsBranchType( false )
 	,	m_Branching( false )
 	,	m_NextPC( _Pc_ + 4 )
+	
+	,	m_Syntax( NULL )
 	{
 	}
 

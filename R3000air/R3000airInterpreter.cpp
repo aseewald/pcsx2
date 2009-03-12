@@ -27,6 +27,8 @@
 #include "IopCounters.h"
 #include "R3000Exceptions.h"
 
+#include "R3000airOpcodeTables.inl"
+
 namespace R3000Exception
 {
 	BaseExcept::~BaseExcept() {}
@@ -75,6 +77,29 @@ static void intEventTest()
 	}
 }
 
+static void Process( Instruction& inst )
+{
+	//if( (iopRegs.pc >= 0x1200 && iopRegs.pc <= 0x1400) || (iopRegs.pc >= 0x0b40 && iopRegs.pc <= 0xe00))
+	{
+		if( inst.U32 == 0 )
+			Console::WriteLn( "0x%8.8x: NOP", params inst._Pc_ );
+		else
+		{
+			InstructionDiagnostic::Process( inst );
+			Console::WriteLn( "0x%8.8x: %-34s ; %s", params
+				inst._Pc_, inst.GetDisasm().c_str(), inst.GetValuesComment().c_str() );
+		}
+
+		if( inst.IsDelaySlot )
+			Console::WriteLn("");
+	}
+
+	InstructionInterpreter::Process( inst );
+	
+	iopRegs.cycle++;
+	psxCycleEE -= 8;
+}
+
 // Steps over the next instruction.
 static void intStep()
 {
@@ -83,14 +108,7 @@ static void intStep()
 	// Fetch current instruction, and interpret!
 
 	Instruction inst( iopRegs.pc );
-
-	//if( iopRegs.cycle > 0x9e20 && (inst._Rt_ == 0x02 || inst._Rd_ == 0x02))
-	//	Console::Error( "Here!" );
-
-	inst.Interpret();
-	
-	iopRegs.cycle++;
-	psxCycleEE -= 8;
+	Process( inst );
 
 	if( inst.IsBranchType() )
 	{
@@ -102,9 +120,11 @@ static void intStep()
 		if( intInterruptTest() ) return;
 
 		Instruction delaySlot( iopRegs.pc+4, true );
-		delaySlot.Interpret();
-		iopRegs.cycle++;
-		psxCycleEE -= 8;
+		Process( delaySlot );
+		
+		if( delaySlot.IsBranchType() )
+			Console::Error( "Branch in the delay slot!!" );
+	
 	}
 
 	iopRegs.pc = inst.GetNextPC();

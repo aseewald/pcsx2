@@ -26,7 +26,10 @@
 
 namespace R3000Air
 {
-static __forceinline void _OverflowCheck( const Instruction& inst, s64 result )
+
+typedef InstructionInterpreter InstInterp;
+
+static __forceinline void _OverflowCheck( const Instruction& inst, u64 result )
 {
 	// This 32bit method can rely on the MIPS documented method of checking for
 	// overflow, which simply compares bit 32 (rightmost bit of the upper word),
@@ -44,46 +47,35 @@ static __forceinline void _OverflowCheck( const Instruction& inst, s64 result )
 * Format:  OP rs, offset                                 *
 *********************************************************/
 
-void Instruction::BGEZ()    { SetBranchInst(); if( RsValue.SL >= 0 ) DoBranch();  } // Branch if Rs >= 0
-void Instruction::BGTZ()    { SetBranchInst(); if( RsValue.SL > 0 ) DoBranch();   } // Branch if Rs >  0
-void Instruction::BLEZ()    { SetBranchInst(); if( RsValue.SL <= 0 ) DoBranch();  } // Branch if Rs <= 0
-void Instruction::BLTZ()    { SetBranchInst(); if( RsValue.SL < 0 ) DoBranch();   }  // Branch if Rs <  0
-void Instruction::BGEZAL()  { SetLink(); BGEZ(); } // Branch if Rs >= 0 and link
-void Instruction::BLTZAL()  { SetLink(); BLTZ(); }  // Branch if Rs <  0 and link
-
-
-void Instruction::BGEZL()   { Console::Error( "R3000A Unimplemented Op: Branch Likely." ); BGEZ(); }
-void Instruction::BGTZL()   { Console::Error( "R3000A Unimplemented Op: Branch Likely." ); BGTZ(); }
-void Instruction::BLEZL()   { Console::Error( "R3000A Unimplemented Op: Branch Likely." ); BLEZ(); }
-void Instruction::BLTZL()   { Console::Error( "R3000A Unimplemented Op: Branch Likely." ); BLTZ(); }
-void Instruction::BGEZALL() { Console::Error( "R3000A Unimplemented Op: Branch Likely." ); BGEZAL(); }
-void Instruction::BLTZALL() { Console::Error( "R3000A Unimplemented Op: Branch Likely." ); BLTZAL(); }
+void InstInterp::BGEZ()    { SetBranchInst(); if( RsValue.SL >= 0 ) DoBranch();  } // Branch if Rs >= 0
+void InstInterp::BGTZ()    { SetBranchInst(); if( RsValue.SL > 0 ) DoBranch();   } // Branch if Rs >  0
+void InstInterp::BLEZ()    { SetBranchInst(); if( RsValue.SL <= 0 ) DoBranch();  } // Branch if Rs <= 0
+void InstInterp::BLTZ()    { SetBranchInst(); if( RsValue.SL < 0 ) DoBranch();   }  // Branch if Rs <  0
+void InstInterp::BGEZAL()  { SetLink(); BGEZ(); } // Branch if Rs >= 0 and link
+void InstInterp::BLTZAL()  { SetLink(); BLTZ(); }  // Branch if Rs <  0 and link
 
 
 /*********************************************************
 * Register branch logic                                  *
 * Format:  OP rs, rt, offset                             *
 *********************************************************/
-void Instruction::BEQ()	 { SetBranchInst(); if( RsValue.SL == RtValue.SL ) DoBranch();  } // Branch if Rs == Rt
-void Instruction::BNE()	 { SetBranchInst(); if( RsValue.SL != RtValue.SL ) DoBranch();  } // Branch if Rs != Rt
-
-void Instruction::BEQL() { Console::Error( "R3000A Unimplemented Op: Branch Likely." ); BEQ(); }
-void Instruction::BNEL() { Console::Error( "R3000A Unimplemented Op: Branch Likely." ); BNE(); }
+void InstInterp::BEQ()	 { SetBranchInst(); if( RsValue.SL == RtValue.SL ) DoBranch();  } // Branch if Rs == Rt
+void InstInterp::BNE()	 { SetBranchInst(); if( RsValue.SL != RtValue.SL ) DoBranch();  } // Branch if Rs != Rt
 
 
 /*********************************************************
 * Jump to target                                         *
 * Format:  OP target                                     *
 *********************************************************/
-void Instruction::J()    { SetBranchInst(); DoBranch( JumpTarget() );  }
-void Instruction::JAL()  { SetLink(); J();  }
+void InstInterp::J()    { SetBranchInst(); DoBranch( JumpTarget() );  }
+void InstInterp::JAL()  { SetLink(); J();  }
 
 /*********************************************************
 * Register jump                                          *
 * Format:  OP rs, rd                                     *
 *********************************************************/
-void Instruction::JR()   { SetBranchInst(); DoBranch( RsValue.UL ); }
-void Instruction::JALR() { SetLinkRd(); JR(); }
+void InstInterp::JR()   { SetBranchInst(); DoBranch( RsValue.UL ); }
+void InstInterp::JALR() { SetLinkRd(); JR(); }
 
 
 /*********************************************************
@@ -92,7 +84,7 @@ void Instruction::JALR() { SetLinkRd(); JR(); }
 *********************************************************/
 
 // Rt = Rs + Im 	(Exception on Integer Overflow)
-void Instruction::ADDI()
+void InstInterp::ADDI()
 {
 	s64 result = RsValue.SL + Imm();
 	_OverflowCheck( *this, result );
@@ -104,7 +96,7 @@ void Instruction::ADDI()
 
 // Rt = Rs + Im (no exception)
 // This is exactly like ADDI but does not perform an overflow exception check.
-void Instruction::ADDIU()
+void InstInterp::ADDIU()
 {
 	/*if( !_Rt_ )
 	{
@@ -115,23 +107,47 @@ void Instruction::ADDIU()
 	IsConstOutput.Rt = IsConstInput.Rs;
 }
 
-void Instruction::ANDI()	// Rt = Rs And Im
-{  if (!_Rt_) return;  RtValue.UL = RsValue.UL & ImmU(); IsConstOutput.Rt = IsConstInput.Rs;  }
-void Instruction::ORI()		// Rt = Rs Or  Im
-{  if (!_Rt_) return;  RtValue.UL = RsValue.UL | ImmU(); IsConstOutput.Rt = IsConstInput.Rs;  }
-void Instruction::XORI()	// Rt = Rs Xor Im
-{  if (!_Rt_) return;  RtValue.UL = RsValue.UL ^ ImmU(); IsConstOutput.Rt = IsConstInput.Rs;  }
-void Instruction::SLTI()	// Rt = Rs < Im		(Signed)
-{  if (!_Rt_) return;  RtValue.SL = (RsValue.SL < Imm() ) ? 1 : 0; IsConstOutput.Rt = IsConstInput.Rs;  }
-void Instruction::SLTIU()	// Rt = Rs < Im		(Unsigned)
-{  if (!_Rt_) return;  RtValue.UL = (RsValue.UL < ImmU()) ? 1 : 0; IsConstOutput.Rt = IsConstInput.Rs;  }
+void InstInterp::ANDI()	// Rt = Rs And Im
+{
+	if (!_Rt_) return; 
+	RtValue.UL = RsValue.UL & ImmU();
+	IsConstOutput.Rt = IsConstInput.Rs;
+}
+
+void InstInterp::ORI()		// Rt = Rs Or  Im
+{
+	if (!_Rt_) return;
+	RtValue.UL = RsValue.UL | ImmU();
+	IsConstOutput.Rt = IsConstInput.Rs;
+}
+
+void InstInterp::XORI()	// Rt = Rs Xor Im
+{
+	if (!_Rt_) return;
+	RtValue.UL = RsValue.UL ^ ImmU();
+	IsConstOutput.Rt = IsConstInput.Rs;
+}
+
+void InstInterp::SLTI()	// Rt = Rs < Im		(Signed)
+{
+	if (!_Rt_) return;
+	RtValue.SL = (RsValue.SL < Imm() ) ? 1 : 0;
+	IsConstOutput.Rt = IsConstInput.Rs;
+}
+
+void InstInterp::SLTIU()	// Rt = Rs < Im		(Unsigned)
+{
+	if (!_Rt_) return;
+	RtValue.UL = (RsValue.UL < ImmU()) ? 1 : 0; 
+	IsConstOutput.Rt = IsConstInput.Rs;
+}
 
 /*********************************************************
 * Register arithmetic                                    *
 * Format:  OP rd, rs, rt                                 *
 *********************************************************/
 // Rd = Rs + Rt		(Exception on Integer Overflow)
-void Instruction::ADD()
+void InstInterp::ADD()
 {
 	if (!_Rd_) return;
 	s64 result = RsValue.SL + RtValue.SL;
@@ -143,10 +159,10 @@ void Instruction::ADD()
 }
 
 // Rd = Rs - Rt		(Exception on Integer Overflow)
-void Instruction::SUB()
+void InstInterp::SUB()
 {
 	if (!_Rd_) return;
-	u64 result = RsValue.UL - RtValue.UL;
+	s64 result = RsValue.SL - RtValue.SL;
 
 	_OverflowCheck( *this, result );
 
@@ -154,29 +170,64 @@ void Instruction::SUB()
 	IsConstOutput.Rd = IsConstInput.Rs && IsConstInput.Rt;
 }
 
-void Instruction::ADDU()	// Rd = Rs + Rt
-{  if(!_Rd_) return;  RdValue.SL = RsValue.SL + RtValue.SL; SetConstRd_OnRsRt(); }
-void Instruction::SUBU()	// Rd = Rs - Rt
-{  if(!_Rd_) return;  RdValue.SL = RsValue.SL - RtValue.SL; SetConstRd_OnRsRt(); }
-void Instruction::AND()		// Rd = Rs And Rt
-{  if(!_Rd_) return;  RdValue.UL = RsValue.UL & RtValue.UL; SetConstRd_OnRsRt(); }
-void Instruction::OR()		// Rd = Rs Or  Rt
-{  if(!_Rd_) return;  RdValue.UL = RsValue.UL | RtValue.UL; SetConstRd_OnRsRt(); }
-void Instruction::XOR()		// Rd = Rs Xor Rt
-{  if(!_Rd_) return;  RdValue.UL = RsValue.UL ^ RtValue.UL; SetConstRd_OnRsRt(); }
-void Instruction::NOR()		// Rd = Rs Nor Rt
-{  if(!_Rd_) return;  RdValue.UL =~(RsValue.UL | RtValue.UL); SetConstRd_OnRsRt(); }
-void Instruction::SLT()		// Rd = Rs < Rt		(Signed)
-{  if(!_Rd_) return;  RdValue.SL = (RsValue.SL < RtValue.SL) ? 1 : 0; SetConstRd_OnRsRt(); }
-void Instruction::SLTU()	// Rd = Rs < Rt		(Unsigned)
-{  if(!_Rd_) return;  RdValue.UL = (RsValue.UL < RtValue.UL) ? 1 : 0; SetConstRd_OnRsRt(); }
+void InstInterp::ADDU()	// Rd = Rs + Rt
+{
+	if(!_Rd_) return;
+	RdValue.SL = RsValue.SL + RtValue.SL;
+	SetConstRd_OnRsRt();
+}
+
+void InstInterp::SUBU()	// Rd = Rs - Rt
+{
+	if(!_Rd_) return;
+	RdValue.SL = RsValue.SL - RtValue.SL;
+	SetConstRd_OnRsRt();
+}
+
+void InstInterp::AND()		// Rd = Rs And Rt
+{
+	if(!_Rd_) return;
+	RdValue.UL = RsValue.UL & RtValue.UL;
+	SetConstRd_OnRsRt();
+}
+
+void InstInterp::OR()		// Rd = Rs Or  Rt
+{
+	if(!_Rd_) return;
+	RdValue.UL = RsValue.UL | RtValue.UL;
+	SetConstRd_OnRsRt();
+}
+void InstInterp::XOR()		// Rd = Rs Xor Rt
+{
+	if(!_Rd_) return;
+	RdValue.UL = RsValue.UL ^ RtValue.UL;
+	SetConstRd_OnRsRt();
+}
+void InstInterp::NOR()		// Rd = Rs Nor Rt
+{
+	if(!_Rd_) return;
+	RdValue.UL =~(RsValue.UL | RtValue.UL);
+	SetConstRd_OnRsRt();
+}
+void InstInterp::SLT()		// Rd = Rs < Rt		(Signed)
+{
+	if(!_Rd_) return;
+	RdValue.SL = (RsValue.SL < RtValue.SL) ? 1 : 0;
+	SetConstRd_OnRsRt();
+}
+void InstInterp::SLTU()	// Rd = Rs < Rt		(Unsigned)
+{
+	if(!_Rd_) return;
+	RdValue.UL = (RsValue.UL < RtValue.UL) ? 1 : 0;
+	SetConstRd_OnRsRt();
+}
 
 
 /*********************************************************
 * Register mult/div & Register trap logic                *
 * Format:  OP rs, rt                                     *
 *********************************************************/
-void Instruction::DIV()
+void InstInterp::DIV()
 {
 	// If Rt is zero, then the result is undefined.
 	// Which means we can safely ignore the instruction entirely. :D
@@ -192,7 +243,7 @@ void Instruction::DIV()
 	return;
 }
 
-void Instruction::DIVU()
+void InstInterp::DIVU()
 {
 	if( RtValue.UL == 0 ) return;
 
@@ -203,7 +254,7 @@ void Instruction::DIVU()
 	IsConstOutput.Lo = IsConstInput.Rs && IsConstInput.Rt;
 }
 
-void Instruction::MultHelper( u64 result )
+void InstInterp::MultHelper( u64 result )
 {
 	LoValue().UL = (u32)result;
 	HiValue().UL = (u32)(result >> 32);
@@ -212,12 +263,12 @@ void Instruction::MultHelper( u64 result )
 	IsConstOutput.Lo = IsConstInput.Rs && IsConstInput.Rt;
 }
 
-void Instruction::MULT()
+void InstInterp::MULT()
 {
 	MultHelper( (s64)RsValue.SL * RtValue.SL );
 }
 
-void Instruction::MULTU()
+void InstInterp::MULTU()
 {
 	MultHelper( (u64)RsValue.UL * RtValue.UL );
 }
@@ -226,21 +277,21 @@ void Instruction::MULTU()
 * Shift arithmetic with constant shift                   *
 * Format:  OP rd, rt, sa                                 *
 *********************************************************/
-void Instruction::SLL()		// Rd = Rt << sa
+void InstInterp::SLL()		// Rd = Rt << sa
 {
 	if( !_Rd_ ) return;
 	RdValue.UL = RtValue.UL << _Sa_;
 	IsConstOutput.Rd = IsConstInput.Rt;
 }
 
-void Instruction::SRA()		// Rd = Rt >> sa (arithmetic) [signed]
+void InstInterp::SRA()		// Rd = Rt >> sa (arithmetic) [signed]
 {
 	if( !_Rd_ ) return;
 	RdValue.SL = RtValue.SL >> _Sa_;
 	IsConstOutput.Rd = IsConstInput.Rt;
 }
 
-void Instruction::SRL()		// Rd = Rt >> sa (logical) [unsigned]
+void InstInterp::SRL()		// Rd = Rt >> sa (logical) [unsigned]
 {
 	if( !_Rd_ ) return;
 	RdValue.UL = RtValue.UL >> _Sa_;
@@ -253,25 +304,25 @@ void Instruction::SRL()		// Rd = Rt >> sa (logical) [unsigned]
 *********************************************************/
 
 // Implementation Wanderings:
-//   According to modern MIPS cpus, the upper buts of the Rs register are
+//   According to modern MIPS cpus, the upper bits of the Rs register are
 //   ignored during the shift (only bottom 5 bits matter).  Old interpreters
 //   did not take this into account.  Nut sure if by design or if by bug.
 
-void Instruction::SLLV()	// Rd = Rt << rs
+void InstInterp::SLLV()	// Rd = Rt << rs
 {
 	if( !_Rd_ ) return;
 	RdValue.UL = RtValue.UL << (RsValue.UL & 0x1f);
 	IsConstOutput.Rd = IsConstInput.Rs && IsConstInput.Rt;
 } 
 
-void Instruction::SRAV()	// Rd = Rt >> rs (arithmetic)
+void InstInterp::SRAV()	// Rd = Rt >> rs (arithmetic)
 {
 	if( !_Rd_ ) return;
 	RdValue.SL = RtValue.SL >> (RsValue.UL & 0x1f);
 	IsConstOutput.Rd = IsConstInput.Rs && IsConstInput.Rt;
 }
 
-void Instruction::SRLV()	// Rd = Rt >> rs (logical)
+void InstInterp::SRLV()	// Rd = Rt >> rs (logical)
 {
 	if( !_Rd_ ) return;
 	RdValue.UL = RtValue.UL >> (RsValue.UL & 0x1f);
@@ -282,7 +333,7 @@ void Instruction::SRLV()	// Rd = Rt >> rs (logical)
 * Load higher 16 bits of the first word in GPR with imm  *
 * Format:  OP rt, immediate                              *
 *********************************************************/
-void Instruction::LUI()	// Rt = Im << 16  (lower 16 bits zeroed)
+void InstInterp::LUI()	// Rt = Im << 16  (lower 16 bits zeroed)
 {
 	if( !_Rt_ ) return;
 	RtValue.SL = Imm() << 16;
@@ -293,14 +344,14 @@ void Instruction::LUI()	// Rt = Im << 16  (lower 16 bits zeroed)
 * Move from HI/LO to GPR                                 *
 * Format:  OP rd                                         *
 *********************************************************/
-void Instruction::MFHI()	// Rd = Hi
+void InstInterp::MFHI()	// Rd = Hi
 {
 	if( !_Rd_ ) return;
 	RdValue = HiValue();
 	IsConstOutput.Rd = IsConstInput.Hi;
 }
 
-void Instruction::MFLO()	 // Rd = Lo
+void InstInterp::MFLO()	 // Rd = Lo
 {
 	if (!_Rd_) return;
 	RdValue = LoValue();
@@ -311,12 +362,12 @@ void Instruction::MFLO()	 // Rd = Lo
 * Move to GPR to HI/LO & Register jump                   *
 * Format:  OP rs                                         *
 *********************************************************/
-void Instruction::MTHI()	// Hi = Rs
+void InstInterp::MTHI()	// Hi = Rs
 {
 	HiValue() = RsValue;
 	IsConstOutput.Hi = IsConstInput.Rs;
 }
-void Instruction::MTLO()	// Lo = Rs
+void InstInterp::MTLO()	// Lo = Rs
 {
 	LoValue() = RsValue;
 	IsConstOutput.Lo = IsConstInput.Rs;
@@ -327,7 +378,7 @@ void Instruction::MTLO()	// Lo = Rs
 * Format:  OP                                            *
 *********************************************************/
 // Break exception - psx rom doens't handles this
-void Instruction::BREAK()
+void InstInterp::BREAK()
 {
 	//iopRegs.pc -= 4;
 	//psxException(0x24, IsDelaySlot);
@@ -338,7 +389,7 @@ void Instruction::BREAK()
 	//throw R3000Exception::Break();
 }
 
-void Instruction::SYSCALL()
+void InstInterp::SYSCALL()
 {
 	//iopRegs.pc -= 4;
 	iopException(IopExcCode::Syscall, IsDelaySlot);
@@ -346,7 +397,7 @@ void Instruction::SYSCALL()
 	//throw R3000Exception::SystemCall( *this );
 }
 
-void Instruction::RFE()
+void InstInterp::RFE()
 {
 //	SysPrintf("RFE\n");
 	iopRegs.CP0.n.Status =
@@ -358,11 +409,9 @@ void Instruction::RFE()
 * Format:  OP rt, offset(base)                           *
 *********************************************************/
 
-#define AddrImm (RsValue.UL + Imm())
-
-void Instruction::LB()
+void InstInterp::LB()
 {
-	const u32 addr = AddrImm;
+	const u32 addr = AddrImm();
 	s8 result = iopMemRead8( addr );
 	if( !_Rt_ ) return;
 
@@ -370,9 +419,9 @@ void Instruction::LB()
 	IsConstOutput.Rt = false;
 }
 
-void Instruction::LBU()
+void InstInterp::LBU()
 {
-	const u32 addr = AddrImm;
+	const u32 addr = AddrImm();
 	u8 result = iopMemRead8( addr );
 	if( !_Rt_ ) return;
 
@@ -382,9 +431,9 @@ void Instruction::LBU()
 
 // Load half-word (16 bits)
 // AddressError exception if the address is not 16-bit aligned.
-void Instruction::LH()
+void InstInterp::LH()
 {
-	const u32 addr = AddrImm;
+	const u32 addr = AddrImm();
 	
 	if( addr & 1 )
 		throw R3000Exception::AddressError( *this, addr, false );
@@ -398,9 +447,9 @@ void Instruction::LH()
 
 // Load Halfword Unsigned (16 bits)
 // AddressError exception if the address is not 16-bit aligned.
-void Instruction::LHU()
+void InstInterp::LHU()
 {
-	const u32 addr = AddrImm;
+	const u32 addr = AddrImm();
 
 	if( addr & 1 )
 		throw R3000Exception::AddressError( *this, addr, false );
@@ -414,9 +463,9 @@ void Instruction::LHU()
 
 // Load Word (32 bits)
 // AddressError exception if the address is not 32-bit aligned.
-void Instruction::LW()
+void InstInterp::LW()
 {
-	const u32 addr = AddrImm;
+	const u32 addr = AddrImm();
 
 	if( addr & 3 )
 		throw R3000Exception::AddressError( *this, addr, false );
@@ -430,9 +479,9 @@ void Instruction::LW()
 
 // Load Word Left (portion loaded determined by address lower 2 bits)
 // No exception is thrown if the address is unaligned.
-void Instruction::LWL()
+void InstInterp::LWL()
 {
-	const u32 addr = AddrImm;
+	const u32 addr = AddrImm();
 	const u32 shift = (addr & 3) << 3;
 	const u32 mem = iopMemRead32( addr & 0xfffffffc );
 
@@ -453,9 +502,9 @@ void Instruction::LWL()
 
 // Load Word Left (portion loaded determined by address lower 2 bits)
 // No exception is thrown if the address is unaligned.
-void Instruction::LWR()
+void InstInterp::LWR()
 {
-	const u32 addr = AddrImm;
+	const u32 addr = AddrImm();
 	const u32 shift = (addr & 3) << 3;
 	const u32 mem = iopMemRead32( addr & 0xfffffffc );
 
@@ -474,14 +523,14 @@ void Instruction::LWR()
 	*/
 }
 
-void Instruction::SB()
+void InstInterp::SB()
 {
-	iopMemWrite8( AddrImm, (u8)RtValue.UL );
+	iopMemWrite8( AddrImm(), (u8)RtValue.UL );
 }
 
-void Instruction::SH()
+void InstInterp::SH()
 {
-	const u32 addr = AddrImm;
+	const u32 addr = AddrImm();
 	
 	if( addr & 1 )
 		throw R3000Exception::AddressError( *this, addr, true );
@@ -489,9 +538,9 @@ void Instruction::SH()
 	iopMemWrite16( addr, RtValue.US[0] );
 }
 
-void Instruction::SW()
+void InstInterp::SW()
 {
-	const u32 addr = AddrImm;
+	const u32 addr = AddrImm();
 
 
 	if( addr & 3 )
@@ -502,9 +551,9 @@ void Instruction::SW()
 
 // Store Word Left
 // No Address Error Exception occurs.
-void Instruction::SWL()
+void InstInterp::SWL()
 {
-	const u32 addr = AddrImm;
+	const u32 addr = AddrImm();
 	const u32 shift = (addr & 3) << 3;
 	const u32 mem = iopMemRead32(addr & 0xfffffffc);
 
@@ -522,9 +571,9 @@ void Instruction::SWL()
 	*/
 }
 
-void Instruction::SWR()
+void InstInterp::SWR()
 {
-	const u32 addr = AddrImm;
+	const u32 addr = AddrImm();
 	const u32 shift = (addr & 3) << 3;
 	const u32 mem = iopMemRead32(addr & 0xfffffffc);
 
@@ -547,26 +596,24 @@ void Instruction::SWR()
 * Format:  OP rt, fs                                     *
 *********************************************************/
 
-void Instruction::MFC0()
+void InstInterp::MFC0()
 {
 	if( !_Rt_ ) return;
 	RtValue = FsValue();
 }
 
-// This is an undocumented instruction? Is it implemented correctly? -air
-void Instruction::CFC0()
+void InstInterp::CFC0()
 {
 	if( !_Rt_ ) return;
 	RtValue = FsValue();
 }
 
-void Instruction::MTC0()
+void InstInterp::MTC0()
 {
 	FsValue() = RtValue;
 }
 
-// This is an undocumented instruction? Is it implemented correctly? -air
-void Instruction::CTC0()
+void InstInterp::CTC0()
 {
 	FsValue() = RtValue;
 }
@@ -575,31 +622,9 @@ void Instruction::CTC0()
 * Unknown instruction (would generate an exception)      *
 * Format:  ?                                             *
 *********************************************************/
-void Instruction::Unknown()
+void InstInterp::Unknown()
 {
 	Console::Error("R3000A: Unimplemented op, code=0x%x\n", params U32 );
 }
-
-/*********************************************************
-* Register trap                                          *
-* Format:  OP rs, rt                                     *
-*********************************************************/
-void Instruction::TGE()  { if( RsValue.SL >= RtValue.SL) throw R3000Exception::Trap(*this, TrapCode()); }
-void Instruction::TGEU() { if( RsValue.UL >= RtValue.UL) throw R3000Exception::Trap(*this, TrapCode()); }
-void Instruction::TLT()  { if( RsValue.SL <  RtValue.SL) throw R3000Exception::Trap(*this, TrapCode()); }
-void Instruction::TLTU() { if( RsValue.UL <  RtValue.UL) throw R3000Exception::Trap(*this, TrapCode()); }
-void Instruction::TEQ()  { if( RsValue.SL == RtValue.SL) throw R3000Exception::Trap(*this, TrapCode()); }
-void Instruction::TNE()  { if( RsValue.SL != RtValue.SL) throw R3000Exception::Trap(*this, TrapCode()); }
-
-/*********************************************************
-* Trap with immediate operand                            *
-* Format:  OP rs, imm                                    *
-*********************************************************/
-void Instruction::TGEI()  { if( RsValue.SL >= RtValue.SL) throw R3000Exception::Trap(*this); }
-void Instruction::TGEIU() { if( RsValue.UL >= RtValue.UL) throw R3000Exception::Trap(*this); }
-void Instruction::TLTI()  { if( RsValue.SL <  RtValue.SL) throw R3000Exception::Trap(*this); }
-void Instruction::TLTIU() { if( RsValue.UL <  RtValue.UL) throw R3000Exception::Trap(*this); }
-void Instruction::TEQI()  { if( RsValue.SL == RtValue.SL) throw R3000Exception::Trap(*this); }
-void Instruction::TNEI()  { if( RsValue.SL != RtValue.SL) throw R3000Exception::Trap(*this); }
 
 }

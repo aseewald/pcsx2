@@ -2293,6 +2293,10 @@
 							>
 						</File>
 						<File
+							RelativePath="..\..\R3000air\R3000airDiagnostic.cpp"
+							>
+						</File>
+						<File
 							RelativePath="..\..\R3000air\R3000airInstruction.cpp"
 							>
 						</File>
@@ -2305,7 +2309,7 @@
 							>
 						</File>
 						<File
-							RelativePath="..\..\R3000air\R3000AirOpcodeTables.cpp"
+							RelativePath="..\..\R3000air\R3000airOpcodeTables.inl"
 							>
 						</File>
 					</Filter>
