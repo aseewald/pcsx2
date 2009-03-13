@@ -23,7 +23,7 @@
 #include "PrecompiledHeader.h"
 
 #include <math.h>
-#include "PsxCommon.h"
+#include "IopCommon.h"
 
 /* Config.PsxType == 1: PAL:
 	 VBlank interlaced		50.00 Hz
@@ -40,8 +40,6 @@
 
 
 psxCounter psxCounters[8];
-s32 psxNextCounter;
-u32 psxNextsCounter;
 u8 psxhblankgate = 0;
 u8 psxvblankgate = 0;
 
@@ -86,20 +84,20 @@ static void _rcntSet( int cntidx )
 	// (we probably missed it because we're doing/checking other things)
 	if( counter.count > overflowCap || counter.count > counter.target )
 	{
-		psxNextCounter = 4;
+		iopRegs.NextCounter = 4;
 		return;
 	}
 
 	c = (u64)((overflowCap - counter.count) * counter.rate) - (iopRegs.cycle - counter.sCycleT);
-	c += iopRegs.cycle - psxNextsCounter;		// adjust for time passed since last rcntUpdate();
-	if(c < (u64)psxNextCounter) psxNextCounter = (u32)c;
+	c += iopRegs.cycle - iopRegs.NextsCounter;		// adjust for time passed since last rcntUpdate();
+	if(c < (u64)iopRegs.NextCounter) iopRegs.NextCounter = (u32)c;
 
 	//if((counter.mode & 0x10) == 0 || psxCounters[i].target > 0xffff) continue;
 	if( counter.target & IOPCNT_FUTURE_TARGET ) return;
 
 	c = (s64)((counter.target - counter.count) * counter.rate) - (iopRegs.cycle - counter.sCycleT);
-	c += iopRegs.cycle - psxNextsCounter;		// adjust for time passed since last rcntUpdate();
-	if(c < (u64)psxNextCounter) psxNextCounter = (u32)c;
+	c += iopRegs.cycle - iopRegs.NextsCounter;		// adjust for time passed since last rcntUpdate();
+	if(c < (u64)iopRegs.NextCounter) iopRegs.NextCounter = (u32)c;
 }
 
 
@@ -146,8 +144,8 @@ void psxRcntInit() {
 
 	// Tell the IOP to branch ASAP, so that timers can get
 	// configured properly.
-	psxNextCounter = 1;
-	psxNextsCounter = iopRegs.cycle;
+	iopRegs.NextCounter = 1;
+	iopRegs.NextsCounter = iopRegs.cycle;
 }
 
 static void __fastcall _rcntTestTarget( int i )
@@ -420,8 +418,8 @@ void psxRcntUpdate()
 		//if( psxCounters[i].count >= psxCounters[i].target ) _rcntTestTarget( i );
 	}
 
-	psxNextCounter = 0xffffff;
-	psxNextsCounter = iopRegs.cycle;
+	iopRegs.NextCounter = 0xffffff;
+	iopRegs.NextsCounter = iopRegs.cycle;
 
 	if(SPU2async)
 	{	
@@ -435,7 +433,7 @@ void psxRcntUpdate()
 			psxCounters[6].CycleT = psxCounters[6].rate;
 		}
 		else c -= difference;
-		psxNextCounter = c;
+		iopRegs.NextCounter = c;
 	}
 
 	if(USBasync)
@@ -450,7 +448,7 @@ void psxRcntUpdate()
 			psxCounters[7].CycleT = psxCounters[7].rate;
 		}
 		else c -= difference;
-		if (c < psxNextCounter) psxNextCounter = c;
+		if (c < iopRegs.NextCounter) iopRegs.NextCounter = c;
 	}
 
 	for (i=0; i<6; i++) _rcntSet( i );
@@ -752,8 +750,6 @@ void psxRcntSetGates()
 void SaveState::psxRcntFreeze()
 {
     Freeze(psxCounters);
-	Freeze(psxNextCounter);
-	Freeze(psxNextsCounter);
 	
 	if( IsLoading() )
 		psxRcntSetGates();

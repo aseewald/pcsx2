@@ -18,7 +18,7 @@
 
 #include "PrecompiledHeader.h"
 
-#include "PsxCommon.h"
+#include "IopCommon.h"
 
 using namespace R3000A;
 
@@ -49,10 +49,10 @@ static void __fastcall psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore, _
 		psxCounters[6].sCycleT = iopRegs.cycle;
 		psxCounters[6].CycleT = size * 3;
 
-		psxNextCounter -= (iopRegs.cycle-psxNextsCounter);
-		psxNextsCounter = iopRegs.cycle;
-		if(psxCounters[6].CycleT < psxNextCounter)
-			psxNextCounter = psxCounters[6].CycleT;
+		iopRegs.NextCounter -= (iopRegs.cycle-iopRegs.NextsCounter);
+		iopRegs.NextsCounter = iopRegs.cycle;
+		if(psxCounters[6].CycleT < iopRegs.NextCounter)
+			iopRegs.NextCounter = psxCounters[6].CycleT;
 	}
 
 	switch (chcr)

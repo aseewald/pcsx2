@@ -32,8 +32,6 @@ struct psxCounter {
 };
 
 extern psxCounter psxCounters[8];
-extern s32 psxNextCounter;
-extern u32 psxNextsCounter;
 
 void psxRcntInit();
 void psxRcntUpdate();

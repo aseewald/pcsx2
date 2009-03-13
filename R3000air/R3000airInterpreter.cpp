@@ -39,6 +39,17 @@ namespace R3000Exception
 namespace R3000Air
 {
 
+//////////////////////////////////////////////////////////////////////////////////////////
+// Branch delay note:  it's actually legal for the R3000 to have branch instructions in
+// the delay slot.  In such a case, the instruction pointed to by the original branch
+// becomes the delay slot of the delay slot branch, and the final PC ends up being the
+// target of the delay slot branch instruction (this one!).
+//
+// This is solved by using a method of instruction fetching that closely mimics the actual
+// MIPS cpu.  Each instruction is fetched and processed, and then the target PC of the
+// previous instruction is applied to iopRegs.pc.  iopRegs.VectorPC holds the target PC of
+// the previously executed instruction.
+
 static void intAlloc() { }
 static void intReset() { }
 
@@ -49,20 +60,20 @@ static void intReset() { }
 // of the iopRegs.pc (which differs from other exceptions based on C++ SEH handlers).
 // Interrupts happen a lot, unlike other types of exceptions, so handling them inline is a
 // must (SEH is slow and intended for 'exceptional' use only).
-static bool intInterruptTest()
+static __forceinline bool intInterruptTest()
 {
 	if( psxHu32(0x1078) == 0 ) return false;
 	if( (psxHu32(0x1070) & psxHu32(0x1074)) == 0 ) return false;
 	if( (iopRegs.CP0.n.Status & 0xFE01) < 0x401 ) return false;
 
-	iopRegs.pc = iopException(0, 0);
+	iopException(0, iopRegs.IsDelaySlot );
 	return true;
 }
 
 // Yay hack!  This is here until I replace it with a non-shitty event system.
 static void intEventTest()
 {
-	if( iopTestCycle( psxNextsCounter, psxNextCounter ) )
+	if( iopTestCycle( iopRegs.NextsCounter, iopRegs.NextCounter ) )
 	{
 		psxRcntUpdate();
 	}
@@ -79,57 +90,69 @@ static void intEventTest()
 	}
 }
 
-static void Process( Instruction& inst )
+// Steps over the next instruction.
+static __releaseinline void intStep()
 {
-#ifdef _DEBUG
-	if( inst.U32 == 0 )
-		PSXCPU_LOG( "NOP\n" );
-	else
+	Opcode opcode( iopMemRead32( iopRegs.pc ) );
+
+	if( opcode.U32 == 0 )	// Iggy on the NOP please!  (Iggy Nop!)
 	{
-		InstructionDiagnostic::Process( inst );
-		PSXCPU_LOG( "%-34s ; %s\n", inst.GetDisasm().c_str(), inst.GetValuesComment().c_str() );
+		PSXCPU_LOG( "NOP\n" );
+
+		iopRegs.pc			 = iopRegs.VectorPC;
+		iopRegs.VectorPC	+= 4;
+		iopRegs.IsDelaySlot	 = false;
+
+		iopRegs.cycle++;
+		psxCycleEE -= 8;
+		
+		opcode = iopMemRead32( iopRegs.pc );
 	}
 
-	if( inst.IsDelaySlot )
-		PSXCPU_LOG("\n");
-#endif
+	s32 woot = iopRegs.NextBranchCycle - iopRegs.cycle;
+	if( woot <= 0 )
+		intEventTest();
 
-	InstructionInterpreter::Process( inst );
-	jASSUME( iopRegs.GPR.n.r0.UL == 0 );		//zero reg should always be zero!
+	Instruction dudley = 
+	{
+		iopRegs.pc,
+		iopRegs.VectorPC + 4,		// default for next PC vector
+
+		opcode.U32,
+		opcode.Rd(),
+		opcode.Rt(),
+		opcode.Rs(),
+		false
+	};
+
+	if( IsDevBuild )
+	{
+		Instruction::Process( (InstructionDiagnostic&)dudley );
+		PSXCPU_LOG( "%-34s ; %s\n", dudley.GetDisasm().c_str(), dudley.GetValuesComment().c_str() );
+
+		if( iopRegs.IsDelaySlot )
+			PSXCPU_LOG("\n");
+	}
+
+	InstructionInterpreter::Process( dudley );
+	jASSUME( iopRegs.GPR.n.r0.UL == 0 );		// zero reg should always be zero!
+
+	// prep the iopRegs for the next instruction fetch -->
+	iopRegs.pc			= iopRegs.VectorPC;
+	iopRegs.VectorPC	= dudley.GetNextPC();
+	iopRegs.IsDelaySlot	= dudley.IsBranchType();
+
+	// Test for interrupts after updating the PC, otherwise the EPC on exception
+	// vector will be wrong!
+	if( intInterruptTest() )
+	{
+		iopRegs.pc			 = iopRegs.VectorPC;
+		iopRegs.VectorPC	+= 4;
+		iopRegs.IsDelaySlot	 = false;
+	}
 
 	iopRegs.cycle++;
 	psxCycleEE -= 8;
-}
-
-// Steps over the next instruction.
-static void intStep()
-{
-	// Fetch current instruction, and interpret!
-
-	Instruction inst( iopRegs.pc );
-	Process( inst );
-
-	if( inst.IsBranchType() )
-	{
-		// Execute the delay slot before branching (but after the branch
-		// target has already been calculated above!)
-
-		const s32 result = iopRegs.NextBranchCycle - iopRegs.cycle;
-		if( result <= 0 ) intEventTest();
-
-		// Now's a good time to test for interrupts, which might vector us
-		// to a new location.
-		if( intInterruptTest() ) return;
-
-		Instruction delaySlot( iopRegs.pc+4, true );
-		Process( delaySlot );
-
-		if( delaySlot.IsBranchType() )
-			Console::Error( "Branch in the delay slot!!" );
-	
-	}
-
-	iopRegs.pc = inst.GetNextPC();
 }
 
 static void intExecute()
@@ -153,6 +176,7 @@ static s32 intExecuteBlock( s32 eeCycles )
 
 	while (psxCycleEE > 0)
 	{
+		// Fetch current instruction, and interpret!
 		intStep();
 	}
 	return psxBreak + psxCycleEE;

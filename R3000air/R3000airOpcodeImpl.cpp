@@ -37,8 +37,11 @@ static __forceinline void _OverflowCheck( const Instruction& inst, u64 result )
 
 	//assert( 0 );
 
+	const u32* const resptr = (u32*)&result;
+
 	// If bit32 != bit31 then we have an overflow.
-	if( !!(result & ((u64)1<<32)) != !!(result & (1UL<<31)) )
+	//if( !!(result & ((u64)1<<32)) != !!(result & 0x80000000) )
+	if( !!(resptr[1] & 1) != !!(resptr[0] & 0x80000000) )
 		throw R3000Exception::Overflow( inst );
 }
 
@@ -47,10 +50,10 @@ static __forceinline void _OverflowCheck( const Instruction& inst, u64 result )
 * Format:  OP rs, offset                                 *
 *********************************************************/
 
-void InstInterp::BGEZ()    { SetBranchInst(); if( RsValue.SL >= 0 ) DoBranch();  } // Branch if Rs >= 0
-void InstInterp::BGTZ()    { SetBranchInst(); if( RsValue.SL > 0 ) DoBranch();   } // Branch if Rs >  0
-void InstInterp::BLEZ()    { SetBranchInst(); if( RsValue.SL <= 0 ) DoBranch();  } // Branch if Rs <= 0
-void InstInterp::BLTZ()    { SetBranchInst(); if( RsValue.SL < 0 ) DoBranch();   }  // Branch if Rs <  0
+void InstInterp::BGEZ()    { SetBranchInst(); if( RsValue().SL >= 0 ) DoBranch();  } // Branch if Rs >= 0
+void InstInterp::BGTZ()    { SetBranchInst(); if( RsValue().SL > 0 ) DoBranch();   } // Branch if Rs >  0
+void InstInterp::BLEZ()    { SetBranchInst(); if( RsValue().SL <= 0 ) DoBranch();  } // Branch if Rs <= 0
+void InstInterp::BLTZ()    { SetBranchInst(); if( RsValue().SL < 0 ) DoBranch();   }  // Branch if Rs <  0
 void InstInterp::BGEZAL()  { SetLink(); BGEZ(); } // Branch if Rs >= 0 and link
 void InstInterp::BLTZAL()  { SetLink(); BLTZ(); }  // Branch if Rs <  0 and link
 
@@ -59,8 +62,8 @@ void InstInterp::BLTZAL()  { SetLink(); BLTZ(); }  // Branch if Rs <  0 and link
 * Register branch logic                                  *
 * Format:  OP rs, rt, offset                             *
 *********************************************************/
-void InstInterp::BEQ()	 { SetBranchInst(); if( RsValue.SL == RtValue.SL ) DoBranch();  } // Branch if Rs == Rt
-void InstInterp::BNE()	 { SetBranchInst(); if( RsValue.SL != RtValue.SL ) DoBranch();  } // Branch if Rs != Rt
+void InstInterp::BEQ()	 { SetBranchInst(); if( RsValue().SL == RtValue().SL ) DoBranch();  } // Branch if Rs == Rt
+void InstInterp::BNE()	 { SetBranchInst(); if( RsValue().SL != RtValue().SL ) DoBranch();  } // Branch if Rs != Rt
 
 
 /*********************************************************
@@ -74,7 +77,7 @@ void InstInterp::JAL()  { SetLink(); J();  }
 * Register jump                                          *
 * Format:  OP rs, rd                                     *
 *********************************************************/
-void InstInterp::JR()   { SetBranchInst(); DoBranch( RsValue.UL ); }
+void InstInterp::JR()   { SetBranchInst(); DoBranch( RsValue().UL ); }
 void InstInterp::JALR() { SetLinkRd(); JR(); }
 
 
@@ -86,12 +89,12 @@ void InstInterp::JALR() { SetLinkRd(); JR(); }
 // Rt = Rs + Im 	(Exception on Integer Overflow)
 void InstInterp::ADDI()
 {
-	s64 result = (s64)RsValue.SL + Imm();
+	s64 result = (s64)RsValue().SL + Imm();
 	_OverflowCheck( *this, result );
 
 	if(!_Rt_) return;
-	RtValue.SL = (s32)result;
-	IsConstOutput.Rt = IsConstInput.Rs;
+	RtValue().SL = (s32)result;
+	SetConstRt( IsConstRs() );
 }
 
 // Rt = Rs + Im (no exception)
@@ -104,43 +107,43 @@ void InstInterp::ADDIU()
 		return;
 	}*/
 	if( !_Rt_ ) return;
-	RtValue.SL = RsValue.SL + Imm();
-	IsConstOutput.Rt = IsConstInput.Rs;
+	RtValue().SL = RsValue().SL + Imm();
+	SetConstRt( IsConstRs() );
 }
 
 void InstInterp::ANDI()	// Rt = Rs And Im
 {
 	if (!_Rt_) return; 
-	RtValue.UL = RsValue.UL & ImmU();
-	IsConstOutput.Rt = IsConstInput.Rs;
+	RtValue().UL = RsValue().UL & ImmU();
+	SetConstRt( IsConstRs() );
 }
 
 void InstInterp::ORI()		// Rt = Rs Or  Im
 {
 	if (!_Rt_) return;
-	RtValue.UL = RsValue.UL | ImmU();
-	IsConstOutput.Rt = IsConstInput.Rs;
+	RtValue().UL = RsValue().UL | ImmU();
+	SetConstRt( IsConstRs() );
 }
 
 void InstInterp::XORI()	// Rt = Rs Xor Im
 {
 	if (!_Rt_) return;
-	RtValue.UL = RsValue.UL ^ ImmU();
-	IsConstOutput.Rt = IsConstInput.Rs;
+	RtValue().UL = RsValue().UL ^ ImmU();
+	SetConstRt( IsConstRs() );
 }
 
 void InstInterp::SLTI()	// Rt = Rs < Im		(Signed)
 {
 	if (!_Rt_) return;
-	RtValue.SL = (RsValue.SL < Imm() ) ? 1 : 0;
-	IsConstOutput.Rt = IsConstInput.Rs;
+	RtValue().SL = (RsValue().SL < Imm() ) ? 1 : 0;
+	SetConstRt( IsConstRs() );
 }
 
 void InstInterp::SLTIU()	// Rt = Rs < Im		(Unsigned)
 {
 	if (!_Rt_) return;
-	RtValue.UL = (RsValue.UL < (u32)Imm()) ? 1 : 0; 
-	IsConstOutput.Rt = IsConstInput.Rs;
+	RtValue().UL = (RsValue().UL < (u32)Imm()) ? 1 : 0; 
+	SetConstRt( IsConstRs() );
 }
 
 /*********************************************************
@@ -150,76 +153,76 @@ void InstInterp::SLTIU()	// Rt = Rs < Im		(Unsigned)
 // Rd = Rs + Rt		(Exception on Integer Overflow)
 void InstInterp::ADD()
 {
-	s64 result = (s64)RsValue.SL + RtValue.SL;
+	s64 result = (s64)RsValue().SL + RtValue().SL;
 	
 	_OverflowCheck( *this, result );
 	if (!_Rd_) return;
 	
-	RdValue.SL = (s32)result;
-	IsConstOutput.Rd = IsConstInput.Rs && IsConstInput.Rt;
+	RdValue().SL = (s32)result;
+	SetConstRd( IsConstRs() && IsConstRt() );
 }
 
 // Rd = Rs - Rt		(Exception on Integer Overflow)
 void InstInterp::SUB()
 {
-	s64 result = (s64)RsValue.SL - RtValue.SL;
+	s64 result = (s64)RsValue().SL - RtValue().SL;
 
 	_OverflowCheck( *this, result );
 	if (!_Rd_) return;
 
-	RdValue.SL = (s32)result;
-	IsConstOutput.Rd = IsConstInput.Rs && IsConstInput.Rt;
+	RdValue().SL = (s32)result;
+	SetConstRd( IsConstRs() && IsConstRt() );
 }
 
 void InstInterp::ADDU()	// Rd = Rs + Rt
 {
 	if(!_Rd_) return;
-	RdValue.SL = RsValue.SL + RtValue.SL;
+	RdValue().SL = RsValue().SL + RtValue().SL;
 	SetConstRd_OnRsRt();
 }
 
 void InstInterp::SUBU()	// Rd = Rs - Rt
 {
 	if(!_Rd_) return;
-	RdValue.SL = RsValue.SL - RtValue.SL;
+	RdValue().SL = RsValue().SL - RtValue().SL;
 	SetConstRd_OnRsRt();
 }
 
 void InstInterp::AND()		// Rd = Rs And Rt
 {
 	if(!_Rd_) return;
-	RdValue.UL = RsValue.UL & RtValue.UL;
+	RdValue().UL = RsValue().UL & RtValue().UL;
 	SetConstRd_OnRsRt();
 }
 
 void InstInterp::OR()		// Rd = Rs Or  Rt
 {
 	if(!_Rd_) return;
-	RdValue.UL = RsValue.UL | RtValue.UL;
+	RdValue().UL = RsValue().UL | RtValue().UL;
 	SetConstRd_OnRsRt();
 }
 void InstInterp::XOR()		// Rd = Rs Xor Rt
 {
 	if(!_Rd_) return;
-	RdValue.UL = RsValue.UL ^ RtValue.UL;
+	RdValue().UL = RsValue().UL ^ RtValue().UL;
 	SetConstRd_OnRsRt();
 }
 void InstInterp::NOR()		// Rd = Rs Nor Rt
 {
 	if(!_Rd_) return;
-	RdValue.UL =~(RsValue.UL | RtValue.UL);
+	RdValue().UL =~(RsValue().UL | RtValue().UL);
 	SetConstRd_OnRsRt();
 }
 void InstInterp::SLT()		// Rd = Rs < Rt		(Signed)
 {
 	if(!_Rd_) return;
-	RdValue.SL = (RsValue.SL < RtValue.SL) ? 1 : 0;
+	RdValue().SL = (RsValue().SL < RtValue().SL) ? 1 : 0;
 	SetConstRd_OnRsRt();
 }
 void InstInterp::SLTU()	// Rd = Rs < Rt		(Unsigned)
 {
 	if(!_Rd_) return;
-	RdValue.UL = (RsValue.UL < RtValue.UL) ? 1 : 0;
+	RdValue().UL = (RsValue().UL < RtValue().UL) ? 1 : 0;
 	SetConstRd_OnRsRt();
 }
 
@@ -233,26 +236,26 @@ void InstInterp::DIV()
 	// If Rt is zero, then the result is undefined.
 	// Which means we can safely ignore the instruction entirely. :D
 
-	if( RtValue.UL == 0 ) return;
+	if( RtValue().UL == 0 ) return;
 
-	LoValue().UL = RsValue.SL / RtValue.SL;
-	HiValue().UL = RsValue.SL % RtValue.SL;
+	LoValue().UL = RsValue().SL / RtValue().SL;
+	HiValue().UL = RsValue().SL % RtValue().SL;
 
-	IsConstOutput.Hi = IsConstInput.Rs && IsConstInput.Rt;
-	IsConstOutput.Lo = IsConstInput.Rs && IsConstInput.Rt;
+	SetConstHi( IsConstRs() && IsConstRt() );
+	SetConstLo( IsConstRs() && IsConstRt() );
 	
 	return;
 }
 
 void InstInterp::DIVU()
 {
-	if( RtValue.UL == 0 ) return;
+	if( RtValue().UL == 0 ) return;
 
-	LoValue().UL = RsValue.UL / RtValue.UL;
-	HiValue().UL = RsValue.UL % RtValue.UL;
+	LoValue().UL = RsValue().UL / RtValue().UL;
+	HiValue().UL = RsValue().UL % RtValue().UL;
 
-	IsConstOutput.Hi = IsConstInput.Rs && IsConstInput.Rt;
-	IsConstOutput.Lo = IsConstInput.Rs && IsConstInput.Rt;
+	SetConstHi( IsConstRs() && IsConstRt() );
+	SetConstLo( IsConstRs() && IsConstRt() );
 }
 
 void InstInterp::MultHelper( u64 result )
@@ -260,18 +263,18 @@ void InstInterp::MultHelper( u64 result )
 	LoValue().UL = (u32)result;
 	HiValue().UL = (u32)(result >> 32);
 
-	IsConstOutput.Hi = IsConstInput.Rs && IsConstInput.Rt;
-	IsConstOutput.Lo = IsConstInput.Rs && IsConstInput.Rt;
+	SetConstHi( IsConstRs() && IsConstRt() );
+	SetConstLo( IsConstRs() && IsConstRt() );
 }
 
 void InstInterp::MULT()
 {
-	MultHelper( (s64)RsValue.SL * RtValue.SL );
+	MultHelper( (s64)RsValue().SL * RtValue().SL );
 }
 
 void InstInterp::MULTU()
 {
-	MultHelper( (u64)RsValue.UL * RtValue.UL );
+	MultHelper( (u64)RsValue().UL * RtValue().UL );
 }
 
 /*********************************************************
@@ -281,22 +284,22 @@ void InstInterp::MULTU()
 void InstInterp::SLL()		// Rd = Rt << sa
 {
 	if( !_Rd_ ) return;
-	RdValue.UL = RtValue.UL << _Sa_;
-	IsConstOutput.Rd = IsConstInput.Rt;
+	RdValue().UL = RtValue().UL << Sa();
+	SetConstRd( IsConstRt() );
 }
 
 void InstInterp::SRA()		// Rd = Rt >> sa (arithmetic) [signed]
 {
 	if( !_Rd_ ) return;
-	RdValue.SL = RtValue.SL >> _Sa_;
-	IsConstOutput.Rd = IsConstInput.Rt;
+	RdValue().SL = RtValue().SL >> Sa();
+	SetConstRd( IsConstRt() );
 }
 
 void InstInterp::SRL()		// Rd = Rt >> sa (logical) [unsigned]
 {
 	if( !_Rd_ ) return;
-	RdValue.UL = RtValue.UL >> _Sa_;
-	IsConstOutput.Rd = IsConstInput.Rt;
+	RdValue().UL = RtValue().UL >> Sa();
+	SetConstRd( IsConstRt() );
 }
 
 /*********************************************************
@@ -312,22 +315,22 @@ void InstInterp::SRL()		// Rd = Rt >> sa (logical) [unsigned]
 void InstInterp::SLLV()	// Rd = Rt << rs
 {
 	if( !_Rd_ ) return;
-	RdValue.UL = RtValue.UL << (RsValue.UL & 0x1f);
-	IsConstOutput.Rd = IsConstInput.Rs && IsConstInput.Rt;
+	RdValue().UL = RtValue().UL << (RsValue().UL & 0x1f);
+	SetConstRd( IsConstRs() && IsConstRt() );
 } 
 
 void InstInterp::SRAV()	// Rd = Rt >> rs (arithmetic)
 {
 	if( !_Rd_ ) return;
-	RdValue.SL = RtValue.SL >> (RsValue.UL & 0x1f);
-	IsConstOutput.Rd = IsConstInput.Rs && IsConstInput.Rt;
+	RdValue().SL = RtValue().SL >> (RsValue().UL & 0x1f);
+	SetConstRd( IsConstRs() && IsConstRt() );
 }
 
 void InstInterp::SRLV()	// Rd = Rt >> rs (logical)
 {
 	if( !_Rd_ ) return;
-	RdValue.UL = RtValue.UL >> (RsValue.UL & 0x1f);
-	IsConstOutput.Rd = IsConstInput.Rs && IsConstInput.Rt;
+	RdValue().UL = RtValue().UL >> (RsValue().UL & 0x1f);
+	SetConstRd( IsConstRs() && IsConstRt() );
 }
 
 /*********************************************************
@@ -337,8 +340,8 @@ void InstInterp::SRLV()	// Rd = Rt >> rs (logical)
 void InstInterp::LUI()	// Rt = Im << 16  (lower 16 bits zeroed)
 {
 	if( !_Rt_ ) return;
-	RtValue.SL = Imm() << 16;
-	IsConstOutput.Rd = true;
+	RtValue().SL = Imm() << 16;
+	SetConstRd( true );
 }
 
 /*********************************************************
@@ -348,15 +351,15 @@ void InstInterp::LUI()	// Rt = Im << 16  (lower 16 bits zeroed)
 void InstInterp::MFHI()	// Rd = Hi
 {
 	if( !_Rd_ ) return;
-	RdValue = HiValue();
-	IsConstOutput.Rd = IsConstInput.Hi;
+	RdValue() = HiValue();
+	SetConstRd( IsConstHi() );
 }
 
 void InstInterp::MFLO()	 // Rd = Lo
 {
 	if (!_Rd_) return;
-	RdValue = LoValue();
-	IsConstOutput.Rd = IsConstInput.Lo;
+	RdValue() = LoValue();
+	SetConstRd( IsConstLo() );
 }
 
 /*********************************************************
@@ -365,26 +368,27 @@ void InstInterp::MFLO()	 // Rd = Lo
 *********************************************************/
 void InstInterp::MTHI()	// Hi = Rs
 {
-	HiValue() = RsValue;
-	IsConstOutput.Hi = IsConstInput.Rs;
+	HiValue() = RsValue();
+	SetConstHi( IsConstRs() );
 }
 void InstInterp::MTLO()	// Lo = Rs
 {
-	LoValue() = RsValue;
-	IsConstOutput.Lo = IsConstInput.Rs;
+	LoValue() = RsValue();
+	SetConstLo( IsConstRs() );
 }
 
 /*********************************************************
 * Special purpose instructions                           *
 * Format:  OP                                            *
 *********************************************************/
-// Break exception - psx rom doens't handles this
+// Break exception - psx rom doesn't handle this
 void InstInterp::BREAK()
 {
 	//iopRegs.pc -= 4;
-	//psxException(0x24, IsDelaySlot);
+	iopException( IopExcCode::Breakpoint, iopRegs.IsDelaySlot );
+	m_NextPC = iopRegs.VectorPC+4;
 
-	assert(0);
+	//assert(0);
 
 	// TODO : Implement!
 	//throw R3000Exception::Break();
@@ -392,10 +396,8 @@ void InstInterp::BREAK()
 
 void InstInterp::SYSCALL()
 {
-	//iopRegs.pc -= 4;
-	m_NextPC = iopException( IopExcCode::Syscall, IsDelaySlot );
-
-	//throw R3000Exception::SystemCall( *this );
+	iopException( IopExcCode::Syscall, iopRegs.IsDelaySlot );
+	m_NextPC = iopRegs.VectorPC+4;
 }
 
 void InstInterp::RFE()
@@ -416,8 +418,8 @@ void InstInterp::LB()
 	s8 result = iopMemRead8( addr );
 	if( !_Rt_ ) return;
 
-	RtValue.SL = result;
-	IsConstOutput.Rt = false;
+	RtValue().SL = result;
+	SetConstRt( false );
 }
 
 void InstInterp::LBU()
@@ -426,8 +428,8 @@ void InstInterp::LBU()
 	u8 result = iopMemRead8( addr );
 	if( !_Rt_ ) return;
 
-	RtValue.UL = result;
-	IsConstOutput.Rt = false;
+	RtValue().UL = result;
+	SetConstRt( false );
 }
 
 // Load half-word (16 bits)
@@ -442,8 +444,8 @@ void InstInterp::LH()
 	s16 result = iopMemRead16( addr );
 	if( !_Rt_ ) return;
 
-	RtValue.SL = result;
-	IsConstOutput.Rt = false;
+	RtValue().SL = result;
+	SetConstRt( false );
 }
 
 // Load Halfword Unsigned (16 bits)
@@ -458,8 +460,8 @@ void InstInterp::LHU()
 	u16 result = iopMemRead16( addr );
 	if( !_Rt_ ) return;
 
-	RtValue.UL = result;
-	IsConstOutput.Rt = false;
+	RtValue().UL = result;
+	SetConstRt( false );
 }
 
 // Load Word (32 bits)
@@ -474,8 +476,8 @@ void InstInterp::LW()
 	s32 result = iopMemRead32( addr );
 	if( !_Rt_ ) return;
 
-	RtValue.SL = result;
-	IsConstOutput.Rt = false;
+	RtValue().SL = result;
+	SetConstRt( false );
 }
 
 // Load Word Left (portion loaded determined by address lower 2 bits)
@@ -487,8 +489,8 @@ void InstInterp::LWL()
 	const u32 mem = iopMemRead32( addr & 0xfffffffc );
 
 	if (!_Rt_) return;
-	RtValue.UL = ( RtValue.UL & (0x00ffffff >> shift) ) | ( mem << (24 - shift) );
-	IsConstOutput.Rt = false;
+	RtValue().UL = ( RtValue().UL & (0x00ffffff >> shift) ) | ( mem << (24 - shift) );
+	SetConstRt( false );
 
 	/*
 	Mem = 1234.  Reg = abcd
@@ -510,8 +512,8 @@ void InstInterp::LWR()
 	const u32 mem = iopMemRead32( addr & 0xfffffffc );
 
 	if (!_Rt_) return;
-	RtValue.UL = ( RtValue.UL & (0xffffff00 << (24-shift)) ) | (mem >> shift);
-	IsConstOutput.Rt = false;
+	RtValue().UL = ( RtValue().UL & (0xffffff00 << (24-shift)) ) | (mem >> shift);
+	SetConstRt( false );
 
 	/*
 	Mem = 1234.  Reg = abcd
@@ -526,7 +528,7 @@ void InstInterp::LWR()
 
 void InstInterp::SB()
 {
-	iopMemWrite8( AddrImm(), (u8)RtValue.UL );
+	iopMemWrite8( AddrImm(), (u8)RtValue().UL );
 }
 
 void InstInterp::SH()
@@ -536,7 +538,7 @@ void InstInterp::SH()
 	if( addr & 1 )
 		throw R3000Exception::AddressError( *this, addr, true );
 
-	iopMemWrite16( addr, RtValue.US[0] );
+	iopMemWrite16( addr, RtValue().US[0] );
 }
 
 void InstInterp::SW()
@@ -547,7 +549,7 @@ void InstInterp::SW()
 	if( addr & 3 )
 		throw R3000Exception::AddressError( *this, addr, true );
 
-	iopMemWrite32( addr, RtValue.UL );
+	iopMemWrite32( addr, RtValue().UL );
 }
 
 // Store Word Left
@@ -559,7 +561,7 @@ void InstInterp::SWL()
 	const u32 mem = iopMemRead32(addr & 0xfffffffc);
 
 	iopMemWrite32( (addr & 0xfffffffc),
-		(( RtValue.UL >> (24 - shift) )) | (mem & (0xffffff00 << shift))
+		(( RtValue().UL >> (24 - shift) )) | (mem & (0xffffff00 << shift))
 	);
 	/*
 	Mem = 1234.  Reg = abcd
@@ -579,7 +581,7 @@ void InstInterp::SWR()
 	const u32 mem = iopMemRead32(addr & 0xfffffffc);
 
 	iopMemWrite32( (addr & 0xfffffffc),
-		( (RtValue.UL << shift) | (mem & (0x00ffffff >> (24 - shift))) )
+		( (RtValue().UL << shift) | (mem & (0x00ffffff >> (24 - shift))) )
 	);
 	/*
 	Mem = 1234.  Reg = abcd
@@ -600,23 +602,23 @@ void InstInterp::SWR()
 void InstInterp::MFC0()
 {
 	if( !_Rt_ ) return;
-	RtValue = FsValue();
+	RtValue() = FsValue();
 }
 
 void InstInterp::CFC0()
 {
 	if( !_Rt_ ) return;
-	RtValue = FsValue();
+	RtValue() = FsValue();
 }
 
 void InstInterp::MTC0()
 {
-	FsValue() = RtValue;
+	FsValue() = RtValue();
 }
 
 void InstInterp::CTC0()
 {
-	FsValue() = RtValue;
+	FsValue() = RtValue();
 }
 
 /*********************************************************

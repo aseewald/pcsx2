@@ -18,8 +18,7 @@
 
 #include "PrecompiledHeader.h"
 
-#include "PsxCommon.h"
-#include "Common.h"
+#include "IopCommon.h"
 
 // Note: Branch instructions of the Interpreter are defined externally because
 // the recompiler shouldn't be using them (it isn't entirely safe, due to the
@@ -56,7 +55,7 @@ void psxANDI() 	{ if (!_Rt_) return; _rRt_ = _u32(_rRs_) & _ImmU_; }		// Rt = Rs
 void psxORI() 	{ if (!_Rt_) return; _rRt_ = _u32(_rRs_) | _ImmU_; }		// Rt = Rs Or  Im
 void psxXORI() 	{ if (!_Rt_) return; _rRt_ = _u32(_rRs_) ^ _ImmU_; }		// Rt = Rs Xor Im
 void psxSLTI() 	{ if (!_Rt_) return; _rRt_ = _i32(_rRs_) < _Imm_ ; }		// Rt = Rs < Im		(Signed)
-void psxSLTIU() { if (!_Rt_) return; _rRt_ = _u32(_rRs_) < _ImmU_; }		// Rt = Rs < Im		(Unsigned)
+void psxSLTIU() { if (!_Rt_) return; _rRt_ = _u32(_rRs_) < (u32)_Imm_; }	// Rt = Rs < Im		(Unsigned)
 
 /*********************************************************
 * Register arithmetic                                    *

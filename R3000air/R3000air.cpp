@@ -18,7 +18,7 @@
 
 #include "PrecompiledHeader.h"
 
-#include "PsxCommon.h"
+#include "IopCommon.h"
 #include "R5900.h"
 
 // This value is used when the IOP execution is broken to return control to the EE.
@@ -58,6 +58,9 @@ void iopReset()
 	psxBreak = 0;
 	psxCycleEE = -1;
 	iopRegs.NextBranchCycle = iopRegs.cycle + 4;
+	
+	iopRegs.VectorPC = iopRegs.pc + 4;
+	iopRegs.IsDelaySlot = false;
 
 	psxHwReset();
 	psxBiosInit();
@@ -71,7 +74,7 @@ void iopShutdown() {
 }
 
 // Returns the new PC to vector to.
-u32 iopException(u32 code, u32 bd)
+void iopException(u32 code, u32 bd)
 {
 	PSXCPU_LOG("psxException 0x%x: 0x%x, 0x%x %s\n",
 		code, psxHu32(0x1070), psxHu32(0x1074), bd ? "(branch delay)" : ""
@@ -90,7 +93,7 @@ u32 iopException(u32 code, u32 bd)
 	else
 		iopRegs.CP0.n.EPC = iopRegs.pc;
 
-	u32 newpc = (iopRegs.CP0.n.Status & 0x400000) ? 0xbfc00180 : 0x80000080;
+	iopRegs.SetExceptionPC( (iopRegs.CP0.n.Status & 0x400000) ? 0xbfc00180 : 0x80000080 );
 
 	// Set the Status
 	iopRegs.CP0.n.Status = (iopRegs.CP0.n.Status &~0x3f) |
@@ -132,7 +135,6 @@ u32 iopException(u32 code, u32 bd)
 		}
 	}
 
-	return newpc;
 	/*if (iopRegs.CP0.n.Cause == 0x400 && (!(psxHu32(0x1450) & 0x8))) {
 		hwIntcIrq(1);
 	}*/
@@ -225,7 +227,7 @@ __forceinline void _iopTestInterrupts()
 
 void iopEventTest()
 {
-	if( iopTestCycle( psxNextsCounter, psxNextCounter ) )
+	if( iopTestCycle( iopRegs.NextsCounter, iopRegs.NextCounter ) )
 	{
 		psxRcntUpdate();
 		iopBranchAction = true;
@@ -248,7 +250,7 @@ void iopEventTest()
 	if ((iopRegs.CP0.n.Status & 0xFE01) >= 0x401)
 	{
 		PSXCPU_LOG("Interrupt: %x  %x\n", psxHu32(0x1070), psxHu32(0x1074));
-		iopRegs.pc = iopException(0, 0);
+		iopException(0, 0);
 		iopBranchAction = true;
 	}
 }

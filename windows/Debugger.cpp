@@ -199,9 +199,9 @@ BOOL APIENTRY DumpProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 					for (temp = start_pc; temp <= end_pc; temp += 4)
 					{
 						opcode_addr = temp;
-						R3000Air::Instruction inst( opcode_addr );
+						//R3000Air::Instruction inst( opcode_addr );
 						//R3000A::IOP_DEBUG_BSC[inst._Opcode_](tmp);
-						fprintf(fp, "%08X %08X: %s\n", temp, inst.U32, tmp);
+						//fprintf(fp, "%08X %08X: %s\n", temp, inst.U32, tmp);
 					}
 
 					fprintf(fp,"\n\n\n----------------------------------\n");

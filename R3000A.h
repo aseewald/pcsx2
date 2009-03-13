@@ -48,14 +48,14 @@ extern R3000Acpu *psxCpu;
 //extern R3000Acpu psxRec;
 extern R3000Acpu iopInt;
 
-void iopReset();
-void iopShutdown();
-u32 iopException(u32 code, u32 step);
-void iopBranchTest();
-void iopExecuteBios();
-void iopMemReset();
+extern void iopReset();
+extern void iopShutdown();
+extern void iopException(u32 code, u32 step);
+extern void iopBranchTest();
+extern void iopExecuteBios();
+extern void iopMemReset();
 
-void iopEventTest();
+extern void iopEventTest();
 
 
 // Recognized IOP exceptions:

@@ -38,7 +38,7 @@
 
 #include "R5900Exceptions.h"
 
-#include "PsxCommon.h"
+#include "IopCommon.h"
 
 
 using namespace R5900;	// for R5900 disasm tools
@@ -451,7 +451,7 @@ __forceinline bool _cpuBranchTest_Shared()
 	// * The IOP cannot always be run.  If we run IOP code every time through the
 	//   cpuBranchTest, the IOP generally starts to run way ahead of the EE.
 
-	iopEventTest();
+	//iopEventTest();
 
 	if( iopBranchAction )
 	{

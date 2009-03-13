@@ -34,18 +34,22 @@ namespace R3000Exception
 		const R3000Air::Registers cpuState;
 		const R3000Air::Instruction Inst;
 
+	protected:
+		const bool m_IsDelaySlot;
+
 	public:
 		virtual ~BaseExcept() throw()=0;
 
 		explicit BaseExcept( const R3000Air::Instruction& inst, const std::string& msg ) :
 			Exception::Ps2Generic( "(IOP) " + msg ),
 			cpuState( R3000Air::iopRegs ),
-			Inst( inst )
+			Inst( inst ),
+			m_IsDelaySlot( iopRegs.IsDelaySlot )
 		{
 		}
 		
 		u32 GetPc() const { return cpuState.pc; }
-		bool IsDelaySlot() const { return !!Inst.IsDelaySlot; }
+		bool IsDelaySlot() const { return m_IsDelaySlot; }
 	};
 
 	//////////////////////////////////////////////////////////////////////////////////

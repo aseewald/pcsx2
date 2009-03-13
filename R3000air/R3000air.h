@@ -131,8 +131,11 @@ struct Registers
 	CP0Regs CP0;		// Coprocessor0 Registers
 	CP2Data CP2D; 		// Cop2 data registers
 	CP2Ctrl CP2C; 		// Cop2 control registers
-	u32 pc;				// Program counter
-	//u32 code;			// The instruction
+
+	u32 pc;				// Program counter for the next instruction fetch
+	u32 VectorPC;		// pc to vector to after the next instruction fetch
+	bool IsDelaySlot;
+	
 	u32 cycle;
 	u32 interrupt;
 	u32 sCycle[32];		// start cycle for signaled ints
@@ -147,6 +150,17 @@ struct Registers
 	// old wacky data related to the PS1 GPU?
 	//u32 _msflag[32];
 	//u32 _smflag[32];
+	
+	// Sets a new PC in "abrupt" fashion (without consideration for delay slot).
+	// Effectively cancels the delay slot instruction, making this ideal for use
+	// in raising exceptions.
+	void SetExceptionPC( u32 newpc )
+	{
+		//pc = newpc;
+		VectorPC = newpc;
+		IsDelaySlot = false;
+	}
+	
 };
 
 PCSX2_ALIGNED16_EXTERN(Registers iopRegs);
@@ -162,7 +176,7 @@ struct GprConstStatus
 };
 
 #undef _Funct_
-#undef _Opcode_
+#undef _Basecode_
 #undef _Rd_
 #undef _Rs_
 #undef _Rt_
@@ -171,81 +185,81 @@ struct GprConstStatus
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-#define INSTRUCTION_API(retval, postfix) \
-	retval BGEZ() postfix; \
-	retval BGEZAL() postfix; \
-	retval BGTZ() postfix; \
-	retval BLEZ() postfix; \
-	retval BLTZ() postfix; \
-	retval BLTZAL() postfix; \
-	retval BEQ() postfix; \
-	retval BNE() postfix; \
+#define INSTRUCTION_API() \
+	void BGEZ(); \
+	void BGEZAL(); \
+	void BGTZ(); \
+	void BLEZ(); \
+	void BLTZ(); \
+	void BLTZAL(); \
+	void BEQ(); \
+	void BNE(); \
  \
-	retval J() postfix; \
-	retval JAL() postfix; \
-	retval JR() postfix; \
-	retval JALR() postfix; \
+	void J(); \
+	void JAL(); \
+	void JR(); \
+	void JALR(); \
  \
-	retval ADDI() postfix; \
-	retval ADDIU() postfix; \
-	retval ANDI() postfix; \
-	retval ORI() postfix; \
-	retval XORI() postfix; \
-	retval SLTI() postfix; \
-	retval SLTIU() postfix; \
+	void ADDI(); \
+	void ADDIU(); \
+	void ANDI(); \
+	void ORI(); \
+	void XORI(); \
+	void SLTI(); \
+	void SLTIU(); \
  \
-	retval ADD() postfix; \
-	retval ADDU() postfix; \
-	retval SUB() postfix; \
-	retval SUBU() postfix; \
-	retval AND() postfix; \
-	retval OR() postfix; \
-	retval XOR() postfix; \
-	retval NOR() postfix; \
-	retval SLT() postfix; \
-	retval SLTU() postfix; \
+	void ADD(); \
+	void ADDU(); \
+	void SUB(); \
+	void SUBU(); \
+	void AND(); \
+	void OR(); \
+	void XOR(); \
+	void NOR(); \
+	void SLT(); \
+	void SLTU(); \
  \
-	retval DIV() postfix; \
-	retval DIVU() postfix; \
-	retval MULT() postfix; \
-	retval MULTU() postfix; \
+	void DIV(); \
+	void DIVU(); \
+	void MULT(); \
+	void MULTU(); \
  \
-	retval SLL() postfix; \
-	retval SRA() postfix; \
-	retval SRL() postfix; \
-	retval SLLV() postfix; \
-	retval SRAV() postfix; \
-	retval SRLV() postfix; \
-	retval LUI() postfix; \
+	void SLL(); \
+	void SRA(); \
+	void SRL(); \
+	void SLLV(); \
+	void SRAV(); \
+	void SRLV(); \
+	void LUI(); \
  \
-	retval MFHI() postfix; \
-	retval MFLO() postfix; \
-	retval MTHI() postfix; \
-	retval MTLO() postfix; \
+	void MFHI(); \
+	void MFLO(); \
+	void MTHI(); \
+	void MTLO(); \
  \
-	retval BREAK() postfix; \
-	retval SYSCALL() postfix; \
-	retval RFE() postfix; \
+	void BREAK(); \
+	void SYSCALL(); \
+	void RFE(); \
  \
-	retval LB() postfix; \
-	retval LBU() postfix; \
-	retval LH() postfix; \
-	retval LHU() postfix; \
-	retval LW() postfix; \
-	retval LWL() postfix; \
-	retval LWR() postfix; \
+	void LB(); \
+	void LBU(); \
+	void LH(); \
+	void LHU(); \
+	void LW(); \
+	void LWL(); \
+	void LWR(); \
  \
-	retval SB() postfix; \
-	retval SH() postfix; \
-	retval SW() postfix; \
-	retval SWL() postfix; \
-	retval SWR() postfix; \
+	void SB(); \
+	void SH(); \
+	void SW(); \
+	void SWL(); \
+	void SWR(); \
  \
-	retval MFC0() postfix; \
-	retval CFC0() postfix; \
-	retval MTC0() postfix; \
-	retval CTC0() postfix; \
-	retval Unknown() postfix;
+	void MFC0(); \
+	void CFC0(); \
+	void MTC0(); \
+	void CTC0(); \
+	void Unknown();
 
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -285,55 +299,92 @@ struct InstDiagInfo
 	const bool IsUnsigned;
 };
 
+struct Opcode
+{
+	u32 U32;
+
+	u8 Funct() const { return U32 & 0x3F; }
+	u8 Sa() const { return (U32 >> 6) & 0x1F; }
+	u8 Rd() const { return (U32 >> 11) & 0x1F; }
+	u8 Rt() const { return (U32 >> 16) & 0x1F; }
+	u8 Rs() const { return (U32 >> 21) & 0x1F; }
+	u8 Basecode() const { return U32 >> 26; }
+
+	// Returns the target portion of the opcode (26 bit immediate)
+	uint Target() const { return U32 & 0x03ffffff; }
+
+	// Sign-extended immediate
+	s32 Imm() const { return (s16)U32; }
+
+	// Zero-extended immediate
+	u32 ImmU() const { return (u16)U32; }
+	u32 TrapCode() const { return (u16)(U32 >> 6); };
+	
+	Opcode( u32 src ) :
+		U32( src ) {}
+};
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // This object is immutable.  Do not modify, just create new ones. :)
 // See R3000AirInstruction.cpp for code implementations.
-class Instruction 
+//
+// Implementation note: C++ Constructors are just slow, so I've had to forego the use of
+// private classifcation so that I can use a much speedier inline initializer instead.
+//
+struct Instruction 
 {
 
 	//////////////////////////////////////////////////////////////////////////////////////
 	// Instance Variables (public and private)
 
-public:
+	const u32 _Pc_;		// program counter for this specific instruction
+	u32 m_NextPC;		// new PC after instruction has finished execution.
+
 	const u32 U32;		// the whole instruction as a U32.
 
 	// Precached values for the instruction (makes debugging and processing simpler).
 	// Optimization: All values are stored as u8's to reduce memory overhead of this class.
-	const u8 _Funct_;
-	const u8 _Sa_;
-	const u8 _Rd_;
-	const u8 _Rt_;
-	const u8 _Rs_;
-	const u8 _Opcode_;
-
-	const u32 _Pc_;		// program counter for this specific instruction
-
-	const bool IsDelaySlot;
-
-	GprConstStatus IsConstInput;
-	GprConstStatus IsConstOutput;
-
-protected:
-	// maps to the psxRegs GPR storage area (actual value of the GPR)
-	IntSign32& RdValue;
-	// maps to the psxRegs GPR storage area (actual value of the GPR)
-	IntSign32& RtValue;
-	// maps to the psxRegs GPR storage area (actual value of the GPR)
-	IntSign32& RsValue;
-
-	bool m_IsBranchType;	// set true by the interpretation process when the instruction is a branching instruction.
-	bool m_Branching;		// set true by the interpretation process when the program has branched.
-	u32 m_NextPC;			// new PC after instruction has finished execution.
+	const u32 _Rd_;
+	const u32 _Rt_;
+	const u32 _Rs_;
+	bool m_IsBranchType;
 
 	const InstDiagInfo* m_Syntax;
+
+	// maps to the psxRegs GPR storage area (actual value of the GPR)
+	//IntSign32& RdValue;
+	// maps to the psxRegs GPR storage area (actual value of the GPR)
+	//IntSign32& RtValue;
+	// maps to the psxRegs GPR storage area (actual value of the GPR)
+	//IntSign32& RsValue;
+
+	//GprConstStatus IsConstInput;
+	//GprConstStatus IsConstOutput;
+
+	void SetConstRd( bool status ) const {}
+	void SetConstRt( bool status ) const {}
+	void SetConstRs( bool status ) const {}
+	void SetConstHi( bool status ) const {}
+	void SetConstLo( bool status ) const {}
+	void SetConstLink( bool status ) const {}
+
+	bool IsConstRd() const { return false; }
+	bool IsConstRt() const { return false; }
+	bool IsConstRs() const { return false; }
+	bool IsConstHi() const { return false; }
+	bool IsConstLo() const { return false; }
+	bool IsConstLink() const { return false; }
+
+	IntSign32& RdValue() const { return (IntSign32&)iopRegs.GPR.r[_Rd_]; };
+	IntSign32& RtValue() const { return (IntSign32&)iopRegs.GPR.r[_Rt_]; };
+	IntSign32& RsValue() const { return (IntSign32&)iopRegs.GPR.r[_Rs_]; };
+
 
 	//////////////////////////////////////////////////////////////////////////////////////
 	// Instances Methods and Functions (public and private)
 
-public:
-	Instruction( u32 srcPc, GprConstStatus constStatus, bool isDelaySlot=false );
-	Instruction( u32 srcPc, bool isDelaySlot=false );
+	//Instruction( u32 srcPc, GprConstStatus constStatus, bool isDelaySlot=false );
+	//Instruction( u32 srcPc, bool isDelaySlot=false );
 	template< typename T> static void Process( T& Inst );
 
 	string GetParamName( const uint pidx ) const;
@@ -353,6 +404,10 @@ public:
 	// Infrequently used APIs for grabbing portions of the opcode.  These are
 	// not cached since only a small handful of instructions use them.
 
+	u32 Funct() const { return U32 & 0x3F; }
+	u32 Basecode() const { return U32 >> 26; }
+	u32 Sa() const { return (U32 >> 6) & 0x1F; }
+
 	// Returns the target portion of the opcode (26 bit immediate)
 	uint Target() const { return U32 & 0x03ffffff; }
 
@@ -362,16 +417,13 @@ public:
 	// Zero-extended immediate
 	u32 ImmU() const { return (u16)U32; }
 
-	u32 AddrImm() const { return RsValue.UL + Imm(); }
+	u32 TrapCode() const { return (u16)(U32 >> 6); };
 
 	// Calculates the target for a jump instruction (26 bit immediate added with the upper 4 bits of
 	// the current pc address)
 	uint JumpTarget() const { return (Target()<<2) + ((_Pc_+4) & 0xf0000000); }
 	u32 BranchTarget() const { return (_Pc_+4) + (Imm() * 4); }
-
-	u32 TrapCode() const { return (u16)(U32 >> 6); };
-	
-protected:
+	u32 AddrImm() const { return RsValue().UL + Imm(); }
 	
 	IntSign32& HiValue() const { return iopRegs.GPR.n.hi; }
 	IntSign32& LoValue() const { return iopRegs.GPR.n.lo; }
@@ -397,35 +449,25 @@ protected:
 	// -------------------------------------------------------------------------
 	// Helpers used to initialize the object state.
 
-	u8 Funct() const { return U32 & 0x3F; }
-	u8 Sa() const { return (U32 >> 6) & 0x1F; }
-	u8 Rd() const { return (U32 >> 11) & 0x1F; }
-	u8 Rt() const { return (U32 >> 16) & 0x1F; }
-	u8 Rs() const { return (U32 >> 21) & 0x1F; }
-	u8 Opcode() const { return U32 >> 26; }
-	
-protected:
 	template< typename T > static void _dispatch_SPECIAL( T& Inst );
 	template< typename T > static void _dispatch_REGIMM( T& Inst );
 	template< typename T > static void _dispatch_COP0( T& Inst );
 	template< typename T > static void _dispatch_COP2( T& Inst );
-
 };
+
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //                        IOP Interpreted Instruction Tables
 //
-class InstructionInterpreter : public Instruction
+struct InstructionInterpreter : public Instruction
 {
-public:
-	static void Process( Instruction& inst )
+	static __releaseinline void Process( Instruction& inst )
 	{
 		Instruction::Process( (InstructionInterpreter&) inst );
 	}
 
-public:
-	INSTRUCTION_API(void, )
-	
+	INSTRUCTION_API()
+
 protected:
 	// used by MULT and MULTU.
 	void MultHelper( u64 result );
@@ -437,7 +479,7 @@ protected:
 class InstructionDiagnostic : public Instruction
 {
 public:
-	static void Process( Instruction& inst )
+	static __releaseinline void Process( Instruction& inst )
 	{
 		Instruction::Process( (InstructionDiagnostic&) inst );
 	}
@@ -447,7 +489,7 @@ protected:
 	InstDiagInfo MakeInfoU( const char* name, ParamType one=Param_None, ParamType two=Param_None, ParamType three=Param_None ) const;
 
 public:
-	INSTRUCTION_API(void, )
+	INSTRUCTION_API()
 };
 
 }

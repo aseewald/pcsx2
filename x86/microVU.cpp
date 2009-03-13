@@ -43,7 +43,6 @@ PCSX2_ALIGNED16(const u32 mVU_T6[4])		= {0xbd6501c4, 0xbd6501c4, 0xbd6501c4, 0xb
 PCSX2_ALIGNED16(const u32 mVU_T7[4])		= {0x3cb31652, 0x3cb31652, 0x3cb31652, 0x3cb31652};
 PCSX2_ALIGNED16(const u32 mVU_T8[4])		= {0xbb84d7e7, 0xbb84d7e7, 0xbb84d7e7, 0xbb84d7e7};
 PCSX2_ALIGNED16(const u32 mVU_Pi4[4])		= {0x3f490fdb, 0x3f490fdb, 0x3f490fdb, 0x3f490fdb};
-//PCSX2_ALIGNED16(const u32 mVU_S1[4])		= {0x3f800000, 0x3f800000, 0x3f800000, 0x3f800000};
 PCSX2_ALIGNED16(const u32 mVU_S2[4])		= {0xbe2aaaa4, 0xbe2aaaa4, 0xbe2aaaa4, 0xbe2aaaa4};
 PCSX2_ALIGNED16(const u32 mVU_S3[4])		= {0x3c08873e, 0x3c08873e, 0x3c08873e, 0x3c08873e};
 PCSX2_ALIGNED16(const u32 mVU_S4[4])		= {0xb94fb21f, 0xb94fb21f, 0xb94fb21f, 0xb94fb21f};

@@ -52,7 +52,7 @@ __forceinline void Instruction::_dispatch_SPECIAL( T& inst )
 {
 	static const int baseval = __COUNTER__ + 1;
 
-	switch( inst._Funct_ )
+	switch( inst.Funct() )
 	{
 		ex(SLL)    null()     ex(SRL)   ex(SRA)     ex(SLLV)    null()    ex(SRLV)  ex(SRAV)
 		ex(JR)     ex(JALR)   null()    null()      ex(SYSCALL) ex(BREAK) null()    null()
@@ -107,11 +107,11 @@ __forceinline void Instruction::_dispatch_COP2( T& inst )
 }
 
 template< typename T >
-void Instruction::Process( T& inst )
+void __forceinline Instruction::Process( T& inst )
 {
 	static const int baseval = __COUNTER__ + 1;
 
-	switch( inst._Opcode_ )
+	switch( inst.Basecode() )
 	{
 		su(SPECIAL)  su(REGIMM)  ex(J)     ex(JAL)      ex(BEQ)     ex(BNE)     ex(BLEZ)   ex(BGTZ)
 		ex(ADDI)     ex(ADDIU)   ex(SLTI)  ex(SLTIU)    ex(ANDI)    ex(ORI)     ex(XORI)   ex(LUI)

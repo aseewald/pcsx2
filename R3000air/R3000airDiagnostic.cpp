@@ -138,15 +138,15 @@ string Instruction::GetParamValue( const uint pidx ) const
 		break;
 
 		case Param_Rt:
-			pvalue = RtValue.SL;
+			pvalue = RtValue().SL;
 		break;
 
 		case Param_Rs:
-			pvalue = RsValue.SL;
+			pvalue = RsValue().SL;
 		break;
 		
 		case Param_Rd:
-			pvalue = RdValue.SL;
+			pvalue = RdValue().SL;
 		break;
 
 		case Param_Sa:
