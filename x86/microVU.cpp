@@ -64,7 +64,7 @@ PCSX2_ALIGNED16(const float mVU_ITOF_15[4])	= {0.000030517578125, 0.000030517578
 // Micro VU - Main Functions
 //------------------------------------------------------------------
 
-// Only run this once! ;)
+// Only run this once per VU! ;)
 microVUt(void) mVUinit(VURegs* vuRegsPtr) {
 
 	microVU* mVU	= mVUx;
@@ -86,7 +86,7 @@ microVUt(void) mVUreset() {
 
 	// Create Block Managers
 	for (int i; i <= mVU->prog.max; i++) {
-		for (u32 j; j < mVU->progSize; j++) {
+		for (u32 j; j < (mVU->progSize / 2); j++) {
 			mVU->prog.prog[i].block[j] = new microBlockManager();
 		}
 	}
@@ -112,7 +112,7 @@ microVUt(void) mVUclose() {
 
 	// Delete Block Managers
 	for (int i; i <= mVU->prog.max; i++) {
-		for (u32 j; j < mVU->progSize; j++) {
+		for (u32 j; j < (mVU->progSize / 2); j++) {
 			if (mVU->prog.prog[i].block[j]) delete mVU->prog.prog[i].block[j];
 		}
 	}
@@ -142,8 +142,8 @@ microVUt(void*) __fastcall mVUexecute(u32 startPC, u32 cycles) {
 */
 	microVU* mVU = mVUx;
 	if ( mVUsearchProg(mVU) ) { // Found Program
-		microBlock* block = mVU->prog.prog[mVU->prog.cur].block[startPC]->search(mVU->prog.lastPipelineState);
-		if (block) return block->x86ptrStart; // Found Block
+		//microBlock* block = mVU->prog.prog[mVU->prog.cur].block[startPC]->search(mVU->prog.lastPipelineState);
+		//if (block) return block->x86ptrStart; // Found Block
 	}
 	// Recompile code
 	return NULL;
@@ -163,7 +163,7 @@ void* __fastcall mVUexecuteVU1(u32 startPC, u32 cycles) {
 // Clears program data (Sets used to 1 because calling this function implies the program will be used at least once)
 __forceinline void mVUclearProg(microVU* mVU, int progIndex) {
 	mVU->prog.prog[progIndex].used = 1;
-	for (u32 i = 0; i < mVU->progSize; i++) {
+	for (u32 i = 0; i < (mVU->progSize / 2); i++) {
 		mVU->prog.prog[progIndex].block[i]->reset();
 	}
 }

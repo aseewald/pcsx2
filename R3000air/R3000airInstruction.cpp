@@ -47,91 +47,25 @@ namespace R3000Air {
 		return false;*/
 	}
 
-	#if 0
-	Instruction::Instruction( u32 srcPc, GprConstStatus constStatus, bool isDelaySlot ) :
-		U32( iopMemRead32( srcPc ) )
-	,	_Funct_( Funct() )
-	,	_Sa_( Sa() )
-	,	_Rd_( Rd() )
-	,	_Rt_( Rt() )
-	,	_Rs_( Rs() )
-	,	_Opcode_( Opcode() )
-	,	_Pc_( srcPc )
-	,	IsDelaySlot( isDelaySlot )
-
-	//,	IsConstInput( constStatus )
-	//,	IsConstOutput( constStatus )
-
-	//,	RdValue( (IntSign32&)iopRegs.GPR.r[_Rd_] )
-	//,	RsValue( (IntSign32&)iopRegs.GPR.r[_Rs_] )
-	//,	RtValue( (IntSign32&)iopRegs.GPR.r[_Rt_] )
-
-	,	m_IsBranchType( false )
-	,	m_Branching( false )
-	,	m_NextPC( _Pc_ + 4 )
-	
-	//,	m_Syntax( NULL )
-	{
-	}
-
-	Instruction::Instruction( u32 srcPc, bool isDelaySlot ) :
-		U32( iopMemRead32( srcPc ) )
-	,	_Funct_( Funct() )
-	,	_Sa_( Sa() )
-	,	_Rd_( Rd() )
-	,	_Rt_( Rt() )
-	,	_Rs_( Rs() )
-	,	_Opcode_( Opcode() )
-	,	_Pc_( srcPc )
-	,	IsDelaySlot( isDelaySlot )
-
-	//,	IsConstInput()
-	//,	IsConstOutput()
-
-	//,	RdValue( (IntSign32&)iopRegs.GPR.r[_Rd_] )
-	//,	RsValue( (IntSign32&)iopRegs.GPR.r[_Rs_] )
-	//,	RtValue( (IntSign32&)iopRegs.GPR.r[_Rt_] )
-	
-	,	m_IsBranchType( false )
-	,	m_Branching( false )
-	,	m_NextPC( _Pc_ + 4 )
-	
-	//,	m_Syntax( NULL )
-	{
-	}
-	#endif
-	
-	
-	// Applies the const flag to Rd based on the const status of Rs and Rt;
-	void Instruction::SetConstRd_OnRsRt()
-	{
-		SetConstRd( IsConstRs() && IsConstRt() );
-	}
-
 	// Sets the link to the next instruction in the given GPR
 	// (defaults to the link register if none specified)
 	void Instruction::SetLink()
 	{
-		iopRegs.GPR.n.ra.UL = _Pc_ + 8;
-		SetConstLink( true );
+		SetLink( _Pc_ + 8 );
 	}
 
 	void Instruction::SetLinkRd()
 	{
-		if( !_Rd_ ) return;
-		RdValue().UL = _Pc_ + 8;
-		SetConstRd( true );
+		SetRd_UL( _Pc_ + 8 );
 	}
 
 	void Instruction::SetBranchInst()
 	{
 		m_IsBranchType = true;
-		//m_NextPC = _Pc_ + 8;		// skips the delay slot
 	}
 
 	void Instruction::DoBranch( u32 jumptarg )
 	{
-		//m_Branching = true;
 		m_NextPC = jumptarg;
 	}
 

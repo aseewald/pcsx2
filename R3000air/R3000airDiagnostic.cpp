@@ -138,15 +138,15 @@ string Instruction::GetParamValue( const uint pidx ) const
 		break;
 
 		case Param_Rt:
-			pvalue = RtValue().SL;
+			pvalue = GetRt().SL;
 		break;
 
 		case Param_Rs:
-			pvalue = RsValue().SL;
+			pvalue = GetRs().SL;
 		break;
 		
 		case Param_Rd:
-			pvalue = RdValue().SL;
+			pvalue = GetRd().SL;
 		break;
 
 		case Param_Sa:
@@ -154,15 +154,15 @@ string Instruction::GetParamValue( const uint pidx ) const
 		break;
 
 		case Param_Fs:		// Used by Cop0 load/store
-			pvalue = FsValue().SL;
+			pvalue = GetFs().SL;
 		break;
 
 		case Param_Hi:
-			pvalue = HiValue().SL;
+			pvalue = GetHi().SL;
 		break;
 		
 		case Param_Lo:
-			pvalue = LoValue().SL;
+			pvalue = GetLo().SL;
 		break;
 			
 		case Param_Imm:

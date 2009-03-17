@@ -391,7 +391,7 @@ static __forceinline void _cpuTestPERF()
 {
 	// Perfs are updated when read by games (COP0's MFC0/MTC0 instructions), so we need
 	// only update them at semi-regular intervals to keep cpuRegs.cycle from wrapping
-	// around twice on us btween updates.  Hence this function is called from the cpu's
+	// around twice on us between updates.  Hence this function is called from the cpu's
 	// Counters update.
 
 	COP0_UpdatePCCR();

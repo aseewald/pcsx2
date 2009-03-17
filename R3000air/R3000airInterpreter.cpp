@@ -91,7 +91,7 @@ static void intEventTest()
 }
 
 // Steps over the next instruction.
-static __releaseinline void intStep()
+static void intStep()
 {
 	Opcode opcode( iopMemRead32( iopRegs.pc ) );
 
@@ -113,21 +113,11 @@ static __releaseinline void intStep()
 	if( woot <= 0 )
 		intEventTest();
 
-	Instruction dudley = 
-	{
-		iopRegs.pc,
-		iopRegs.VectorPC + 4,		// default for next PC vector
-
-		opcode.U32,
-		opcode.Rd(),
-		opcode.Rt(),
-		opcode.Rs(),
-		false
-	};
+	Instruction dudley( opcode );
 
 	if( IsDevBuild )
 	{
-		Instruction::Process( (InstructionDiagnostic&)dudley );
+		InstructionDiagnostic::Process( dudley );
 		PSXCPU_LOG( "%-34s ; %s\n", dudley.GetDisasm().c_str(), dudley.GetValuesComment().c_str() );
 
 		if( iopRegs.IsDelaySlot )
@@ -135,7 +125,6 @@ static __releaseinline void intStep()
 	}
 
 	InstructionInterpreter::Process( dudley );
-	jASSUME( iopRegs.GPR.n.r0.UL == 0 );		// zero reg should always be zero!
 
 	// prep the iopRegs for the next instruction fetch -->
 	iopRegs.pc			= iopRegs.VectorPC;
