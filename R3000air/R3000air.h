@@ -20,6 +20,8 @@
 
 #include <stdio.h>
 
+#define __instinline __releaseinline		// MSVC still fails to inline as much as it should
+
 union IntSign32
 {
 	s32 SL;
@@ -27,6 +29,9 @@ union IntSign32
 
 	s16 SS[2];
 	u16 US[2];
+
+	s8 SB[2];
+	u8 UB[2];
 };
 
 namespace R3000Air
@@ -146,6 +151,8 @@ struct Registers
 
 	// Controls when branch tests are performed.
 	u32 NextBranchCycle;
+	
+	u32 DivUnitCycles;	// number of cycles pending on the current div unit instruction (mult and div both run in the same unit)
 
 	// old wacky data related to the PS1 GPU?
 	//u32 _msflag[32];
@@ -341,6 +348,11 @@ struct Opcode
 // This object is immutable.  Do not modify, just create new ones. :)
 // See R3000AirInstruction.cpp for code implementations.
 //
+// Note on R3000A cycle counting: it's best to assume *all* R3000A instructions as a single
+// cycle.  Loads have a delay slot (NOP), and the mult and div instructions have their own
+// pipeline that runs in parallel to the rest of the CPU (typically mult/div are paired
+// with a 13 instruction computation of overflow).
+//
 struct Instruction 
 {
 public:
@@ -360,8 +372,8 @@ protected:
 	// public accessors.
 
 	u32 m_NextPC;		// new PC after instruction has finished execution.
+	u32 m_DivStall;		// indicates the cycle stall of the current instruction if the DIV pipe is already in use.
 	bool m_IsBranchType;
-	const InstDiagInfo* m_Syntax;
 
 public:
 	Instruction( const Opcode& opcode ) :
@@ -371,6 +383,7 @@ public:
 	,	_Rs_( opcode.Rs() )
 	,	_Pc_( iopRegs.pc )
 	,	m_NextPC( iopRegs.VectorPC + 4 )
+	,	m_DivStall( 0 )
 	,	m_IsBranchType( false )
 	{
 	}
@@ -381,17 +394,14 @@ public:
 
 	template< typename T> static void Process( T& Inst );
 
-	string GetParamName( const uint pidx ) const;
-	string GetParamValue( const uint pidx ) const;
-	string GetDisasm() const;
-	string GetValuesComment() const;
-
 	// Returns true if this instruction is a branch/jump type (which means it
 	// will have a delay slot which should execute prior to the jump but *after*
 	// the branch instruction's target has been calculated).
 	const bool IsBranchType() const;
 
 	const u32 GetNextPC() const { return m_NextPC; }
+
+	const u32 GetDivStall() const { return m_DivStall; }
 
 	// ------------------------------------------------------------------------
 	// APIs for grabbing portions of the opcodes.  These are just passthrough
@@ -416,7 +426,7 @@ public:
 	// the current pc address)
 	uint JumpTarget() const { return (Target()<<2) + ((_Pc_+4) & 0xf0000000); }
 	u32 BranchTarget() const { return (_Pc_+4) + (Imm() * 4); }
-	u32 AddrImm() const { return GetRs().UL + Imm(); }
+	u32 AddrImm() { return GetRs().UL + Imm(); }
 	
 	// Sets the link to the next instruction in the link register (Ra)
 	void SetLink();
@@ -430,19 +440,37 @@ public:
 
 	void DoBranch( u32 jumptarg );
 	void DoBranch();
-	void MultHelper( u64 result );
+
+	INSTRUCTION_API()
 
 protected:
+	void MultHelper( u64 result );
+
 	// ------------------------------------------------------------------------
 	// Register value retrieval methods.  Use these to read/write the registers
-	// specified by the Opcode.
+	// specified by the Opcode.  There are two types: the const "RegValue()" brand
+	// which do not propagate const/optimization data, and the GetReg() form,
+	// which is non-const and propagates optimization flags.
 
-	virtual const IntSign32 GetRd() const { return iopRegs.GPR.r[_Rd_]; }
-	virtual const IntSign32 GetRt() const { return iopRegs.GPR.r[_Rt_]; }
-	virtual const IntSign32 GetRs() const { return iopRegs.GPR.r[_Rs_]; }
-	virtual const IntSign32 GetHi() const { return iopRegs.GPR.n.hi; }
-	virtual const IntSign32 GetLo() const { return iopRegs.GPR.n.lo; }
-	virtual const IntSign32 GetFs() const { return iopRegs.CP0.r[_Rd_]; }
+	const IntSign32 RdValue() const { return iopRegs.GPR.r[_Rd_]; }
+	const IntSign32 RtValue() const { return iopRegs.GPR.r[_Rt_]; }
+	const IntSign32 RsValue() const { return iopRegs.GPR.r[_Rs_]; }
+	const IntSign32 HiValue() const { return iopRegs.GPR.n.hi; }
+	const IntSign32 LoValue() const { return iopRegs.GPR.n.lo; }
+	const IntSign32 FsValue() const { return iopRegs.CP0.r[_Rd_]; }
+
+	// HiLo are always written as unsigned.
+	void SetHiLo( u32 hi, u32 lo ) { SetLo_UL( lo ); SetHi_UL( hi ); }
+
+	// ------------------------------------------------------------------------
+	// Begin Virtual API
+	
+	virtual const IntSign32 GetRd() { return iopRegs.GPR.r[_Rd_]; }
+	virtual const IntSign32 GetRt() { return iopRegs.GPR.r[_Rt_]; }
+	virtual const IntSign32 GetRs() { return iopRegs.GPR.r[_Rs_]; }
+	virtual const IntSign32 GetHi() { return iopRegs.GPR.n.hi; }
+	virtual const IntSign32 GetLo() { return iopRegs.GPR.n.lo; }
+	virtual const IntSign32 GetFs() { return iopRegs.CP0.r[_Rd_]; }
 
 	virtual void SetRd_SL( s32 src ) { if(!_Rd_) return; iopRegs.GPR.r[_Rd_].SL = src; }
 	virtual void SetRt_SL( s32 src ) { if(!_Rt_) return; iopRegs.GPR.r[_Rt_].SL = src; }
@@ -459,15 +487,21 @@ protected:
 	virtual void SetLo_UL( u32 src ) { iopRegs.GPR.n.lo.UL = src; }
 	virtual void SetFs_UL( u32 src ) { iopRegs.CP0.r[_Rd_].UL = src; }
 
-	// HiLo are always written as unsigned.
-	virtual void SetHiLo( u32 hi, u32 lo ) { SetLo_UL( lo ); SetHi_UL( hi ); }
+	virtual u8  MemoryRead8( u32 addr );
+	virtual u16 MemoryRead16( u32 addr );
+	virtual u32 MemoryRead32( u32 addr );
 
+	virtual void MemoryWrite8( u32 addr, u8 val );
+	virtual void MemoryWrite16( u32 addr, u16 val );
+	virtual void MemoryWrite32( u32 addr, u32 val );
+
+	virtual void RaiseException( uint code );
+	virtual void _RFE();	// virtual implementation of RFE
+	
 	// used to flag instructions which have a "critical" side effect elsewhere in emulation-
 	// land -- such as modifying COP0 registers, or other functions which cannot be safely
 	// optimized.
 	virtual void HasSideEffects() const {}
-	virtual void ReadsMemory() const {}
-	virtual void WritesMemory() const {}
 
 	// -------------------------------------------------------------------------
 	// Helpers used to initialize the object state.
@@ -478,24 +512,6 @@ protected:
 	template< typename T > static void _dispatch_COP2( T& Inst );
 };
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//                        IOP Interpreted Instruction Tables
-//
-struct InstructionInterpreter : public Instruction
-{
-	static __releaseinline void Process( Instruction& inst )
-	{
-		Instruction::Process( (InstructionInterpreter&) inst );
-		jASSUME( iopRegs.GPR.n.r0.UL == 0 );		// zero reg should always be zero!
-	}
-
-	INSTRUCTION_API()
-
-protected:
-	// used by MULT and MULTU.
-	void MultHelper( u64 result );
-};
-
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // This version of the instruction interprets the instruction and propagates optimization
@@ -503,11 +519,19 @@ protected:
 //
 class InstructionOptimizer : public Instruction
 {
-
 protected:
 	bool m_HasSideEffects;
 	GprStatus m_ReadsGPR;
 	GprStatus m_WritesGPR;
+
+public:
+	InstructionOptimizer( const Opcode& opcode ) :
+		Instruction( opcode )
+	,	m_HasSideEffects( false )
+	{
+		m_ReadsGPR.Value = false;
+		m_WritesGPR.Value = false;
+	}
 
 protected:
 	// ------------------------------------------------------------------------
@@ -523,46 +547,90 @@ protected:
 	const IntSign32 GetLo() { m_ReadsGPR.Lo = true; return iopRegs.GPR.n.lo; }
 	const IntSign32 GetFs() { m_ReadsGPR.Fs = true; return iopRegs.CP0.r[_Rd_]; }
 
-	void SetRd_SL( s32 src ) { if(!_Rd_) return; m_WritesGPR.Rd = true; iopRegs.GPR.r[_Rd_].SL = src; }
-	void SetRt_SL( s32 src ) { if(!_Rt_) return; m_WritesGPR.Rt = true; iopRegs.GPR.r[_Rt_].SL = src; }
-	void SetRs_SL( s32 src ) { if(!_Rs_) return; m_WritesGPR.Rs = true; iopRegs.GPR.r[_Rs_].SL = src; }
-	void SetHi_SL( s32 src ) { m_WritesGPR.Hi = true; iopRegs.GPR.n.hi.SL = src; }
-	void SetLo_SL( s32 src ) { m_WritesGPR.Lo = true; iopRegs.GPR.n.lo.SL = src; }
-	void SetFs_SL( s32 src ) { m_WritesGPR.Fs = true; iopRegs.CP0.r[_Rd_].SL = src; }
-	void SetLink( u32 addr ) { m_WritesGPR.Link = true; iopRegs.GPR.n.ra.UL = addr; }
+	virtual void SetRd_SL( s32 src ) { if(!_Rd_) return; m_WritesGPR.Rd = true; iopRegs.GPR.r[_Rd_].SL = src; }
+	virtual void SetRt_SL( s32 src ) { if(!_Rt_) return; m_WritesGPR.Rt = true; iopRegs.GPR.r[_Rt_].SL = src; }
+	virtual void SetRs_SL( s32 src ) { if(!_Rs_) return; m_WritesGPR.Rs = true; iopRegs.GPR.r[_Rs_].SL = src; }
+	virtual void SetHi_SL( s32 src ) { m_WritesGPR.Hi = true; iopRegs.GPR.n.hi.SL = src; }
+	virtual void SetLo_SL( s32 src ) { m_WritesGPR.Lo = true; iopRegs.GPR.n.lo.SL = src; }
+	virtual void SetFs_SL( s32 src ) { m_WritesGPR.Fs = true; iopRegs.CP0.r[_Rd_].SL = src; }
+	virtual void SetLink( u32 addr ) { m_WritesGPR.Link = true; iopRegs.GPR.n.ra.UL = addr; }
 
-	void SetRd_UL( u32 src ) { if(!_Rd_) return; m_WritesGPR.Rd = true; iopRegs.GPR.r[_Rd_].UL = src; }
-	void SetRt_UL( u32 src ) { if(!_Rt_) return; m_WritesGPR.Rt = true; iopRegs.GPR.r[_Rt_].UL = src; }
-	void SetRs_UL( u32 src ) { if(!_Rs_) return; m_WritesGPR.Rs = true; iopRegs.GPR.r[_Rs_].UL = src; }
-	void SetHi_UL( u32 src ) { m_WritesGPR.Hi = true; iopRegs.GPR.n.hi.UL = src; }
-	void SetLo_UL( u32 src ) { m_WritesGPR.Lo = true; iopRegs.GPR.n.lo.UL = src; }
-	void SetFs_UL( u32 src ) { m_WritesGPR.Fs = true; iopRegs.CP0.r[_Rd_].UL = src; }
+	virtual void SetRd_UL( u32 src ) { if(!_Rd_) return; m_WritesGPR.Rd = true; iopRegs.GPR.r[_Rd_].UL = src; }
+	virtual void SetRt_UL( u32 src ) { if(!_Rt_) return; m_WritesGPR.Rt = true; iopRegs.GPR.r[_Rt_].UL = src; }
+	virtual void SetRs_UL( u32 src ) { if(!_Rs_) return; m_WritesGPR.Rs = true; iopRegs.GPR.r[_Rs_].UL = src; }
+	virtual void SetHi_UL( u32 src ) { m_WritesGPR.Hi = true; iopRegs.GPR.n.hi.UL = src; }
+	virtual void SetLo_UL( u32 src ) { m_WritesGPR.Lo = true; iopRegs.GPR.n.lo.UL = src; }
+	virtual void SetFs_UL( u32 src ) { m_WritesGPR.Fs = true; iopRegs.CP0.r[_Rd_].UL = src; }
+
+	virtual u8  MemoryRead8( u32 addr );
+	virtual u16 MemoryRead16( u32 addr );
+	virtual u32 MemoryRead32( u32 addr );
+
+	virtual void MemoryWrite8( u32 addr, u8 val );
+	virtual void MemoryWrite16( u32 addr, u16 val );
+	virtual void MemoryWrite32( u32 addr, u32 val );
 
 	void HasSideEffects() { m_HasSideEffects = true; }
-	void ReadsMemory() { m_ReadsGPR.Memory = true; }
-	void WritesMemory() { m_WritesGPR.Memory = true; }
-
-public:
-	InstructionOptimizer( const Opcode& opcode ) :
-		Instruction( opcode )
-	,	m_HasSideEffects( false )
-	{
-		m_ReadsGPR.Value = 0;
-		m_WritesGPR.Value = 0;
-	}
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //                         IOP Diagnostic Information Tables
 //
-class InstructionDiagnostic : public Instruction
+class InstructionDiagnostic : public InstructionOptimizer
 {
+protected:
+	const InstDiagInfo* m_Syntax;
+
 public:
-	static __releaseinline void Process( Instruction& inst )
+	InstructionDiagnostic( const Opcode& opcode ) :
+		InstructionOptimizer( opcode )
+	,	m_Syntax( NULL )
 	{
-		//Instruction::Process( (InstructionOptimizer&) inst );
-		Instruction::Process( (InstructionDiagnostic&) inst );
 	}
+
+	__releaseinline void Process()
+	{
+		// Two phase processing for information collection:
+		//  First phase uses the interpreter to collect register read/write information.
+		//  Second phase uses the Diagnostic to collect parameter display order.
+		
+		Instruction::Process( (InstructionOptimizer&) *this );
+		Instruction::Process( *this );
+	}
+
+	bool ParamIsRead( const uint pidx ) const;
+	void GetParamName( const uint pidx, string& dest ) const;
+	void GetParamValue( const uint pidx, string& dest ) const;
+
+	void GetDisasm( string& dest ) const;
+	void GetValuesComment( string& dest ) const;
+
+protected:
+	void SetRd_SL( s32 src ) { if(!_Rd_) return; m_WritesGPR.Rd = true; }
+	void SetRt_SL( s32 src ) { if(!_Rt_) return; m_WritesGPR.Rt = true; }
+	void SetRs_SL( s32 src ) { if(!_Rs_) return; m_WritesGPR.Rs = true; }
+	void SetHi_SL( s32 src ) { m_WritesGPR.Hi = true; }
+	void SetLo_SL( s32 src ) { m_WritesGPR.Lo = true; }
+	void SetFs_SL( s32 src ) { m_WritesGPR.Fs = true; }
+	void SetLink( u32 addr ) { m_WritesGPR.Link = true; }
+
+	void SetRd_UL( u32 src ) { if(!_Rd_) return; m_WritesGPR.Rd = true; }
+	void SetRt_UL( u32 src ) { if(!_Rt_) return; m_WritesGPR.Rt = true; }
+	void SetRs_UL( u32 src ) { if(!_Rs_) return; m_WritesGPR.Rs = true; }
+	void SetHi_UL( u32 src ) { m_WritesGPR.Hi = true; }
+	void SetLo_UL( u32 src ) { m_WritesGPR.Lo = true; }
+	void SetFs_UL( u32 src ) { m_WritesGPR.Fs = true; }
+
+	u8  MemoryRead8( u32 addr )  { m_ReadsGPR.Memory = true; return 0; }
+	u16 MemoryRead16( u32 addr ) { m_ReadsGPR.Memory = true; return 0; }
+	u32 MemoryRead32( u32 addr ) { m_ReadsGPR.Memory = true; return 0; }
+
+	void MemoryWrite8( u32 addr, u8 val )   { m_WritesGPR.Memory = true; }
+	void MemoryWrite16( u32 addr, u16 val ) { m_WritesGPR.Memory = true; }
+	void MemoryWrite32( u32 addr, u32 val ) { m_WritesGPR.Memory = true; }
+
+	void RaiseException( uint code ) { }
+	void _RFE() { }
 
 protected:
 	InstDiagInfo MakeInfoS( const char* name, ParamType one=Param_None, ParamType two=Param_None, ParamType three=Param_None ) const;

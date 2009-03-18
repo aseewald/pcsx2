@@ -27,7 +27,9 @@
 #include "IopCounters.h"
 #include "R3000Exceptions.h"
 
+#include "R3000airInstruction.inl"
 #include "R3000airOpcodeTables.inl"
+#include "R3000airOpcodeImpl.inl"
 
 #include "DebugTools/Debug.h"
 
@@ -90,8 +92,11 @@ static void intEventTest()
 	}
 }
 
+static string m_disasm;
+static string m_comment;
+
 // Steps over the next instruction.
-static void intStep()
+static __releaseinline void intStep()
 {
 	Opcode opcode( iopMemRead32( iopRegs.pc ) );
 
@@ -105,6 +110,9 @@ static void intStep()
 
 		iopRegs.cycle++;
 		psxCycleEE -= 8;
+
+		if( iopRegs.DivUnitCycles > 0 )
+			iopRegs.DivUnitCycles--;
 		
 		opcode = iopMemRead32( iopRegs.pc );
 	}
@@ -113,18 +121,21 @@ static void intStep()
 	if( woot <= 0 )
 		intEventTest();
 
-	Instruction dudley( opcode );
-
-	if( IsDevBuild )
+	if( IsDevBuild && (varLog & 0x00100000) )
 	{
-		InstructionDiagnostic::Process( dudley );
-		PSXCPU_LOG( "%-34s ; %s\n", dudley.GetDisasm().c_str(), dudley.GetValuesComment().c_str() );
-
-		if( iopRegs.IsDelaySlot )
-			PSXCPU_LOG("\n");
+		InstructionDiagnostic diag( opcode );
+		diag.Process();
+		diag.GetDisasm( m_disasm );
+		diag.GetValuesComment( m_comment );
+		
+		if( m_comment.empty() )
+			PSXCPU_LOG( "%s\n%s", m_disasm.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
+		else
+			PSXCPU_LOG( "%-34s ; %s\n%s", m_disasm.c_str(), m_comment.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
 	}
 
-	InstructionInterpreter::Process( dudley );
+	Instruction dudley( opcode );
+	Instruction::Process( dudley );
 
 	// prep the iopRegs for the next instruction fetch -->
 	iopRegs.pc			= iopRegs.VectorPC;
@@ -142,6 +153,22 @@ static void intStep()
 
 	iopRegs.cycle++;
 	psxCycleEE -= 8;
+
+	// ------------------------------------------------------------------------
+	// The DIV pipe runs in parallel to the rest of the CPU, but if one of the dependent instructions
+	// is used, it means we need to stall the IOP to wait for the result.
+
+	if( iopRegs.DivUnitCycles > 0 )
+	{
+		iopRegs.DivUnitCycles--;
+		if( dudley.GetDivStall() != 0 )
+		{
+			iopRegs.cycle += iopRegs.DivUnitCycles;
+			psxCycleEE -= iopRegs.DivUnitCycles * 8;
+			iopRegs.DivUnitCycles = dudley.GetDivStall();	// stall for the following instruction.
+		}
+	}
+	else iopRegs.DivUnitCycles = dudley.GetDivStall();	// optimized case, when DivUnitCycles is known zero.
 }
 
 static void intExecute()
@@ -158,7 +185,7 @@ static void intExecute()
 // vary from the value requested (usually higher, but sometimes lower, depending
 // on if events occurred).
 static s32 intExecuteBlock( s32 eeCycles )
-{
+{	
 	// psxBreak and psxCycleEE are used to determine the actual number of cycles run.
 	psxBreak = 0;
 	psxCycleEE = eeCycles;

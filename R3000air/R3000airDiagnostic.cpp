@@ -58,7 +58,40 @@ InstDiagInfo InstDiag::MakeInfoU( const char *name, ParamType one, ParamType two
 	return info;
 }
 
-string Instruction::GetParamName( const uint pidx  ) const
+bool InstDiag::ParamIsRead( const uint pidx ) const
+{
+	switch( m_Syntax->Param[pidx] )
+	{
+		case Param_None: return false;
+
+		case Param_Rt: return m_ReadsGPR.Rt;
+		case Param_Rs: return m_ReadsGPR.Rs;
+		case Param_Rd: return m_ReadsGPR.Rd;
+		case Param_Sa: return true;
+		case Param_Fs: return m_ReadsGPR.Fs;		// Used by Cop0 load/store
+		case Param_Hi: return m_ReadsGPR.Hi;
+		case Param_Lo: return m_ReadsGPR.Lo;
+			
+		case Param_HiLo: return false;		// 64 bit operand (allowed as destination only)
+
+		case Param_Imm:
+		case Param_Imm16:		// Immediate, shifted up by 16. [used by LUI]
+			return false;
+
+		case Param_AddrImm:		// Address Immediate (Rs + Imm()), used by load/store
+			return false;
+
+		case Param_BranchOffset:
+			return false;
+		
+		case Param_JumpTarget:	// 26 bit immediate used as a jump target
+			return false;
+		
+		jNO_DEFAULT;
+	}
+}
+
+void InstDiag::GetParamName( const uint pidx, string& dest ) const
 {
 	const char* pname = NULL;
 
@@ -79,7 +112,7 @@ string Instruction::GetParamName( const uint pidx  ) const
 		break;
 
 		case Param_Sa:
-			pname  = "Sa";
+			pname  = "sa";
 		break;
 
 		case Param_Fs:		// Used by Cop0 load/store
@@ -95,7 +128,7 @@ string Instruction::GetParamName( const uint pidx  ) const
 		break;
 			
 		case Param_HiLo:		// 64 bit operand (allowed as destination only)
-			pname = "HiLo";
+			pname = "hilo";
 		break;
 
 		case Param_Imm:
@@ -105,7 +138,7 @@ string Instruction::GetParamName( const uint pidx  ) const
 		case Param_AddrImm:		// Address Immediate (Rs + Imm()), used by load/store
 			// TODO : Calculate label.
 			//AddrImm()
-			return fmt_string( "0x%4.4x(%s)", (s32)Imm(), tbl_regname_gpr[_Rs_] );
+			ssprintf( dest, "0x%4.4x(%s)", (s32)Imm(), tbl_regname_gpr[_Rs_] );
 		break;
 
 		case Param_BranchOffset:
@@ -121,13 +154,13 @@ string Instruction::GetParamName( const uint pidx  ) const
 		jNO_DEFAULT;
 	}
 	
-	return string( (pname != NULL) ? pname : "" );
+	dest = (pname != NULL) ? pname : "";
 }
 
-string Instruction::GetParamValue( const uint pidx ) const
+void InstDiag::GetParamValue( const uint pidx, string& dest ) const
 {
 	// First parameter is always "target" form, so it never has a value.
-	if( pidx == 0 || m_Syntax->Param[pidx] == Param_None ) return string();
+	if( m_Syntax->Param[pidx] == Param_None ) { dest.clear(); return; }
 
 	s32 pvalue = 0;
 
@@ -138,15 +171,15 @@ string Instruction::GetParamValue( const uint pidx ) const
 		break;
 
 		case Param_Rt:
-			pvalue = GetRt().SL;
+			pvalue = RtValue().SL;
 		break;
 
 		case Param_Rs:
-			pvalue = GetRs().SL;
+			pvalue = RsValue().SL;
 		break;
 		
 		case Param_Rd:
-			pvalue = GetRd().SL;
+			pvalue = RdValue().SL;
 		break;
 
 		case Param_Sa:
@@ -154,15 +187,15 @@ string Instruction::GetParamValue( const uint pidx ) const
 		break;
 
 		case Param_Fs:		// Used by Cop0 load/store
-			pvalue = GetFs().SL;
+			pvalue = FsValue().SL;
 		break;
 
 		case Param_Hi:
-			pvalue = GetHi().SL;
+			pvalue = HiValue().SL;
 		break;
 		
 		case Param_Lo:
-			pvalue = GetLo().SL;
+			pvalue = LoValue().SL;
 		break;
 			
 		case Param_Imm:
@@ -174,7 +207,7 @@ string Instruction::GetParamValue( const uint pidx ) const
 		break;
 
 		case Param_AddrImm:		// Address Immediate (Rs + Imm()), used by load/store
-			pvalue = AddrImm();
+			pvalue = RsValue().UL + Imm();
 		break;
 
 		case Param_BranchOffset:
@@ -188,24 +221,23 @@ string Instruction::GetParamValue( const uint pidx ) const
 		jNO_DEFAULT;
 	}
 	
-	return fmt_string( "0x%8.8x", pvalue );
+	ssprintf( dest, "0x%8.8x", pvalue );
 }
 
 // Creates a string representation of the given instruction status.
-string Instruction::GetDisasm() const
+void InstDiag::GetDisasm( string& dest ) const
 {	
-	string dest;
 	ssprintf( dest, "%-8s", m_Syntax->Name );
 
 	bool needComma = false;
+	string paramName;
 
 	for( uint i=0; i<3; ++i )
 	{
-		string paramName( GetParamName( i ) );
-		
-		
+		GetParamName( i, paramName );
+
 		if( paramName.empty() )
-			paramName = GetParamValue( i );
+			GetParamValue( i, paramName );
 			
 		if( !paramName.empty() )
 		{
@@ -216,33 +248,31 @@ string Instruction::GetDisasm() const
 			needComma = true;
 		}
 	}
-	return dest;
 }
 
-// Returns the values of the given string as an assembly comment
-string Instruction::GetValuesComment() const
+// Returns the values of the given string as comma delimited.
+void InstDiag::GetValuesComment( string& dest ) const
 {
-	string values;
 	bool needComma = false;
+	dest.clear();
 
-	for( uint i=1; i<3; ++i )
+	string paramName;
+	for( uint i=0; i<3; ++i )
 	{
-		string paramName( GetParamName( i ) );
+		if( !ParamIsRead( i ) ) continue;
+
+		GetParamName( i, paramName );
 		if( paramName == "zero" ) continue;
 
-		string paramValue( GetParamValue( i ) );
+		string paramValue;
+		GetParamValue( i, paramValue );
 
 		if( !paramName.empty() && !paramValue.empty() )
 		{
-			if( needComma )
-				values += ", ";
-
-			values += paramName + "=" + paramValue;
+			ssappendf( dest, "%s%hs=%hs", needComma ? ", " : "", &paramName, &paramValue );
 			needComma = true;
 		}
 	}
-
-	return values;
 }
 
 
@@ -274,11 +304,15 @@ string Instruction::GetValuesComment() const
 #define Form_None			Param_None, Param_None, Param_None
 
 
-#define MakeDiagS( name, form ) void InstDiag::name() \
-{	static const InstDiagInfo secret_signed_stuff = { #name, form, false }; m_Syntax = &secret_signed_stuff; }
+#define MakeDiagS( name, form ) \
+static const InstDiagInfo secret_signed_stuff_##name = { #name, form, false }; \
+void InstDiag::name() \
+{	m_Syntax = &secret_signed_stuff_##name; }
 
-#define MakeDiagU( name, form ) void InstDiag::name() \
-{	static const InstDiagInfo secret_unsigned_stuff = { #name, form, true }; m_Syntax = &secret_unsigned_stuff; }
+#define MakeDiagU( name, form ) \
+static const InstDiagInfo secret_unsigned_stuff_##name = { #name, form, true }; \
+void InstDiag::name() \
+{	m_Syntax = &secret_unsigned_stuff_##name; }
 
 /*********************************************************
 * Register branch logic                                  *

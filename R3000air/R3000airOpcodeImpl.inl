@@ -16,9 +16,7 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
-#include "PrecompiledHeader.h"
-
-#include "System.h"
+#pragma once 
 
 #include "R3000A.h"
 #include "R3000Exceptions.h"
@@ -27,7 +25,7 @@
 namespace R3000Air
 {
 
-typedef InstructionInterpreter InstInterp;
+typedef Instruction Inst;
 
 static __forceinline void _OverflowCheck( const Instruction& inst, u64 result )
 {
@@ -39,8 +37,6 @@ static __forceinline void _OverflowCheck( const Instruction& inst, u64 result )
 
 	const u32* const resptr = (u32*)&result;
 
-	// If bit32 != bit31 then we have an overflow.
-	//if( !!(result & ((u64)1<<32)) != !!(result & 0x80000000) )
 	if( !!(resptr[1] & 1) != !!(resptr[0] & 0x80000000) )
 		throw R3000Exception::Overflow( inst );
 }
@@ -50,37 +46,37 @@ static __forceinline void _OverflowCheck( const Instruction& inst, u64 result )
 * Format:  OP rs, offset                                 *
 *********************************************************/
 
-void InstInterp::BGEZ()	// Branch if Rs >= 0
+__instinline void Inst::BGEZ()	// Branch if Rs >= 0
 {
 	SetBranchInst();
 	if( GetRs().SL >= 0 ) DoBranch();
 }
 
-void InstInterp::BGTZ()	// Branch if Rs >  0
+__instinline void Inst::BGTZ()	// Branch if Rs >  0
 {
 	SetBranchInst();
 	if( GetRs().SL > 0 ) DoBranch();
 }
 
-void InstInterp::BLEZ()	// Branch if Rs <= 0
+__instinline void Inst::BLEZ()	// Branch if Rs <= 0
 {
 	SetBranchInst();
 	if( GetRs().SL <= 0 ) DoBranch();
 }
 
-void InstInterp::BLTZ()	// Branch if Rs <  0
+__instinline void Inst::BLTZ()	// Branch if Rs <  0
 {
 	SetBranchInst();
 	if( GetRs().SL < 0 ) DoBranch();
 }
 
-void InstInterp::BGEZAL()	// Branch if Rs >= 0 and link
+__instinline void Inst::BGEZAL()	// Branch if Rs >= 0 and link
 {
 	SetLink();
 	BGEZ();
 }
 
-void InstInterp::BLTZAL()	// Branch if Rs <  0 and link
+__instinline void Inst::BLTZAL()	// Branch if Rs <  0 and link
 {
 	SetLink();
 	BLTZ();
@@ -91,13 +87,13 @@ void InstInterp::BLTZAL()	// Branch if Rs <  0 and link
 * Register branch logic                                  *
 * Format:  OP rs, rt, offset                             *
 *********************************************************/
-void InstInterp::BEQ()		// Branch if Rs == Rt
+__instinline void Inst::BEQ()		// Branch if Rs == Rt
 {
 	SetBranchInst();
 	if( GetRs().SL == GetRt().SL ) DoBranch();
 }
 
-void InstInterp::BNE()		// Branch if Rs != Rt
+__instinline void Inst::BNE()		// Branch if Rs != Rt
 {
 	SetBranchInst();
 	if( GetRs().SL != GetRt().SL ) DoBranch();
@@ -108,13 +104,13 @@ void InstInterp::BNE()		// Branch if Rs != Rt
 * Jump to target                                         *
 * Format:  OP target                                     *
 *********************************************************/
-void InstInterp::J()
+__instinline void Inst::J()
 {
 	SetBranchInst();
 	DoBranch( JumpTarget() );
 }
 
-void InstInterp::JAL()
+__instinline void Inst::JAL()
 {
 	SetLink(); J();
 }
@@ -123,13 +119,13 @@ void InstInterp::JAL()
 * Register jump                                          *
 * Format:  OP rs, rd                                     *
 *********************************************************/
-void InstInterp::JR()
+__instinline void Inst::JR()
 {
 	SetBranchInst();
 	DoBranch( GetRs().UL );
 }
 
-void InstInterp::JALR()
+__instinline void Inst::JALR()
 {
 	SetLinkRd(); JR();
 }
@@ -141,7 +137,7 @@ void InstInterp::JALR()
 *********************************************************/
 
 // Rt = Rs + Im 	(Exception on Integer Overflow)
-void InstInterp::ADDI()
+__instinline void Inst::ADDI()
 {
 	s64 result = (s64)GetRs().SL + Imm();
 	_OverflowCheck( *this, result );
@@ -150,7 +146,7 @@ void InstInterp::ADDI()
 
 // Rt = Rs + Im (no exception)
 // This is exactly like ADDI but does not perform an overflow exception check.
-void InstInterp::ADDIU()
+__instinline void Inst::ADDIU()
 {
 	/*if( !_Rt_ )
 	{
@@ -160,28 +156,28 @@ void InstInterp::ADDIU()
 	SetRt_SL( GetRs().SL + Imm() );
 }
 
-void InstInterp::ANDI()	// Rt = Rs And Im
+__instinline void Inst::ANDI()	// Rt = Rs And Im
 {
 	SetRt_UL( GetRs().UL & ImmU() );
 }
 
-void InstInterp::ORI()		// Rt = Rs Or  Im
+__instinline void Inst::ORI()		// Rt = Rs Or  Im
 {
 	SetRt_UL( GetRs().UL | ImmU() );
 }
 
-void InstInterp::XORI()	// Rt = Rs Xor Im
+__instinline void Inst::XORI()	// Rt = Rs Xor Im
 {
 	SetRt_UL( GetRs().UL ^ ImmU() );
 }
 
-void InstInterp::SLTI()	// Rt = Rs < Im		(Signed)
+__instinline void Inst::SLTI()	// Rt = Rs < Im		(Signed)
 {
 	// Note: C standard guarantees conditionals resolve to 0 or 1 when cast to int.
 	SetRt_SL( GetRs().SL < Imm() );
 }
 
-void InstInterp::SLTIU()	// Rt = Rs < Im		(Unsigned)
+__instinline void Inst::SLTIU()	// Rt = Rs < Im		(Unsigned)
 {
 	// Note: Imm is the 16 bit value SIGN EXTENDED into 32 bits, which is why we
 	// cannot use ImmU() here!!
@@ -193,7 +189,7 @@ void InstInterp::SLTIU()	// Rt = Rs < Im		(Unsigned)
 * Format:  OP rd, rs, rt                                 *
 *********************************************************/
 // Rd = Rs + Rt		(Exception on Integer Overflow)
-void InstInterp::ADD()
+__instinline void Inst::ADD()
 {
 	s64 result = (s64)GetRs().SL + GetRt().SL;
 	
@@ -202,7 +198,7 @@ void InstInterp::ADD()
 }
 
 // Rd = Rs - Rt		(Exception on Integer Overflow)
-void InstInterp::SUB()
+__instinline void Inst::SUB()
 {
 	s64 result = (s64)GetRs().SL - GetRt().SL;
 
@@ -210,42 +206,42 @@ void InstInterp::SUB()
 	SetRd_SL( (s32)result );
 }
 
-void InstInterp::ADDU()	// Rd = Rs + Rt
+__instinline void Inst::ADDU()	// Rd = Rs + Rt
 {
 	SetRd_SL( GetRs().SL + GetRt().SL );
 }
 
-void InstInterp::SUBU()	// Rd = Rs - Rt
+__instinline void Inst::SUBU()	// Rd = Rs - Rt
 {
 	SetRd_SL( GetRs().SL - GetRt().SL );
 }
 
-void InstInterp::AND()		// Rd = Rs And Rt
+__instinline void Inst::AND()		// Rd = Rs And Rt
 {
 	SetRd_UL( GetRs().UL & GetRt().UL );
 }
 
-void InstInterp::OR()		// Rd = Rs Or  Rt
+__instinline void Inst::OR()		// Rd = Rs Or  Rt
 {
 	SetRd_UL( GetRs().UL | GetRt().UL );
 }
 
-void InstInterp::XOR()		// Rd = Rs Xor Rt
+__instinline void Inst::XOR()		// Rd = Rs Xor Rt
 {
 	SetRd_UL( GetRs().UL ^ GetRt().UL );
 }
 
-void InstInterp::NOR()		// Rd = Rs Nor Rt
+__instinline void Inst::NOR()		// Rd = Rs Nor Rt
 {
 	SetRd_UL( ~(GetRs().UL | GetRt().UL) );
 }
 
-void InstInterp::SLT()		// Rd = Rs < Rt		(Signed)
+__instinline void Inst::SLT()		// Rd = Rs < Rt		(Signed)
 {
 	SetRd_UL( GetRs().SL < GetRt().SL );
 }
 
-void InstInterp::SLTU()	// Rd = Rs < Rt		(Unsigned)
+__instinline void Inst::SLTU()	// Rd = Rs < Rt		(Unsigned)
 {
 	SetRd_UL( GetRs().UL < GetRt().UL );
 }
@@ -255,7 +251,7 @@ void InstInterp::SLTU()	// Rd = Rs < Rt		(Unsigned)
 * Register mult/div & Register trap logic                *
 * Format:  OP rs, rt                                     *
 *********************************************************/
-void InstInterp::DIV()
+__instinline void Inst::DIV()
 {
 	// If Rt is zero, then the result is undefined.
 	// Which means we can safely ignore the instruction entirely. :D
@@ -265,28 +261,31 @@ void InstInterp::DIV()
 
 	const s32 Rs = GetRs().SL;
 	SetHiLo( (Rs % Rt), (Rs / Rt) );
+	m_DivStall = 35;
 }
 
-void InstInterp::DIVU()
+__instinline void Inst::DIVU()
 {
 	const u32 Rt = GetRt().UL;
 	if( Rt == 0 ) return;
 
 	const u32 Rs = GetRs().UL;
 	SetHiLo( (Rs % Rt), (Rs / Rt) );
+	m_DivStall = 35;
 }
 
-void InstInterp::MultHelper( u64 result )
+__instinline void Inst::MultHelper( u64 result )
 {
 	SetHiLo( (u32)(result >> 32), (u32)result );
+	m_DivStall = 11;
 }
 
-void InstInterp::MULT()
+__instinline void Inst::MULT()
 {
 	MultHelper( (s64)GetRs().SL * GetRt().SL );
 }
 
-void InstInterp::MULTU()
+__instinline void Inst::MULTU()
 {
 	MultHelper( (u64)GetRs().UL * GetRt().UL );
 }
@@ -295,17 +294,17 @@ void InstInterp::MULTU()
 * Shift arithmetic with constant shift                   *
 * Format:  OP rd, rt, sa                                 *
 *********************************************************/
-void InstInterp::SLL()		// Rd = Rt << sa
+__instinline void Inst::SLL()		// Rd = Rt << sa
 {
 	SetRd_UL( GetRt().UL << Sa() );
 }
 
-void InstInterp::SRA()		// Rd = Rt >> sa (arithmetic) [signed]
+__instinline void Inst::SRA()		// Rd = Rt >> sa (arithmetic) [signed]
 {
 	SetRd_SL( GetRt().SL >> Sa() );
 }
 
-void InstInterp::SRL()		// Rd = Rt >> sa (logical) [unsigned]
+__instinline void Inst::SRL()		// Rd = Rt >> sa (logical) [unsigned]
 {
 	SetRd_UL( GetRt().UL >> Sa() );
 }
@@ -320,17 +319,17 @@ void InstInterp::SRL()		// Rd = Rt >> sa (logical) [unsigned]
 //   ignored during the shift (only bottom 5 bits matter).  Old interpreters
 //   did not take this into account.  Nut sure if by design or if by bug.
 
-void InstInterp::SLLV()	// Rd = Rt << rs
+__instinline void Inst::SLLV()	// Rd = Rt << rs
 {
 	SetRd_UL( GetRt().UL << (GetRs().UL & 0x1f) );
 } 
 
-void InstInterp::SRAV()	// Rd = Rt >> rs (arithmetic)
+__instinline void Inst::SRAV()	// Rd = Rt >> rs (arithmetic)
 {
 	SetRd_SL( GetRt().SL >> (GetRs().UL & 0x1f) );
 }
 
-void InstInterp::SRLV()	// Rd = Rt >> rs (logical)
+__instinline void Inst::SRLV()	// Rd = Rt >> rs (logical)
 {
 	SetRd_UL( GetRt().UL >> (GetRs().UL & 0x1f) );
 }
@@ -339,7 +338,7 @@ void InstInterp::SRLV()	// Rd = Rt >> rs (logical)
 * Load higher 16 bits of the first word in GPR with imm  *
 * Format:  OP rt, immediate                              *
 *********************************************************/
-void InstInterp::LUI()	// Rt = Im << 16  (lower 16 bits zeroed)
+__instinline void Inst::LUI()	// Rt = Im << 16  (lower 16 bits zeroed)
 {
 	SetRt_SL( Imm() << 16 );
 }
@@ -348,25 +347,27 @@ void InstInterp::LUI()	// Rt = Im << 16  (lower 16 bits zeroed)
 * Move from HI/LO to GPR                                 *
 * Format:  OP rd                                         *
 *********************************************************/
-void InstInterp::MFHI()	// Rd = Hi
+__instinline void Inst::MFHI()	// Rd = Hi
 {
 	SetRd_UL( GetHi().UL );
+	m_DivStall = 1;
 }
 
-void InstInterp::MFLO()	 // Rd = Lo
+__instinline void Inst::MFLO()	 // Rd = Lo
 {
 	SetRd_UL( GetLo().UL );
+	m_DivStall = 1;
 }
 
 /*********************************************************
 * Move to GPR to HI/LO & Register jump                   *
 * Format:  OP rs                                         *
 *********************************************************/
-void InstInterp::MTHI()	// Hi = Rs
+__instinline void Inst::MTHI()	// Hi = Rs
 {
 	SetHi_UL( GetRs().UL );
 }
-void InstInterp::MTLO()	// Lo = Rs
+__instinline void Inst::MTLO()	// Lo = Rs
 {
 	SetLo_UL( GetRs().UL );
 }
@@ -376,23 +377,25 @@ void InstInterp::MTLO()	// Lo = Rs
 * Format:  OP                                            *
 *********************************************************/
 // Break exception - psx rom doesn't handle this
-void InstInterp::BREAK()
+__instinline void Inst::BREAK()
 {
-	iopException( IopExcCode::Breakpoint, iopRegs.IsDelaySlot );
-	m_NextPC = iopRegs.VectorPC+4;
+	RaiseException( IopExcCode::Breakpoint );
 }
 
-void InstInterp::SYSCALL()
+__instinline void Inst::SYSCALL()
 {
-	iopException( IopExcCode::Syscall, iopRegs.IsDelaySlot );
-	m_NextPC = iopRegs.VectorPC+4;
+	RaiseException( IopExcCode::Syscall );
 }
 
-void InstInterp::RFE()
+void Inst::_RFE()
 {
 	HasSideEffects();
-	iopRegs.CP0.n.Status =
-		(iopRegs.CP0.n.Status & 0xfffffff0) | ((iopRegs.CP0.n.Status & 0x3c) >> 2);
+	iopRegs.CP0.n.Status = (iopRegs.CP0.n.Status & 0xfffffff0) | ((iopRegs.CP0.n.Status & 0x3c) >> 2);
+}
+
+__instinline void Inst::RFE()
+{
+	_RFE();		// defer to the virtual implementation
 }
 
 /*********************************************************
@@ -400,74 +403,63 @@ void InstInterp::RFE()
 * Format:  OP rt, offset(base)                           *
 *********************************************************/
 
-void InstInterp::LB()
+__instinline void Inst::LB()
 {
 	const u32 addr = AddrImm();
-	s8 result = iopMemRead8( addr );
-	SetRt_SL( result );
-	ReadsMemory();
+	SetRt_SL( (s8)MemoryRead8( addr ) );
 }
 
-void InstInterp::LBU()
+__instinline void Inst::LBU()
 {
 	const u32 addr = AddrImm();
-	u8 result = iopMemRead8( addr );
-	SetRt_SL( result );
-	ReadsMemory();
+	SetRt_UL( MemoryRead8( addr ) );
 }
 
 // Load half-word (16 bits)
 // AddressError exception if the address is not 16-bit aligned.
-void InstInterp::LH()
+__instinline void Inst::LH()
 {
 	const u32 addr = AddrImm();
 	
 	if( addr & 1 )
 		throw R3000Exception::AddressError( *this, addr, false );
 	
-	s16 result = iopMemRead16( addr );
-	SetRt_SL( result );
-	ReadsMemory();
+	SetRt_SL( (s16)MemoryRead16( addr ) );
 }
 
 // Load Halfword Unsigned (16 bits)
 // AddressError exception if the address is not 16-bit aligned.
-void InstInterp::LHU()
+__instinline void Inst::LHU()
 {
 	const u32 addr = AddrImm();
 
 	if( addr & 1 )
 		throw R3000Exception::AddressError( *this, addr, false );
 
-	u16 result = iopMemRead16( addr );
-	SetRt_SL( result );
-	ReadsMemory();
+	SetRt_UL( MemoryRead16( addr ) );
 }
 
 // Load Word (32 bits)
 // AddressError exception if the address is not 32-bit aligned.
-void InstInterp::LW()
+__instinline void Inst::LW()
 {
 	const u32 addr = AddrImm();
 
 	if( addr & 3 )
 		throw R3000Exception::AddressError( *this, addr, false );
 
-	s32 result = iopMemRead32( addr );
-	SetRt_SL( result );
-	ReadsMemory();
+	SetRt_SL( MemoryRead32( addr ) );
 }
 
 // Load Word Left (portion loaded determined by address lower 2 bits)
 // No exception is thrown if the address is unaligned.
-void InstInterp::LWL()
+__instinline void Inst::LWL()
 {
 	const u32 addr = AddrImm();
 	const u32 shift = (addr & 3) << 3;
-	const u32 mem = iopMemRead32( addr & 0xfffffffc );
+	const u32 mem = MemoryRead32( addr & 0xfffffffc );
 
 	SetRt_UL( (GetRt().UL & (0x00ffffff >> shift)) | (mem << (24 - shift)) );
-	ReadsMemory();
 
 	/*
 	Mem = 1234.  Reg = abcd
@@ -482,14 +474,13 @@ void InstInterp::LWL()
 
 // Load Word Left (portion loaded determined by address lower 2 bits)
 // No exception is thrown if the address is unaligned.
-void InstInterp::LWR()
+__instinline void Inst::LWR()
 {
 	const u32 addr = AddrImm();
 	const u32 shift = (addr & 3) << 3;
-	const u32 mem = iopMemRead32( addr & 0xfffffffc );
+	const u32 mem = MemoryRead32( addr & 0xfffffffc );
 
 	SetRt_UL( (GetRt().UL & (0xffffff00 << (24-shift))) | (mem >> shift) );
-	ReadsMemory();
 
 	/*
 	Mem = 1234.  Reg = abcd
@@ -502,48 +493,42 @@ void InstInterp::LWR()
 	*/
 }
 
-void InstInterp::SB()
+__instinline void Inst::SB()
 {
-	iopMemWrite8( AddrImm(), (u8)GetRt().UL );
-	WritesMemory();
+	MemoryWrite8( AddrImm(), GetRt().UB[0] );
 }
 
-void InstInterp::SH()
+__instinline void Inst::SH()
 {
 	const u32 addr = AddrImm();
 	
 	if( addr & 1 )
 		throw R3000Exception::AddressError( *this, addr, true );
 
-	iopMemWrite16( addr, GetRt().US[0] );
-	WritesMemory();
+	MemoryWrite16( addr, GetRt().US[0] );
 }
 
-void InstInterp::SW()
+__instinline void Inst::SW()
 {
 	const u32 addr = AddrImm();
 
 	if( addr & 3 )
 		throw R3000Exception::AddressError( *this, addr, true );
 
-	iopMemWrite32( addr, GetRt().UL );
-	WritesMemory();
+	MemoryWrite32( addr, GetRt().UL );
 }
 
 // Store Word Left
 // No Address Error Exception occurs.
-void InstInterp::SWL()
+__instinline void Inst::SWL()
 {
 	const u32 addr = AddrImm();
 	const u32 shift = (addr & 3) << 3;
-	const u32 mem = iopMemRead32(addr & 0xfffffffc);
+	const u32 mem = MemoryRead32(addr & 0xfffffffc);
 
-	ReadsMemory();
-
-	iopMemWrite32( (addr & 0xfffffffc),
+	MemoryWrite32( (addr & 0xfffffffc),
 		(( GetRt().UL >> (24 - shift) )) | (mem & (0xffffff00 << shift))
 	);
-	WritesMemory();
 
 	/*
 	Mem = 1234.  Reg = abcd
@@ -556,18 +541,15 @@ void InstInterp::SWL()
 	*/
 }
 
-void InstInterp::SWR()
+__instinline void Inst::SWR()
 {
 	const u32 addr = AddrImm();
 	const u32 shift = (addr & 3) << 3;
-	const u32 mem = iopMemRead32(addr & 0xfffffffc);
+	const u32 mem = MemoryRead32(addr & 0xfffffffc);
 
-	ReadsMemory();
-
-	iopMemWrite32( (addr & 0xfffffffc),
+	MemoryWrite32( (addr & 0xfffffffc),
 		( (GetRt().UL << shift) | (mem & (0x00ffffff >> (24 - shift))) )
 	);
-	WritesMemory();
 
 	/*
 	Mem = 1234.  Reg = abcd
@@ -585,22 +567,22 @@ void InstInterp::SWR()
 * Format:  OP rt, fs                                     *
 *********************************************************/
 
-void InstInterp::MFC0()
+__instinline void Inst::MFC0()
 {
 	SetRt_UL( GetFs().UL );
 }
 
-void InstInterp::CFC0()
+__instinline void Inst::CFC0()
 {
 	SetRt_UL( GetFs().UL );
 }
 
-void InstInterp::MTC0()
+__instinline void Inst::MTC0()
 {
 	SetFs_UL( GetRt().UL );
 }
 
-void InstInterp::CTC0()
+__instinline void Inst::CTC0()
 {
 	SetFs_UL( GetRt().UL );
 }
@@ -609,7 +591,7 @@ void InstInterp::CTC0()
 * Unknown instruction (would generate an exception)      *
 * Format:  ?                                             *
 *********************************************************/
-void InstInterp::Unknown()
+__instinline void Inst::Unknown()
 {
 	Console::Error("R3000A: Unimplemented op, code=0x%x\n", params _Opcode_ );
 }

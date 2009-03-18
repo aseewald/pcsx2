@@ -134,7 +134,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="3"
-				InlineFunctionExpansion="0"
+				InlineFunctionExpansion="2"
 				FavorSizeOrSpeed="1"
 				WholeProgramOptimization="false"
 				AdditionalIncludeDirectories=""
@@ -2301,7 +2301,7 @@
 							>
 						</File>
 						<File
-							RelativePath="..\..\R3000air\R3000airInstruction.cpp"
+							RelativePath="..\..\R3000air\R3000airInstruction.inl"
 							>
 						</File>
 						<File
@@ -2309,29 +2309,8 @@
 							>
 						</File>
 						<File
-							RelativePath="..\..\R3000air\R3000airOpcodeImpl.cpp"
+							RelativePath="..\..\R3000air\R3000airOpcodeImpl.inl"
 							>
-							<FileConfiguration
-								Name="Debug|Win32"
-								>
-								<Tool
-									Name="VCCLCompilerTool"
-								/>
-							</FileConfiguration>
-							<FileConfiguration
-								Name="Devel|Win32"
-								>
-								<Tool
-									Name="VCCLCompilerTool"
-								/>
-							</FileConfiguration>
-							<FileConfiguration
-								Name="Release|Win32"
-								>
-								<Tool
-									Name="VCCLCompilerTool"
-								/>
-							</FileConfiguration>
 						</File>
 						<File
 							RelativePath="..\..\R3000air\R3000airOpcodeTables.inl"
