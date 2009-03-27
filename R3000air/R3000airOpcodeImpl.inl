@@ -251,33 +251,60 @@ __instinline void Inst::SLTU()	// Rd = Rs < Rt		(Unsigned)
 * Register mult/div & Register trap logic                *
 * Format:  OP rs, rt                                     *
 *********************************************************/
-__instinline void Inst::DIV()
-{
-	// If Rt is zero, then the result is undefined.
-	// Which means we can safely ignore the instruction entirely. :D
-
-	const s32 Rt = GetRt().SL;
-	if( Rt == 0 ) return;
-
-	const s32 Rs = GetRs().SL;
-	SetHiLo( (Rs % Rt), (Rs / Rt) );
-	m_DivStall = 35;
-}
-
-__instinline void Inst::DIVU()
-{
-	const u32 Rt = GetRt().UL;
-	if( Rt == 0 ) return;
-
-	const u32 Rs = GetRs().UL;
-	SetHiLo( (Rs % Rt), (Rs / Rt) );
-	m_DivStall = 35;
-}
 
 __instinline void Inst::MultHelper( u64 result )
 {
 	SetHiLo( (u32)(result >> 32), (u32)result );
 	m_DivStall = 11;
+}
+
+__instinline void Inst::DIV()
+{
+	m_DivStall = 35;
+
+	// Div on MIPS Magic:
+	// * If Rt is zero, then the result is undefined by MIPS standard.  EE/IOP results are pretty
+	//   consistent, however:  Hi == Rs, Lo == (Rs > 0) ? -1 : 1
+
+	// * MIPS has special defined behavior on signed DIVs, to cope with it's lack of overflow
+	//   exception handling.  If Rs == -0x80000000 (which is the same as unsigned 0x80000000 on
+	//   our beloved twos-compliment math), and Rt == -1 (0xffffffff as unsigned), the result
+	//   is 0x80000000 and remainder of zero.
+	
+	// [TODO] : This could be handled with an exception or signal handler instead of conditionals.
+
+	const s32 Rt = GetRt().SL;
+	if( Rt == -1 )
+	{
+		const u32 Rs = GetRs().UL;
+		if( Rs == 0x80000000 )
+		{
+			SetHiLo( 0, 0x80000000 );
+			return;
+		}
+	}
+	else if( Rt == 0 )
+	{
+		const s32 Rs = GetRs().SL;
+		SetHiLo( Rs, (Rs > 0) ? -1 : 1 );
+		return;
+	}
+
+	const s32 Rs = GetRs().SL;
+	SetHiLo( (Rs % Rt), (Rs / Rt) );
+}
+
+__instinline void Inst::DIVU()
+{
+	m_DivStall = 35;
+
+	const u32 Rt = GetRt().UL;
+	const u32 Rs = GetRs().UL;
+
+	if( Rt == 0 )
+		SetHiLo( Rs, (u32)(-1) );		// unsigned div by zero always returns Rs, 0xffffffff
+	else
+		SetHiLo( (Rs % Rt), (Rs / Rt) );
 }
 
 __instinline void Inst::MULT()
