@@ -402,7 +402,7 @@ void IopDmaUpdate(u32 elapsed)
 							ch->MemAddr   += BCount;
 							ch->ByteCount -= BCount;
 
-							TTarget = BCount/2; // / ch->Width;
+							TTarget = BCount/4; // / ch->Width;
 						}
 
 						if (Target != 0) TTarget = Target;
@@ -416,6 +416,12 @@ void IopDmaUpdate(u32 elapsed)
 						if (TTarget<MinDelay)
 							MinDelay = TTarget;
 					}
+				}
+				else
+				{
+					int TTarget = ch->Target;
+					if (TTarget<MinDelay)
+						MinDelay = TTarget;
 				}
 			}
 		}
