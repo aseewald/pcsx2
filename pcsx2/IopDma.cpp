@@ -333,7 +333,6 @@ void RaiseDmaIrq(u32 channel)
 		psxDmaInterrupt2(channel-7);
 }
 
-// WARNING: CALLER ****[MUST]**** CALL IopDmaUpdate RIGHT AFTER THIS!
 void IopDmaStart(int channel, u32 chcr, u32 madr, u32 bcr)
 {
 	// I dont' really understand this, but it's used above. Is this BYTES OR WHAT?
@@ -420,6 +419,7 @@ void IopDmaUpdate(u32 elapsed)
 				}
 			}
 		}
+		elapsed=0;
 	}
 	while(MinDelay <= 0);
 

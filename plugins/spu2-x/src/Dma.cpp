@@ -274,7 +274,7 @@ s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProce
 
 		if((bytesLeft>>1) == (transferSize))
 		{
-			if((Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<(Cores[core].TSA+0x20)))
+			if(Cores[core].IRQA==Cores[core].TSA)
 			{
 				Spdif.Info=4<<core;
 				SetIrqCall();
@@ -352,7 +352,7 @@ s32 CALLBACK SPU2dmaRead(s32 channel, u16* data, u32 bytesLeft, u32* bytesProces
 
 		if(bytesLeft == transferSize)
 		{
-			if((Cores[core].IRQA==Cores[core].TSA))
+			if((Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<=(Cores[core].TSA+0x20)))
 			{
 				Spdif.Info=4<<core;
 				SetIrqCall();
