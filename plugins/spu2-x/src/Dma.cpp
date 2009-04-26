@@ -143,7 +143,10 @@ s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProce
 	Cores[core].Regs.STATX &= ~0x80;
 
 	if(bytesLeft<16) 
+	{
+		// Potential FIXME: Do you people think any game will send a tiny transfer, and expect it to work, or raise a irq?
 		return 0;
+	}
 
 	Cores[core].TSA&=~7;
 
@@ -221,7 +224,7 @@ s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProce
 
 		transferSize >>=1; // we work in half-words
 
-		int part1 = 0xFFFFFF - Cores[core].TSA;
+		int part1 = 0xFFFFF - Cores[core].TSA;
 		if(part1 > transferSize)
 			part1 = transferSize;
 
@@ -239,7 +242,7 @@ s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProce
 
 			// invalidate caches between TSA and TDA
 			int first = Cores[core].TSA / pcm_WordsPerBlock;
-			int last = Cores[core].TDA / pcm_WordsPerBlock;
+			int last = (Cores[core].TDA+pcm_WordsPerBlock-1) / pcm_WordsPerBlock;
 			PcmCacheEntry* pfirst = pcm_cache_data + first;
 			PcmCacheEntry* plast  = pcm_cache_data + last;
 			for(;pfirst<plast;pfirst++)
@@ -254,7 +257,8 @@ s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProce
 			memcpy(GetMemPtr(0),data,part2<<1);
 			data += part2;
 			
-			Cores[core].TDA = Cores[core].TSA + part2;
+			Cores[core].TSA = 0;
+			Cores[core].TDA = part2;
 			if((Cores[core].IRQEnable)&&(Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
 			{
 				Spdif.Info=4<<core;
@@ -263,7 +267,7 @@ s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProce
 
 			// invalidate caches between TSA and TDA
 			int first = Cores[core].TSA / pcm_WordsPerBlock;
-			int last = Cores[core].TDA / pcm_WordsPerBlock;
+			int last = (Cores[core].TDA+pcm_WordsPerBlock-1) / pcm_WordsPerBlock;
 			PcmCacheEntry* pfirst = pcm_cache_data + first;
 			PcmCacheEntry* plast  = pcm_cache_data + last;
 			for(;pfirst<plast;pfirst++)
