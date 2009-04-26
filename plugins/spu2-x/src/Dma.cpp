@@ -178,7 +178,7 @@ s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProce
 				
 				int TSA = 0x2000 + (core<<10);
 				int TDA = TSA + 0x100;
-				if((Cores[core].IRQA>=TSA)&&(Cores[core].IRQA<TDA))
+				if((Cores[core].IRQEnable)&&(Cores[core].IRQA>=TSA)&&(Cores[core].IRQA<TDA))
 				{
 					Spdif.Info=4<<core;
 					SetIrqCall();
@@ -192,7 +192,7 @@ s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProce
 				
 				int TSA = 0x2200 + (core<<10);
 				int TDA = TSA + 0x100;
-				if((Cores[core].IRQA>=TSA)&&(Cores[core].IRQA<TDA))
+				if((Cores[core].IRQEnable)&&(Cores[core].IRQA>=TSA)&&(Cores[core].IRQA<TDA))
 				{
 					Spdif.Info=4<<core;
 					SetIrqCall();
@@ -231,7 +231,7 @@ s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProce
 			data += part1;
 			
 			Cores[core].TDA = Cores[core].TSA + part1;
-			if((Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
+			if((Cores[core].IRQEnable)&&(Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
 			{
 				Spdif.Info=4<<core;
 				SetIrqCall();
@@ -255,7 +255,7 @@ s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProce
 			data += part2;
 			
 			Cores[core].TDA = Cores[core].TSA + part2;
-			if((Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
+			if((Cores[core].IRQEnable)&&(Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
 			{
 				Spdif.Info=4<<core;
 				SetIrqCall();
@@ -274,7 +274,7 @@ s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProce
 
 		if((bytesLeft>>1) == (transferSize))
 		{
-			if(Cores[core].IRQA==Cores[core].TSA)
+			if((Cores[core].IRQEnable)&&(Cores[core].IRQA==Cores[core].TSA))
 			{
 				Spdif.Info=4<<core;
 				SetIrqCall();
@@ -325,7 +325,7 @@ s32 CALLBACK SPU2dmaRead(s32 channel, u16* data, u32 bytesLeft, u32* bytesProces
 			data += part1;
 			
 			Cores[core].TDA = Cores[core].TSA + part1;
-			if((Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
+			if((Cores[core].IRQEnable)&&(Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
 			{
 				Spdif.Info=4<<core;
 				SetIrqCall();
@@ -341,7 +341,7 @@ s32 CALLBACK SPU2dmaRead(s32 channel, u16* data, u32 bytesLeft, u32* bytesProces
 			data += part2;
 			
 			Cores[core].TDA = Cores[core].TSA + part2;
-			if((Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
+			if((Cores[core].IRQEnable)&&(Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
 			{
 				Spdif.Info=4<<core;
 				SetIrqCall();
@@ -352,7 +352,7 @@ s32 CALLBACK SPU2dmaRead(s32 channel, u16* data, u32 bytesLeft, u32* bytesProces
 
 		if(bytesLeft == transferSize)
 		{
-			if((Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<=(Cores[core].TSA+0x20)))
+			if((Cores[core].IRQEnable)&&(Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<=(Cores[core].TSA+0x20)))
 			{
 				Spdif.Info=4<<core;
 				SetIrqCall();
