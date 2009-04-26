@@ -363,15 +363,8 @@ struct V_Core
 	s8 NoiseClk;
 // AutoDMA Status
 	u16 AutoDMACtrl;
-// DMA Interrupt Counter
-	s32 DMAICounter;
 // Mute
 	s8 Mute;
-// Input Buffer
-	u32 InputDataLeft;
-	u32 InputPos;
-	u32 InputDataProgress;
-	u8 AdmaInProgress;
 
 // Reverb
 	V_Reverb Revb;
@@ -401,11 +394,15 @@ struct V_Core
 	u8 AttrBit4;
 	u8 AttrBit5;
 
-	u16*DMAPtr;
-	u32 MADR;
 	u32 TADR;
 
-	s16 ADMATempBuffer[0x1000];
+// Input Buffer
+	u32 AdmaInProgress;
+	u32 AdmaDataLeft;
+	u32 AdmaReadPos;
+	s32 AdmaWritePos;
+	s32 AdmaFree;
+	s16 AdmaTempBuffer[0x800];
 
 	u32 ADMAPV;
 	StereoOut32 ADMAP;

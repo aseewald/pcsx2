@@ -75,7 +75,7 @@
 // PS2EgetLibVersion2 (high 16 bits)
 #define PS2E_GS_VERSION   0x0006
 #define PS2E_PAD_VERSION  0x0002	// -=[ OBSOLETE ]=-
-#define PS2E_SPU2_VERSION 0x0005
+#define PS2E_SPU2_VERSION 0x0006
 #define PS2E_CDVD_VERSION 0x0005
 #define PS2E_DEV9_VERSION 0x0003
 #define PS2E_USB_VERSION  0x0003
@@ -326,20 +326,12 @@ void CALLBACK SPU2close();
 void CALLBACK SPU2shutdown();
 void CALLBACK SPU2write(u32 mem, u16 value);
 u16  CALLBACK SPU2read(u32 mem);
-void CALLBACK SPU2readDMA4Mem(u16 *pMem, int size);
-void CALLBACK SPU2writeDMA4Mem(u16 *pMem, int size);
-void CALLBACK SPU2interruptDMA4();
-void CALLBACK SPU2readDMA7Mem(u16* pMem, int size);
-void CALLBACK SPU2writeDMA7Mem(u16 *pMem, int size);
+s32  CALLBACK SPU2dmaRead(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed);
+s32  CALLBACK SPU2dmaWrite(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed);
+void CALLBACK SPU2dmaInterrupt(s32 channel);
 
-// all addresses passed by dma will be pointers to the array starting at baseaddr
-// This function is necessary to successfully save and reload the spu2 state
-void CALLBACK SPU2setDMABaseAddr(uptr baseaddr);
-
-void CALLBACK SPU2interruptDMA7();
-u32 CALLBACK SPU2ReadMemAddr(int core);
-void CALLBACK SPU2WriteMemAddr(int core,u32 value);
-void CALLBACK SPU2irqCallback(void (*SPU2callback)(),void (*DMA4callback)(),void (*DMA7callback)());
+// dma irq callbacks not needed anymore, they are handled by the dmac
+void CALLBACK SPU2irqCallback(void (*SPU2callback)());
 
 // extended funcs
 // if start is 1, starts recording spu2 data, else stops
@@ -574,21 +566,19 @@ typedef void (CALLBACK* _SPU2close)();
 typedef void (CALLBACK* _SPU2shutdown)();
 typedef void (CALLBACK* _SPU2write)(u32 mem, u16 value);
 typedef u16  (CALLBACK* _SPU2read)(u32 mem);
-typedef void (CALLBACK* _SPU2readDMA4Mem)(u16 *pMem, int size);
-typedef void (CALLBACK* _SPU2writeDMA4Mem)(u16 *pMem, int size);
-typedef void (CALLBACK* _SPU2interruptDMA4)();
-typedef void (CALLBACK* _SPU2readDMA7Mem)(u16 *pMem, int size);
-typedef void (CALLBACK* _SPU2writeDMA7Mem)(u16 *pMem, int size);
-typedef void (CALLBACK* _SPU2setDMABaseAddr)(uptr baseaddr);
-typedef void (CALLBACK* _SPU2interruptDMA7)();
-typedef void (CALLBACK* _SPU2irqCallback)(void (*SPU2callback)(),void (*DMA4callback)(),void (*DMA7callback)());
+
+typedef s32  (CALLBACK* _SPU2dmaRead)(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed);
+typedef s32  (CALLBACK* _SPU2dmaWrite)(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed);
+typedef void (CALLBACK* _SPU2dmaInterrupt)(s32 channel);
+
+// dma irq callbacks not needed anymore, they are handled by the dmac
+typedef void (CALLBACK* _SPU2irqCallback)(void (*SPU2callback)());
+
 typedef int (CALLBACK* _SPU2setupRecording)(int, void*);
 
 typedef void (CALLBACK* _SPU2setClockPtr)(u32*ptr);
 typedef void (CALLBACK* _SPU2setTimeStretcher)(short int enable);
 
-typedef u32 (CALLBACK* _SPU2ReadMemAddr)(int core);
-typedef void (CALLBACK* _SPU2WriteMemAddr)(int core,u32 value);
 typedef void (CALLBACK* _SPU2async)(u32 cycles);
 typedef s32  (CALLBACK* _SPU2freeze)(int mode, freezeData *data);
 typedef void (CALLBACK* _SPU2configure)();
@@ -778,17 +768,13 @@ extern _SPU2close         SPU2close;
 extern _SPU2shutdown      SPU2shutdown;
 extern _SPU2write         SPU2write;
 extern _SPU2read          SPU2read;
-extern _SPU2readDMA4Mem   SPU2readDMA4Mem;
-extern _SPU2writeDMA4Mem  SPU2writeDMA4Mem;
-extern _SPU2interruptDMA4 SPU2interruptDMA4;
-extern _SPU2readDMA7Mem   SPU2readDMA7Mem;
-extern _SPU2writeDMA7Mem  SPU2writeDMA7Mem;
-extern _SPU2setDMABaseAddr SPU2setDMABaseAddr;
-extern _SPU2interruptDMA7 SPU2interruptDMA7;
-extern _SPU2ReadMemAddr   SPU2ReadMemAddr;
-extern _SPU2setupRecording SPU2setupRecording;
-extern _SPU2WriteMemAddr   SPU2WriteMemAddr;
+
+extern _SPU2dmaRead       SPU2dmaRead;
+extern _SPU2dmaWrite      SPU2dmaWrite;
+extern _SPU2dmaInterrupt  SPU2dmaInterrupt;
 extern _SPU2irqCallback   SPU2irqCallback;
+
+extern _SPU2setupRecording SPU2setupRecording;
 
 extern _SPU2setClockPtr   SPU2setClockPtr;
 extern _SPU2setTimeStretcher SPU2setTimeStretcher;

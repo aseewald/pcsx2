@@ -33,10 +33,6 @@ FILE *REGWRTLogFile[2]={0,0};
 
 int packcount=0;
 
-u16* MBASE[2] = {0,0};
-
-u16* DMABaseAddr;
-
 void DMALogOpen()
 {
 	if(!DMALog()) return;
@@ -83,6 +79,27 @@ void RegWriteLog(u32 core,u16 value)
 	fwrite(&value,2,1,REGWRTLogFile[core]);
 }
 
+void AdmaLogWritePacket(int core, s16* data)
+{
+	if(core==0)
+	{
+		for(int i=0;i<256;i++)
+		{
+			ADMA4LogWrite(data+i,2);
+			ADMA4LogWrite(data+i+256,2);
+		}
+	}
+	else
+	{
+		for(int i=0;i<256;i++)
+		{
+			ADMA7LogWrite(data+i,2);
+			ADMA7LogWrite(data+i+256,2);
+		}
+	}
+
+}
+
 void DMALogClose() {
 	if(!DMALog()) return;
 	if (DMA4LogFile) fclose(DMA4LogFile);
@@ -110,375 +127,250 @@ __forceinline void DmaWrite(u32 core, u16 value)
 	Cores[core].TSA&=0xfffff;
 }
 
-void AutoDMAReadBuffer(int core, int mode) //mode: 0= split stereo; 1 = do not split stereo
-{
-	int spos=((Cores[core].InputPos+0xff)&0x100); //starting position of the free buffer
+#define MAX_SINGLE_TRANSFER_SIZE 2048
 
-	if(core==0)
-		ADMA4LogWrite(Cores[core].DMAPtr+Cores[core].InputDataProgress,0x400);
-	else
-		ADMA7LogWrite(Cores[core].DMAPtr+Cores[core].InputDataProgress,0x400);
+#define GET_DMA_DATA_PTR(offset) (((s16*)Cores[core].AdmaTempBuffer)+offset)
+//#define GET_DMA_DATA_PTR(offset) (GetMemPtr(0x2000 + (core<<10) + offset))
 
-	if(mode)
-	{
-		//hacky :p
-
-		memcpy((Cores[core].ADMATempBuffer+(spos<<1)),Cores[core].DMAPtr+Cores[core].InputDataProgress,0x400);
-		Cores[core].MADR+=0x400;
-		Cores[core].InputDataLeft-=0x200;
-		Cores[core].InputDataProgress+=0x200;
-	}
-	else
-	{
-		memcpy((Cores[core].ADMATempBuffer+spos),Cores[core].DMAPtr+Cores[core].InputDataProgress,0x200);
-		//memcpy((spu2mem+0x2000+(core<<10)+spos),Cores[core].DMAPtr+Cores[core].InputDataProgress,0x200);
-		Cores[core].MADR+=0x200;
-		Cores[core].InputDataLeft-=0x100;
-		Cores[core].InputDataProgress+=0x100;
-
-		memcpy((Cores[core].ADMATempBuffer+spos+0x200),Cores[core].DMAPtr+Cores[core].InputDataProgress,0x200);
-		//memcpy((spu2mem+0x2200+(core<<10)+spos),Cores[core].DMAPtr+Cores[core].InputDataProgress,0x200);
-		Cores[core].MADR+=0x200;
-		Cores[core].InputDataLeft-=0x100;
-		Cores[core].InputDataProgress+=0x100;
-	}
-	// See ReadInput at mixer.cpp for explanation on the commented out lines
-	//
-}
-
-void StartADMAWrite(int core,u16 *pMem, u32 sz)
-{
-	int size=(sz)&(~511);
-
-	if(MsgAutoDMA()) ConLog(" * SPU2: DMA%c AutoDMA Transfer of %d bytes to %x (%02x %x %04x).\n",
-		(core==0)?'4':'7',size<<1,Cores[core].TSA,Cores[core].DMABits,Cores[core].AutoDMACtrl,(~Cores[core].Regs.ATTR)&0x7fff);
-
-	Cores[core].InputDataProgress=0;
-	if((Cores[core].AutoDMACtrl&(core+1))==0)
-	{
-		Cores[core].TSA=0x2000+(core<<10);
-		Cores[core].DMAICounter=size;
-	}
-	else if(size>=512)
-	{
-		Cores[core].InputDataLeft=size;
-		if(Cores[core].AdmaInProgress==0)
-		{
-#ifdef PCM24_S1_INTERLEAVE
-			if((core==1)&&((PlayMode&8)==8))
-			{
-				AutoDMAReadBuffer(core,1);
-			}
-			else
-			{
-				AutoDMAReadBuffer(core,0);
-			}
-#else
-			if(((PlayMode&4)==4)&&(core==0))
-				Cores[0].InputPos=0;
-
-			AutoDMAReadBuffer(core,0);
-#endif
-
-			if(size==512)
-				Cores[core].DMAICounter=size;
-		}
-
-		Cores[core].AdmaInProgress=1;
-	}
-	else
-	{
-		Cores[core].InputDataLeft=0;
-		Cores[core].DMAICounter=1;
-	}
-	Cores[core].TADR=Cores[core].MADR+(size<<1);
-}
-
-void DoDMAWrite(int core,u16 *pMem,u32 size)
-{
-	// Perform an alignment check.
-	// Not really important.  Everything should work regardless,
-	// but it could be indicative of an emulation foopah elsewhere.
-
-#if 0
-	uptr pa = ((uptr)pMem)&7;
-	uptr pm = Cores[core].TSA&0x7;
-
-	if( pa )
-	{
-		fprintf(stderr, "* SPU2 DMA Write > Missaligned SOURCE! Core: %d  TSA: 0x%x  TDA: 0x%x  Size: 0x%x\n", core, Cores[core].TSA, Cores[core].TDA, size);
-	}
-
-	if( pm )
-	{
-		fprintf(stderr, "* SPU2 DMA Write > Missaligned TARGET! Core: %d  TSA: 0x%x  TDA: 0x%x Size: 0x%x\n", core, Cores[core].TSA, Cores[core].TDA, size );
-	}
-#endif
-
-	if(core==0)
-		DMA4LogWrite(pMem,size<<1);
-	else
-		DMA7LogWrite(pMem,size<<1);
-
-	if(MsgDMA()) ConLog(" * SPU2: DMA%c Transfer of %d bytes to %x (%02x %x %04x).\n",(core==0)?'4':'7',size<<1,Cores[core].TSA,Cores[core].DMABits,Cores[core].AutoDMACtrl,(~Cores[core].Regs.ATTR)&0x7fff);
-
-	Cores[core].TSA &= 0xfffff;
-
-	u32 buff1end = Cores[core].TSA + size;
-	u32 buff2end=0;
-	if( buff1end > 0x100000 )
-	{
-		buff2end = buff1end - 0x100000;
-		buff1end = 0x100000;
-	}
-
-	const int cacheIdxStart = Cores[core].TSA / pcm_WordsPerBlock;
-	const int cacheIdxEnd = (buff1end+pcm_WordsPerBlock-1) / pcm_WordsPerBlock;
-	PcmCacheEntry* cacheLine = &pcm_cache_data[cacheIdxStart];
-	PcmCacheEntry& cacheEnd = pcm_cache_data[cacheIdxEnd];
-
-	do 
-	{
-		cacheLine->Validated = false;
-		cacheLine++;
-	} while ( cacheLine != &cacheEnd );
-
-	//ConLog( " * SPU2 : Cache Clear Range!  TSA=0x%x, TDA=0x%x (low8=0x%x, high8=0x%x, len=0x%x)\n",
-	//	Cores[core].TSA, buff1end, flagTSA, flagTDA, clearLen );
-
-
-	// First Branch needs cleared:
-	// It starts at TSA and goes to buff1end.
-
-	const u32 buff1size = (buff1end-Cores[core].TSA);
-	memcpy( GetMemPtr( Cores[core].TSA ), pMem, buff1size*2 );
-	
-	if( buff2end > 0 )
-	{
-		// second branch needs copied:
-		// It starts at the beginning of memory and moves forward to buff2end
-
-		// endpoint cache should be irrelevant, since it's almost certainly dynamic 
-		// memory below 0x2800 (registers and such)
-		//const u32 endpt2 = (buff2end + roundUp) / indexer_scalar;
-		//memset( pcm_cache_flags, 0, endpt2 );
-
-		// Emulation Grayarea: Should addresses wrap around to zero, or wrap around to
-		// 0x2800?  Hard to know for usre (almost no games depend on this)
-
-		memcpy( GetMemPtr( 0 ), &pMem[buff1size], buff2end*2 );
-		Cores[core].TDA = (buff2end+1) & 0xfffff;
-
-		if(Cores[core].IRQEnable)
-		{
-			// Flag interrupt?
-			// If IRQA occurs between start and dest, flag it.
-			// Since the buffer wraps, the conditional might seem odd, but it works.
-
-			if( ( Cores[core].IRQA >= Cores[core].TSA ) ||
-				( Cores[core].IRQA < Cores[core].TDA ) )
-			{
-				Spdif.Info = 4 << core;
-				SetIrqCall();
-			}
-		}
-	}
-	else
-	{
-		// Buffer doesn't wrap/overflow!
-		// Just set the TDA and check for an IRQ...
-		
-		Cores[core].TDA = buff1end;
-
-		if(Cores[core].IRQEnable)
-		{
-			// Flag interrupt?
-			// If IRQA occurs between start and dest, flag it.
-			// (start is inclusive, dest exclusive -- fixes DMC1 and hopefully won't break
-			// other games. ;)
-
-			if( ( Cores[core].IRQA >= Cores[core].TSA ) &&
-				( Cores[core].IRQA < Cores[core].TDA ) )
-			{
-				Spdif.Info = 4 << core;
-				SetIrqCall();
-			}
-		}
-	}
-
-	Cores[core].TSA=Cores[core].TDA&0xFFFF0;
-	Cores[core].DMAICounter=size;
-	Cores[core].TADR=Cores[core].MADR+(size<<1);
-}
-
-void SPU2readDMA(int core, u16* pMem, u32 size) 
+s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProcessed)
 {
 	if(hasPtr) TimeUpdate(*cPtr);
 
-	Cores[core].TSA &= 0xffff8;
+	FileLog("[%10d] SPU2 dmaWrite channel %d size %x\n", Cycles, channel, bytesLeft);
 
-	u32 buff1end = Cores[core].TSA + size;
-	u32 buff2end = 0;
-	if( buff1end > 0x100000 )
-	{
-		buff2end = buff1end - 0x100000;
-		buff1end = 0x100000;
-	}
+	int core = channel/7;
 
-	const u32 buff1size = (buff1end-Cores[core].TSA);
-	memcpy( pMem, GetMemPtr( Cores[core].TSA ), buff1size*2 );
-
-	// Note on TSA's position after our copy finishes:
-	// IRQA should be measured by the end of the writepos+0x20.  But the TDA
-	// should be written back at the precise endpoint of the xfer.
-
-	if( buff2end > 0 )
-	{
-		// second branch needs cleared:
-		// It starts at the beginning of memory and moves forward to buff2end
-
-		memcpy( &pMem[buff1size], GetMemPtr( 0 ), buff2end*2 );
-
-		Cores[core].TDA = (buff2end+0x20) & 0xfffff;
-
-		for( int i=0; i<2; i++ )
-		{
-			if(Cores[i].IRQEnable)
-			{
-				// Flag interrupt?
-				// If IRQA occurs between start and dest, flag it.
-				// Since the buffer wraps, the conditional might seem odd, but it works.
-
-				if( ( Cores[i].IRQA >= Cores[core].TSA ) ||
-					( Cores[i].IRQA <= Cores[core].TDA ) )
-				{
-					Spdif.Info=4<<i;
-					SetIrqCall();
-				}
-			}
-		}
-	}
-	else
-	{
-		// Buffer doesn't wrap/overflow!
-		// Just set the TDA and check for an IRQ...
-
-		Cores[core].TDA = (buff1end + 0x20) & 0xfffff;
-
-		for( int i=0; i<2; i++ )
-		{
-			if(Cores[i].IRQEnable)
-			{
-				// Flag interrupt?
-				// If IRQA occurs between start and dest, flag it:
-
-				if( ( Cores[i].IRQA >= Cores[i].TSA ) &&
-					( Cores[i].IRQA < Cores[i].TDA ) )
-				{
-					Spdif.Info=4<<i;
-					SetIrqCall();
-				}
-			}
-		}
-	}
-
-
-	Cores[core].TSA=Cores[core].TDA & 0xFFFFF;
-
-	Cores[core].DMAICounter=size;
 	Cores[core].Regs.STATX &= ~0x80;
-	//Cores[core].Regs.ATTR |= 0x30;
-	Cores[core].TADR=Cores[core].MADR+(size<<1);
 
-}
-
-void SPU2writeDMA(int core, u16* pMem, u32 size) 
-{
-	if(hasPtr) TimeUpdate(*cPtr);
-
-	Cores[core].DMAPtr=pMem;
-
-	if(size<2) {
-		//if(dma7callback) dma7callback();
-		Cores[core].Regs.STATX &= ~0x80;
-		//Cores[core].Regs.ATTR |= 0x30;
-		Cores[core].DMAICounter=1;
-
-		return;
-	}
-
-	if( IsDevBuild )
-		DebugCores[core].lastsize = size;
+	if(bytesLeft<16) 
+		return 0;
 
 	Cores[core].TSA&=~7;
 
-	bool adma_enable = ((Cores[core].AutoDMACtrl&(core+1))==(core+1));
+	bool isAdma = ((Cores[core].AutoDMACtrl&(core+1))==(core+1));
 
-	if(adma_enable)
+	if(isAdma)
 	{
-		Cores[core].TSA&=0x1fff;
-		StartADMAWrite(core,pMem,size);
+		//Cores[core].TSA&=0x1fff;
+
+		if(Cores[core].AdmaDataLeft==0)
+		{
+			Cores[core].AdmaDataLeft = bytesLeft;
+			Cores[core].AdmaFree = 2;
+			Cores[core].AdmaReadPos = 0;
+			Cores[core].AdmaWritePos = 0;
+		}
+
+		if(Cores[core].AdmaFree<=0) // no space, try later
+		{
+			*bytesProcessed = 0;
+			return 768*2;
+		}
+
+		int transferSize = 0;
+		while (Cores[core].AdmaFree>0)
+		{
+			AdmaLogWritePacket(core,data);
+			// partL
+			{
+				memcpy(GET_DMA_DATA_PTR(Cores[core].AdmaWritePos),data,512);
+				data += 256;
+				
+				int TSA = 0x2000 + (core<<10);
+				int TDA = TSA + 0x100;
+				if((Cores[core].IRQA>=TSA)&&(Cores[core].IRQA<TDA))
+				{
+					Spdif.Info=4<<core;
+					SetIrqCall();
+				}
+			}
+
+			// partR
+			{
+				memcpy(GET_DMA_DATA_PTR(Cores[core].AdmaWritePos + 0x200),data,512);
+				data += 256;
+				
+				int TSA = 0x2200 + (core<<10);
+				int TDA = TSA + 0x100;
+				if((Cores[core].IRQA>=TSA)&&(Cores[core].IRQA<TDA))
+				{
+					Spdif.Info=4<<core;
+					SetIrqCall();
+				}
+			}
+
+			Cores[core].AdmaWritePos = (Cores[core].AdmaWritePos + 0x100) & 0x1ff;
+			Cores[core].AdmaFree--; // there's two buffers, we have one less available
+
+			transferSize+=1024;
+		}
+
+		if( IsDevBuild )
+			DebugCores[core].lastsize = transferSize;
+
+		*bytesProcessed = transferSize;
+
+		return 0;
 	}
 	else
 	{
-		DoDMAWrite(core,pMem,size);
+		int transferSize = MAX_SINGLE_TRANSFER_SIZE;
+
+		if(bytesLeft < transferSize)
+			transferSize = bytesLeft;		
+
+		transferSize >>=1; // we work in half-words
+
+		int part1 = 0xFFFFFF - Cores[core].TSA;
+		if(part1 > transferSize)
+			part1 = transferSize;
+
+		if(part1>0)
+		{
+			memcpy(GetMemPtr(Cores[core].TSA),data,part1<<1);
+			data += part1;
+			
+			Cores[core].TDA = Cores[core].TSA + part1;
+			if((Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
+			{
+				Spdif.Info=4<<core;
+				SetIrqCall();
+			}
+
+			// invalidate caches between TSA and TDA
+			int first = Cores[core].TSA / pcm_WordsPerBlock;
+			int last = Cores[core].TDA / pcm_WordsPerBlock;
+			PcmCacheEntry* pfirst = pcm_cache_data + first;
+			PcmCacheEntry* plast  = pcm_cache_data + last;
+			for(;pfirst<plast;pfirst++)
+				pfirst->Validated=0;
+
+			Cores[core].TSA = Cores[core].TDA;
+		}
+
+		int part2 = transferSize - part1;
+		if(part2>0)
+		{
+			memcpy(GetMemPtr(0),data,part2<<1);
+			data += part2;
+			
+			Cores[core].TDA = Cores[core].TSA + part2;
+			if((Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
+			{
+				Spdif.Info=4<<core;
+				SetIrqCall();
+			}
+
+			// invalidate caches between TSA and TDA
+			int first = Cores[core].TSA / pcm_WordsPerBlock;
+			int last = Cores[core].TDA / pcm_WordsPerBlock;
+			PcmCacheEntry* pfirst = pcm_cache_data + first;
+			PcmCacheEntry* plast  = pcm_cache_data + last;
+			for(;pfirst<plast;pfirst++)
+				pfirst->Validated=0;
+
+			Cores[core].TSA = Cores[core].TDA;
+		}
+
+		if((bytesLeft>>1) == (transferSize))
+		{
+			if((Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<(Cores[core].TSA+0x20)))
+			{
+				Spdif.Info=4<<core;
+				SetIrqCall();
+			}
+			transferSize = bytesLeft;
+		}
+		else transferSize<<=1;
+
+
+		if( IsDevBuild )
+			DebugCores[core].lastsize = transferSize;
+
+		*bytesProcessed = transferSize;
+		return 0;
 	}
+}
+
+s32 CALLBACK SPU2dmaRead(s32 channel, u16* data, u32 bytesLeft, u32* bytesProcessed)
+{
+	if(hasPtr) TimeUpdate(*cPtr);
+
+	FileLog("[%10d] SPU2 dmaRead channel %d size %x\n", Cycles, channel, bytesLeft);
+
+	int core = channel/7;
+
 	Cores[core].Regs.STATX &= ~0x80;
-	//Cores[core].Regs.ATTR |= 0x30;
+
+	if(bytesLeft<16) 
+		return 0;
+
+	Cores[core].TSA&=~7;
+
+	// If there's autodma reading, and somehow some game needs it, then you can implement it yourselves :P
+	{
+		int transferSize = MAX_SINGLE_TRANSFER_SIZE;
+		if(bytesLeft < transferSize)
+			transferSize = bytesLeft;
+
+		transferSize >>=1; // we work in half-words
+
+		int part1 = 0xFFFFFF - Cores[core].TSA;
+		if(part1 > transferSize)
+			part1 = transferSize;
+
+		if(part1>0)
+		{
+			memcpy(data,GetMemPtr(Cores[core].TSA),part1<<1);
+			data += part1;
+			
+			Cores[core].TDA = Cores[core].TSA + part1;
+			if((Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
+			{
+				Spdif.Info=4<<core;
+				SetIrqCall();
+			}
+
+			Cores[core].TSA = Cores[core].TDA;
+		}
+
+		int part2 = transferSize - part1;
+		if(part2>0)
+		{
+			memcpy(data,GetMemPtr(0),part2<<1);
+			data += part2;
+			
+			Cores[core].TDA = Cores[core].TSA + part2;
+			if((Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
+			{
+				Spdif.Info=4<<core;
+				SetIrqCall();
+			}
+
+			Cores[core].TSA = Cores[core].TDA;
+		}
+
+		if(bytesLeft == transferSize)
+		{
+			if((Cores[core].IRQA==Cores[core].TSA))
+			{
+				Spdif.Info=4<<core;
+				SetIrqCall();
+			}
+		}
+
+		if( IsDevBuild )
+			DebugCores[core].lastsize = transferSize;
+
+		*bytesProcessed = transferSize<<1;
+		return 0;
+	}
 }
 
-u32 CALLBACK SPU2ReadMemAddr(int core)
+void CALLBACK SPU2dmaInterrupt(s32 channel) 
 {
-	return Cores[core].MADR;
-}
-void CALLBACK SPU2WriteMemAddr(int core,u32 value)
-{
-	Cores[core].MADR=value;
-}
-
-void CALLBACK SPU2setDMABaseAddr(uptr baseaddr)
-{
-   DMABaseAddr = (u16*)baseaddr;
-}
-
-void CALLBACK SPU2readDMA4Mem(u16 *pMem, u32 size) { //size now in 16bit units
-	FileLog("[%10d] SPU2 readDMA4Mem size %x\n",Cycles, size<<1);
-	SPU2readDMA(0,pMem,size);
-}
-
-void CALLBACK SPU2writeDMA4Mem(u16* pMem, u32 size) { //size now in 16bit units
-	FileLog("[%10d] SPU2 writeDMA4Mem size %x at address %x\n",Cycles, size<<1, Cores[0].TSA);
-#ifdef S2R_ENABLE
-	if(!replay_mode)
-		s2r_writedma4(Cycles,pMem,size);
-#endif
-	SPU2writeDMA(0,pMem,size);
-}
-
-void CALLBACK SPU2interruptDMA4() {
-	FileLog("[%10d] SPU2 interruptDMA4\n",Cycles);
-	Cores[0].Regs.STATX |= 0x80;
-	//Cores[0].Regs.ATTR &= ~0x30;
-}
-
-void CALLBACK SPU2readDMA7Mem(u16* pMem, u32 size) {
-	FileLog("[%10d] SPU2 readDMA7Mem size %x\n",Cycles, size<<1);
-
-	SPU2readDMA(1,pMem,size);
-}
-
-void CALLBACK SPU2writeDMA7Mem(u16* pMem, u32 size) {
-	FileLog("[%10d] SPU2 writeDMA7Mem size %x at address %x\n",Cycles, size<<1, Cores[1].TSA);
-#ifdef S2R_ENABLE
-	if(!replay_mode)
-		s2r_writedma7(Cycles,pMem,size);
-#endif
-	SPU2writeDMA(1,pMem,size);
-}
-
-void CALLBACK SPU2interruptDMA7() {
-	FileLog("[%10d] SPU2 interruptDMA7\n",Cycles);
-	Cores[1].Regs.STATX |= 0x80;
-	//Cores[1].Regs.ATTR &= ~0x30;
+	int core = channel/7;
+	FileLog("[%10d] SPU2 dma Interrupt channel %d\n",Cycles,channel);
+	Cores[core].Regs.STATX |= 0x80;
 }
 

@@ -114,17 +114,13 @@ _SPU2close         SPU2close;
 _SPU2shutdown      SPU2shutdown;
 _SPU2write         SPU2write;
 _SPU2read          SPU2read;
-_SPU2readDMA4Mem   SPU2readDMA4Mem;
-_SPU2writeDMA4Mem  SPU2writeDMA4Mem;
-_SPU2interruptDMA4 SPU2interruptDMA4;
-_SPU2readDMA7Mem   SPU2readDMA7Mem;
-_SPU2writeDMA7Mem  SPU2writeDMA7Mem;
-_SPU2setDMABaseAddr SPU2setDMABaseAddr;
-_SPU2interruptDMA7 SPU2interruptDMA7;
-_SPU2ReadMemAddr   SPU2ReadMemAddr;
-_SPU2setupRecording SPU2setupRecording;
-_SPU2WriteMemAddr   SPU2WriteMemAddr;
+
+_SPU2dmaRead       SPU2dmaRead;
+_SPU2dmaWrite      SPU2dmaWrite;
+_SPU2dmaInterrupt  SPU2dmaInterrupt;
 _SPU2irqCallback   SPU2irqCallback;
+
+_SPU2setupRecording SPU2setupRecording;
 
 _SPU2setClockPtr   SPU2setClockPtr;
 _SPU2setTimeStretcher SPU2setTimeStretcher;
@@ -425,15 +421,9 @@ int LoadSPU2plugin(const string& filename) {
 	MapSymbol_Error(SPU2close);
 	MapSymbol_Error(SPU2write);
 	MapSymbol_Error(SPU2read);
-	MapSymbol_Error(SPU2readDMA4Mem);
-	MapSymbol_Error(SPU2writeDMA4Mem);
-	MapSymbol_Error(SPU2interruptDMA4);
-	MapSymbol_Error(SPU2readDMA7Mem);
-	MapSymbol_Error(SPU2writeDMA7Mem);
-	MapSymbol_Error(SPU2interruptDMA7);
-	MapSymbol(SPU2setDMABaseAddr);
-	MapSymbol_Error(SPU2ReadMemAddr);
-	MapSymbol_Error(SPU2WriteMemAddr);
+	MapSymbol_Error(SPU2dmaRead);
+	MapSymbol_Error(SPU2dmaWrite);
+	MapSymbol_Error(SPU2dmaInterrupt);
 	MapSymbol_Error(SPU2irqCallback);
 
 	MapSymbol(SPU2setClockPtr);
@@ -767,9 +757,7 @@ int OpenPlugins(const char* pTitleFilename)
 
 	if( !OpenStatus.SPU2 )
 	{
-		SPU2irqCallback(spu2Irq,spu2DMA4Irq,spu2DMA7Irq);
-		if( SPU2setDMABaseAddr != NULL )
-			SPU2setDMABaseAddr((uptr)psxM);
+		SPU2irqCallback(spu2Irq);
 
 		if(SPU2setClockPtr != NULL)
 			SPU2setClockPtr(&psxRegs.cycle);

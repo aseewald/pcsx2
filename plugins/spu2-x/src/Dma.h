@@ -26,6 +26,4 @@ void DMALogClose();
 extern void DmaWrite(u32 core, u16 data);
 extern u16 DmaRead(u32 core);
 
-extern void AutoDMAReadBuffer(int core, int mode);
-
 #endif // DMA_H_INCLUDED //

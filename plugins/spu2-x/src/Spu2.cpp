@@ -37,8 +37,6 @@ DWORD CALLBACK TimeThread(PVOID /* unused param */);
 #endif
 
 void (* _irqcallback)();
-void (* dma4callback)();
-void (* dma7callback)();
 
 short *spu2regs;
 short *_spu2mem;
@@ -193,7 +191,6 @@ void V_Core::Reset()
 		Voices[v].StartA = 2800;
 		Voices[v].LoopStartA = 2800;
 	}
-	DMAICounter = 0;
 	AdmaInProgress = 0;
  
 	Regs.STATX = 0x80;
@@ -415,37 +412,6 @@ __forceinline void TimeUpdate(u32 cClocks)
 			if(Cores[1].InitDelay==0)
 			{
 				Cores[1].Reset();
-			}
-		}
-
-		//Update DMA4 interrupt delay counter
-		if(Cores[0].DMAICounter>0) 
-		{
-			Cores[0].DMAICounter-=TickInterval;
-			if(Cores[0].DMAICounter<=0)
-			{
-				Cores[0].MADR=Cores[0].TADR;
-				Cores[0].DMAICounter=0;
-				if(dma4callback) dma4callback();
-			}
-			else {
-				Cores[0].MADR+=TickInterval<<1;
-			}
-		}
-
-		//Update DMA7 interrupt delay counter
-		if(Cores[1].DMAICounter>0) 
-		{
-			Cores[1].DMAICounter-=TickInterval;
-			if(Cores[1].DMAICounter<=0)
-			{
-				Cores[1].MADR=Cores[1].TADR;
-				Cores[1].DMAICounter=0;
-				//ConLog( "* SPU2 > DMA 7 Callback!  %d\n", Cycles );
-				if(dma7callback) dma7callback();
-			}
-			else {
-				Cores[1].MADR+=TickInterval<<1;
 			}
 		}
 

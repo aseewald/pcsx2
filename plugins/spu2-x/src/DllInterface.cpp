@@ -352,11 +352,9 @@ EXPORT_C_(void) SPU2async(u32 cycles)
 	}
 }
 
-EXPORT_C_(void) SPU2irqCallback(void (*SPU2callback)(),void (*DMA4callback)(),void (*DMA7callback)())
+EXPORT_C_(void) SPU2irqCallback(void (*SPU2callback)())
 {
 	_irqcallback = SPU2callback;
-	dma4callback = DMA4callback;
-	dma7callback = DMA7callback;
 }
 
 EXPORT_C_(u16) SPU2read(u32 rmem) 

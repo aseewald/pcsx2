@@ -1735,7 +1735,7 @@ StartRecomp:
 	assert( recStackPtr < recStack+RECSTACK_SIZE );
 	assert( x86FpuState == 0 );
 
-	assert(x86Ptr - recPtr < 0x10000);
+	//assert(x86Ptr - recPtr < 0x10000);
 	s_pCurBlockEx->x86size = x86Ptr - recPtr;
 
 	recPtr = x86Ptr;

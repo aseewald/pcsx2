@@ -30,6 +30,7 @@ using namespace R3000A;
 int iopsifbusy[2] = { 0, 0 };
 extern int eesifbusy[2];
 
+#if 0
 static void __fastcall psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore, _SPU2writeDMA4Mem spu2WriteFunc, _SPU2readDMA4Mem spu2ReadFunc)
 {
 	const char dmaNum = spuCore ? '7' : '4';
@@ -74,6 +75,7 @@ static void __fastcall psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore, _
 			break;
 	}
 }
+#endif
 
 void psxDma2(u32 madr, u32 bcr, u32 chcr)		// GPU
 {
@@ -83,6 +85,7 @@ void psxDma2(u32 madr, u32 bcr, u32 chcr)		// GPU
 
 /*  psxDma3 is in CdRom.cpp */
 
+#if 0
 void psxDma4(u32 madr, u32 bcr, u32 chcr)		// SPU2's Core 0
 {
 	psxDmaGeneric(madr, bcr, chcr, 0, SPU2writeDMA4Mem, SPU2readDMA4Mem);
@@ -95,6 +98,7 @@ int psxDma4Interrupt()
 	iopIntcIrq(9);
 	return 1;
 }
+#endif
 
 void psxDma6(u32 madr, u32 bcr, u32 chcr)
 {
@@ -121,6 +125,7 @@ void psxDma6(u32 madr, u32 bcr, u32 chcr)
 	psxDmaInterrupt(6);
 }
 
+#if 0
 void psxDma7(u32 madr, u32 bcr, u32 chcr)		// SPU2's Core 1
 {
 	psxDmaGeneric(madr, bcr, chcr, 1, SPU2writeDMA7Mem, SPU2readDMA7Mem);
@@ -133,6 +138,7 @@ int psxDma7Interrupt()
 	return 1;
 
 }
+#endif
 
 void psxDma8(u32 madr, u32 bcr, u32 chcr)
 {
@@ -226,6 +232,7 @@ void fwIrq()
 	hwIntcIrq(INTC_SBUS);
 }
 
+#if 0
 void spu2DMA4Irq()
 {
 	SPU2interruptDMA4();
@@ -239,6 +246,7 @@ void spu2DMA7Irq()
 	HW_DMA7_CHCR &= ~0x01000000;
 	psxDmaInterrupt2(0);
 }
+#endif
 
 void spu2Irq()
 {
@@ -257,94 +265,28 @@ void iopIntcIrq(uint irqType)
 // Gigaherz's "Improved DMA Handling" Engine WIP...
 //
 
-// fixme: Is this in progress?
 #ifdef ENABLE_NEW_IOPDMA
 
 s32  spu2DmaRead(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed)
 {
-	// FIXME: change the plugin interfaces so that they are aware of this new dma handler
-
-	/*
-	u32 bytes = 1024;
-	if(bytesLeft<1024)
-		bytes=bytesLeft;
-	*/
-	u32 bytes=bytesLeft;
-
-	// Update the spu2 to the current cycle before initiating the DMA
-	if (SPU2async)
-	{
-		SPU2async(psxRegs.cycle - psxCounters[6].sCycleT);
-		//Console::Status("cycles sent to SPU2 %x\n", psxRegs.cycle - psxCounters[6].sCycleT);
-
-		psxCounters[6].sCycleT = psxRegs.cycle;
-		psxCounters[6].CycleT = bytes * 3;
-
-		psxNextCounter -= (psxRegs.cycle - psxNextsCounter);
-		psxNextsCounter = psxRegs.cycle;
-		if (psxCounters[6].CycleT < psxNextCounter)
-			psxNextCounter = psxCounters[6].CycleT;
-	}
-
-	if(channel==7)
-		SPU2readDMA7Mem((u16 *)data, bytes/2);
-	else
-		SPU2readDMA4Mem((u16 *)data, bytes/2);
-
-	*bytesProcessed = bytes;
-
-	return 0;
+	return SPU2dmaRead(channel,data,bytesLeft,bytesProcessed);
 }
 
 s32  spu2DmaWrite(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed)
 {
-	// FIXME: change the plugin interfaces so that they are aware of this new dma handler
-
-
-	/*
-	u32 bytes = 1024;
-	if(bytesLeft<1024)
-		bytes=bytesLeft;
-	*/
-	u32 bytes=bytesLeft;
-
-
-	// Update the spu2 to the current cycle before initiating the DMA
-	if (SPU2async)
-	{
-		SPU2async(psxRegs.cycle - psxCounters[6].sCycleT);
-		//Console::Status("cycles sent to SPU2 %x\n", psxRegs.cycle - psxCounters[6].sCycleT);
-
-		psxCounters[6].sCycleT = psxRegs.cycle;
-		psxCounters[6].CycleT = bytes * 3;
-
-		psxNextCounter -= (psxRegs.cycle - psxNextsCounter);
-		psxNextsCounter = psxRegs.cycle;
-		if (psxCounters[6].CycleT < psxNextCounter)
-			psxNextCounter = psxCounters[6].CycleT;
-	}
-
-	if(channel==7)
-		SPU2writeDMA7Mem((u16 *)data, bytes/2);
-	else
-		SPU2writeDMA4Mem((u16 *)data, bytes/2);
-
-
-	*bytesProcessed = bytes;
-
-	return 0;
+	return SPU2dmaWrite(channel,data,bytesLeft,bytesProcessed);
 }
 
 void spu2DmaInterrupt(s32 channel)
 {
-	if(channel==7)
-		SPU2interruptDMA7();
-	else	
-		SPU2interruptDMA4();
+	SPU2dmaInterrupt(channel);
 }
 
 //typedef s32(* DmaHandler)(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed);
 //typedef void (* DmaIHandler)(s32 channel);
+extern s32 sio2DmaRead(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed);
+extern s32 sio2DmaWrite(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed);
+extern void sio2DmaInterrupt(s32 channel);
 
 s32 errDmaWrite(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed);
 s32 errDmaRead(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed);
@@ -353,43 +295,34 @@ DmaStatusInfo  IopChannels[DMA_CHANNEL_MAX]; // I dont' knwo how many there are,
 
 DmaHandlerInfo IopDmaHandlers[DMA_CHANNEL_MAX] =
 {
-	{0}, //0
-	{0}, //1
-	{0}, //2
-	{cdvdDmaRead, errDmaWrite,  cdvdDmaInterrupt}, //3:  CDVD
-	{spu2DmaRead, spu2DmaWrite, spu2DmaInterrupt}, //4:  Spu Core0
-	{0}, //5
-	{0}, //6: OT?
-	{spu2DmaRead, spu2DmaWrite, spu2DmaInterrupt}, //7:  Spu Core1
-	{0},//{dev9DmaRead, dev9DmaWrite, dev9DmaInterrupt}, //8:  Dev9
-	{0},//{sif0DmaRead, sif0DmaWrite, sif0DmaInterrupt}, //9:  SIF0
-	{0},//{sif1DmaRead, sif1DmaWrite, sif1DmaInterrupt}, //10: SIF1
-	{0}, // Sio2
-	{0}, // Sio2
-};
+	// First DMAC, same as PS1
+	{"Ps1 Mdec",       0}, //0
+	{"Ps1 Mdec",       0}, //1
+	{"Ps1 Gpu",        0}, //2
+	{"CDVD",           cdvdDmaRead, errDmaWrite,  cdvdDmaInterrupt}, //3:  CDVD
+	{"SPU2 Core0",     spu2DmaRead, spu2DmaWrite, spu2DmaInterrupt}, //4:  Spu Core0
+	{"?",              0}, //5
+	{"OT",             0}, //6: OT?
 
-const char* IopDmaNames[DMA_CHANNEL_MAX] =
-{
-	"Ps1 Mdec",
-	"Ps1 Mdec",
-	"Ps1 Gpu",
-	"CDVD",
-	"SPU/SPU2 Core0",
-	"?",
-	"OT",
-	"SPU2 Core1", //7:  Spu Core1
-	"Dev9", //8:  Dev9
-	"Sif0", //9:  SIF0
-	"Sif1", //10: SIF1
-	"Sio2",//...
-	"Sio2",
-	"?", "?", "?"
+	// Second DMAC, new in PS2 IOP
+	{"SPU2 Core1",     spu2DmaRead, spu2DmaWrite, spu2DmaInterrupt}, //7:  Spu Core1
+	{"Dev9",		   0},//dev9DmaRead, dev9DmaWrite, dev9DmaInterrupt}, //8:  Dev9
+	{"Sif0",           0},//sif0DmaRead, sif0DmaWrite, sif0DmaInterrupt}, //9:  SIF0
+	{"Sif1",           0},//sif1DmaRead, sif1DmaWrite, sif1DmaInterrupt}, //10: SIF1
+	{"Sio2 (writes)",  errDmaRead, sio2DmaWrite, sio2DmaInterrupt}, //11: Sio2
+	{"Sio2 (reads)",   sio2DmaRead, errDmaWrite, sio2DmaInterrupt}, //12: Sio2
+	{"?",              0}, //13
+	// if each dmac has 7 channels, the list would end here, but i made it 16 cos I'm not sure :p
+	{"?",              0}, //14
+	{"?",              0}, //15
 };
 
 // Prototypes. To be implemented later (or in other parts of the emulator)
 void SetDmaUpdateTarget(u32 delay)
 {
 	psxCounters[8].CycleT = delay;
+	if (delay < psxNextCounter)
+		psxNextCounter = delay;
 }
 
 void RaiseDmaIrq(u32 channel)
@@ -409,64 +342,86 @@ void IopDmaStart(int channel, u32 chcr, u32 madr, u32 bcr)
 	IopChannels[channel].Control = chcr | DMA_CTRL_ACTIVE;
 	IopChannels[channel].MemAddr = madr;
 	IopChannels[channel].ByteCount = size;
+	IopChannels[channel].Target=0;
 
-	SetDmaUpdateTarget(0);
+	//SetDmaUpdateTarget(1);
+	{
+		const s32 difference = psxRegs.cycle - psxCounters[8].sCycleT;
+
+		psxCounters[8].sCycleT = psxRegs.cycle;
+		psxCounters[8].CycleT = psxCounters[8].rate;
+		IopDmaUpdate(difference);
+
+		s32 c = psxCounters[8].CycleT;
+		if (c < psxNextCounter) psxNextCounter = c;
+	}
 }
 
 void IopDmaUpdate(u32 elapsed)
 {
-	s32 MinDelay = 0x7FFFFFFF;
+	s32 MinDelay=0;
+	
+	do {
+		MinDelay = 0x7FFFFFFF;
 
-	for (int i = 0;i < DMA_CHANNEL_MAX;i++)
-	{
-		DmaStatusInfo *ch = IopChannels + i;
-
-		if (ch->Control&DMA_CTRL_ACTIVE)
+		for (int i = 0;i < DMA_CHANNEL_MAX;i++)
 		{
-			ch->Target -= elapsed;
-			if (ch->Target <= 0)
+			DmaStatusInfo *ch = IopChannels + i;
+
+			if (ch->Control&DMA_CTRL_ACTIVE)
 			{
-				if (ch->ByteCount <= 0)
+				ch->Target -= elapsed;
+				if (ch->Target <= 0)
 				{
-					ch->Control &= ~DMA_CTRL_ACTIVE;
-					RaiseDmaIrq(i);
-					IopDmaHandlers[i].Interrupt(i);
-				}
-				else
-				{
-					// TODO: Make sure it's the right order
-					DmaHandler handler = (ch->Control & DMA_CTRL_DIRECTION) ? IopDmaHandlers[i].Write : IopDmaHandlers[i].Read;
-
-					u32 BCount = 0;
-					s32 Target = (handler) ? handler(i, (u32*)iopPhysMem(ch->MemAddr), ch->ByteCount, &BCount) : 0;
-
-					if(BCount>0)
+					if (ch->ByteCount <= 0)
 					{
-						psxCpu->Clear(ch->MemAddr, BCount/4);
-					}
+						ch->Target = 0x7fffffff;
 
-					int TTarget = 100;
-					if (Target < 0)
+						ch->Control &= ~DMA_CTRL_ACTIVE;
+						RaiseDmaIrq(i);
+						IopDmaHandlers[i].Interrupt(i);
+					}
+					else
 					{
-						// TODO: ... What to do if the plugin errors? :P
+						DmaHandler handler = (ch->Control & DMA_CTRL_DIRECTION) ? IopDmaHandlers[i].Write : IopDmaHandlers[i].Read;
+
+						u32 BCount = 0;
+						s32 Target = (handler) ? handler(i, (u32*)iopPhysMem(ch->MemAddr), ch->ByteCount, &BCount) : 0;
+
+						if(BCount>0)
+						{
+							psxCpu->Clear(ch->MemAddr, BCount/4);
+						}
+
+						int TTarget = 100;
+						if (Target < 0)
+						{
+							// TODO: ... What to do if the handler gives an error code? :P
+						}
+						else if (BCount > 0)
+						{
+							ch->MemAddr   += BCount;
+							ch->ByteCount -= BCount;
+
+							TTarget = BCount/2; // / ch->Width;
+						}
+
+						if (Target != 0) TTarget = Target;
+
+						ch->Target += TTarget;
+						
+						TTarget = ch->Target;
+						if(TTarget < 0)
+							TTarget = 0;
+
+						if (TTarget<MinDelay)
+							MinDelay = TTarget;
 					}
-					else if (BCount != 0)
-					{
-						ch->MemAddr   += BCount;
-						ch->ByteCount -= BCount;
-
-						TTarget = BCount; // / ch->Width;
-					}
-
-					if (Target != 0) TTarget = Target;
-
-					if (ch->Target<MinDelay) MinDelay = TTarget;
-
-					ch->Target += TTarget;
 				}
 			}
 		}
 	}
+	while(MinDelay <= 0);
 
 	if(MinDelay<0x7FFFFFFF)
 		SetDmaUpdateTarget(MinDelay);
@@ -476,7 +431,7 @@ void IopDmaUpdate(u32 elapsed)
 
 s32 errDmaRead(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed)
 {
-	Console::Error("ERROR: Tried to read using DMA %d (%s). Ignoring.", params 0, channel, IopDmaNames[channel]);
+	Console::Error("ERROR: Tried to read using DMA %d (%s). Ignoring.", params 0, channel, IopDmaHandlers[channel].Name);
 
 	*bytesProcessed = bytesLeft;
 	return 0;
@@ -484,7 +439,7 @@ s32 errDmaRead(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed)
 
 s32 errDmaWrite(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed)
 {
-	Console::Error("ERROR: Tried to write using DMA %d (%s). Ignoring.", params 0, channel, IopDmaNames[channel]);
+	Console::Error("ERROR: Tried to write using DMA %d (%s). Ignoring.", params 0, channel, IopDmaHandlers[channel].Name);
 
 	*bytesProcessed = bytesLeft;
 	return 0;

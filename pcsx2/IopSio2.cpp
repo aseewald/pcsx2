@@ -210,6 +210,75 @@ void SaveState::sio2Freeze()
 /////////////////////////////////////////////////
 ////////////////////////////////////////////  DMA
 /////////////////////////////////////////////////
+#ifdef ENABLE_NEW_IOPDMA
+
+s32 sio2DmaRead(s32 channel, u32* tdata, u32 bytesLeft, u32* bytesProcessed)
+{
+	u8* data = (u8*)tdata;
+
+	if(channel!=12)
+		return -1;
+
+	sio2.recvIndex = 0; // Set To start;    saqib
+
+	int read = 0;
+
+	while (bytesLeft > 0) 
+	{
+		(*(data++)) = sio2_fifoOut();
+		bytesLeft--;
+		read++;
+		if(sio2.recvIndex == sio2.packet.sendSize)
+		{
+			read+=bytesLeft;
+			break;
+		}
+	}
+
+	*bytesProcessed = read;
+	return 0;
+}
+
+s32 sio2DmaWrite(s32 channel, u32* tdata, u32 bytesLeft, u32* bytesProcessed)
+{
+	u8* data = (u8*)tdata;
+
+	if(channel!=11)
+		return -1;
+
+	//int available = sio2_getFifoInFree();
+
+	int written = 0;
+
+	for(int i = 0; i < bytesLeft; i++)
+	{
+		sio.count = 1;
+		sio2_fifoIn(*(data++));
+		written++;
+		if(sio2.packet.sendSize == BUFSIZE)
+		{
+			written = bytesLeft;
+			break;
+		}
+	}
+
+	*bytesProcessed = written;
+	return 0;
+}
+
+void sio2DmaInterrupt(s32 channel)
+{
+	if((channel==11)&&(sio2.packet.sendSize == BUFSIZE))
+	{
+		PSX_INT(IopEvt_Dma11,0);	// Interrupts should always occur at the end
+	}
+	if((channel==12)&&(sio2.recvIndex == sio2.packet.sendSize))
+	{
+		PSX_INT(IopEvt_Dma12,0);	// Interrupts should always occur at the end
+	}
+}
+
+#endif
 
 void psxDma11(u32 madr, u32 bcr, u32 chcr) {
 	unsigned int i, j;
@@ -264,4 +333,3 @@ void psxDMA12Interrupt()
 	HW_DMA12_CHCR &= ~0x01000000;
 	psxDmaInterrupt2(5);
 }
-

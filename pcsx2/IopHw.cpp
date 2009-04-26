@@ -431,6 +431,7 @@ u32 psxHwRead32(u32 add) {
 
 		case 0x1f8010c8:
 			PSXHW_LOG("DMA4 CHCR 32bit read %lx", HW_DMA4_CHCR);
+			HW_DMA4_CHCR = IopChannels[4].Control;
 			return HW_DMA4_CHCR;       // DMA4 chcr (SPU DMA)
 			
 		// time for rootcounters :)
@@ -514,11 +515,11 @@ u32 psxHwRead32(u32 add) {
 
 
 		case 0x1F8010C0:
-			HW_DMA4_MADR = SPU2ReadMemAddr(0);
+			HW_DMA4_MADR = IopChannels[4].MemAddr;
 			return HW_DMA4_MADR;
 
 		case 0x1f801500:
-			HW_DMA7_MADR = SPU2ReadMemAddr(1);
+			HW_DMA7_MADR = IopChannels[7].MemAddr;
 			PSXHW_LOG("DMA7 MADR 32bit read %lx", HW_DMA7_MADR);
 			return HW_DMA7_MADR;  // DMA7 madr
 		case 0x1f801504:
@@ -527,6 +528,7 @@ u32 psxHwRead32(u32 add) {
 
 		case 0x1f801508:
 			PSXHW_LOG("DMA7 CHCR 32bit read %lx", HW_DMA7_CHCR);
+			HW_DMA7_CHCR = IopChannels[7].Control;
 			return HW_DMA7_CHCR;         // DMA7 chcr (SPU2)		
 
 		case 0x1f801570:
@@ -1012,8 +1014,9 @@ void psxHwWrite32(u32 add, u32 value) {
 //------------------------------------------------------------------
 		case 0x1f8010c0:
 			PSXHW_LOG("DMA4 MADR 32bit write %lx", value);
-			SPU2WriteMemAddr(0,value);
-			HW_DMA4_MADR = value; return; // DMA4 madr
+			HW_DMA4_MADR = value;
+			IopChannels[4].MemAddr = value; // in case some game decides to change madr on the fly
+			return; // DMA4 madr
 		case 0x1f8010c4:
 			PSXHW_LOG("DMA4 BCR 32bit write %lx", value);
 			HW_DMA4_BCR  = value; return; // DMA4 bcr
@@ -1045,7 +1048,7 @@ void psxHwWrite32(u32 add, u32 value) {
 //------------------------------------------------------------------
 		case 0x1f801500:
 			PSXHW_LOG("DMA7 MADR 32bit write %lx", value);
-			SPU2WriteMemAddr(1,value);
+			IopChannels[7].MemAddr = value; // in case some game decides to change madr on the fly
 			HW_DMA7_MADR = value; return; // DMA7 madr
 		case 0x1f801504:
 			PSXHW_LOG("DMA7 BCR 32bit write %lx", value);
@@ -1101,7 +1104,9 @@ void psxHwWrite32(u32 add, u32 value) {
 //------------------------------------------------------------------
 		case 0x1f801540:
 			PSXHW_LOG("DMA11 SIO2in MADR 32bit write %lx", value);
-			HW_DMA11_MADR = value; return;
+			HW_DMA11_MADR = value;
+			IopChannels[11].MemAddr = value;
+			return;
 		
 		case 0x1f801544:
 			PSXHW_LOG("DMA11 SIO2in BCR 32bit write %lx", value);
@@ -1109,13 +1114,15 @@ void psxHwWrite32(u32 add, u32 value) {
 		case 0x1f801548:
 			PSXHW_LOG("DMA11 SIO2in CHCR 32bit write %lx", value);
 			HW_DMA11_CHCR = value;         // DMA11 chcr (SIO2 in)
-			DmaExec2(11);
+			DmaExecNew2(11);
 			return;
 
 //------------------------------------------------------------------
 		case 0x1f801550:
 			PSXHW_LOG("DMA12 SIO2out MADR 32bit write %lx", value);
-			HW_DMA12_MADR = value; return;
+			HW_DMA12_MADR = value;
+			IopChannels[12].MemAddr = value;
+			return;
 		
 		case 0x1f801554:
 			PSXHW_LOG("DMA12 SIO2out BCR 32bit write %lx", value);
@@ -1123,7 +1130,7 @@ void psxHwWrite32(u32 add, u32 value) {
 		case 0x1f801558:
 			PSXHW_LOG("DMA12 SIO2out CHCR 32bit write %lx", value);
 			HW_DMA12_CHCR = value;         // DMA12 chcr (SIO2 out)
-			DmaExec2(12);
+			DmaExecNew2(12);
 			return;
 
 //------------------------------------------------------------------

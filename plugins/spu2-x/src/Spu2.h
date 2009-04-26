@@ -69,7 +69,7 @@ EXPORT_C_(void) SPU2setDMABaseAddr(uptr baseaddr);
 EXPORT_C_(void) SPU2interruptDMA7();
 EXPORT_C_(u32) SPU2ReadMemAddr(int core);
 EXPORT_C_(void) SPU2WriteMemAddr(int core,u32 value);
-EXPORT_C_(void) SPU2irqCallback(void (*SPU2callback)(),void (*DMA4callback)(),void (*DMA7callback)());
+EXPORT_C_(void) SPU2irqCallback(void (*SPU2callback)());
 
 // extended funcs
 // if start is 1, starts recording spu2 data, else stops
@@ -160,8 +160,6 @@ extern void __inline __fastcall spu2M_Write( u32 addr, u16 value );
 extern u8 callirq;
 
 extern void (* _irqcallback)();
-extern void (* dma4callback)();
-extern void (* dma7callback)();
 
 extern void SetIrqCall();
 
