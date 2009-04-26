@@ -21,108 +21,108 @@
 
 #include "Spu2.h"
 
-#define GET_DMA_DATA_PTR(offset) (((s16*)thiscore.AdmaTempBuffer)+offset)
+#define GET_DMA_DATA_PTR(offset) (((s16*)thisCore.AdmaTempBuffer)+offset)
 //#define GET_DMA_DATA_PTR(offset) (GetMemPtr(0x2000 + (core<<10) + offset))
 
 void __fastcall ReadInput( uint core, StereoOut32& PData ) 
 {
-	V_Core& thiscore( Cores[core] );
+	V_Core& thisCore( Cores[core] );
 
-	if((thiscore.AutoDMACtrl&(core+1))==(core+1))
+	if((thisCore.AutoDMACtrl&(core+1))==(core+1))
 	{
 		s32 tl,tr;
 
 		if((core==1)&&((PlayMode&8)==8))
 		{
-			thiscore.AdmaReadPos&=~1;
+			thisCore.AdmaReadPos&=~1;
 
 			// CDDA mode
 			// Source audio data is 32 bits.
 			// We don't yet have the capability to handle this high res input data
 			// so we just downgrade it to 16 bits for now.
 
-			s32 *pl=(s32*)GET_DMA_DATA_PTR(thiscore.AdmaReadPos);
-			s32 *pr=(s32*)GET_DMA_DATA_PTR(thiscore.AdmaReadPos+0x200);
+			s32 *pl=(s32*)GET_DMA_DATA_PTR(thisCore.AdmaReadPos);
+			s32 *pr=(s32*)GET_DMA_DATA_PTR(thisCore.AdmaReadPos+0x200);
 			PData.Left = *pl;
 			PData.Right = *pr;
 
 			PData.Left >>= 2; //give 30 bit data (SndOut downsamples the rest of the way)
 			PData.Right >>= 2;
 
-			thiscore.AdmaReadPos+=2;
-			if((thiscore.AdmaReadPos==0x100)||(thiscore.AdmaReadPos>=0x200)) {
-				thiscore.AdmaInProgress=0;
-				if(thiscore.AdmaDataLeft>=0x200)
+			thisCore.AdmaReadPos+=2;
+			if((thisCore.AdmaReadPos==0x100)||(thisCore.AdmaReadPos>=0x200)) {
+				thisCore.AdmaInProgress=0;
+				if(thisCore.AdmaDataLeft>=0x200)
 				{
-					thiscore.AdmaFree+=2;
-					if(thiscore.AdmaFree>2)
+					thisCore.AdmaFree+=2;
+					if(thisCore.AdmaFree>2)
 					{
-						thiscore.AdmaFree=2;
-						thiscore.AdmaReadPos=thiscore.AdmaWritePos;
+						thisCore.AdmaFree=2;
+						thisCore.AdmaReadPos=thisCore.AdmaWritePos;
 					}
 
-					thiscore.AdmaInProgress=1;
+					thisCore.AdmaInProgress=1;
 
-					thiscore.TSA=(core<<10)+thiscore.AdmaReadPos;
+					thisCore.TSA=(core<<10)+thisCore.AdmaReadPos;
 
-					if (thiscore.AdmaDataLeft<0x200) 
+					if (thisCore.AdmaDataLeft<0x200) 
 					{
 						FileLog("[%10d] AutoDMA%c block end.\n",Cycles, (core==0)?'4':'7');
 
 						if( IsDevBuild )
 						{
-							if(thiscore.AdmaDataLeft>0)
+							if(thisCore.AdmaDataLeft>0)
 							{
 								if(MsgAutoDMA()) ConLog("WARNING: adma buffer didn't finish with a whole block!!\n");
 							}
 						}
-						thiscore.AdmaDataLeft=0;
+						thisCore.AdmaDataLeft=0;
 					}
 				}
-				thiscore.AdmaReadPos&=0x1ff;
+				thisCore.AdmaReadPos&=0x1ff;
 			}
 
 		}
 		else if((core==0)&&((PlayMode&4)==4))
 		{
-			thiscore.AdmaReadPos&=~1;
+			thisCore.AdmaReadPos&=~1;
 
-			s32 *pl=(s32*)GET_DMA_DATA_PTR(thiscore.AdmaReadPos);
-			s32 *pr=(s32*)GET_DMA_DATA_PTR(thiscore.AdmaReadPos+0x200);
+			s32 *pl=(s32*)GET_DMA_DATA_PTR(thisCore.AdmaReadPos);
+			s32 *pr=(s32*)GET_DMA_DATA_PTR(thisCore.AdmaReadPos+0x200);
 			PData.Left  = *pl;
 			PData.Right = *pr;
 
-			thiscore.AdmaReadPos+=2;
-			if(thiscore.AdmaReadPos>=0x200) {
-				thiscore.AdmaInProgress=0;
-				if(thiscore.AdmaDataLeft>=0x200)
+			thisCore.AdmaReadPos+=2;
+			if(thisCore.AdmaReadPos>=0x200) {
+				thisCore.AdmaInProgress=0;
+				if(thisCore.AdmaDataLeft>=0x200)
 				{
-					thiscore.AdmaFree+=2;
-					if(thiscore.AdmaFree>2)
+					thisCore.AdmaFree+=2;
+					if(thisCore.AdmaFree>2)
 					{
-						thiscore.AdmaFree=2;
-						thiscore.AdmaReadPos=thiscore.AdmaWritePos;
+						thisCore.AdmaFree=2;
+						thisCore.AdmaReadPos=thisCore.AdmaWritePos;
 					}
 
-					thiscore.AdmaInProgress=1;
+					thisCore.AdmaInProgress=1;
 
-					thiscore.TSA=(core<<10)+thiscore.AdmaReadPos;
+					thisCore.TSA=(core<<10)+thisCore.AdmaReadPos;
 
-					if (thiscore.AdmaDataLeft<0x200) 
+					if (thisCore.AdmaDataLeft<0x200) 
 					{
 						FileLog("[%10d] Spdif AutoDMA%c block end.\n",Cycles, (core==0)?'4':'7');
 
 						if( IsDevBuild )
 						{
-							if(thiscore.AdmaDataLeft>0)
+							if(thisCore.AdmaDataLeft>0)
 							{
 								if(MsgAutoDMA()) ConLog("WARNING: adma buffer didn't finish with a whole block!!\n");
 							}
 						}
-						thiscore.AdmaDataLeft=0;
+						thisCore.AdmaDataLeft=0;
 					}
 				}
-				thiscore.AdmaReadPos&=0x1ff;
+				thisCore.AdmaReadPos&=0x1ff;
 			}
 
 		}
@@ -135,46 +135,46 @@ void __fastcall ReadInput( uint core, StereoOut32& PData )
 			}
 			else
 			{
-				tl = (s32)*GET_DMA_DATA_PTR(thiscore.AdmaReadPos);
-				tr = (s32)*GET_DMA_DATA_PTR(thiscore.AdmaReadPos+0x200);
+				tl = (s32)*GET_DMA_DATA_PTR(thisCore.AdmaReadPos);
+				tr = (s32)*GET_DMA_DATA_PTR(thisCore.AdmaReadPos+0x200);
 			}
 
 			PData.Left  = tl;
 			PData.Right = tr;
 
-			thiscore.AdmaReadPos++;
-			if((thiscore.AdmaReadPos==0x100)||(thiscore.AdmaReadPos>=0x200)) {
-				thiscore.AdmaInProgress=0;
-				if(thiscore.AdmaDataLeft>=0x200)
+			thisCore.AdmaReadPos++;
+			if((thisCore.AdmaReadPos==0x100)||(thisCore.AdmaReadPos>=0x200)) {
+				thisCore.AdmaInProgress=0;
+				if(thisCore.AdmaDataLeft>=0x200)
 				{
-					thiscore.AdmaFree++;
-					if(thiscore.AdmaFree>2)
+					thisCore.AdmaFree++;
+					if(thisCore.AdmaFree>2)
 					{
-						thiscore.AdmaFree=2;
-						thiscore.AdmaReadPos=thiscore.AdmaWritePos;
+						thisCore.AdmaFree=2;
+						thisCore.AdmaReadPos=thisCore.AdmaWritePos;
 					}
 
-					thiscore.AdmaInProgress=1;
+					thisCore.AdmaInProgress=1;
 
-					thiscore.TSA=(core<<10)+thiscore.AdmaReadPos;
+					thisCore.TSA=(core<<10)+thisCore.AdmaReadPos;
 
-					if (thiscore.AdmaDataLeft<0x200) 
+					if (thisCore.AdmaDataLeft<0x200) 
 					{
-						thiscore.AutoDMACtrl |= ~3;
+						thisCore.AutoDMACtrl |= ~3;
 
 						if( IsDevBuild )
 						{
 							FileLog("[%10d] AutoDMA%c block end.\n",Cycles, (core==0)?'4':'7');
-							if(thiscore.AdmaDataLeft>0)
+							if(thisCore.AdmaDataLeft>0)
 							{
 								if(MsgAutoDMA()) ConLog("WARNING: adma buffer didn't finish with a whole block!!\n");
 							}
 						}
 
-						thiscore.AdmaDataLeft = 0;
+						thisCore.AdmaDataLeft = 0;
 					}
 				}
-				thiscore.AdmaReadPos&=0x1ff;
+				thisCore.AdmaReadPos&=0x1ff;
 			}
 		}
 	}

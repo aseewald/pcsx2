@@ -887,53 +887,53 @@ __forceinline void SPU2_FastWrite( u32 rmem, u16 value )
 	}
 	else
 	{
-		V_Core& thiscore = Cores[core];
+		V_Core& thisCore = Cores[core];
 		switch(omem)
 		{
 			case REG_C_ATTR:
 			{
-				int irqe = thiscore.IRQEnable;
-				int bit0 = thiscore.AttrBit0;
-				int bit4 = thiscore.AttrBit4;
+				int irqe = thisCore.IRQEnable;
+				int bit0 = thisCore.AttrBit0;
+				int bit4 = thisCore.AttrBit4;
 
-				if( ((value>>15)&1) && (!thiscore.CoreEnabled) && (thiscore.InitDelay==0) ) // on init/reset
+				if( ((value>>15)&1) && (!thisCore.CoreEnabled) && (thisCore.InitDelay==0) ) // on init/reset
 				{
 					if(hasPtr)
 					{
-						thiscore.InitDelay=1;
-						thiscore.Regs.STATX=0;	
+						thisCore.InitDelay=1;
+						thisCore.Regs.STATX=0;	
 					}
 					else
 					{
-						thiscore.Reset();
+						thisCore.Reset();
 					}
 				}
 
-				thiscore.AttrBit0   =(value>> 0) & 0x01; //1 bit
-				thiscore.DMABits	=(value>> 1) & 0x07; //3 bits
-				thiscore.AttrBit4   =(value>> 4) & 0x01; //1 bit
-				thiscore.AttrBit5   =(value>> 5) & 0x01; //1 bit
-				thiscore.IRQEnable  =(value>> 6) & 0x01; //1 bit
-				thiscore.FxEnable   =(value>> 7) & 0x01; //1 bit
-				thiscore.NoiseClk   =(value>> 8) & 0x3f; //6 bits
-				//thiscore.Mute	   =(value>>14) & 0x01; //1 bit
-				thiscore.Mute=0;
-				thiscore.CoreEnabled=(value>>15) & 0x01; //1 bit
-				thiscore.Regs.ATTR  =value&0x7fff;
+				thisCore.AttrBit0   =(value>> 0) & 0x01; //1 bit
+				thisCore.DMABits	=(value>> 1) & 0x07; //3 bits
+				thisCore.AttrBit4   =(value>> 4) & 0x01; //1 bit
+				thisCore.AttrBit5   =(value>> 5) & 0x01; //1 bit
+				thisCore.IRQEnable  =(value>> 6) & 0x01; //1 bit
+				thisCore.FxEnable   =(value>> 7) & 0x01; //1 bit
+				thisCore.NoiseClk   =(value>> 8) & 0x3f; //6 bits
+				//thisCore.Mute	   =(value>>14) & 0x01; //1 bit
+				thisCore.Mute=0;
+				thisCore.CoreEnabled=(value>>15) & 0x01; //1 bit
+				thisCore.Regs.ATTR  =value&0x7fff;
 
 				if(value&0x000E)
 				{
 					ConLog(" * SPU2: Core %d ATTR unknown bits SET! value=%04x\n",core,value);
 				}
 
-				if(thiscore.AttrBit0!=bit0)
+				if(thisCore.AttrBit0!=bit0)
 				{
-					ConLog(" * SPU2: ATTR bit 0 set to %d\n",thiscore.AttrBit0);
+					ConLog(" * SPU2: ATTR bit 0 set to %d\n",thisCore.AttrBit0);
 				}
-				if(thiscore.IRQEnable!=irqe)
+				if(thisCore.IRQEnable!=irqe)
 				{
-					ConLog(" * SPU2: IRQ %s\n",((thiscore.IRQEnable==0)?"disabled":"enabled"));
-					if(!thiscore.IRQEnable)
+					ConLog(" * SPU2: IRQ %s\n",((thisCore.IRQEnable==0)?"disabled":"enabled"));
+					if(!thisCore.IRQEnable)
 						Spdif.Info=0;
 				}
 
@@ -941,40 +941,40 @@ __forceinline void SPU2_FastWrite( u32 rmem, u16 value )
 			break;
 
 			case REG_S_PMON:
-				vx=2; for (vc=1;vc<16;vc++) { thiscore.Voices[vc].Modulated=(s8)((value & vx)/vx); vx<<=1; }
-				SetLoWord( thiscore.Regs.PMON, value );
+				vx=2; for (vc=1;vc<16;vc++) { thisCore.Voices[vc].Modulated=(s8)((value & vx)/vx); vx<<=1; }
+				SetLoWord( thisCore.Regs.PMON, value );
 			break;
 
 			case (REG_S_PMON + 2):
-				vx=1; for (vc=16;vc<24;vc++) { thiscore.Voices[vc].Modulated=(s8)((value & vx)/vx); vx<<=1; }
-				SetHiWord( thiscore.Regs.PMON, value );
+				vx=1; for (vc=16;vc<24;vc++) { thisCore.Voices[vc].Modulated=(s8)((value & vx)/vx); vx<<=1; }
+				SetHiWord( thisCore.Regs.PMON, value );
 			break;
 
 			case REG_S_NON:
-				vx=1; for (vc=0;vc<16;vc++) { thiscore.Voices[vc].Noise=(s8)((value & vx)/vx); vx<<=1; }
-				SetLoWord( thiscore.Regs.NON, value );
+				vx=1; for (vc=0;vc<16;vc++) { thisCore.Voices[vc].Noise=(s8)((value & vx)/vx); vx<<=1; }
+				SetLoWord( thisCore.Regs.NON, value );
 			break;
 
 			case (REG_S_NON + 2):
-				vx=1; for (vc=16;vc<24;vc++) { thiscore.Voices[vc].Noise=(s8)((value & vx)/vx); vx<<=1; }
-				SetHiWord( thiscore.Regs.NON, value );
+				vx=1; for (vc=16;vc<24;vc++) { thisCore.Voices[vc].Noise=(s8)((value & vx)/vx); vx<<=1; }
+				SetHiWord( thisCore.Regs.NON, value );
 			break;
 
 // Games like to repeatedly write these regs over and over with the same value, hence
 // the shortcut that skips the bitloop if the values are equal.
 #define vx_SetSomeBits( reg_out, mask_out, hiword ) \
 { \
-	const u32 result		= thiscore.Regs.reg_out; \
+	const u32 result		= thisCore.Regs.reg_out; \
 	if( hiword ) \
-		SetHiWord( thiscore.Regs.reg_out, value ); \
+		SetHiWord( thisCore.Regs.reg_out, value ); \
 	else \
-		SetLoWord( thiscore.Regs.reg_out, value ); \
-	if( result == thiscore.Regs.reg_out ) break; \
+		SetLoWord( thisCore.Regs.reg_out, value ); \
+	if( result == thisCore.Regs.reg_out ) break; \
  \
 	const uint start_bit	= hiword ? 16 : 0; \
 	const uint end_bit		= hiword ? 24 : 16; \
 	for (uint vc=start_bit, vx=1; vc<end_bit; ++vc, vx<<=1) \
-		thiscore.VoiceGates[vc].mask_out = (value & vx) ? -1 : 0; \
+		thisCore.VoiceGates[vc].mask_out = (value & vx) ? -1 : 0; \
 }
 
 			case REG_S_VMIXL:
@@ -1016,19 +1016,19 @@ __forceinline void SPU2_FastWrite( u32 rmem, u16 value )
 			
 				vx = value;
 				if (core == 0) vx&=0xFF0;
-				thiscore.WetGate.ExtR = (vx & 0x001) ? -1 : 0;
-				thiscore.WetGate.ExtL = (vx & 0x002) ? -1 : 0;
-				thiscore.DryGate.ExtR = (vx & 0x004) ? -1 : 0;
-				thiscore.DryGate.ExtL = (vx & 0x008) ? -1 : 0;
-				thiscore.WetGate.InpR = (vx & 0x010) ? -1 : 0;
-				thiscore.WetGate.InpL = (vx & 0x020) ? -1 : 0;
-				thiscore.DryGate.InpR = (vx & 0x040) ? -1 : 0;
-				thiscore.DryGate.InpL = (vx & 0x080) ? -1 : 0;
-				thiscore.WetGate.SndR = (vx & 0x100) ? -1 : 0;
-				thiscore.WetGate.SndL = (vx & 0x200) ? -1 : 0;
-				thiscore.DryGate.SndR = (vx & 0x400) ? -1 : 0;
-				thiscore.DryGate.SndL = (vx & 0x800) ? -1 : 0;
-				thiscore.Regs.MMIX = value;
+				thisCore.WetGate.ExtR = (vx & 0x001) ? -1 : 0;
+				thisCore.WetGate.ExtL = (vx & 0x002) ? -1 : 0;
+				thisCore.DryGate.ExtR = (vx & 0x004) ? -1 : 0;
+				thisCore.DryGate.ExtL = (vx & 0x008) ? -1 : 0;
+				thisCore.WetGate.InpR = (vx & 0x010) ? -1 : 0;
+				thisCore.WetGate.InpL = (vx & 0x020) ? -1 : 0;
+				thisCore.DryGate.InpR = (vx & 0x040) ? -1 : 0;
+				thisCore.DryGate.InpL = (vx & 0x080) ? -1 : 0;
+				thisCore.WetGate.SndR = (vx & 0x100) ? -1 : 0;
+				thisCore.WetGate.SndL = (vx & 0x200) ? -1 : 0;
+				thisCore.DryGate.SndR = (vx & 0x400) ? -1 : 0;
+				thisCore.DryGate.SndL = (vx & 0x800) ? -1 : 0;
+				thisCore.Regs.MMIX = value;
 			break;
 
 			case (REG_S_KON + 2):
@@ -1048,11 +1048,11 @@ __forceinline void SPU2_FastWrite( u32 rmem, u16 value )
 			break;
 
 			case REG_S_ENDX:
-				thiscore.Regs.ENDX&=0x00FF0000;
+				thisCore.Regs.ENDX&=0x00FF0000;
 			break;
 
 			case (REG_S_ENDX + 2):	
-				thiscore.Regs.ENDX&=0xFFFF;
+				thisCore.Regs.ENDX&=0xFFFF;
 			break;
 
 			// Reverb Start and End Address Writes!
@@ -1063,21 +1063,21 @@ __forceinline void SPU2_FastWrite( u32 rmem, u16 value )
 			//    change the end address anyway.
 
 			case REG_A_ESA:
-				SetHiWord( thiscore.EffectsStartA, value );
-				thiscore.UpdateEffectsBufferSize();
-				thiscore.ReverbX = 0;
+				SetHiWord( thisCore.EffectsStartA, value );
+				thisCore.UpdateEffectsBufferSize();
+				thisCore.ReverbX = 0;
 			break;
 
 			case (REG_A_ESA + 2):
-				SetLoWord( thiscore.EffectsStartA, value );
-				thiscore.UpdateEffectsBufferSize();
-				thiscore.ReverbX = 0;
+				SetLoWord( thisCore.EffectsStartA, value );
+				thisCore.UpdateEffectsBufferSize();
+				thisCore.ReverbX = 0;
 			break;
 
 			case REG_A_EEA:
-				thiscore.EffectsEndA = ((u32)value<<16) | 0xFFFF;
-				thiscore.UpdateEffectsBufferSize();
-				thiscore.ReverbX = 0;
+				thisCore.EffectsEndA = ((u32)value<<16) | 0xFFFF;
+				thisCore.UpdateEffectsBufferSize();
+				thisCore.ReverbX = 0;
 			break;
 			
 			// Master Volume Address Write!
@@ -1085,7 +1085,7 @@ __forceinline void SPU2_FastWrite( u32 rmem, u16 value )
 			case REG_P_MVOLL:
 			case REG_P_MVOLR:
 			{
-				V_VolumeSlide& thisvol = (omem==REG_P_MVOLL) ? thiscore.MasterVol.Left : thiscore.MasterVol.Right;
+				V_VolumeSlide& thisvol = (omem==REG_P_MVOLL) ? thisCore.MasterVol.Left : thisCore.MasterVol.Right;
 
 				if( value & 0x8000 )	// +Lin/-Lin/+Exp/-Exp
 				{ 
@@ -1107,36 +1107,36 @@ __forceinline void SPU2_FastWrite( u32 rmem, u16 value )
 			break;
 
 			case REG_P_EVOLL:
-				thiscore.FxVol.Left = GetVol32( value );
+				thisCore.FxVol.Left = GetVol32( value );
 			break;
 
 			case REG_P_EVOLR:
-				thiscore.FxVol.Right = GetVol32( value );
+				thisCore.FxVol.Right = GetVol32( value );
 			break;
 			
 			case REG_P_AVOLL:
-				thiscore.ExtVol.Left = GetVol32( value );
+				thisCore.ExtVol.Left = GetVol32( value );
 			break;
 
 			case REG_P_AVOLR:
-				thiscore.ExtVol.Right = GetVol32( value );
+				thisCore.ExtVol.Right = GetVol32( value );
 			break;
 			
 			case REG_P_BVOLL:
-				thiscore.InpVol.Left = GetVol32( value );
+				thisCore.InpVol.Left = GetVol32( value );
 			break;
 
 			case REG_P_BVOLR:
-				thiscore.InpVol.Right = GetVol32( value );
+				thisCore.InpVol.Right = GetVol32( value );
 			break;
 
 			case REG_S_ADMAS:
 				//ConLog(" * SPU2: Core %d AutoDMAControl set to %d (%d)\n",core,value, Cycles);
-				thiscore.AutoDMACtrl=value;
+				thisCore.AutoDMACtrl=value;
 
 				if(value==0)
 				{
-					thiscore.AdmaInProgress=0;
+					thisCore.AdmaInProgress=0;
 				}
 			break;
 

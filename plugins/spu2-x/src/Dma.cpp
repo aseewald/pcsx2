@@ -139,49 +139,51 @@ s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProce
 	FileLog("[%10d] SPU2 dmaWrite channel %d size %x\n", Cycles, channel, bytesLeft);
 
 	int core = channel/7;
+	V_Core& thisCore( Cores[core] );
 
-	Cores[core].Regs.STATX &= ~0x80;
+	thisCore.Regs.STATX &= ~0x80;
 
 	if(bytesLeft<16) 
 	{
 		// Potential FIXME: Do you people think any game will send a tiny transfer, and expect it to work, or raise a irq?
+		assert(false);
 		return 0;
 	}
 
-	Cores[core].TSA&=~7;
+	thisCore.TSA&=~7;
 
-	bool isAdma = ((Cores[core].AutoDMACtrl&(core+1))==(core+1));
+	bool isAdma = ((thisCore.AutoDMACtrl&(core+1))!=0);
 
 	if(isAdma)
 	{
-		//Cores[core].TSA&=0x1fff;
+		//thisCore.TSA&=0x1fff;
 
-		if(Cores[core].AdmaDataLeft==0)
+		if(thisCore.AdmaDataLeft==0)
 		{
-			Cores[core].AdmaDataLeft = bytesLeft;
-			Cores[core].AdmaFree = 2;
-			Cores[core].AdmaReadPos = 0;
-			Cores[core].AdmaWritePos = 0;
+			thisCore.AdmaDataLeft = bytesLeft;
+			thisCore.AdmaFree = 2;
+			thisCore.AdmaReadPos = 0;
+			thisCore.AdmaWritePos = 0;
 		}
 
-		if(Cores[core].AdmaFree<=0) // no space, try later
+		if(thisCore.AdmaFree<=0) // no space, try later
 		{
 			*bytesProcessed = 0;
 			return 768*2;
 		}
 
 		int transferSize = 0;
-		while (Cores[core].AdmaFree>0)
+		while (thisCore.AdmaFree>0)
 		{
 			AdmaLogWritePacket(core,data);
 			// partL
 			{
-				memcpy(GET_DMA_DATA_PTR(Cores[core].AdmaWritePos),data,512);
+				memcpy(GET_DMA_DATA_PTR(thisCore.AdmaWritePos),data,512);
 				data += 256;
 				
 				int TSA = 0x2000 + (core<<10);
 				int TDA = TSA + 0x100;
-				if((Cores[core].IRQEnable)&&(Cores[core].IRQA>=TSA)&&(Cores[core].IRQA<TDA))
+				if((thisCore.IRQEnable)&&(thisCore.IRQA>=TSA)&&(thisCore.IRQA<TDA))
 				{
 					Spdif.Info=4<<core;
 					SetIrqCall();
@@ -190,20 +192,20 @@ s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProce
 
 			// partR
 			{
-				memcpy(GET_DMA_DATA_PTR(Cores[core].AdmaWritePos + 0x200),data,512);
+				memcpy(GET_DMA_DATA_PTR(thisCore.AdmaWritePos + 0x200),data,512);
 				data += 256;
 				
 				int TSA = 0x2200 + (core<<10);
 				int TDA = TSA + 0x100;
-				if((Cores[core].IRQEnable)&&(Cores[core].IRQA>=TSA)&&(Cores[core].IRQA<TDA))
+				if((thisCore.IRQEnable)&&(thisCore.IRQA>=TSA)&&(thisCore.IRQA<TDA))
 				{
 					Spdif.Info=4<<core;
 					SetIrqCall();
 				}
 			}
 
-			Cores[core].AdmaWritePos = (Cores[core].AdmaWritePos + 0x100) & 0x1ff;
-			Cores[core].AdmaFree--; // there's two buffers, we have one less available
+			thisCore.AdmaWritePos = (thisCore.AdmaWritePos + 0x100) & 0x1ff;
+			thisCore.AdmaFree--; // there's two buffers, we have one less available
 
 			transferSize+=1024;
 		}
@@ -224,31 +226,31 @@ s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProce
 
 		transferSize >>=1; // we work in half-words
 
-		int part1 = 0xFFFFF - Cores[core].TSA;
+		int part1 = 0xFFFFF - thisCore.TSA;
 		if(part1 > transferSize)
 			part1 = transferSize;
 
 		if(part1>0)
 		{
-			memcpy(GetMemPtr(Cores[core].TSA),data,part1<<1);
+			memcpy(GetMemPtr(thisCore.TSA),data,part1<<1);
 			data += part1;
 			
-			Cores[core].TDA = Cores[core].TSA + part1;
-			if((Cores[core].IRQEnable)&&(Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
+			thisCore.TDA = thisCore.TSA + part1;
+			if((thisCore.IRQEnable)&&(thisCore.IRQA>=thisCore.TSA)&&(thisCore.IRQA<thisCore.TDA))
 			{
 				Spdif.Info=4<<core;
 				SetIrqCall();
 			}
 
 			// invalidate caches between TSA and TDA
-			int first = Cores[core].TSA / pcm_WordsPerBlock;
-			int last = (Cores[core].TDA+pcm_WordsPerBlock-1) / pcm_WordsPerBlock;
+			int first = thisCore.TSA / pcm_WordsPerBlock;
+			int last = (thisCore.TDA+pcm_WordsPerBlock-1) / pcm_WordsPerBlock;
 			PcmCacheEntry* pfirst = pcm_cache_data + first;
 			PcmCacheEntry* plast  = pcm_cache_data + last;
 			for(;pfirst<plast;pfirst++)
 				pfirst->Validated=0;
 
-			Cores[core].TSA = Cores[core].TDA;
+			thisCore.TSA = thisCore.TDA;
 		}
 
 		int part2 = transferSize - part1;
@@ -257,28 +259,28 @@ s32 CALLBACK SPU2dmaWrite(s32 channel, s16* data, u32 bytesLeft, u32* bytesProce
 			memcpy(GetMemPtr(0),data,part2<<1);
 			data += part2;
 			
-			Cores[core].TSA = 0;
-			Cores[core].TDA = part2;
-			if((Cores[core].IRQEnable)&&(Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
+			thisCore.TSA = 0;
+			thisCore.TDA = part2;
+			if((thisCore.IRQEnable)&&(thisCore.IRQA>=thisCore.TSA)&&(thisCore.IRQA<thisCore.TDA))
 			{
 				Spdif.Info=4<<core;
 				SetIrqCall();
 			}
 
 			// invalidate caches between TSA and TDA
-			int first = Cores[core].TSA / pcm_WordsPerBlock;
-			int last = (Cores[core].TDA+pcm_WordsPerBlock-1) / pcm_WordsPerBlock;
+			int first = thisCore.TSA / pcm_WordsPerBlock;
+			int last = (thisCore.TDA+pcm_WordsPerBlock-1) / pcm_WordsPerBlock;
 			PcmCacheEntry* pfirst = pcm_cache_data + first;
 			PcmCacheEntry* plast  = pcm_cache_data + last;
 			for(;pfirst<plast;pfirst++)
 				pfirst->Validated=0;
 
-			Cores[core].TSA = Cores[core].TDA;
+			thisCore.TSA = thisCore.TDA;
 		}
 
 		if((bytesLeft>>1) == (transferSize))
 		{
-			if((Cores[core].IRQEnable)&&(Cores[core].IRQA==Cores[core].TSA))
+			if((thisCore.IRQEnable)&&(thisCore.IRQA==thisCore.TSA))
 			{
 				Spdif.Info=4<<core;
 				SetIrqCall();
@@ -303,13 +305,14 @@ s32 CALLBACK SPU2dmaRead(s32 channel, u16* data, u32 bytesLeft, u32* bytesProces
 	FileLog("[%10d] SPU2 dmaRead channel %d size %x\n", Cycles, channel, bytesLeft);
 
 	int core = channel/7;
+	V_Core& thisCore( Cores[core] );
 
-	Cores[core].Regs.STATX &= ~0x80;
+	thisCore.Regs.STATX &= ~0x80;
 
 	if(bytesLeft<16) 
 		return 0;
 
-	Cores[core].TSA&=~7;
+	thisCore.TSA&=~7;
 
 	// If there's autodma reading, and somehow some game needs it, then you can implement it yourselves :P
 	{
@@ -319,23 +322,23 @@ s32 CALLBACK SPU2dmaRead(s32 channel, u16* data, u32 bytesLeft, u32* bytesProces
 
 		transferSize >>=1; // we work in half-words
 
-		int part1 = 0xFFFFFF - Cores[core].TSA;
+		int part1 = 0xFFFFFF - thisCore.TSA;
 		if(part1 > transferSize)
 			part1 = transferSize;
 
 		if(part1>0)
 		{
-			memcpy(data,GetMemPtr(Cores[core].TSA),part1<<1);
+			memcpy(data,GetMemPtr(thisCore.TSA),part1<<1);
 			data += part1;
 			
-			Cores[core].TDA = Cores[core].TSA + part1;
-			if((Cores[core].IRQEnable)&&(Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
+			thisCore.TDA = thisCore.TSA + part1;
+			if((thisCore.IRQEnable)&&(thisCore.IRQA>=thisCore.TSA)&&(thisCore.IRQA<thisCore.TDA))
 			{
 				Spdif.Info=4<<core;
 				SetIrqCall();
 			}
 
-			Cores[core].TSA = Cores[core].TDA;
+			thisCore.TSA = thisCore.TDA;
 		}
 
 		int part2 = transferSize - part1;
@@ -344,19 +347,19 @@ s32 CALLBACK SPU2dmaRead(s32 channel, u16* data, u32 bytesLeft, u32* bytesProces
 			memcpy(data,GetMemPtr(0),part2<<1);
 			data += part2;
 			
-			Cores[core].TDA = Cores[core].TSA + part2;
-			if((Cores[core].IRQEnable)&&(Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<Cores[core].TDA))
+			thisCore.TDA = thisCore.TSA + part2;
+			if((thisCore.IRQEnable)&&(thisCore.IRQA>=thisCore.TSA)&&(thisCore.IRQA<thisCore.TDA))
 			{
 				Spdif.Info=4<<core;
 				SetIrqCall();
 			}
 
-			Cores[core].TSA = Cores[core].TDA;
+			thisCore.TSA = thisCore.TDA;
 		}
 
 		if(bytesLeft == transferSize)
 		{
-			if((Cores[core].IRQEnable)&&(Cores[core].IRQA>=Cores[core].TSA)&&(Cores[core].IRQA<=(Cores[core].TSA+0x20)))
+			if((thisCore.IRQEnable)&&(thisCore.IRQA>=thisCore.TSA)&&(thisCore.IRQA<=(thisCore.TSA+0x20)))
 			{
 				Spdif.Info=4<<core;
 				SetIrqCall();

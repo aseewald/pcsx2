@@ -141,7 +141,7 @@ static void __forceinline XA_decode_block_unsaturated(s16* buffer, const s16* bl
 	}
 }
 
-static void __forceinline IncrementNextA( const V_Core& thiscore, V_Voice& vc )
+static void __forceinline IncrementNextA( const V_Core& thisCore, V_Voice& vc )
 {
 	// Important!  Both cores signal IRQ when an address is read, regardless of
 	// which core actually reads the address.
@@ -175,15 +175,15 @@ int g_counter_cache_ignores = 0;
 #define XAFLAG_LOOP			(1ul<<1)
 #define XAFLAG_LOOP_START	(1ul<<2)
 
-static __forceinline s32 __fastcall GetNextDataBuffered( V_Core& thiscore, uint voiceidx ) 
+static __forceinline s32 __fastcall GetNextDataBuffered( V_Core& thisCore, uint voiceidx ) 
 {
-	V_Voice& vc( thiscore.Voices[voiceidx] );
+	V_Voice& vc( thisCore.Voices[voiceidx] );
 
 	if( vc.SCurrent == 28 )
 	{
 		if(vc.LoopFlags & XAFLAG_LOOP_END)
 		{
-			thiscore.Regs.ENDX |= (1 << voiceidx);
+			thisCore.Regs.ENDX |= (1 << voiceidx);
 
 			if( vc.LoopFlags & XAFLAG_LOOP )
 			{
@@ -263,7 +263,7 @@ static __forceinline s32 __fastcall GetNextDataBuffered( V_Core& thiscore, uint 
 	if( (vc.SCurrent&3) == 3 )
 	{
 _Increment:
-		IncrementNextA( thiscore, vc );
+		IncrementNextA( thisCore, vc );
 	}
 
 	return vc.SBuffer[vc.SCurrent++];
@@ -358,9 +358,9 @@ static void __forceinline UpdatePitch( uint coreidx, uint voiceidx )
 }
 
 
-static __forceinline void CalculateADSR( V_Core& thiscore, uint voiceidx )
+static __forceinline void CalculateADSR( V_Core& thisCore, uint voiceidx )
 {
-	V_Voice& vc( thiscore.Voices[voiceidx] );
+	V_Voice& vc( thisCore.Voices[voiceidx] );
 
 	if( vc.ADSR.Phase==0 )
 	{
@@ -375,25 +375,25 @@ static __forceinline void CalculateADSR( V_Core& thiscore, uint voiceidx )
 			if(MsgVoiceOff()) ConLog(" * SPU2: Voice Off by ADSR: %d \n", voiceidx);
 		}
 		vc.Stop();
-		thiscore.Regs.ENDX |= (1 << voiceidx);
+		thisCore.Regs.ENDX |= (1 << voiceidx);
 	}
 
 	jASSUME( vc.ADSR.Value >= 0 );	// ADSR should never be negative...
 }
 
 // Returns a 16 bit result in Value.
-static s32 __forceinline GetVoiceValues_Linear( V_Core& thiscore, uint voiceidx )
+static s32 __forceinline GetVoiceValues_Linear( V_Core& thisCore, uint voiceidx )
 {
-	V_Voice& vc( thiscore.Voices[voiceidx] );
+	V_Voice& vc( thisCore.Voices[voiceidx] );
 
 	while( vc.SP > 0 )
 	{
 		vc.PV2 = vc.PV1;
-		vc.PV1 = GetNextDataBuffered( thiscore, voiceidx );
+		vc.PV1 = GetNextDataBuffered( thisCore, voiceidx );
 		vc.SP -= 4096;
 	}
 
-	CalculateADSR( thiscore, voiceidx );
+	CalculateADSR( thisCore, voiceidx );
 
 	// Note!  It's very important that ADSR stay as accurate as possible.  By the way
 	// it is used, various sound effects can end prematurely if we truncate more than
@@ -411,9 +411,9 @@ static s32 __forceinline GetVoiceValues_Linear( V_Core& thiscore, uint voiceidx 
 }
 
 // Returns a 16 bit result in Value.
-static s32 __forceinline GetVoiceValues_Cubic( V_Core& thiscore, uint voiceidx )
+static s32 __forceinline GetVoiceValues_Cubic( V_Core& thisCore, uint voiceidx )
 {
-	V_Voice& vc( thiscore.Voices[voiceidx] );
+	V_Voice& vc( thisCore.Voices[voiceidx] );
 
 	while( vc.SP > 0 )
 	{
@@ -421,13 +421,13 @@ static s32 __forceinline GetVoiceValues_Cubic( V_Core& thiscore, uint voiceidx )
 		vc.PV3 = vc.PV2;
 		vc.PV2 = vc.PV1;
 
-		vc.PV1 = GetNextDataBuffered( thiscore, voiceidx );
+		vc.PV1 = GetNextDataBuffered( thisCore, voiceidx );
 		vc.PV1 <<= 2;
 		vc.SPc = vc.SP&4095;	// just the fractional part, please!
 		vc.SP -= 4096;
 	}
 
-	CalculateADSR( thiscore, voiceidx );
+	CalculateADSR( thisCore, voiceidx );
 
 	s32 z0 = vc.PV3 - vc.PV4 + vc.PV1 - vc.PV2;
 	s32 z1 = (vc.PV4 - vc.PV3 - z0);
@@ -449,9 +449,9 @@ static s32 __forceinline GetVoiceValues_Cubic( V_Core& thiscore, uint voiceidx )
 // Noise values need to be mixed without going through interpolation, since it
 // can wreak havoc on the noise (causing muffling or popping).  Not that this noise
 // generator is accurate in its own right.. but eh, ah well :)
-static s32 __forceinline __fastcall GetNoiseValues( V_Core& thiscore, uint voiceidx )
+static s32 __forceinline __fastcall GetNoiseValues( V_Core& thisCore, uint voiceidx )
 {
-	V_Voice& vc( thiscore.Voices[voiceidx] );
+	V_Voice& vc( thisCore.Voices[voiceidx] );
 
 	s32 retval = GetNoiseValues();
 
@@ -465,7 +465,7 @@ static s32 __forceinline __fastcall GetNoiseValues( V_Core& thiscore, uint voice
 	// like GetVoiceValues can.  Better assert just in case though..
 	jASSUME( vc.ADSR.Phase != 0 );
 
-	CalculateADSR( thiscore, voiceidx );
+	CalculateADSR( thisCore, voiceidx );
 
 	// Yup, ADSR applies even to noise sources...
 	return ApplyVolume( retval, vc.ADSR.Value );
@@ -477,20 +477,20 @@ static s32 __forceinline __fastcall GetNoiseValues( V_Core& thiscore, uint voice
 
 static __forceinline StereoOut32 ReadInputPV( uint core ) 
 {
-	V_Core& thiscore( Cores[core] );
+	V_Core& thisCore( Cores[core] );
 	u32 pitch = AutoDMAPlayRate[core];
 
 	if(pitch==0) pitch=48000;
 	
-	thiscore.ADMAPV += pitch;
-	while(thiscore.ADMAPV>=48000) 
+	thisCore.ADMAPV += pitch;
+	while(thisCore.ADMAPV>=48000) 
 	{
-		ReadInput( core, thiscore.ADMAP );
-		thiscore.ADMAPV -= 48000;
+		ReadInput( core, thisCore.ADMAP );
+		thisCore.ADMAPV -= 48000;
 	}
 
 	// Apply volumes:
-	return ApplyVolume( thiscore.ADMAP, thiscore.InpVol );
+	return ApplyVolume( thisCore.ADMAP, thisCore.InpVol );
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -512,8 +512,8 @@ static __forceinline void spu2M_WriteFast( u32 addr, s16 value )
 
 static __forceinline StereoOut32 MixVoice( uint coreidx, uint voiceidx )
 {
-	V_Core& thiscore( Cores[coreidx] );
-	V_Voice& vc( thiscore.Voices[voiceidx] );
+	V_Core& thisCore( Cores[coreidx] );
+	V_Voice& vc( thisCore.Voices[voiceidx] );
 
 	// Most games don't use much volume slide effects.  So only call the UpdateVolume
 	// methods when needed by checking the flag outside the method here...
@@ -531,13 +531,13 @@ static __forceinline StereoOut32 MixVoice( uint coreidx, uint voiceidx )
 		s32 Value;
 
 		if( vc.Noise )
-			Value = GetNoiseValues( thiscore, voiceidx );
+			Value = GetNoiseValues( thisCore, voiceidx );
 		else
 		{
 			if( Interpolation == 2 )
-				Value = GetVoiceValues_Cubic( thiscore, voiceidx );
+				Value = GetVoiceValues_Cubic( thisCore, voiceidx );
 			else
-				Value = GetVoiceValues_Linear( thiscore, voiceidx );
+				Value = GetVoiceValues_Linear( thisCore, voiceidx );
 		}
 
 		// Note: All values recorded into OutX (may be used for modulation later)
@@ -581,7 +581,7 @@ const VoiceMixSet VoiceMixSet::Empty( StereoOut32::Empty, StereoOut32::Empty );
 
 static __forceinline void MixCoreVoices( VoiceMixSet& dest, const uint coreidx )
 {
-	V_Core& thiscore( Cores[coreidx] );
+	V_Core& thisCore( Cores[coreidx] );
 
 	for( uint voiceidx=0; voiceidx<V_Core::NumVoices; ++voiceidx )
 	{
@@ -589,17 +589,17 @@ static __forceinline void MixCoreVoices( VoiceMixSet& dest, const uint coreidx )
 
 		// Note: Results from MixVoice are ranged at 16 bits.
 		
-		dest.Dry.Left += VVal.Left & thiscore.VoiceGates[voiceidx].DryL;
-		dest.Dry.Right += VVal.Right & thiscore.VoiceGates[voiceidx].DryR;
-		dest.Wet.Left += VVal.Left & thiscore.VoiceGates[voiceidx].WetL;
-		dest.Wet.Right += VVal.Right & thiscore.VoiceGates[voiceidx].WetR;
+		dest.Dry.Left += VVal.Left & thisCore.VoiceGates[voiceidx].DryL;
+		dest.Dry.Right += VVal.Right & thisCore.VoiceGates[voiceidx].DryR;
+		dest.Wet.Left += VVal.Left & thisCore.VoiceGates[voiceidx].WetL;
+		dest.Wet.Right += VVal.Right & thisCore.VoiceGates[voiceidx].WetR;
 	}
 }
 
 static StereoOut32 __fastcall MixCore( const uint coreidx, const VoiceMixSet& inVoices, const StereoOut32& Input, const StereoOut32& Ext )
 {
-	V_Core& thiscore( Cores[coreidx] );
-	thiscore.MasterVol.Update();
+	V_Core& thisCore( Cores[coreidx] );
+	thisCore.MasterVol.Update();
 
 	// Saturate final result to standard 16 bit range.
 	const VoiceMixSet Voices( clamp_mix( inVoices.Dry ), clamp_mix( inVoices.Wet ) );
@@ -618,39 +618,39 @@ static StereoOut32 __fastcall MixCore( const uint coreidx, const VoiceMixSet& in
 	// Mix in the Input data
 
 	StereoOut32 TD(
-		Input.Left & thiscore.DryGate.InpL,
-		Input.Right & thiscore.DryGate.InpR
+		Input.Left & thisCore.DryGate.InpL,
+		Input.Right & thisCore.DryGate.InpR
 	);
 	
 	// Mix in the Voice data
-	TD.Left += Voices.Dry.Left & thiscore.DryGate.SndL;
-	TD.Right += Voices.Dry.Right & thiscore.DryGate.SndR;
+	TD.Left += Voices.Dry.Left & thisCore.DryGate.SndL;
+	TD.Right += Voices.Dry.Right & thisCore.DryGate.SndR;
 
 	// Mix in the External (nothing/core0) data
-	TD.Left += Ext.Left & thiscore.DryGate.ExtL;
-	TD.Right += Ext.Right & thiscore.DryGate.ExtR;
+	TD.Left += Ext.Left & thisCore.DryGate.ExtL;
+	TD.Right += Ext.Right & thisCore.DryGate.ExtR;
 	
 	if( !EffectsDisabled )
 	{
 		//Reverb pointer advances regardless of the FxEnable bit...
-		Reverb_AdvanceBuffer( thiscore );
+		Reverb_AdvanceBuffer( thisCore );
 
-		if( thiscore.FxEnable )
+		if( thisCore.FxEnable )
 		{
 			// Mix Input, Voice, and External data:
 			StereoOut32 TW(
-				Input.Left & thiscore.WetGate.InpL,
-				Input.Right & thiscore.WetGate.InpR
+				Input.Left & thisCore.WetGate.InpL,
+				Input.Right & thisCore.WetGate.InpR
 			);
 			
-			TW.Left += Voices.Wet.Left & thiscore.WetGate.SndL;
-			TW.Right += Voices.Wet.Right & thiscore.WetGate.SndR;
-			TW.Left += Ext.Left & thiscore.WetGate.ExtL; 
-			TW.Right += Ext.Right & thiscore.WetGate.ExtR;
+			TW.Left += Voices.Wet.Left & thisCore.WetGate.SndL;
+			TW.Right += Voices.Wet.Right & thisCore.WetGate.SndR;
+			TW.Left += Ext.Left & thisCore.WetGate.ExtL; 
+			TW.Right += Ext.Right & thisCore.WetGate.ExtR;
 
 			WaveDump::WriteCore( coreidx, CoreSrc_PreReverb, TW );
 
-			StereoOut32 RV( DoReverb( thiscore, TW ) );
+			StereoOut32 RV( DoReverb( thisCore, TW ) );
 
 			// Volume boost after effects application.  Boosting volume prior to effects
 			// causes slight overflows in some games, and the volume boost is required.
@@ -663,7 +663,7 @@ static StereoOut32 __fastcall MixCore( const uint coreidx, const VoiceMixSet& in
 			WaveDump::WriteCore( coreidx, CoreSrc_PostReverb, RV );
 
 			// Mix Dry+Wet
-			return TD + ApplyVolume( RV, thiscore.FxVol );
+			return TD + ApplyVolume( RV, thisCore.FxVol );
 		}
 		else
 		{
