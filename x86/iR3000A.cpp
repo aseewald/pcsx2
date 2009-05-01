@@ -24,6 +24,8 @@
 #include "PrecompiledHeader.h"
 
 #include "iR3000A.h"
+#include "BaseblockEx.h"
+
 #include <time.h>
 
 #ifndef _WIN32
@@ -115,7 +117,7 @@ static void iIopDumpBlock( int startpc, u8 * ptr )
 	u8 used[34];
 	int numused, count;
 
-	SysPrintf( "dump1 %x:%x, %x\n", startpc, psxpc, psxRegs.cycle );
+	Console::WriteLn( "dump1 %x:%x, %x", params startpc, psxpc, psxRegs.cycle );
 	Path::CreateDirectory( "dumps" );
 
 	string filename( Path::Combine( "dumps", fmt_string( "psxdump%.8X.txt", startpc ) ) );
@@ -170,7 +172,7 @@ static void iIopDumpBlock( int startpc, u8 * ptr )
 #ifdef __LINUX__
     // dump the asm
     f = fopen( "mydump1", "wb" );
-	fwrite( ptr, 1, (uptr)x86Ptr[0] - (uptr)ptr, f );
+	fwrite( ptr, 1, (uptr)x86Ptr - (uptr)ptr, f );
 	fclose( f );
 	sprintf( command, "objdump -D --target=binary --architecture=i386 -M intel mydump1 | cat %s - > tempdump", filename );
 	system( command );
@@ -315,7 +317,7 @@ void _psxMoveGPRtoM(u32 to, int fromgpr)
 void _psxMoveGPRtoRm(x86IntRegType to, int fromgpr)
 {
 	if( PSX_IS_CONST1(fromgpr) )
-		MOV32ItoRmOffset( to, g_psxConstRegs[fromgpr], 0 );
+		MOV32ItoRm( to, g_psxConstRegs[fromgpr] );
 	else {
 		// check x86
 		MOV32MtoR(EAX, (uptr)&psxRegs.GPR.r[ fromgpr ] );
@@ -535,7 +537,7 @@ void recResetIOP()
 
 	DevCon::Status( "iR3000A Resetting recompiler memory and structures" );
 
-	memset_8<0xcd,RECMEM_SIZE>( recMem );
+	memset_8<0xcc,RECMEM_SIZE>( recMem );	// 0xcc is INT3
 	iopClearRecLUT((BASEBLOCK*)m_recBlockAlloc,
 		(((Ps2MemSize::IopRam + Ps2MemSize::Rom + Ps2MemSize::Rom1) / 4)));
 
@@ -646,7 +648,7 @@ static void recExecute()
 	//for (;;) R3000AExecute();
 }
 
-static s32 recExecuteBlock( s32 eeCycles )
+static __forceinline s32 recExecuteBlock( s32 eeCycles )
 {
 	psxBreak = 0;
 	psxCycleEE = eeCycles;
@@ -740,7 +742,7 @@ static __forceinline u32 psxRecClearMem(u32 pc)
 	return upperextent - pc;
 }
 
-static void recClear(u32 Addr, u32 Size)
+static __forceinline void recClearIOP(u32 Addr, u32 Size)
 {
 	u32 pc = Addr;
 	while (pc < Addr + Size*4)
@@ -771,7 +773,7 @@ void psxSetBranchReg(u32 reg)
 	_psxFlushCall(FLUSH_EVERYTHING);
 	iPsxBranchTest(0xffffffff, 1);
 
-	JMP32((uptr)iopDispatcherReg - ( (uptr)x86Ptr[0] + 5 ));
+	JMP32((uptr)iopDispatcherReg - ( (uptr)x86Ptr + 5 ));
 }
 
 void psxSetBranchImm( u32 imm )
@@ -795,9 +797,9 @@ void psxSetBranchImm( u32 imm )
 //		  So for now these are new settings that work.
 //		  (rama)
 
-static u32 psxScaleBlockCycles()
+static __forceinline u32 psxScaleBlockCycles()
 {
-	return s_psxBlockCycles * (CHECK_IOP_CYCLERATE ? 2 : 1);
+	return s_psxBlockCycles * (Config.Hacks.IOPCycleDouble ? 2 : 1);
 }
 
 static void iPsxBranchTest(u32 newpc, u32 cpuBranch)
@@ -827,14 +829,14 @@ static void iPsxBranchTest(u32 newpc, u32 cpuBranch)
 	if( newpc != 0xffffffff )
 	{
 		CMP32ItoM((uptr)&psxRegs.pc, newpc);
-		JNE32((uptr)iopDispatcherReg - ( (uptr)x86Ptr[0] + 6 ));
+		JNE32((uptr)iopDispatcherReg - ( (uptr)x86Ptr + 6 ));
 	}
 
 	// Skip branch jump target here:
 	x86SetJ8( j8Ptr[0] );
 }
 
-static const int *s_pCode;
+//static const int *s_pCode;
 
 #if !defined(_MSC_VER)
 static void checkcodefn()
@@ -844,9 +846,9 @@ static void checkcodefn()
 #ifdef _MSC_VER
 	__asm mov pctemp, eax;
 #else
-    __asm__("movl %%eax, %0" : : "m"(pctemp) );
+    __asm__("movl %%eax, %[pctemp]" : : [pctemp]"m"(pctemp) );
 #endif
-	SysPrintf("iop code changed! %x\n", pctemp);
+	Console::WriteLn("iop code changed! %x", params pctemp);
 }
 #endif
 
@@ -863,7 +865,7 @@ void rpsxSYSCALL()
 
 	ADD32ItoM((uptr)&psxRegs.cycle, psxScaleBlockCycles() );
 	SUB32ItoM((uptr)&psxCycleEE, psxScaleBlockCycles()*8 );
-	JMP32((uptr)iopDispatcherReg - ( (uptr)x86Ptr[0] + 5 ));
+	JMP32((uptr)iopDispatcherReg - ( (uptr)x86Ptr + 5 ));
 
 	// jump target for skipping blockCycle updates
 	x86SetJ8(j8Ptr[0]);
@@ -883,7 +885,7 @@ void rpsxBREAK()
 	j8Ptr[0] = JE8(0);
 	ADD32ItoM((uptr)&psxRegs.cycle, psxScaleBlockCycles() );
 	SUB32ItoM((uptr)&psxCycleEE, psxScaleBlockCycles()*8 );
-	JMP32((uptr)iopDispatcherReg - ( (uptr)x86Ptr[0] + 5 ));
+	JMP32((uptr)iopDispatcherReg - ( (uptr)x86Ptr + 5 ));
 	x86SetJ8(j8Ptr[0]);
 
 	//if (!psxbranch) psxbranch = 2;
@@ -929,41 +931,11 @@ void psxRecompileNextInstruction(int delayslot)
 	_clearNeededX86regs();
 }
 
-#include "IopHw.h"
-
-void iDumpPsxRegisters(u32 startpc, u32 temp)
-{
-// [TODO] fixme : thie code is broken and has no labels.  Needs a rewrite to be useful.
-
-#if 0
-	int i;
-	const char* pstr = temp ? "t" : "";
-
-    __Log("%spsxreg: %x %x ra:%x k0: %x %x\n", pstr, startpc, psxRegs.cycle, psxRegs.GPR.n.ra, psxRegs.GPR.n.k0, *(int*)PSXM(0x13c128));
-    for(i = 0; i < 34; i+=2) __Log("%spsx%s: %x %x\n", pstr, disRNameGPR[i], psxRegs.GPR.r[i], psxRegs.GPR.r[i+1]);
-	__Log("%scycle: %x %x %x; counters %x %x\n", pstr, psxRegs.cycle, g_psxNextBranchCycle, EEsCycle, 
-		psxNextsCounter, psxNextCounter);
-
-	__Log("psxdma%d c%x b%x m%x t%x\n", 2, HW_DMA2_CHCR, HW_DMA2_BCR, HW_DMA2_MADR, HW_DMA2_TADR);
-	__Log("psxdma%d c%x b%x m%x\n", 3, HW_DMA3_CHCR, HW_DMA3_BCR, HW_DMA3_MADR);
-	__Log("psxdma%d c%x b%x m%x t%x\n", 4, HW_DMA4_CHCR, HW_DMA4_BCR, HW_DMA4_MADR, HW_DMA4_TADR);
-	__Log("psxdma%d c%x b%x m%x\n", 6, HW_DMA6_CHCR, HW_DMA6_BCR, HW_DMA6_MADR);
-	__Log("psxdma%d c%x b%x m%x\n", 7, HW_DMA7_CHCR, HW_DMA7_BCR, HW_DMA7_MADR);
-	__Log("psxdma%d c%x b%x m%x\n", 8, HW_DMA8_CHCR, HW_DMA8_BCR, HW_DMA8_MADR);
-	__Log("psxdma%d c%x b%x m%x t%x\n", 9, HW_DMA9_CHCR, HW_DMA9_BCR, HW_DMA9_MADR, HW_DMA9_TADR);
-	__Log("psxdma%d c%x b%x m%x\n", 10, HW_DMA10_CHCR, HW_DMA10_BCR, HW_DMA10_MADR);
-    __Log("psxdma%d c%x b%x m%x\n", 11, HW_DMA11_CHCR, HW_DMA11_BCR, HW_DMA11_MADR);
-	__Log("psxdma%d c%x b%x m%x\n", 12, HW_DMA12_CHCR, HW_DMA12_BCR, HW_DMA12_MADR);
-	for(i = 0; i < 7; ++i)
-		__Log("%scounter%d: mode %x count %I64x rate %x scycle %x target %I64x\n", pstr, i, psxCounters[i].mode, psxCounters[i].count, psxCounters[i].rate, psxCounters[i].sCycleT, psxCounters[i].target);
-#endif
-}
-
-void iDumpPsxRegisters(u32 startpc);
-
 #ifdef _DEBUG
 static void printfn()
 {
+	extern void iDumpPsxRegisters(u32 startpc, u32 temp);
+
 	static int lastrec = 0;
 	static int curcount = 0;
 	const int skip = 0;
@@ -991,6 +963,8 @@ void iopRecRecompile(u32 startpc)
 	u32 willbranch3 = 0;
 
 #ifdef _DEBUG
+	extern void iDumpPsxRegisters(u32 startpc, u32 temp);
+
 	if( psxdump & 4 )
 		iDumpPsxRegisters(startpc, 0);
 #endif
@@ -1003,7 +977,7 @@ void iopRecRecompile(u32 startpc)
 	
 	x86SetPtr( recPtr );
 	x86Align(16);
-	recPtr = x86Ptr[_EmitterId_];
+	recPtr = x86Ptr;
 
 	s_pCurBlock = PSX_GETBLOCK(startpc);
 	
@@ -1024,7 +998,7 @@ void iopRecRecompile(u32 startpc)
 	
     psxbranch = 0;
 
-	s_pCurBlock->SetFnptr( (uptr)x86Ptr[0] );
+	s_pCurBlock->SetFnptr( (uptr)x86Ptr );
 	s_psxBlockCycles = 0;
 
 	// reset recomp state variables
@@ -1159,7 +1133,7 @@ StartRecomp:
 
 		iPsxBranchTest(0xffffffff, 1);	
 
-		JMP32((uptr)iopDispatcherReg - ( (uptr)x86Ptr[0] + 5 ));
+		JMP32((uptr)iopDispatcherReg - ( (uptr)x86Ptr + 5 ));
 	}
 	else {
 		if( psxbranch ) assert( !willbranch3 );
@@ -1179,12 +1153,12 @@ StartRecomp:
 		}
 	}
 
-	assert( x86Ptr[0] < recMem+RECMEM_SIZE );
+	assert( x86Ptr < recMem+RECMEM_SIZE );
 
-	assert(x86Ptr[_EmitterId_] - recPtr < 0x10000);
-	s_pCurBlockEx->x86size = x86Ptr[_EmitterId_] - recPtr;
+	assert(x86Ptr - recPtr < 0x10000);
+	s_pCurBlockEx->x86size = x86Ptr - recPtr;
 
-	recPtr = x86Ptr[0];
+	recPtr = x86Ptr;
 
 	assert( (g_psxHasConstReg&g_psxFlushedConstReg) == g_psxHasConstReg );
 
@@ -1197,7 +1171,7 @@ R3000Acpu psxRec = {
 	recResetIOP,
 	recExecute,
 	recExecuteBlock,
-	recClear,
+	recClearIOP,
 	recShutdown
 };
 

@@ -112,13 +112,13 @@ static __forceinline void StopCdda() {
 	} 
 }
 
-__forceinline void SetResultSize(u8 size) {
+static __forceinline void SetResultSize(u8 size) {
     cdr.ResultP = 0;
 	cdr.ResultC = size;
 	cdr.ResultReady = 1;
 }
 
-__forceinline s32 MSFtoLSN(u8 *Time) {
+static __forceinline s32 MSFtoLSN(u8 *Time) {
 	u32 lsn;
 
 	lsn = Time[2];
@@ -127,7 +127,7 @@ __forceinline s32 MSFtoLSN(u8 *Time) {
 	return lsn;
 }
 
-void LSNtoMSF(u8 *Time, s32 lsn) {
+static __forceinline void LSNtoMSF(u8 *Time, s32 lsn) {
 	lsn += 150;
 	Time[2] = lsn / 4500;			// minuten
 	lsn = lsn - Time[2] * 4500;		// minuten rest
@@ -135,12 +135,12 @@ void LSNtoMSF(u8 *Time, s32 lsn) {
 	Time[0] = lsn - Time[1] * 75;		// sekunden rest
 }
 
-void ReadTrack() {
+static void ReadTrack() {
 	cdr.Prev[0] = itob(cdr.SetSector[0]);
 	cdr.Prev[1] = itob(cdr.SetSector[1]);
 	cdr.Prev[2] = itob(cdr.SetSector[2]);
 
-	CDR_LOG("KEY *** %x:%x:%x\n", cdr.Prev[0], cdr.Prev[1], cdr.Prev[2]);
+	CDR_LOG("KEY *** %x:%x:%x", cdr.Prev[0], cdr.Prev[1], cdr.Prev[2]);
 	cdr.RErr = CDVDreadTrack(MSFtoLSN(cdr.SetSector), CDVD_MODE_2352);
 }
 
@@ -152,7 +152,7 @@ void ReadTrack() {
 #define DataEnd		4
 #define DiskError	5
 
-void AddIrqQueue(u8 irq, unsigned long ecycle) {
+static void AddIrqQueue(u8 irq, unsigned long ecycle) {
 	cdr.Irq = irq;
 	if (cdr.Stat) {
 		cdr.eCycle = ecycle;
@@ -529,7 +529,7 @@ void  cdrReadInterrupt() {
 	memcpy_fast(cdr.Transfer, buf+12, 2340);
 	cdr.Stat = DataReady;
 
-	CDR_LOG(" %x:%x:%x\n", cdr.Transfer[0], cdr.Transfer[1], cdr.Transfer[2]);
+	CDR_LOG(" %x:%x:%x", cdr.Transfer[0], cdr.Transfer[1], cdr.Transfer[2]);
 
 	cdr.SetSector[2]++;
 	
@@ -545,7 +545,7 @@ void  cdrReadInterrupt() {
 	cdr.Readed = 0;
 
 	if ((cdr.Transfer[4+2] & 0x80) && (cdr.Mode & 0x2)) { // EOF
-		CDR_LOG("AutoPausing Read\n");
+		CDR_LOG("AutoPausing Read");
 		AddIrqQueue(CdlPause, 0x800);
 	}
 	else {
@@ -583,7 +583,7 @@ u8 cdrRead0(void) {
 	// what means the 0x10 and the 0x08 bits? i only saw it used by the bios
 	cdr.Ctrl|=0x18;
 
-	CDR_LOG("CD0 Read: %x\n", cdr.Ctrl);
+	CDR_LOG("CD0 Read: %x", cdr.Ctrl);
 	return psxHu8(0x1800) = cdr.Ctrl;
 }
 
@@ -593,7 +593,7 @@ cdrWrite0:
 */
 
 void cdrWrite0(u8 rt) {
-	CDR_LOG("CD0 write: %x\n", rt);
+	CDR_LOG("CD0 write: %x", rt);
 
 	cdr.Ctrl = rt | (cdr.Ctrl & ~0x3);
 
@@ -612,14 +612,14 @@ u8 cdrRead1(void) {
 	else 
 		psxHu8(0x1801) = 0;
 	
-	CDR_LOG("CD1 Read: %x\n", psxHu8(0x1801));
+	CDR_LOG("CD1 Read: %x", psxHu8(0x1801));
 	return psxHu8(0x1801);
 }
 
 void cdrWrite1(u8 rt) {
 	int i;
 
-	CDR_LOG("CD1 write: %x (%s)\n", rt, CmdName[rt]);
+	CDR_LOG("CD1 write: %x (%s)", rt, CmdName[rt]);
 	cdr.Cmd = rt;
 	cdr.OCUP = 0;
 
@@ -744,7 +744,7 @@ void cdrWrite1(u8 rt) {
 			break;
 
 		case CdlSetmode:
-			CDR_LOG("Setmode %x\n", cdr.Param[0]);
+			CDR_LOG("Setmode %x", cdr.Param[0]);
 		
 			cdr.Mode = cdr.Param[0];
 			cdr.Ctrl|= 0x80;
@@ -839,12 +839,12 @@ u8 cdrRead2(void) {
 		ret = *cdr.pTransfer++;
 	}
 
-	CDR_LOG("CD2 Read: %x\n", ret);
+	CDR_LOG("CD2 Read: %x", ret);
 	return ret;
 }
 
 void cdrWrite2(u8 rt) {
-	CDR_LOG("CD2 write: %x\n", rt);
+	CDR_LOG("CD2 write: %x", rt);
 	
 	if (cdr.Ctrl & 0x1) {
 		switch (rt) {
@@ -877,12 +877,12 @@ u8 cdrRead3(void) {
 			psxHu8(0x1803) = 0xff;
 	} else psxHu8(0x1803) = 0;
 
-	CDR_LOG("CD3 Read: %x\n", psxHu8(0x1803));
+	CDR_LOG("CD3 Read: %x", psxHu8(0x1803));
 	return psxHu8(0x1803);
 }
 
 void cdrWrite3(u8 rt) {
-	CDR_LOG("CD3 write: %x\n", rt);
+	CDR_LOG("CD3 write: %x", rt);
 	
 	if (rt == 0x07 && cdr.Ctrl & 0x1) {
 		cdr.Stat = 0;
@@ -909,13 +909,13 @@ void cdrWrite3(u8 rt) {
 void psxDma3(u32 madr, u32 bcr, u32 chcr) {
 	u32 cdsize;
 
-	CDR_LOG("*** DMA 3 *** %lx addr = %lx size = %lx\n", chcr, madr, bcr);
+	CDR_LOG("*** DMA 3 *** %lx addr = %lx size = %lx", chcr, madr, bcr);
 
 	switch (chcr) {
 		case 0x11000000:
 		case 0x11400100:
 			if (cdr.Readed == 0) {
-				CDR_LOG("*** DMA 3 *** NOT READY\n");
+				CDR_LOG("*** DMA 3 *** NOT READY");
 				return;
 			}
 
@@ -930,12 +930,40 @@ void psxDma3(u32 madr, u32 bcr, u32 chcr) {
 			return;
 
 		default:
-			CDR_LOG("Unknown cddma %lx\n", chcr);
+			CDR_LOG("Unknown cddma %lx", chcr);
 			break;
 	}
 	HW_DMA3_CHCR &= ~0x01000000;
 	psxDmaInterrupt(3);
 }
+
+#ifdef ENABLE_NEW_IOPDMA
+s32 cdvdDmaRead(s32 channel, u32* data, u32 wordsLeft, u32* wordsProcessed)
+{
+	// hacked up from the code above
+
+	if (cdr.Readed == 0) 
+	{
+		//CDR_LOG("*** DMA 3 *** NOT READY");
+		wordsProcessed = 0;
+		return 10000;
+	}
+
+	memcpy_fast(data, cdr.pTransfer, wordsLeft);
+	//psxCpu->Clear(madr, cdsize/4);
+	cdr.pTransfer+=wordsLeft;
+	*wordsProcessed = wordsLeft;
+
+	Console::Status("New IOP DMA handled CDVD DMA: channel %d, data %p, remaining %08x, processed %08x.", params channel,data,wordsLeft, *wordsProcessed);
+	return 0;
+}
+
+void cdvdDmaInterrupt(s32 channel)
+{
+	cdrInterrupt();
+}
+
+#endif
 
 void cdrReset() {
 	memzero_obj(cdr);
@@ -944,15 +972,9 @@ void cdrReset() {
 	cdReadTime = (PSXCLK / 1757) * BIAS; 
 }
 
-void SaveState::cdrFreeze() {
+void SaveState::cdrFreeze()
+{
+	FreezeTag( "cdrom" );
 	Freeze(cdr);
-
-	// Alrighty!  This code used to, for some reason, recalculate the pTransfer value
-	// even though it's being saved as part of the cdr struct.  Probably a backwards
-	// compat fix with an earlier save version.
-
-	int tmp; // = (int)(cdr.pTransfer - cdr.Transfer);
-	Freeze(tmp);
-	//if (Mode == 0) cdr.pTransfer = cdr.Transfer + tmp;
 }
 

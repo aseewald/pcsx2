@@ -19,33 +19,12 @@
 #ifndef __IR5900_H__
 #define __IR5900_H__
 
-#define _EmitterId_ EmitterId_R5900
 #include "ix86/ix86.h"
 #include "ix86/ix86_sse_helpers.h"
 #include "R5900.h"
 #include "VU.h"
 #include "iCore.h"
-#include "BaseblockEx.h"	// needed for recClear and stuff
-
-// Yay!  These work now! (air) ... almost (air)
-#define ARITHMETICIMM_RECOMPILE
-#define ARITHMETIC_RECOMPILE
-#define MULTDIV_RECOMPILE
-#define SHIFT_RECOMPILE
-#define BRANCH_RECOMPILE
-#define JUMP_RECOMPILE
-#define LOADSTORE_RECOMPILE
-#define MOVE_RECOMPILE
-#define MMI_RECOMPILE
-#define MMI0_RECOMPILE
-#define MMI1_RECOMPILE
-#define MMI2_RECOMPILE
-#define MMI3_RECOMPILE
-#define FPU_RECOMPILE
-#define CP0_RECOMPILE
-#define CP2_RECOMPILE
-
-#define EE_CONST_PROP // rec2 - enables constant propagation (faster)
+#include "Pcsx2Config.h"
 
 #define PC_GETBLOCK(x) PC_GETBLOCK_(x, recLUT)
 
@@ -88,6 +67,17 @@ extern u32 s_nBlockCycles;		// cycles of current block recompiling
 	   branch = 2; \
    }
 
+#define REC_SYS_DEL( f, delreg ) \
+   void rec##f( void ) \
+   { \
+	   MOV32ItoM( (uptr)&cpuRegs.code, (u32)cpuRegs.code ); \
+	   MOV32ItoM( (uptr)&cpuRegs.pc, (u32)pc ); \
+	   iFlushCall(FLUSH_EVERYTHING); \
+	   if( (delreg) > 0 ) _deleteEEreg(delreg, 0); \
+	   CALLFunc( (uptr)Interp::f ); \
+	   branch = 2; \
+   }
+
 
 // Used to clear recompiled code blocks during memory/dma write operations.
 u32 recClearMem(u32 pc);
@@ -105,10 +95,6 @@ u32 eeScaleBlockCycles();
 void iFlushCall(int flushtype);
 void recBranchCall( void (*func)() );
 void recCall( void (*func)(), int delreg );
-
-// these are defined in iFPU.cpp
-void LoadCW();
-void SaveCW(int type);
 
 extern void recExecute();		// same as recCpu.Execute(), but faster (can be inline'd)
 
@@ -243,19 +229,6 @@ void eeRecompileCodeConstSPECIAL(R5900FNPTR constcode, R5900FNPTR_INFO multicode
 #define XMMINFO_READD_LO	0x100 // if set and XMMINFO_READD is set, reads only low 64 bits of D
 #define XMMINFO_READACC		0x200
 #define XMMINFO_WRITEACC	0x400
-
-#define CPU_SSE_XMMCACHE_START(xmminfo) \
-    { \
-		int info = eeRecompileCodeXMM(xmminfo); \
-
-#define CPU_SSE2_XMMCACHE_START(xmminfo) \
-    { \
-		int info = eeRecompileCodeXMM(xmminfo); \
-
-#define CPU_SSE_XMMCACHE_END \
-		_clearNeededXMMregs(); \
-		return; \
-	}  \
 
 #define FPURECOMPILE_CONSTCODE(fn, xmminfo) \
 void rec##fn(void) \

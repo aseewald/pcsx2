@@ -19,7 +19,7 @@
 #ifndef __COMMON_H__
 #define __COMMON_H__
 
-#include "PS2Etypes.h"
+#include "Pcsx2Defs.h"
 
 #define BIAS 2   // Bus is half of the actual ps2 speed
 //#define PS2CLK   36864000	/* 294.912 mhz */
@@ -28,6 +28,8 @@
 #define PS2CLK 294912000 //hz	/* 294.912 mhz */
 
 #define PCSX2_VERSION "(beta)"
+
+#include "System.h"
 
 #include "Plugins.h"
 #include "SaveState.h"
@@ -39,8 +41,5 @@
 #include "R5900.h"
 #include "Elfheader.h"
 #include "Patch.h"
-
-#include "System.h"
-#include "Pcsx2Config.h"
 
 #endif /* __COMMON_H__ */

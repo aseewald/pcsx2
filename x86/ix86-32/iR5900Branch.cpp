@@ -47,12 +47,12 @@ REC_SYS(BLEZ);
 REC_SYS(BGEZ);
 REC_SYS(BGTZL);
 REC_SYS(BLTZL);
-REC_SYS(BLTZAL);
-REC_SYS(BLTZALL);
+REC_SYS_DEL(BLTZAL, 31);
+REC_SYS_DEL(BLTZALL, 31);
 REC_SYS(BLEZL);
 REC_SYS(BGEZL);
-REC_SYS(BGEZAL);
-REC_SYS(BGEZALL);
+REC_SYS_DEL(BGEZAL, 31);
+REC_SYS_DEL(BGEZALL, 31);
 
 #else
 
@@ -492,7 +492,7 @@ EERECOMPILE_CODE0(BNEL, XMMINFO_READS|XMMINFO_READT);
 ////////////////////////////////////////////////////
 //void recBLTZAL( void ) 
 //{
-//	SysPrintf("BLTZAL\n");
+//	Console::WriteLn("BLTZAL");
 //	_eeFlushAllUnused();
 //	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
 //	MOV32ItoM( (int)&cpuRegs.pc, pc );

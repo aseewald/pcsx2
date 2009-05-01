@@ -29,7 +29,7 @@
 #ifdef _DEBUG
 extern u32 vudump;
 #endif
-
+#ifndef PCSX2_MICROVU_
 namespace VU1micro
 {
 	void recAlloc()
@@ -63,7 +63,7 @@ namespace VU1micro
 		mkdir("dumps", 0755);
 		sprintf( filename, "dumps/vu%.4X.txt", VU1.VI[ REG_TPC ].UL );
 	#endif
-		SysPrintf( "dump1 %x => %x (%s)\n", VU1.VI[ REG_TPC ].UL, pc, filename );
+		Console::WriteLn( "dump1 %x => %x (%s)", params VU1.VI[ REG_TPC ].UL, pc, filename );
 
 		f = fopen( filename, "wb" );
 		for ( i = VU1.VI[REG_TPC].UL; i < pc; i += 8 ) {
@@ -85,7 +85,6 @@ namespace VU1micro
 
 		// these shouldn't be needed, but shouldn't hurt anything either.
 		x86FpuState = FPU_STATE;
-		iCWstate = 0;
 	}
 
 	static void recStep()
@@ -97,11 +96,11 @@ namespace VU1micro
 	#ifdef _DEBUG
 		static u32 vuprogcount = 0;
 		vuprogcount++;
-		if( vudump & 8 ) __Log("start vu1: %x %x\n", VU1.VI[ REG_TPC ].UL, vuprogcount);
+		if( vudump & 8 ) __Log("start vu1: %x %x", VU1.VI[ REG_TPC ].UL, vuprogcount);
 	#endif
 
 		if((VU0.VI[REG_VPU_STAT].UL & 0x100) == 0){
-			//SysPrintf("Execute block VU1, VU1 not busy\n");
+			//Console::WriteLn("Execute block VU1, VU1 not busy");
 			return;
 		}
 		
@@ -122,6 +121,34 @@ namespace VU1micro
 		FreezeXMMRegs(0);
 	}
 }
+#else
+
+extern void initVUrec(VURegs* vuRegs, const int vuIndex);
+extern void closeVUrec(const int vuIndex);
+extern void resetVUrec(const int vuIndex);
+extern void clearVUrec(u32 addr, u32 size, const int vuIndex);
+extern void runVUrec(u32 startPC, u32 cycles, const int vuIndex);
+
+namespace VU1micro
+{
+	void recAlloc()								 { initVUrec(&VU1, 1); }
+	void __fastcall recClear(u32 Addr, u32 Size) { clearVUrec(Addr, Size, 1); }
+	void recShutdown()							 { closeVUrec(1); }
+	static void recReset()						 { resetVUrec(1); x86FpuState = FPU_STATE; }
+	static void recStep()						 {}
+	static void recExecuteBlock() {
+
+		if((VU0.VI[REG_VPU_STAT].UL & 0x100) == 0) return;
+		assert( (VU1.VI[REG_TPC].UL&7) == 0 );
+
+		FreezeXMMRegs(1);
+		FreezeMMXRegs(1);
+		runVUrec(VU1.VI[REG_TPC].UL, 5000, 1);
+		FreezeXMMRegs(0);
+		FreezeMMXRegs(0);
+	}
+}
+#endif
 
 using namespace VU1micro;
 

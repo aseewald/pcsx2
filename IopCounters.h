@@ -19,19 +19,21 @@
 #ifndef __PSXCOUNTERS_H__
 #define __PSXCOUNTERS_H__
 
-// fixme: sCycle, Cycle, and otarget are unused
-// Can't remove them without making a new savestate version though.
-
 struct psxCounter {
 	u64 count, target;
     u32 mode;
-	u32 rate, interrupt, otarget;
-	u32 sCycle, Cycle;
+	u32 rate, interrupt;
 	u32 sCycleT;
 	s32 CycleT;
 };
 
-extern psxCounter psxCounters[8];
+#ifdef ENABLE_NEW_IOPDMA
+#	define NUM_COUNTERS 9
+#else
+#	define NUM_COUNTERS 8
+#endif
+
+extern psxCounter psxCounters[NUM_COUNTERS];
 
 void psxRcntInit();
 void psxRcntUpdate();

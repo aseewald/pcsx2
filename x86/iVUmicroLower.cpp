@@ -91,7 +91,7 @@ void recVUMI_DIV(VURegs *VU, int info)
 	u8 *pjmp, *pjmp1;
 	u32 *ajmp32, *bjmp32;
 
-	//SysPrintf("recVUMI_DIV()\n");
+	//Console::WriteLn("recVUMI_DIV()");
 	AND32ItoM(VU_VI_ADDR(REG_STATUS_FLAG, 2), 0xFCF); // Clear D/I flags
 
 	// FT can be zero here! so we need to check if its zero and set the correct flag.
@@ -154,7 +154,7 @@ void recVUMI_DIV(VURegs *VU, int info)
 void recVUMI_SQRT( VURegs *VU, int info )
 {
 	u8* pjmp;
-	//SysPrintf("recVUMI_SQRT()\n");
+	//Console::WriteLn("recVUMI_SQRT()");
 
 	_unpackVFSS_xyzw(EEREC_TEMP, EEREC_T, _Ftf_);
 	AND32ItoM(VU_VI_ADDR(REG_STATUS_FLAG, 2), 0xFCF); // Clear D/I flags
@@ -181,8 +181,9 @@ PCSX2_ALIGNED16(u64 RSQRT_TEMP_XMM[2]);
 void recVUMI_RSQRT(VURegs *VU, int info)
 {
 	u8 *ajmp8, *bjmp8;
+	u8 *qjmp1, *qjmp2;
 	int t1reg, t1boolean;
-	//SysPrintf("recVUMI_RSQRT()\n");
+	//Console::WriteLn("recVUMI_RSQRT()");
 
 	_unpackVFSS_xyzw(EEREC_TEMP, EEREC_T, _Ftf_);
 	AND32ItoM(VU_VI_ADDR(REG_STATUS_FLAG, 2), 0xFCF); // Clear D/I flags
@@ -215,11 +216,24 @@ void recVUMI_RSQRT(VURegs *VU, int info)
 
 	AND32ItoR( EAX, 0x01 );  // Grab "Is Zero" bits from the previous calculation
 	ajmp8 = JZ8(0); // Skip if none are
-		OR32ItoM(VU_VI_ADDR(REG_STATUS_FLAG, 2), 0x820); // Zero divide flag
-		
+
+		//check for 0/0
 		_unpackVFSS_xyzw(EEREC_TEMP, EEREC_S, _Fsf_);
+
+		SSE_XORPS_XMM_to_XMM(t1reg, t1reg); // Clear EEREC_TEMP
+		SSE_CMPEQPS_XMM_to_XMM(t1reg, EEREC_TEMP); // Set all F's if each vector is zero
+		SSE_MOVMSKPS_XMM_to_R32(EAX, t1reg); // Move the sign bits of the previous calculation
+
+		AND32ItoR( EAX, 0x01 );  // Grab "Is Zero" bits from the previous calculation
+		qjmp1 = JZ8(0);
+			OR32ItoM( VU_VI_ADDR(REG_STATUS_FLAG, 2), 0x410 ); // Set invalid flag (0/0)
+			qjmp2 = JMP8(0);
+		x86SetJ8(qjmp1);
+			OR32ItoM( VU_VI_ADDR(REG_STATUS_FLAG, 2), 0x820 ); // Zero divide (only when not 0/0)
+		x86SetJ8(qjmp2);
+
 		SSE_ANDPS_M128_to_XMM(EEREC_TEMP, (uptr)&const_clip[4]);
-		SSE_ORPS_M128_to_XMM(EEREC_TEMP, (uptr)&g_maxvals[0]); // EEREC_TEMP = +/-Max
+		SSE_ORPS_M128_to_XMM(EEREC_TEMP, (uptr)&g_maxvals[0]); // If division by zero, then EEREC_TEMP = +/- fmax
 		SSE_MOVSS_XMM_to_M32(VU_VI_ADDR(REG_Q, 0), EEREC_TEMP);
 		bjmp8 = JMP8(0);
 	x86SetJ8(ajmp8);
@@ -278,7 +292,7 @@ void recVUMI_IADDI(VURegs *VU, int info)
 	s16 imm;
 
 	if ( _Ft_ == 0 ) return;
-	//SysPrintf("recVUMI_IADDI  \n");
+	//Console::WriteLn("recVUMI_IADDI");
 	imm = ( VU->code >> 6 ) & 0x1f;
 	imm = ( imm & 0x10 ? 0xfff0 : 0) | ( imm & 0xf );
 	_addISIMMtoIT(VU, imm, info);
@@ -294,7 +308,7 @@ void recVUMI_IADDIU(VURegs *VU, int info)
 	s16 imm;
 
 	if ( _Ft_ == 0 ) return;
-	//SysPrintf("recVUMI_IADDIU  \n");
+	//Console::WriteLn("recVUMI_IADDIU");
 	imm = ( ( VU->code >> 10 ) & 0x7800 ) | ( VU->code & 0x7ff );
 	_addISIMMtoIT(VU, imm, info);
 }
@@ -308,7 +322,7 @@ void recVUMI_IADD( VURegs *VU, int info )
 {
 	int fdreg, fsreg = -1, ftreg = -1;
 	if ( _Fd_ == 0 ) return;
-	//SysPrintf("recVUMI_IADD  \n");
+	//Console::WriteLn("recVUMI_IADD");
 	if ( ( _Ft_ == 0 ) && ( _Fs_ == 0 ) ) {
 		fdreg = ALLOCVI(_Fd_, MODE_WRITE);
 		XOR32RtoR(fdreg, fdreg);
@@ -340,8 +354,8 @@ void recVUMI_IADD( VURegs *VU, int info )
 
 		if( fdreg == fsreg ) ADD32RtoR(fdreg, ftreg);
 		else if( fdreg == ftreg ) ADD32RtoR(fdreg, fsreg);
-		else LEA16RRtoR(fdreg, fsreg, ftreg);
-		MOVZX32R16toR(fdreg, fdreg); // neeed since don't know if fdreg's upper bits are 0
+		else LEA32RRtoR(fdreg, fsreg, ftreg);
+		MOVZX32R16toR(fdreg, fdreg); // needed since don't know if fdreg's upper bits are 0
 	}
 }
 //------------------------------------------------------------------
@@ -354,7 +368,7 @@ void recVUMI_IAND( VURegs *VU, int info )
 {
 	int fdreg, fsreg = -1, ftreg = -1;
 	if ( _Fd_ == 0 ) return;
-	//SysPrintf("recVUMI_IAND  \n");
+	//Console::WriteLn("recVUMI_IAND");
 	if ( ( _Fs_ == 0 ) || ( _Ft_ == 0 ) ) {
 		fdreg = ALLOCVI(_Fd_, MODE_WRITE);
 		XOR32RtoR(fdreg, fdreg);
@@ -385,7 +399,7 @@ void recVUMI_IOR( VURegs *VU, int info )
 {
 	int fdreg, fsreg = -1, ftreg = -1;
 	if ( _Fd_ == 0 ) return;
-	//SysPrintf("recVUMI_IOR  \n");
+	//Console::WriteLn("recVUMI_IOR");
 	if ( ( _Ft_ == 0 ) && ( _Fs_ == 0 ) ) {
 		fdreg = ALLOCVI(_Fd_, MODE_WRITE);
 		XOR32RtoR(fdreg, fdreg);
@@ -433,7 +447,7 @@ void recVUMI_ISUB( VURegs *VU, int info )
 {
 	int fdreg, fsreg = -1, ftreg = -1;
 	if ( _Fd_ == 0 ) return;
-	//SysPrintf("recVUMI_ISUB  \n");
+	//Console::WriteLn("recVUMI_ISUB");
 	if ( ( _Ft_ == 0 ) && ( _Fs_ == 0 ) ) {
 		fdreg = ALLOCVI(_Fd_, MODE_WRITE);
 		XOR32RtoR(fdreg, fdreg);
@@ -485,7 +499,7 @@ void recVUMI_ISUBIU( VURegs *VU, int info )
 	s16 imm;
 
 	if ( _Ft_ == 0 ) return;
-	//SysPrintf("recVUMI_ISUBIU  \n");
+	//Console::WriteLn("recVUMI_ISUBIU");
 	imm = ( ( VU->code >> 10 ) & 0x7800 ) | ( VU->code & 0x7ff );
 	imm = -imm;
 	_addISIMMtoIT(VU, imm, info);
@@ -499,7 +513,7 @@ void recVUMI_ISUBIU( VURegs *VU, int info )
 void recVUMI_MOVE( VURegs *VU, int info )
 {	
 	if ( (_Ft_ == 0) || (_X_Y_Z_W == 0) ) return;
-	//SysPrintf("recVUMI_MOVE  \n");
+	//Console::WriteLn("recVUMI_MOVE");
 	if (_X_Y_Z_W == 0x8)  SSE_MOVSS_XMM_to_XMM(EEREC_T, EEREC_S);
 	else if (_X_Y_Z_W == 0xf) SSE_MOVAPS_XMM_to_XMM(EEREC_T, EEREC_S);
 	else {
@@ -516,7 +530,7 @@ void recVUMI_MOVE( VURegs *VU, int info )
 void recVUMI_MFIR( VURegs *VU, int info )
 {
 	if ( (_Ft_ == 0)  || (_X_Y_Z_W == 0) ) return;
-	//SysPrintf("recVUMI_MFIR  \n");
+	//Console::WriteLn("recVUMI_MFIR");
 	_deleteX86reg(X86TYPE_VI|((VU==&VU1)?X86TYPE_VU1:0), _Fs_, 1);
 
 	if( _XYZW_SS ) {
@@ -547,7 +561,7 @@ void recVUMI_MFIR( VURegs *VU, int info )
 void recVUMI_MTIR( VURegs *VU, int info )
 {
 	if ( _Ft_ == 0 ) return;
-	//SysPrintf("recVUMI_MTIR  \n");
+	//Console::WriteLn("recVUMI_MTIR");
 	_deleteX86reg(X86TYPE_VI|((VU==&VU1)?X86TYPE_VU1:0), _Ft_, 2);
 
 	if( _Fsf_ == 0 ) {
@@ -569,7 +583,7 @@ void recVUMI_MTIR( VURegs *VU, int info )
 void recVUMI_MR32( VURegs *VU, int info )
 {	
 	if ( (_Ft_ == 0) || (_X_Y_Z_W == 0) ) return;
-	//SysPrintf("recVUMI_MR32  \n");
+	//Console::WriteLn("recVUMI_MR32");
 	if (_X_Y_Z_W != 0xf) {
 		SSE_MOVAPS_XMM_to_XMM(EEREC_TEMP, EEREC_S);
 		SSE_SHUFPS_XMM_to_XMM(EEREC_TEMP, EEREC_TEMP, 0x39);
@@ -595,31 +609,31 @@ void _loadEAX(VURegs *VU, int x86reg, uptr offset, int info)
 	if( x86reg >= 0 ) {
 		switch(_X_Y_Z_W) {
 			case 3: // ZW
-				SSE_MOVHPS_RmOffset_to_XMM(EEREC_T, x86reg, offset+8);
+				SSE_MOVHPS_Rm_to_XMM(EEREC_T, x86reg, offset+8);
 				break;
 			case 6: // YZ
-				SSE_SHUFPS_RmOffset_to_XMM(EEREC_T, x86reg, offset, 0x9c);
+				SSE_SHUFPS_Rm_to_XMM(EEREC_T, x86reg, offset, 0x9c);
 				SSE_SHUFPS_XMM_to_XMM(EEREC_T, EEREC_T, 0x78);
 				break;
 
 			case 8: // X
-				SSE_MOVSS_RmOffset_to_XMM(EEREC_TEMP, x86reg, offset);
+				SSE_MOVSS_Rm_to_XMM(EEREC_TEMP, x86reg, offset);
 				SSE_MOVSS_XMM_to_XMM(EEREC_T, EEREC_TEMP);
 				break;
 			case 9: // XW
-				SSE_SHUFPS_RmOffset_to_XMM(EEREC_T, x86reg, offset, 0xc9);
+				SSE_SHUFPS_Rm_to_XMM(EEREC_T, x86reg, offset, 0xc9);
 				SSE_SHUFPS_XMM_to_XMM(EEREC_T, EEREC_T, 0xd2);
 				break;
 			case 12: // XY
-				SSE_MOVLPS_RmOffset_to_XMM(EEREC_T, x86reg, offset);
+				SSE_MOVLPS_Rm_to_XMM(EEREC_T, x86reg, offset);
 				break;
 			case 15:
-				if( VU == &VU1 ) SSE_MOVAPSRmtoROffset(EEREC_T, x86reg, offset);
-				else SSE_MOVUPSRmtoROffset(EEREC_T, x86reg, offset);
+				if( VU == &VU1 ) SSE_MOVAPSRmtoR(EEREC_T, x86reg, offset);
+				else SSE_MOVUPSRmtoR(EEREC_T, x86reg, offset);
 				break;
 			default:
-				if( VU == &VU1 ) SSE_MOVAPSRmtoROffset(EEREC_TEMP, x86reg, offset);
-				else SSE_MOVUPSRmtoROffset(EEREC_TEMP, x86reg, offset);
+				if( VU == &VU1 ) SSE_MOVAPSRmtoR(EEREC_TEMP, x86reg, offset);
+				else SSE_MOVUPSRmtoR(EEREC_TEMP, x86reg, offset);
 
 				VU_MERGE_REGS(EEREC_T, EEREC_TEMP);
 				break;
@@ -707,7 +721,7 @@ void recVUMI_LQ(VURegs *VU, int info)
 {
 	s16 imm;
 	if ( _Ft_ == 0 ) return;
-	//SysPrintf("recVUMI_LQ  \n");
+	//Console::WriteLn("recVUMI_LQ");
 	imm = (VU->code & 0x400) ? (VU->code & 0x3ff) | 0xfc00 : (VU->code & 0x3ff); 
 	if (_Fs_ == 0) {
 		_loadEAX(VU, -1, (uptr)GET_VU_MEM(VU, (u32)imm*16), info);
@@ -726,7 +740,7 @@ void recVUMI_LQ(VURegs *VU, int info)
 void recVUMI_LQD( VURegs *VU, int info )
 {
 	int fsreg;
-	//SysPrintf("recVUMI_LQD  \n");
+	//Console::WriteLn("recVUMI_LQD");
 	if ( _Fs_ != 0 ) {
 		fsreg = ALLOCVI(_Fs_, MODE_READ|MODE_WRITE);
 		SUB16ItoR( fsreg, 1 );
@@ -746,7 +760,7 @@ void recVUMI_LQD( VURegs *VU, int info )
 void recVUMI_LQI(VURegs *VU, int info)
 {
 	int fsreg;
-	//SysPrintf("recVUMI_LQI  \n");
+	//Console::WriteLn("recVUMI_LQI");
 	if ( _Ft_ == 0 ) {
 		if( _Fs_ != 0 ) {
 			if( (fsreg = _checkX86reg(X86TYPE_VI|(VU==&VU1?X86TYPE_VU1:0), _Fs_, MODE_WRITE|MODE_READ)) >= 0 ) {
@@ -781,22 +795,19 @@ void _saveEAX(VURegs *VU, int x86reg, uptr offset, int info)
 	if ( _Fs_ == 0 ) {
 		if ( _XYZW_SS ) {
 			u32 c = _W ? 0x3f800000 : 0;
-			if ( x86reg >= 0 ) MOV32ItoRmOffset(x86reg, c, offset+(_W?12:(_Z?8:(_Y?4:0))));
+			if ( x86reg >= 0 ) MOV32ItoRm(x86reg, c, offset+(_W?12:(_Z?8:(_Y?4:0))));
 			else MOV32ItoM(offset+(_W?12:(_Z?8:(_Y?4:0))), c);
 		}
 		else {
-			if ( x86reg >= 0 ) {
-				if ( _X ) MOV32ItoRmOffset(x86reg, 0x00000000, offset);
-				if ( _Y ) MOV32ItoRmOffset(x86reg, 0x00000000, offset+4);
-				if ( _Z ) MOV32ItoRmOffset(x86reg, 0x00000000, offset+8);
-				if ( _W ) MOV32ItoRmOffset(x86reg, 0x3f800000, offset+12);
-			}
-			else {
-				if ( _X ) MOV32ItoM(offset,		0x00000000);
-				if ( _Y ) MOV32ItoM(offset+4,	0x00000000);
-				if ( _Z ) MOV32ItoM(offset+8,	0x00000000);
-				if ( _W ) MOV32ItoM(offset+12,	0x3f800000);
-			}
+
+			// (this is one of my test cases for the new emitter --air)
+			using namespace x86Emitter;
+			xAddressReg thisreg( x86reg );
+
+			if ( _X ) xMOV(ptr32[thisreg+offset],    0x00000000);
+			if ( _Y ) xMOV(ptr32[thisreg+offset+4],  0x00000000);
+			if ( _Z ) xMOV(ptr32[thisreg+offset+8],  0x00000000);
+			if ( _W ) xMOV(ptr32[thisreg+offset+12], 0x3f800000);
 		}
 		return;
 	}
@@ -804,29 +815,29 @@ void _saveEAX(VURegs *VU, int x86reg, uptr offset, int info)
 	switch ( _X_Y_Z_W ) {
 		case 1: // W
 			SSE2_PSHUFD_XMM_to_XMM(EEREC_TEMP, EEREC_S, 0x27);
-			if ( x86reg >= 0 ) SSE_MOVSS_XMM_to_RmOffset(x86reg, EEREC_TEMP, offset+12);
+			if ( x86reg >= 0 ) SSE_MOVSS_XMM_to_Rm(x86reg, EEREC_TEMP, offset+12);
 			else SSE_MOVSS_XMM_to_M32(offset+12, EEREC_TEMP);
 			break;
 		case 2: // Z
 			SSE_MOVHLPS_XMM_to_XMM(EEREC_TEMP, EEREC_S);
-			if ( x86reg >= 0 ) SSE_MOVSS_XMM_to_RmOffset(x86reg, EEREC_TEMP, offset+8);
+			if ( x86reg >= 0 ) SSE_MOVSS_XMM_to_Rm(x86reg, EEREC_TEMP, offset+8);
 			else SSE_MOVSS_XMM_to_M32(offset+8, EEREC_TEMP);
 			break;
 		case 3: // ZW
-			if ( x86reg >= 0 ) SSE_MOVHPS_XMM_to_RmOffset(x86reg, EEREC_S, offset+8);
+			if ( x86reg >= 0 ) SSE_MOVHPS_XMM_to_Rm(x86reg, EEREC_S, offset+8);
 			else SSE_MOVHPS_XMM_to_M64(offset+8, EEREC_S);
 			break;
 		case 4: // Y
 			SSE2_PSHUFLW_XMM_to_XMM(EEREC_TEMP, EEREC_S, 0x4e);
-			if ( x86reg >= 0 ) SSE_MOVSS_XMM_to_RmOffset(x86reg, EEREC_TEMP, offset+4);
+			if ( x86reg >= 0 ) SSE_MOVSS_XMM_to_Rm(x86reg, EEREC_TEMP, offset+4);
 			else SSE_MOVSS_XMM_to_M32(offset+4, EEREC_TEMP);
 			break;
 		case 5: // YW
 			SSE_SHUFPS_XMM_to_XMM(EEREC_S, EEREC_S, 0xB1);
 			SSE_MOVHLPS_XMM_to_XMM(EEREC_TEMP, EEREC_S);
 			if ( x86reg >= 0 ) {
-				SSE_MOVSS_XMM_to_RmOffset(x86reg, EEREC_S, offset+4);
-				SSE_MOVSS_XMM_to_RmOffset(x86reg, EEREC_TEMP, offset+12);
+				SSE_MOVSS_XMM_to_Rm(x86reg, EEREC_S, offset+4);
+				SSE_MOVSS_XMM_to_Rm(x86reg, EEREC_TEMP, offset+12);
 			}
 			else {
 				SSE_MOVSS_XMM_to_M32(offset+4, EEREC_S);
@@ -836,14 +847,14 @@ void _saveEAX(VURegs *VU, int x86reg, uptr offset, int info)
 			break;
 		case 6: // YZ
 			SSE2_PSHUFD_XMM_to_XMM(EEREC_TEMP, EEREC_S, 0xc9);
-			if ( x86reg >= 0 ) SSE_MOVLPS_XMM_to_RmOffset(x86reg, EEREC_TEMP, offset+4);
+			if ( x86reg >= 0 ) SSE_MOVLPS_XMM_to_Rm(x86reg, EEREC_TEMP, offset+4);
 			else SSE_MOVLPS_XMM_to_M64(offset+4, EEREC_TEMP);
 			break;
 		case 7: // YZW
 			SSE2_PSHUFD_XMM_to_XMM(EEREC_TEMP, EEREC_S, 0x93); //ZYXW
 			if ( x86reg >= 0 ) {
-				SSE_MOVHPS_XMM_to_RmOffset(x86reg, EEREC_TEMP, offset+4);
-				SSE_MOVSS_XMM_to_RmOffset(x86reg, EEREC_TEMP, offset+12);
+				SSE_MOVHPS_XMM_to_Rm(x86reg, EEREC_TEMP, offset+4);
+				SSE_MOVSS_XMM_to_Rm(x86reg, EEREC_TEMP, offset+12);
 			}
 			else {
 				SSE_MOVHPS_XMM_to_M64(offset+4, EEREC_TEMP);
@@ -851,26 +862,24 @@ void _saveEAX(VURegs *VU, int x86reg, uptr offset, int info)
 			}
 			break;
 		case 8: // X
-			if ( x86reg >= 0 ) SSE_MOVSS_XMM_to_RmOffset(x86reg, EEREC_S, offset);
+			if ( x86reg >= 0 ) SSE_MOVSS_XMM_to_Rm(x86reg, EEREC_S, offset);
 			else SSE_MOVSS_XMM_to_M32(offset, EEREC_S);
 			break;
 		case 9: // XW
-			SSE_MOVHLPS_XMM_to_XMM(EEREC_TEMP, EEREC_S);
-			if ( x86reg >= 0 ) SSE_MOVSS_XMM_to_RmOffset(x86reg, EEREC_S, offset);
+			if ( x86reg >= 0 ) SSE_MOVSS_XMM_to_Rm(x86reg, EEREC_S, offset);
 			else SSE_MOVSS_XMM_to_M32(offset, EEREC_S);
 			
-			if ( cpucaps.hasStreamingSIMD3Extensions ) SSE3_MOVSLDUP_XMM_to_XMM(EEREC_TEMP, EEREC_TEMP);
-			else SSE_SHUFPS_XMM_to_XMM(EEREC_TEMP, EEREC_TEMP, 0x55);
+			SSE2_PSHUFD_XMM_to_XMM(EEREC_TEMP, EEREC_S, 0xff); //WWWW
 
-			if ( x86reg >= 0 ) SSE_MOVSS_XMM_to_RmOffset(x86reg, EEREC_TEMP, offset+12);
+			if ( x86reg >= 0 ) SSE_MOVSS_XMM_to_Rm(x86reg, EEREC_TEMP, offset+12);
 			else SSE_MOVSS_XMM_to_M32(offset+12, EEREC_TEMP);
 
 			break;
 		case 10: //XZ
 			SSE_MOVHLPS_XMM_to_XMM(EEREC_TEMP, EEREC_S);
 			if ( x86reg >= 0 ) {
-				SSE_MOVSS_XMM_to_RmOffset(x86reg, EEREC_S, offset);
-				SSE_MOVSS_XMM_to_RmOffset(x86reg, EEREC_TEMP, offset+8);
+				SSE_MOVSS_XMM_to_Rm(x86reg, EEREC_S, offset);
+				SSE_MOVSS_XMM_to_Rm(x86reg, EEREC_TEMP, offset+8);
 			}
 			else {
 				SSE_MOVSS_XMM_to_M32(offset, EEREC_S);
@@ -879,8 +888,8 @@ void _saveEAX(VURegs *VU, int x86reg, uptr offset, int info)
 			break;
 		case 11: //XZW
 			if ( x86reg >= 0 ) {
-				SSE_MOVSS_XMM_to_RmOffset(x86reg, EEREC_S, offset);
-				SSE_MOVHPS_XMM_to_RmOffset(x86reg, EEREC_S, offset+8);
+				SSE_MOVSS_XMM_to_Rm(x86reg, EEREC_S, offset);
+				SSE_MOVHPS_XMM_to_Rm(x86reg, EEREC_S, offset+8);
 			}
 			else {
 				SSE_MOVSS_XMM_to_M32(offset, EEREC_S);
@@ -888,14 +897,14 @@ void _saveEAX(VURegs *VU, int x86reg, uptr offset, int info)
 			}
 			break;
 		case 12: // XY
-			if ( x86reg >= 0 ) SSE_MOVLPS_XMM_to_RmOffset(x86reg, EEREC_S, offset+0);
+			if ( x86reg >= 0 ) SSE_MOVLPS_XMM_to_Rm(x86reg, EEREC_S, offset+0);
 			else SSE_MOVLPS_XMM_to_M64(offset, EEREC_S);
 			break;
 		case 13: // XYW
 			SSE2_PSHUFD_XMM_to_XMM(EEREC_TEMP, EEREC_S, 0x4b); //YXZW
 			if ( x86reg >= 0 ) {
-				SSE_MOVHPS_XMM_to_RmOffset(x86reg, EEREC_TEMP, offset+0);
-				SSE_MOVSS_XMM_to_RmOffset(x86reg, EEREC_TEMP, offset+12);
+				SSE_MOVHPS_XMM_to_Rm(x86reg, EEREC_TEMP, offset+0);
+				SSE_MOVSS_XMM_to_Rm(x86reg, EEREC_TEMP, offset+12);
 			}
 			else {
 				SSE_MOVHPS_XMM_to_M64(offset, EEREC_TEMP);
@@ -905,8 +914,8 @@ void _saveEAX(VURegs *VU, int x86reg, uptr offset, int info)
 		case 14: // XYZ
 			SSE_MOVHLPS_XMM_to_XMM(EEREC_TEMP, EEREC_S);
 			if ( x86reg >= 0 ) {
-				SSE_MOVLPS_XMM_to_RmOffset(x86reg, EEREC_S, offset+0);
-				SSE_MOVSS_XMM_to_RmOffset(x86reg, EEREC_TEMP, offset+8);
+				SSE_MOVLPS_XMM_to_Rm(x86reg, EEREC_S, offset+0);
+				SSE_MOVSS_XMM_to_Rm(x86reg, EEREC_TEMP, offset+8);
 			}
 			else {
 				SSE_MOVLPS_XMM_to_M64(offset, EEREC_S);
@@ -915,11 +924,11 @@ void _saveEAX(VURegs *VU, int x86reg, uptr offset, int info)
 			break;
 		case 15: // XYZW
 			if ( VU == &VU1 ) {
-				if( x86reg >= 0 ) SSE_MOVAPSRtoRmOffset(x86reg, EEREC_S, offset+0);
+				if( x86reg >= 0 ) SSE_MOVAPSRtoRm(x86reg, EEREC_S, offset+0);
 				else SSE_MOVAPS_XMM_to_M128(offset, EEREC_S);
 			}
 			else {
-				if( x86reg >= 0 ) SSE_MOVUPSRtoRmOffset(x86reg, EEREC_S, offset+0);
+				if( x86reg >= 0 ) SSE_MOVUPSRtoRm(x86reg, EEREC_S, offset+0);
 				else {
 					if( offset & 15 ) SSE_MOVUPS_XMM_to_M128(offset, EEREC_S);
 					else SSE_MOVAPS_XMM_to_M128(offset, EEREC_S);
@@ -937,7 +946,7 @@ void _saveEAX(VURegs *VU, int x86reg, uptr offset, int info)
 void recVUMI_SQ(VURegs *VU, int info)
 {
 	s16 imm;
-	//SysPrintf("recVUMI_SQ  \n");
+	//Console::WriteLn("recVUMI_SQ");
 	imm = ( VU->code & 0x400) ? ( VU->code & 0x3ff) | 0xfc00 : ( VU->code & 0x3ff); 
 	if ( _Ft_ == 0 ) _saveEAX(VU, -1, (uptr)GET_VU_MEM(VU, (int)imm * 16), info);
 	else {
@@ -953,7 +962,7 @@ void recVUMI_SQ(VURegs *VU, int info)
 //------------------------------------------------------------------
 void recVUMI_SQD(VURegs *VU, int info)
 {
-	//SysPrintf("recVUMI_SQD  \n");
+	//Console::WriteLn("recVUMI_SQD");
 	if (_Ft_ == 0) _saveEAX(VU, -1, (uptr)VU->Mem, info);
 	else {
 		int ftreg = ALLOCVI(_Ft_, MODE_READ|MODE_WRITE);
@@ -969,7 +978,7 @@ void recVUMI_SQD(VURegs *VU, int info)
 //------------------------------------------------------------------
 void recVUMI_SQI(VURegs *VU, int info)
 {
-	//SysPrintf("recVUMI_SQI  \n");
+	//Console::WriteLn("recVUMI_SQI");
 	if (_Ft_ == 0) _saveEAX(VU, -1, (uptr)VU->Mem, info);
 	else {
 		int ftreg = ALLOCVI(_Ft_, MODE_READ|MODE_WRITE);
@@ -989,7 +998,7 @@ void recVUMI_ILW(VURegs *VU, int info)
 	s16 imm, off;
  
 	if ( ( _Ft_ == 0 ) || ( _X_Y_Z_W == 0 ) ) return;
-	//SysPrintf("recVUMI_ILW  \n");
+	//Console::WriteLn("recVUMI_ILW");
 	imm = ( VU->code & 0x400) ? ( VU->code & 0x3ff) | 0xfc00 : ( VU->code & 0x3ff);
 	if (_X) off = 0;
 	else if (_Y) off = 4;
@@ -1004,7 +1013,7 @@ void recVUMI_ILW(VURegs *VU, int info)
 	}
 	else {
 		int fsreg = ALLOCVI(_Fs_, MODE_READ);
-		MOV32RmtoROffset(ftreg, recVUTransformAddr(fsreg, VU, _Fs_, imm), (uptr)VU->Mem + off);
+		MOV32RmtoR(ftreg, recVUTransformAddr(fsreg, VU, _Fs_, imm), (uptr)VU->Mem + off);
 	}
 }
 //------------------------------------------------------------------
@@ -1016,7 +1025,7 @@ void recVUMI_ILW(VURegs *VU, int info)
 void recVUMI_ISW( VURegs *VU, int info )
 {
 	s16 imm;
-	//SysPrintf("recVUMI_ISW  \n");
+	//Console::WriteLn("recVUMI_ISW");
 	imm = ( VU->code & 0x400) ? ( VU->code & 0x3ff) | 0xfc00 : ( VU->code & 0x3ff); 
 
 	if (_Fs_ == 0) {
@@ -1037,10 +1046,10 @@ void recVUMI_ISW( VURegs *VU, int info )
 
 		x86reg = recVUTransformAddr(fsreg, VU, _Fs_, imm);
 
-		if (_X) MOV32RtoRmOffset(x86reg, ftreg, (uptr)VU->Mem);
-		if (_Y) MOV32RtoRmOffset(x86reg, ftreg, (uptr)VU->Mem+4);
-		if (_Z) MOV32RtoRmOffset(x86reg, ftreg, (uptr)VU->Mem+8);
-		if (_W) MOV32RtoRmOffset(x86reg, ftreg, (uptr)VU->Mem+12);
+		if (_X) MOV32RtoRm(x86reg, ftreg, (uptr)VU->Mem);
+		if (_Y) MOV32RtoRm(x86reg, ftreg, (uptr)VU->Mem+4);
+		if (_Z) MOV32RtoRm(x86reg, ftreg, (uptr)VU->Mem+8);
+		if (_W) MOV32RtoRm(x86reg, ftreg, (uptr)VU->Mem+12);
 	}
 }
 //------------------------------------------------------------------
@@ -1054,7 +1063,7 @@ void recVUMI_ILWR( VURegs *VU, int info )
 	int off, ftreg;
 
 	if ( ( _Ft_ == 0 ) || ( _X_Y_Z_W == 0 ) ) return;
-	//SysPrintf("recVUMI_ILWR  \n");
+	//Console::WriteLn("recVUMI_ILWR");
 	if (_X) off = 0;
 	else if (_Y) off = 4;
 	else if (_Z) off = 8;
@@ -1068,7 +1077,7 @@ void recVUMI_ILWR( VURegs *VU, int info )
 	}
 	else {
 		int fsreg = ALLOCVI(_Fs_, MODE_READ);
-		MOVZX32Rm16toROffset(ftreg, recVUTransformAddr(fsreg, VU, _Fs_, 0), (uptr)VU->Mem + off);
+		MOVZX32Rm16toR(ftreg, recVUTransformAddr(fsreg, VU, _Fs_, 0), (uptr)VU->Mem + off);
 	}
 }
 //------------------------------------------------------------------
@@ -1080,7 +1089,7 @@ void recVUMI_ILWR( VURegs *VU, int info )
 void recVUMI_ISWR( VURegs *VU, int info )
 {
 	int ftreg;
-	//SysPrintf("recVUMI_ISWR  \n");
+	//Console::WriteLn("recVUMI_ISWR");
 	ADD_VI_NEEDED(_Fs_);
 	ftreg = ALLOCVI(_Ft_, MODE_READ);
 
@@ -1095,10 +1104,10 @@ void recVUMI_ISWR( VURegs *VU, int info )
 		int fsreg = ALLOCVI(_Fs_, MODE_READ);
 		x86reg = recVUTransformAddr(fsreg, VU, _Fs_, 0);
 
-		if (_X) MOV32RtoRmOffset(x86reg, ftreg, (uptr)VU->Mem);
-		if (_Y) MOV32RtoRmOffset(x86reg, ftreg, (uptr)VU->Mem+4);
-		if (_Z) MOV32RtoRmOffset(x86reg, ftreg, (uptr)VU->Mem+8);
-		if (_W) MOV32RtoRmOffset(x86reg, ftreg, (uptr)VU->Mem+12);
+		if (_X) MOV32RtoRm(x86reg, ftreg, (uptr)VU->Mem);
+		if (_Y) MOV32RtoRm(x86reg, ftreg, (uptr)VU->Mem+4);
+		if (_Z) MOV32RtoRm(x86reg, ftreg, (uptr)VU->Mem+8);
+		if (_W) MOV32RtoRm(x86reg, ftreg, (uptr)VU->Mem+12);
 	}
 }
 //------------------------------------------------------------------
@@ -1109,7 +1118,7 @@ void recVUMI_ISWR( VURegs *VU, int info )
 //------------------------------------------------------------------
 void recVUMI_RINIT(VURegs *VU, int info)
 {
-	//SysPrintf("recVUMI_RINIT()\n");
+	//Console::WriteLn("recVUMI_RINIT()");
 	if( (xmmregs[EEREC_S].mode & MODE_WRITE) && (xmmregs[EEREC_S].mode & MODE_NOFLUSH) ) {
 		_deleteX86reg(X86TYPE_VI|(VU==&VU1?X86TYPE_VU1:0), REG_R, 2);
 		_unpackVFSS_xyzw(EEREC_TEMP, EEREC_S, _Fsf_);
@@ -1141,7 +1150,7 @@ void recVUMI_RINIT(VURegs *VU, int info)
 //------------------------------------------------------------------
 void recVUMI_RGET(VURegs *VU, int info)
 {
-	//SysPrintf("recVUMI_RGET()\n");
+	//Console::WriteLn("recVUMI_RGET()");
 	if ( (_Ft_ == 0) || (_X_Y_Z_W == 0)  ) return;
 
 	_deleteX86reg(X86TYPE_VI|(VU==&VU1?X86TYPE_VU1:0), REG_R, 1);
@@ -1165,7 +1174,7 @@ void recVUMI_RGET(VURegs *VU, int info)
 void recVUMI_RNEXT( VURegs *VU, int info )
 {
 	int rreg, x86temp0, x86temp1;
-	//SysPrintf("recVUMI_RNEXT()\n");
+	//Console::WriteLn("recVUMI_RNEXT()");
 
 	rreg = ALLOCVI(REG_R, MODE_WRITE|MODE_READ);
 
@@ -1206,7 +1215,7 @@ void recVUMI_RNEXT( VURegs *VU, int info )
 //------------------------------------------------------------------
 void recVUMI_RXOR( VURegs *VU, int info )
 {
-	//SysPrintf("recVUMI_RXOR()\n");
+	//Console::WriteLn("recVUMI_RXOR()");
 	if( (xmmregs[EEREC_S].mode & MODE_WRITE) && (xmmregs[EEREC_S].mode & MODE_NOFLUSH) ) {
 		_deleteX86reg(X86TYPE_VI|(VU==&VU1?X86TYPE_VU1:0), REG_R, 1); 
 		_unpackVFSS_xyzw(EEREC_TEMP, EEREC_S, _Fsf_);
@@ -1239,7 +1248,7 @@ void recVUMI_RXOR( VURegs *VU, int info )
 //------------------------------------------------------------------
 void recVUMI_WAITQ( VURegs *VU, int info )
 {
-	//SysPrintf("recVUMI_WAITQ  \n");
+	//Console::WriteLn("recVUMI_WAITQ");
 //	if( info & PROCESS_VU_SUPER ) {
 //		//CALLFunc(waitqfn);
 //		SuperVUFlush(0, 1);
@@ -1255,7 +1264,7 @@ void recVUMI_FSAND( VURegs *VU, int info )
 {
 	int ftreg;
 	u16 imm;
-	//SysPrintf("recVUMI_FSAND  \n");
+	//Console::WriteLn("recVUMI_FSAND");
 	imm = (((VU->code >> 21 ) & 0x1) << 11) | (VU->code & 0x7ff);
 	if(_Ft_ == 0) return; 
 
@@ -1274,7 +1283,7 @@ void recVUMI_FSEQ( VURegs *VU, int info )
 	int ftreg;
 	u16 imm;
 	if ( _Ft_ == 0 ) return;
-	//SysPrintf("recVUMI_FSEQ\n");
+	//Console::WriteLn("recVUMI_FSEQ");
 	imm = (((VU->code >> 21 ) & 0x1) << 11) | (VU->code & 0x7ff);
 
 	ftreg = ALLOCVI(_Ft_, MODE_WRITE|MODE_8BITREG);
@@ -1295,7 +1304,7 @@ void recVUMI_FSOR( VURegs *VU, int info )
 	int ftreg;
 	u32 imm;
 	if(_Ft_ == 0) return; 
-	//SysPrintf("recVUMI_FSOR  \n");
+	//Console::WriteLn("recVUMI_FSOR");
 	imm = (((VU->code >> 21 ) & 0x1) << 11) | (VU->code & 0x7ff);
 
 	ftreg = ALLOCVI(_Ft_, MODE_WRITE);
@@ -1315,7 +1324,7 @@ void recVUMI_FSSET(VURegs *VU, int info)
 	u32 prevaddr = VU_VI_ADDR(REG_STATUS_FLAG, 2);
 
 	u16 imm = 0;
-	//SysPrintf("recVUMI_FSSET  \n");
+	//Console::WriteLn("recVUMI_FSSET");
 	imm = (((VU->code >> 21 ) & 0x1) << 11) | (VU->code & 0x7FF);
 
     // keep the low 6 bits ONLY if the upper instruction is an fmac instruction (otherwise rewrite) - metal gear solid 3
@@ -1339,7 +1348,7 @@ void recVUMI_FMAND( VURegs *VU, int info )
 {
 	int fsreg, ftreg;
 	if ( _Ft_ == 0 ) return;
-	//SysPrintf("recVUMI_FMAND  \n");
+	//Console::WriteLn("recVUMI_FMAND");
 	fsreg = _checkX86reg(X86TYPE_VI|(VU==&VU1?X86TYPE_VU1:0), _Fs_, MODE_READ);
 	ftreg = ALLOCVI(_Ft_, MODE_WRITE);//|MODE_8BITREG);
 
@@ -1360,7 +1369,7 @@ void recVUMI_FMEQ( VURegs *VU, int info )
 {
 	int ftreg, fsreg;
 	if ( _Ft_ == 0 ) return;
-	//SysPrintf("recVUMI_FMEQ  \n");
+	//Console::WriteLn("recVUMI_FMEQ");
 	if( _Ft_ == _Fs_ ) {
 		ftreg = ALLOCVI(_Ft_, MODE_WRITE|MODE_READ);//|MODE_8BITREG
 
@@ -1389,7 +1398,7 @@ void recVUMI_FMOR( VURegs *VU, int info )
 {
 	int fsreg, ftreg;
 	if ( _Ft_ == 0 ) return;
-	//SysPrintf("recVUMI_FMOR  \n");
+	//Console::WriteLn("recVUMI_FMOR");
 	if( _Fs_ == 0 ) {
 		ftreg = ALLOCVI(_Ft_, MODE_WRITE);//|MODE_8BITREG);
 		MOVZX32M16toR( ftreg, VU_VI_ADDR(REG_MAC_FLAG, 1) );
@@ -1419,7 +1428,7 @@ void recVUMI_FMOR( VURegs *VU, int info )
 void recVUMI_FCAND( VURegs *VU, int info )
 {
 	int ftreg = ALLOCVI(1, MODE_WRITE|MODE_8BITREG);
-	//SysPrintf("recVUMI_FCAND  \n");
+	//Console::WriteLn("recVUMI_FCAND");
 	MOV32MtoR( EAX, VU_VI_ADDR(REG_CLIP_FLAG, 1) );
 	XOR32RtoR( ftreg, ftreg );
 	AND32ItoR( EAX, VU->code & 0xFFFFFF );
@@ -1435,7 +1444,7 @@ void recVUMI_FCAND( VURegs *VU, int info )
 void recVUMI_FCEQ( VURegs *VU, int info )
 {
 	int ftreg = ALLOCVI(1, MODE_WRITE|MODE_8BITREG);
-	//SysPrintf("recVUMI_FCEQ  \n");
+	//Console::WriteLn("recVUMI_FCEQ");
 	MOV32MtoR( EAX, VU_VI_ADDR(REG_CLIP_FLAG, 1) );
 	AND32ItoR( EAX, 0xffffff );
 	XOR32RtoR( ftreg, ftreg );
@@ -1452,7 +1461,7 @@ void recVUMI_FCEQ( VURegs *VU, int info )
 void recVUMI_FCOR( VURegs *VU, int info )
 {
 	int ftreg;
-	//SysPrintf("recVUMI_FCOR\n");
+	//Console::WriteLn("recVUMI_FCOR");
 	ftreg = ALLOCVI(1, MODE_WRITE);
 	MOV32MtoR( ftreg, VU_VI_ADDR(REG_CLIP_FLAG, 1) );
 	OR32ItoR ( ftreg, VU->code );
@@ -1469,7 +1478,7 @@ void recVUMI_FCOR( VURegs *VU, int info )
 void recVUMI_FCSET( VURegs *VU, int info )
 {
 	u32 addr = VU_VI_ADDR(REG_CLIP_FLAG, 0);
-	//SysPrintf("recVUMI_FCSET  \n");
+	//Console::WriteLn("recVUMI_FCSET");
 	MOV32ItoM(addr ? addr : VU_VI_ADDR(REG_CLIP_FLAG, 2), VU->code&0xffffff );
 
 	if( !(info & (PROCESS_VU_SUPER|PROCESS_VU_COP2)) )
@@ -1485,7 +1494,7 @@ void recVUMI_FCGET( VURegs *VU, int info )
 {
 	int ftreg;
 	if(_Ft_ == 0) return;
-	//SysPrintf("recVUMI_FCGET  \n");
+	//Console::WriteLn("recVUMI_FCGET");
 	ftreg = ALLOCVI(_Ft_, MODE_WRITE);
 
 	MOV32MtoR(ftreg, VU_VI_ADDR(REG_CLIP_FLAG, 1));
@@ -1507,7 +1516,7 @@ void recVUMI_FCGET( VURegs *VU, int info )
 void recVUMI_MFP(VURegs *VU, int info)
 {
 	if ( (_Ft_ == 0) || (_X_Y_Z_W == 0) ) return; 
-	//SysPrintf("recVUMI_MFP  \n");
+	//Console::WriteLn("recVUMI_MFP");
 	if( _XYZW_SS ) {
 		_vuFlipRegSS(VU, EEREC_T);
 		SSE_MOVSS_M32_to_XMM(EEREC_TEMP, VU_VI_ADDR(REG_P, 1));
@@ -1533,7 +1542,7 @@ void recVUMI_MFP(VURegs *VU, int info)
 static PCSX2_ALIGNED16(float s_tempmem[4]);
 void recVUMI_WAITP(VURegs *VU, int info)
 {
-	//SysPrintf("recVUMI_WAITP \n");
+	//Console::WriteLn("recVUMI_WAITP");
 //	if( info & PROCESS_VU_SUPER )
 //		SuperVUFlush(1, 1);
 }
@@ -1547,7 +1556,7 @@ void recVUMI_WAITP(VURegs *VU, int info)
 //------------------------------------------------------------------
 void vuSqSumXYZ(int regd, int regs, int regtemp) // regd.x =  x ^ 2 + y ^ 2 + z ^ 2
 {
-	//SysPrintf("VU: SUMXYZ\n");
+	//Console::WriteLn("VU: SUMXYZ");
 	if( cpucaps.hasStreamingSIMD4Extensions )
 	{
 		SSE_MOVAPS_XMM_to_XMM(regd, regs);
@@ -1582,7 +1591,7 @@ void vuSqSumXYZ(int regd, int regs, int regtemp) // regd.x =  x ^ 2 + y ^ 2 + z 
 //------------------------------------------------------------------
 void recVUMI_ESADD( VURegs *VU, int info)
 {
-	//SysPrintf("VU: ESADD\n");
+	//Console::WriteLn("VU: ESADD");
 	assert( VU == &VU1 );
 	if( EEREC_TEMP == EEREC_D ) { // special code to reset P ( FixMe: don't know if this is still needed! (cottonvibes) )
 		Console::Notice("ESADD: Resetting P reg!!!\n");
@@ -1601,7 +1610,7 @@ void recVUMI_ESADD( VURegs *VU, int info)
 //------------------------------------------------------------------
 void recVUMI_ERSADD( VURegs *VU, int info )
 {
-	//SysPrintf("VU: ERSADD\n");
+	//Console::WriteLn("VU: ERSADD");
 	assert( VU == &VU1 );
 	vuSqSumXYZ(EEREC_D, EEREC_S, EEREC_TEMP);
 	// don't use RCPSS (very bad precision)
@@ -1618,7 +1627,7 @@ void recVUMI_ERSADD( VURegs *VU, int info )
 //------------------------------------------------------------------
 void recVUMI_ELENG( VURegs *VU, int info )
 {
-	//SysPrintf("VU: ELENG\n");
+	//Console::WriteLn("VU: ELENG");
 	assert( VU == &VU1 );
 	vuSqSumXYZ(EEREC_D, EEREC_S, EEREC_TEMP);
 	if (CHECK_VU_OVERFLOW) SSE_MINSS_M32_to_XMM(EEREC_D, (uptr)g_maxvals); // Only need to do positive clamp since (x ^ 2 + y ^ 2 + z ^ 2) is positive
@@ -1633,7 +1642,7 @@ void recVUMI_ELENG( VURegs *VU, int info )
 //------------------------------------------------------------------
 void recVUMI_ERLENG( VURegs *VU, int info )
 {
-	//SysPrintf("VU: ERLENG\n");
+	//Console::WriteLn("VU: ERLENG");
 	assert( VU == &VU1 );
 	vuSqSumXYZ(EEREC_D, EEREC_S, EEREC_TEMP);
 	if (CHECK_VU_OVERFLOW) SSE_MINSS_M32_to_XMM(EEREC_D, (uptr)g_maxvals); // Only need to do positive clamp since (x ^ 2 + y ^ 2 + z ^ 2) is positive
@@ -1652,7 +1661,7 @@ void recVUMI_ERLENG( VURegs *VU, int info )
 void recVUMI_EATANxy( VURegs *VU, int info )
 {
 	assert( VU == &VU1 );
-	//SysPrintf("recVUMI_EATANxy  \n");
+	//Console::WriteLn("recVUMI_EATANxy");
 	if( (xmmregs[EEREC_S].mode & MODE_WRITE) && (xmmregs[EEREC_S].mode&MODE_NOFLUSH) ) {
 		SSE_MOVLPS_XMM_to_M64((uptr)s_tempmem, EEREC_S);
 		FLD32((uptr)&s_tempmem[0]);
@@ -1680,7 +1689,7 @@ void recVUMI_EATANxy( VURegs *VU, int info )
 void recVUMI_EATANxz( VURegs *VU, int info )
 {
 	assert( VU == &VU1 );
-	//SysPrintf("recVUMI_EATANxz  \n");
+	//Console::WriteLn("recVUMI_EATANxz");
 	if( (xmmregs[EEREC_S].mode & MODE_WRITE) && (xmmregs[EEREC_S].mode&MODE_NOFLUSH) ) {
 		SSE_MOVLPS_XMM_to_M64((uptr)s_tempmem, EEREC_S);
 		FLD32((uptr)&s_tempmem[0]);
@@ -1706,7 +1715,7 @@ void recVUMI_EATANxz( VURegs *VU, int info )
 //------------------------------------------------------------------
 void recVUMI_ESUM( VURegs *VU, int info )
 {
-	//SysPrintf("VU: ESUM\n");
+	//Console::WriteLn("VU: ESUM");
 	assert( VU == &VU1 );
 
 	if( cpucaps.hasStreamingSIMD3Extensions ) {
@@ -1735,7 +1744,7 @@ void recVUMI_ESUM( VURegs *VU, int info )
 void recVUMI_ERCPR( VURegs *VU, int info )
 {
 	assert( VU == &VU1 );
-	//SysPrintf("VU1: ERCPR\n");
+	//Console::WriteLn("VU1: ERCPR");
 
 	// don't use RCPSS (very bad precision)
 	switch ( _Fsf_ ) {
@@ -1780,7 +1789,7 @@ void recVUMI_ESQRT( VURegs *VU, int info )
 {
 	assert( VU == &VU1 );
 
-	//SysPrintf("VU1: ESQRT\n");
+	//Console::WriteLn("VU1: ESQRT");
 	_unpackVFSS_xyzw(EEREC_TEMP, EEREC_S, _Fsf_);
 	SSE_ANDPS_M128_to_XMM(EEREC_TEMP, (uptr)const_clip); // abs(x)
 	if (CHECK_VU_OVERFLOW) SSE_MINSS_M32_to_XMM(EEREC_TEMP, (uptr)g_maxvals); // Only need to do positive clamp
@@ -1799,7 +1808,7 @@ void recVUMI_ERSQRT( VURegs *VU, int info )
 	int t1reg = _vuGetTempXMMreg(info);
  
 	assert( VU == &VU1 );
-	//SysPrintf("VU1: ERSQRT\n");
+	//Console::WriteLn("VU1: ERSQRT");
 
 	_unpackVFSS_xyzw(EEREC_TEMP, EEREC_S, _Fsf_);
 	SSE_ANDPS_M128_to_XMM(EEREC_TEMP, (uptr)const_clip); // abs(x)
@@ -1833,7 +1842,7 @@ void recVUMI_ESIN( VURegs *VU, int info )
 {
 	assert( VU == &VU1 );
 
-	//SysPrintf("recVUMI_ESIN  \n");
+	//Console::WriteLn("recVUMI_ESIN");
 	if( (xmmregs[EEREC_S].mode & MODE_WRITE) && (xmmregs[EEREC_S].mode&MODE_NOFLUSH) ) {
 		switch(_Fsf_) {
 			case 0: SSE_MOVSS_XMM_to_M32((uptr)s_tempmem, EEREC_S);
@@ -1864,7 +1873,7 @@ void recVUMI_EATAN( VURegs *VU, int info )
 {
 	assert( VU == &VU1 );
 
-	//SysPrintf("recVUMI_EATAN  \n");
+	//Console::WriteLn("recVUMI_EATAN");
 	if( (xmmregs[EEREC_S].mode & MODE_WRITE) && (xmmregs[EEREC_S].mode&MODE_NOFLUSH) ) {
 		switch(_Fsf_) {
 			case 0: SSE_MOVSS_XMM_to_M32((uptr)s_tempmem, EEREC_S);
@@ -1894,7 +1903,7 @@ void recVUMI_EATAN( VURegs *VU, int info )
 void recVUMI_EEXP( VURegs *VU, int info )
 {
 	assert( VU == &VU1 );
-	//SysPrintf("recVUMI_EEXP  \n");
+	//Console::WriteLn("recVUMI_EEXP");
 	FLDL2E();
 
 	if( (xmmregs[EEREC_S].mode & MODE_WRITE) && (xmmregs[EEREC_S].mode&MODE_NOFLUSH) ) {
@@ -1937,7 +1946,7 @@ void recVUMI_XITOP( VURegs *VU, int info )
 {
 	int ftreg;
 	if (_Ft_ == 0) return;
-	//SysPrintf("recVUMI_XITOP  \n");
+	//Console::WriteLn("recVUMI_XITOP");
 	ftreg = ALLOCVI(_Ft_, MODE_WRITE);
 	MOVZX32M16toR( ftreg, (uptr)&VU->vifRegs->itop );
 }
@@ -1951,7 +1960,7 @@ void recVUMI_XTOP( VURegs *VU, int info )
 {
 	int ftreg;
 	if ( _Ft_ == 0 ) return;
-	//SysPrintf("recVUMI_XTOP  \n");
+	//Console::WriteLn("recVUMI_XTOP");
 	ftreg = ALLOCVI(_Ft_, MODE_WRITE);
 	MOVZX32M16toR( ftreg, (uptr)&VU->vifRegs->top );
 }

@@ -18,8 +18,8 @@
 
 #include "PrecompiledHeader.h"
 
-#include "Misc.h"
-#include "ix86/ix86.h"
+#include "System.h"
+#include "ix86.h"
 
 // used to make sure regs don't get changed while in recompiler
 // use FreezeMMXRegs, FreezeXMMRegs
@@ -28,11 +28,24 @@ u8 g_globalMMXSaved = 0;
 u8 g_globalXMMSaved = 0;
 
 PCSX2_ALIGNED16( static u64 g_globalMMXData[8] );
-PCSX2_ALIGNED16( static u64 g_globalXMMData[2*XMMREGS] );
+PCSX2_ALIGNED16( static u64 g_globalXMMData[2*iREGCNT_XMM] );
+
+namespace x86Emitter
+{
+	void xStoreReg( const xRegisterSSE& src )
+	{
+		xMOVDQA( &g_globalXMMData[src.Id*2], src );
+	}
+
+	void xRestoreReg( const xRegisterSSE& dest )
+	{
+		xMOVDQA( dest, &g_globalXMMData[dest.Id*2] );
+	}
+}
 
 
 /////////////////////////////////////////////////////////////////////
-// SetCPUState -- for assugnment of SSE roundmodes and clampmodes.
+// SetCPUState -- for assignment of SSE roundmodes and clampmodes.
 
 u32 g_sseMXCSR = DEFAULT_sseMXCSR; 
 u32 g_sseVUMXCSR = DEFAULT_sseVUMXCSR;
@@ -61,7 +74,7 @@ void SetCPUState(u32 sseMXCSR, u32 sseVUMXCSR)
 #ifdef _MSC_VER
 	__asm ldmxcsr g_sseMXCSR; // set the new sse control
 #else
-    __asm__("ldmxcsr %0" : : "m"(g_sseMXCSR) );
+    __asm__("ldmxcsr %[g_sseMXCSR]" : : [g_sseMXCSR]"m"(g_sseMXCSR) );
 #endif
 	//g_sseVUMXCSR = g_sseMXCSR|0x6000;
 }
@@ -108,16 +121,16 @@ __forceinline void FreezeMMXRegs_(int save)
 #else
         __asm__(
 			".intel_syntax noprefix\n"
-			"movq [%0+0x00], mm0\n"
-			"movq [%0+0x08], mm1\n"
-			"movq [%0+0x10], mm2\n"
-			"movq [%0+0x18], mm3\n"
-			"movq [%0+0x20], mm4\n"
-			"movq [%0+0x28], mm5\n"
-			"movq [%0+0x30], mm6\n"
-			"movq [%0+0x38], mm7\n"
+			"movq [%[g_globalMMXData]+0x00], mm0\n"
+			"movq [%[g_globalMMXData]+0x08], mm1\n"
+			"movq [%[g_globalMMXData]+0x10], mm2\n"
+			"movq [%[g_globalMMXData]+0x18], mm3\n"
+			"movq [%[g_globalMMXData]+0x20], mm4\n"
+			"movq [%[g_globalMMXData]+0x28], mm5\n"
+			"movq [%[g_globalMMXData]+0x30], mm6\n"
+			"movq [%[g_globalMMXData]+0x38], mm7\n"
 			"emms\n"
-			".att_syntax\n" : : "r"(g_globalMMXData)
+			".att_syntax\n" : : [g_globalMMXData]"r"(g_globalMMXData)
 		);
 #endif
 
@@ -148,16 +161,16 @@ __forceinline void FreezeMMXRegs_(int save)
 #else
         __asm__(
 			".intel_syntax noprefix\n"
-			"movq mm0, [%0+0x00]\n"
-			"movq mm1, [%0+0x08]\n"
-			"movq mm2, [%0+0x10]\n"
-			"movq mm3, [%0+0x18]\n"
-			"movq mm4, [%0+0x20]\n"
-			"movq mm5, [%0+0x28]\n"
-			"movq mm6, [%0+0x30]\n"
-			"movq mm7, [%0+0x38]\n"
+			"movq mm0, [%[g_globalMMXData]+0x00]\n"
+			"movq mm1, [%[g_globalMMXData]+0x08]\n"
+			"movq mm2, [%[g_globalMMXData]+0x10]\n"
+			"movq mm3, [%[g_globalMMXData]+0x18]\n"
+			"movq mm4, [%[g_globalMMXData]+0x20]\n"
+			"movq mm5, [%[g_globalMMXData]+0x28]\n"
+			"movq mm6, [%[g_globalMMXData]+0x30]\n"
+			"movq mm7, [%[g_globalMMXData]+0x38]\n"
 			"emms\n"
-			".att_syntax\n" : : "r"(g_globalMMXData)
+			".att_syntax\n" : :  [g_globalMMXData]"r"(g_globalMMXData)
 		);
 #endif
 	}
@@ -195,15 +208,15 @@ __forceinline void FreezeXMMRegs_(int save)
 #else
         __asm__(
 			".intel_syntax noprefix\n"
-			"movaps [%0+0x00], xmm0\n"
-			"movaps [%0+0x10], xmm1\n"
-			"movaps [%0+0x20], xmm2\n"
-			"movaps [%0+0x30], xmm3\n"
-			"movaps [%0+0x40], xmm4\n"
-			"movaps [%0+0x50], xmm5\n"
-			"movaps [%0+0x60], xmm6\n"
-			"movaps [%0+0x70], xmm7\n"
-			".att_syntax\n" : : "r"(g_globalXMMData)
+			"movaps [%[g_globalXMMData]+0x00], xmm0\n"
+			"movaps [%[g_globalXMMData]+0x10], xmm1\n"
+			"movaps [%[g_globalXMMData]+0x20], xmm2\n"
+			"movaps [%[g_globalXMMData]+0x30], xmm3\n"
+			"movaps [%[g_globalXMMData]+0x40], xmm4\n"
+			"movaps [%[g_globalXMMData]+0x50], xmm5\n"
+			"movaps [%[g_globalXMMData]+0x60], xmm6\n"
+			"movaps [%[g_globalXMMData]+0x70], xmm7\n"
+			".att_syntax\n" : :  [g_globalXMMData]"r"(g_globalXMMData)
 		);
 
 #endif // _MSC_VER
@@ -237,15 +250,15 @@ __forceinline void FreezeXMMRegs_(int save)
 #else
         __asm__(
 			".intel_syntax noprefix\n"
-			"movaps xmm0, [%0+0x00]\n"
-			"movaps xmm1, [%0+0x10]\n"
-			"movaps xmm2, [%0+0x20]\n"
-			"movaps xmm3, [%0+0x30]\n"
-			"movaps xmm4, [%0+0x40]\n"
-			"movaps xmm5, [%0+0x50]\n"
-			"movaps xmm6, [%0+0x60]\n"
-			"movaps xmm7, [%0+0x70]\n"
-			".att_syntax\n" : : "r"(g_globalXMMData)
+			"movaps xmm0, [%[g_globalXMMData]+0x00]\n"
+			"movaps xmm1, [%[g_globalXMMData]+0x10]\n"
+			"movaps xmm2, [%[g_globalXMMData]+0x20]\n"
+			"movaps xmm3, [%[g_globalXMMData]+0x30]\n"
+			"movaps xmm4, [%[g_globalXMMData]+0x40]\n"
+			"movaps xmm5, [%[g_globalXMMData]+0x50]\n"
+			"movaps xmm6, [%[g_globalXMMData]+0x60]\n"
+			"movaps xmm7, [%[g_globalXMMData]+0x70]\n"
+			".att_syntax\n" : : [g_globalXMMData]"r"(g_globalXMMData)
 		);
 
 #endif // _MSC_VER
@@ -254,3 +267,4 @@ __forceinline void FreezeXMMRegs_(int save)
 #ifndef __INTEL_COMPILER
 }
 #endif
+

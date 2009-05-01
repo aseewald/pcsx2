@@ -20,8 +20,9 @@
 	<Configurations>
 		<Configuration
 			Name="Debug|Win32"
+			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="1"
-			InheritedPropertySheets=".\vsprops\common.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\3rdpartyDeps.vsprops;.\vsprops\debug.vsprops;.\vsprops\devbuild.vsprops;..\..\..\common\vsprops\pthreads.vsprops"
+			InheritedPropertySheets=".\vsprops\common.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\3rdpartyDeps.vsprops;.\vsprops\debug.vsprops;.\vsprops\devbuild.vsprops;..\..\..\common\vsprops\pthreads.vsprops;..\..\..\common\vsprops\IncrementalLinking.vsprops"
 			UseOfMFC="0"
 			ATLMinimizesCRunTimeLibraryUsage="false"
 			CharacterSet="2"
@@ -52,10 +53,8 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories=""
-				MinimalRebuild="true"
 				ExceptionHandling="2"
 				SmallerTypeCheck="false"
-				EnableFunctionLevelLinking="true"
 				UsePrecompiledHeader="2"
 				PrecompiledHeaderThrough="PrecompiledHeader.h"
 				PrecompiledHeaderFile="$(IntDir)\$(TargetName).pch"
@@ -75,7 +74,6 @@
 				AdditionalOptions="/MACHINE:I386"
 				AdditionalDependencies="zlib.lib"
 				OutputFile="$(OutDir)\$(ProjectName)-dbg.exe"
-				LinkIncremental="2"
 			/>
 			<Tool
 				Name="VCALinkTool"
@@ -102,7 +100,7 @@
 		<Configuration
 			Name="Devel|Win32"
 			ConfigurationType="1"
-			InheritedPropertySheets=".\vsprops\common.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\3rdpartyDeps.vsprops;.\vsprops\devbuild.vsprops;..\..\..\common\vsprops\pthreads.vsprops"
+			InheritedPropertySheets=".\vsprops\common.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\3rdpartyDeps.vsprops;.\vsprops\devbuild.vsprops;..\..\..\common\vsprops\pthreads.vsprops;..\..\..\common\vsprops\IncrementalLinking.vsprops"
 			UseOfMFC="0"
 			ATLMinimizesCRunTimeLibraryUsage="false"
 			CharacterSet="2"
@@ -134,21 +132,18 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="3"
-				InlineFunctionExpansion="2"
 				FavorSizeOrSpeed="1"
-				WholeProgramOptimization="false"
 				AdditionalIncludeDirectories=""
 				PreprocessorDefinitions="NDEBUG"
-				StringPooling="true"
 				ExceptionHandling="2"
 				SmallerTypeCheck="false"
 				BufferSecurityCheck="false"
-				EnableFunctionLevelLinking="false"
 				UsePrecompiledHeader="2"
 				PrecompiledHeaderThrough="PrecompiledHeader.h"
 				PrecompiledHeaderFile="$(IntDir)\$(TargetName).pch"
 				WarningLevel="3"
 				SuppressStartupBanner="true"
+				DebugInformationFormat="3"
 				CompileAs="2"
 			/>
 			<Tool
@@ -191,7 +186,7 @@
 		<Configuration
 			Name="Release|Win32"
 			ConfigurationType="1"
-			InheritedPropertySheets=".\vsprops\common.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\3rdpartyDeps.vsprops;.\vsprops\release.vsprops;..\..\..\common\vsprops\pthreads.vsprops"
+			InheritedPropertySheets=".\vsprops\common.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\3rdpartyDeps.vsprops;..\..\..\common\vsprops\pthreads.vsprops;..\..\..\common\vsprops\GlobalLinking.vsprops"
 			UseOfMFC="0"
 			ATLMinimizesCRunTimeLibraryUsage="false"
 			CharacterSet="2"
@@ -222,7 +217,6 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				Optimization="3"
 				EnableFiberSafeOptimizations="true"
 				AdditionalIncludeDirectories=""
 				PreprocessorDefinitions="NDEBUG"
@@ -912,6 +906,14 @@
 			Name="Misc"
 			>
 			<File
+				RelativePath="..\..\Dump.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\Dump.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\HashMap.h"
 				>
 			</File>
@@ -952,7 +954,6 @@
 					<Tool
 						Name="VCCLCompilerTool"
 						UsePrecompiledHeader="1"
-						PrecompiledHeaderFile="$(IntDir)\$(TargetName).pch"
 					/>
 				</FileConfiguration>
 				<FileConfiguration
@@ -2316,10 +2317,26 @@
 					<File
 						RelativePath="..\..\Subsystems\Iop\IopHwRead.cpp"
 						>
+						<FileConfiguration
+							Name="Debug|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
 					</File>
 					<File
 						RelativePath="..\..\Subsystems\Iop\IopHwWrite.cpp"
 						>
+						<FileConfiguration
+							Name="Debug|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
 					</File>
 					<File
 						RelativePath="..\..\IopMem.cpp"
@@ -2332,10 +2349,26 @@
 					<File
 						RelativePath="..\..\Subsystems\Iop\IopMemory.cpp"
 						>
+						<FileConfiguration
+							Name="Debug|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
 					</File>
 					<File
 						RelativePath="..\..\Subsystems\Iop\IopSifMemory.cpp"
 						>
+						<FileConfiguration
+							Name="Debug|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
 					</File>
 				</Filter>
 			</Filter>
@@ -2593,7 +2626,19 @@
 							>
 						</File>
 						<File
+							RelativePath="..\..\x86\microVU_Analyze.inl"
+							>
+						</File>
+						<File
 							RelativePath="..\..\x86\microVU_Compile.inl"
+							>
+						</File>
+						<File
+							RelativePath="..\..\x86\microVU_Execute.inl"
+							>
+						</File>
+						<File
+							RelativePath="..\..\x86\microVU_Log.inl"
 							>
 						</File>
 						<File
@@ -2982,7 +3027,7 @@
 			</Filter>
 		</Filter>
 		<Filter
-			Name="Dynarec Emitter"
+			Name="x86Emitter"
 			>
 			<File
 				RelativePath="..\..\x86\ix86\ix86.cpp"
@@ -3025,149 +3070,56 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\x86\ix86\ix86.inl"
+				RelativePath="..\..\x86\ix86\ix86_3dnow.cpp"
 				>
-			</File>
-			<File
-				RelativePath="..\..\x86\ix86\ix86_3dnow.inl"
-				>
-				<FileConfiguration
-					Name="Devel vm|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						UsePrecompiledHeader="0"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Debug vm|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						UsePrecompiledHeader="0"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Release vm|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						UsePrecompiledHeader="0"
-					/>
-				</FileConfiguration>
 			</File>
 			<File
 				RelativePath="..\..\x86\ix86\ix86_cpudetect.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\x86\ix86\ix86_fpu.inl"
-				>
-				<FileConfiguration
-					Name="Debug|Win32"
-					>
-					<Tool
-						Name="VCCustomBuildTool"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Devel vm|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						UsePrecompiledHeader="0"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Debug vm|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						UsePrecompiledHeader="0"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Release vm|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						UsePrecompiledHeader="0"
-					/>
-				</FileConfiguration>
-			</File>
-			<File
-				RelativePath="..\..\x86\ix86\ix86_macros.h"
+				RelativePath="..\..\x86\ix86\ix86_fpu.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\x86\ix86\ix86_mmx.inl"
+				RelativePath="..\..\x86\ix86\ix86_inlines.inl"
 				>
-				<FileConfiguration
-					Name="Debug|Win32"
-					>
-					<Tool
-						Name="VCCustomBuildTool"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Devel vm|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						UsePrecompiledHeader="0"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Debug vm|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						UsePrecompiledHeader="0"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Release vm|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						UsePrecompiledHeader="0"
-					/>
-				</FileConfiguration>
 			</File>
 			<File
-				RelativePath="..\..\x86\ix86\ix86_sse.inl"
+				RelativePath="..\..\x86\ix86\ix86_instructions.h"
 				>
-				<FileConfiguration
-					Name="Debug|Win32"
-					>
-					<Tool
-						Name="VCCustomBuildTool"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Devel vm|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						UsePrecompiledHeader="0"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Debug vm|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						UsePrecompiledHeader="0"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Release vm|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						UsePrecompiledHeader="0"
-					/>
-				</FileConfiguration>
+			</File>
+			<File
+				RelativePath="..\..\x86\ix86\ix86_internal.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\x86\ix86\ix86_jmp.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\x86\ix86\ix86_legacy.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\x86\ix86\ix86_legacy_instructions.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\x86\ix86\ix86_legacy_internal.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\x86\ix86\ix86_legacy_sse.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\x86\ix86\ix86_legacy_types.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\x86\ix86\ix86_simd.cpp"
+				>
 			</File>
 			<File
 				RelativePath="..\..\x86\ix86\ix86_sse_helpers.h"
@@ -3181,6 +3133,74 @@
 				RelativePath="..\..\x86\ix86\ix86_types.h"
 				>
 			</File>
+			<File
+				RelativePath="..\..\x86\ix86\ix86_writers.inl"
+				>
+			</File>
+			<Filter
+				Name="Implement"
+				>
+				<File
+					RelativePath="..\..\x86\ix86\implement\dwshift.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\x86\ix86\implement\group1.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\x86\ix86\implement\group2.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\x86\ix86\implement\group3.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\x86\ix86\implement\incdec.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\x86\ix86\implement\jmpcall.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\x86\ix86\implement\movs.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\x86\ix86\implement\test.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\x86\ix86\implement\xchg.h"
+					>
+				</File>
+				<Filter
+					Name="xmm"
+					>
+					<File
+						RelativePath="..\..\x86\ix86\implement\xmm\arithmetic.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\x86\ix86\implement\xmm\basehelpers.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\x86\ix86\implement\xmm\comparisons.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\x86\ix86\implement\xmm\moremovs.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\x86\ix86\implement\xmm\shufflepack.h"
+						>
+					</File>
+				</Filter>
+			</Filter>
 		</Filter>
 		<File
 			RelativePath="..\..\Common.h"

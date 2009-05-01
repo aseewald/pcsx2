@@ -25,10 +25,6 @@
 #include "VUops.h"
 #include "VUmicro.h"
 
-//namespace R5900 {
-//namespace Interpreter {
-//namespace OpcodeImpl{
-
 using namespace R5900;
 using namespace R5900::Interpreter;
 
@@ -48,7 +44,7 @@ void BC2F()
 { 
 	if (CP2COND == 0) 
 	{ 
-		SysPrintf("VU0 Macro Branch \n"); 
+		Console::WriteLn("VU0 Macro Branch"); 
 		intDoBranch(_BranchTarget_); 
 	}
 }
@@ -56,7 +52,7 @@ void BC2T()
 { 
 	if (CP2COND == 1) 
 	{ 
-		SysPrintf("VU0 Macro Branch \n"); 
+		Console::WriteLn("VU0 Macro Branch"); 
 		intDoBranch(_BranchTarget_); 
 	}
 }
@@ -65,7 +61,7 @@ void BC2FL()
 { 
 	if (CP2COND == 0) 
 	{ 
-		SysPrintf("VU0 Macro Branch \n"); 
+		Console::WriteLn("VU0 Macro Branch"); 
 		intDoBranch(_BranchTarget_); 
 	}
 	else 
@@ -77,7 +73,7 @@ void BC2TL()
 { 
 	if (CP2COND == 1) 
 	{ 
-		SysPrintf("VU0 Macro Branch \n"); 
+		Console::WriteLn("VU0 Macro Branch"); 
 		intDoBranch(_BranchTarget_); 
 	}
 	else 
@@ -85,5 +81,3 @@ void BC2TL()
 		cpuRegs.pc+= 4;
 	}
 }
-
-//}}}

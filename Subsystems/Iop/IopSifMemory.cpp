@@ -9,7 +9,7 @@ namespace IopMemory
 // ------------------------------------------------------------------------
 u8 __fastcall SifRead8( u32 iopaddr )
 {
-	SIF_LOG("SIFreg Read8 addr=0x%x [ignored, returns zero]\n", iopaddr);
+	SIF_LOG("SIFreg Read8 addr=0x%x [ignored, returns zero]", iopaddr);
 	return 0;
 }
 
@@ -40,7 +40,7 @@ u16 __fastcall SifRead16( u32 iopaddr )
 			ret = psxSu16( iopaddr );
 		break;
 	}
-	SIF_LOG("SIFreg Read addr=0x%x value=0x%x\n", iopaddr, ret);
+	SIF_LOG("SIFreg Read addr=0x%x value=0x%x", iopaddr, ret);
 	return ret;
 }
 
@@ -79,7 +79,7 @@ u32 __fastcall SifRead32( u32 iopaddr )
 			ret = psxSu32(iopaddr);
 		break;
 	}
-	SIF_LOG("Sif reg read %x value %x\n", iopaddr, ret);
+	SIF_LOG("Sif reg read %x value %x", iopaddr, ret);
 	return ret;
 }
 

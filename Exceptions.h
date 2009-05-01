@@ -16,11 +16,7 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
-#ifndef _PCSX2_EXCEPTIONS_H_
-#define _PCSX2_EXCEPTIONS_H_
-
-#include <stdexcept>
-#include "StringUtils.h"
+#pragma once
 
 // This class provides an easy and clean method for ensuring objects are not copyable.
 class NoncopyableObject
@@ -74,8 +70,18 @@ namespace Exception
 		virtual ~BaseException() throw()=0;	// the =0; syntax forces this class into "abstract" mode.
 		explicit BaseException( const std::string& msg="Unhandled exception." ) :
 			m_message( msg )
-		{}
-
+		{
+			// Major hack. After a couple of tries, I'm still not managing to get Linux to catch these exceptions, so that the user actually
+			// gets the messages. Since Console is unavailable at this level, I'm using a simple printf, which of course, means it doesn't get
+			// logged. But at least the user sees it. 
+			// 
+			// I'll rip this out once I get Linux to actually catch these exceptions. Say, in BeginExecution or StartGui, like I would expect.
+			// -- arcum42
+#ifdef __LINUX__
+			printf(msg.c_str());
+#endif
+		}
+		
 		const std::string& Message() const { return m_message; }
 		const char* cMessage() const { return m_message.c_str(); }
 	};
@@ -339,7 +345,7 @@ namespace Exception
 			StateLoadError_Recoverable( fmt_string( "Unknown or unsupported savestate version: 0x%x", version ) )
 		{}
 
-		explicit UnsupportedStateVersion( int version, const std::string& msg ) :
+		explicit UnsupportedStateVersion( __unused int version, const std::string& msg ) :
 			StateLoadError_Recoverable( msg ) {}
 	};
 
@@ -370,5 +376,3 @@ namespace Exception
 		{}
 	};
 }
-
-#endif

@@ -29,37 +29,7 @@
 PCSX2_ALIGNED16(microVU microVU0);
 PCSX2_ALIGNED16(microVU microVU1);
 
-PCSX2_ALIGNED16(const u32 mVU_absclip[4])	= {0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff};
-PCSX2_ALIGNED16(const u32 mVU_signbit[4])	= {0x80000000, 0x80000000, 0x80000000, 0x80000000};
-PCSX2_ALIGNED16(const u32 mVU_minvals[4])	= {0xff7fffff, 0xff7fffff, 0xff7fffff, 0xff7fffff};
-PCSX2_ALIGNED16(const u32 mVU_maxvals[4])	= {0x7f7fffff, 0x7f7fffff, 0x7f7fffff, 0x7f7fffff};
-PCSX2_ALIGNED16(const u32 mVU_one[4])		= {0x3f800000, 0x3f800000, 0x3f800000, 0x3f800000};
-PCSX2_ALIGNED16(const u32 mVU_T1[4])		= {0x3f7ffff5, 0x3f7ffff5, 0x3f7ffff5, 0x3f7ffff5};
-PCSX2_ALIGNED16(const u32 mVU_T2[4])		= {0xbeaaa61c, 0xbeaaa61c, 0xbeaaa61c, 0xbeaaa61c};
-PCSX2_ALIGNED16(const u32 mVU_T3[4])		= {0x3e4c40a6, 0x3e4c40a6, 0x3e4c40a6, 0x3e4c40a6};
-PCSX2_ALIGNED16(const u32 mVU_T4[4])		= {0xbe0e6c63, 0xbe0e6c63, 0xbe0e6c63, 0xbe0e6c63};
-PCSX2_ALIGNED16(const u32 mVU_T5[4])		= {0x3dc577df, 0x3dc577df, 0x3dc577df, 0x3dc577df};
-PCSX2_ALIGNED16(const u32 mVU_T6[4])		= {0xbd6501c4, 0xbd6501c4, 0xbd6501c4, 0xbd6501c4};
-PCSX2_ALIGNED16(const u32 mVU_T7[4])		= {0x3cb31652, 0x3cb31652, 0x3cb31652, 0x3cb31652};
-PCSX2_ALIGNED16(const u32 mVU_T8[4])		= {0xbb84d7e7, 0xbb84d7e7, 0xbb84d7e7, 0xbb84d7e7};
-PCSX2_ALIGNED16(const u32 mVU_Pi4[4])		= {0x3f490fdb, 0x3f490fdb, 0x3f490fdb, 0x3f490fdb};
-PCSX2_ALIGNED16(const u32 mVU_S2[4])		= {0xbe2aaaa4, 0xbe2aaaa4, 0xbe2aaaa4, 0xbe2aaaa4};
-PCSX2_ALIGNED16(const u32 mVU_S3[4])		= {0x3c08873e, 0x3c08873e, 0x3c08873e, 0x3c08873e};
-PCSX2_ALIGNED16(const u32 mVU_S4[4])		= {0xb94fb21f, 0xb94fb21f, 0xb94fb21f, 0xb94fb21f};
-PCSX2_ALIGNED16(const u32 mVU_S5[4])		= {0x362e9c14, 0x362e9c14, 0x362e9c14, 0x362e9c14};
-PCSX2_ALIGNED16(const u32 mVU_E1[4])		= {0x3e7fffa8, 0x3e7fffa8, 0x3e7fffa8, 0x3e7fffa8};
-PCSX2_ALIGNED16(const u32 mVU_E2[4])		= {0x3d0007f4, 0x3d0007f4, 0x3d0007f4, 0x3d0007f4};
-PCSX2_ALIGNED16(const u32 mVU_E3[4])		= {0x3b29d3ff, 0x3b29d3ff, 0x3b29d3ff, 0x3b29d3ff};
-PCSX2_ALIGNED16(const u32 mVU_E4[4])		= {0x3933e553, 0x3933e553, 0x3933e553, 0x3933e553};
-PCSX2_ALIGNED16(const u32 mVU_E5[4])		= {0x36b63510, 0x36b63510, 0x36b63510, 0x36b63510};
-PCSX2_ALIGNED16(const u32 mVU_E6[4])		= {0x353961ac, 0x353961ac, 0x353961ac, 0x353961ac};
-PCSX2_ALIGNED16(const float mVU_FTOI_4[4])	= {16.0, 16.0, 16.0, 16.0};
-PCSX2_ALIGNED16(const float mVU_FTOI_12[4])	= {4096.0, 4096.0, 4096.0, 4096.0};
-PCSX2_ALIGNED16(const float mVU_FTOI_15[4])	= {32768.0, 32768.0, 32768.0, 32768.0};
-PCSX2_ALIGNED16(const float mVU_ITOF_4[4])	= {0.0625f, 0.0625f, 0.0625f, 0.0625f};
-PCSX2_ALIGNED16(const float mVU_ITOF_12[4])	= {0.000244140625, 0.000244140625, 0.000244140625, 0.000244140625};
-PCSX2_ALIGNED16(const float mVU_ITOF_15[4])	= {0.000030517578125, 0.000030517578125, 0.000030517578125, 0.000030517578125};
-
+declareAllVariables // Declares All Global Variables :D
 //------------------------------------------------------------------
 // Micro VU - Main Functions
 //------------------------------------------------------------------
@@ -71,9 +41,10 @@ microVUt(void) mVUinit(VURegs* vuRegsPtr) {
 	mVU->regs		= vuRegsPtr;
 	mVU->index		= vuIndex;
 	mVU->microSize	= (vuIndex ? 0x4000 : 0x1000);
-	mVU->progSize	= (vuIndex ? 0x4000 : 0x1000) / 8;
-	mVU->cacheAddr	= 0xC0000000 + (vuIndex ? mVU->cacheSize : 0);
+	mVU->progSize	= (vuIndex ? 0x4000 : 0x1000) / 4;
 	mVU->cache		= NULL;
+	memset(&mVU->prog, 0, sizeof(mVU->prog));
+	mVUprint((vuIndex) ? "microVU1: init" : "microVU0: init");
 
 	mVUreset<vuIndex>();
 }
@@ -84,35 +55,56 @@ microVUt(void) mVUreset() {
 	microVU* mVU = mVUx;
 	mVUclose<vuIndex>(); // Close
 
+	mVUprint((vuIndex) ? "microVU1: reset" : "microVU0: reset");
+
+	// Dynarec Cache
+	mVU->cache = SysMmapEx((vuIndex ? 0x1e840000 : 0x0e840000), mVU->cacheSize, 0, (vuIndex ? "Micro VU1" : "Micro VU0"));
+	if ( mVU->cache == NULL ) throw Exception::OutOfMemory(fmt_string( "microVU Error: Failed to allocate recompiler memory! (addr: 0x%x)", params (u32)mVU->cache));
+	memset(mVU->cache, 0xcc, mVU->cacheSize);
+
+	// Setup Entrance/Exit Points
+	x86SetPtr(mVU->cache);
+	mVUdispatcherA<vuIndex>();
+	mVUdispatcherB<vuIndex>();
+
+	// Clear All Program Data
+	memset(&mVU->prog, 0, sizeof(mVU->prog));
+
 	// Create Block Managers
-	for (int i; i <= mVU->prog.max; i++) {
-		for (u32 j; j < (mVU->progSize / 2); j++) {
+	for (int i = 0; i <= mVU->prog.max; i++) {
+		for (u32 j = 0; j < (mVU->progSize / 2); j++) {
 			mVU->prog.prog[i].block[j] = new microBlockManager();
 		}
 	}
 
-	// Dynarec Cache
-	mVU->cache = SysMmapEx(mVU->cacheAddr, mVU->cacheSize, 0x10000000, (vuIndex ? "Micro VU1" : "Micro VU0"));
-	if ( mVU->cache == NULL ) throw Exception::OutOfMemory(fmt_string( "microVU Error: failed to allocate recompiler memory! (addr: 0x%x)", params (u32)mVU->cache));
-
-	// Other Variables
-	memset(&mVU->prog, 0, sizeof(mVU->prog));
+	// Program Variables
 	mVU->prog.finished = 1;
 	mVU->prog.cleared = 1;
 	mVU->prog.cur = -1;
 	mVU->prog.total = -1;
+	//mVU->prog.lpState = &mVU->prog.prog[15].allocInfo.block.pState; // Blank Pipeline State (ToDo: finish implementation)
+
+	// Setup Dynarec Cache Limits for Each Program
+	u8* z = (mVU->cache + 512); // Dispatcher Code is in first 512 bytes
+	for (int i = 0; i <= mVU->prog.max; i++) {
+		mVU->prog.prog[i].x86start = z;
+		mVU->prog.prog[i].x86ptr = z;
+		z += (mVU->cacheSize / (mVU->prog.max + 1));
+		mVU->prog.prog[i].x86end = z;
+	}
 }
 
 // Free Allocated Resources
 microVUt(void) mVUclose() {
 
 	microVU* mVU = mVUx;
+	mVUprint((vuIndex) ? "microVU1: close" : "microVU0: close");
 
 	if ( mVU->cache ) { HostSys::Munmap( mVU->cache, mVU->cacheSize ); mVU->cache = NULL; }
 
 	// Delete Block Managers
-	for (int i; i <= mVU->prog.max; i++) {
-		for (u32 j; j < (mVU->progSize / 2); j++) {
+	for (int i = 0; i <= mVU->prog.max; i++) {
+		for (u32 j = 0; j < (mVU->progSize / 2); j++) {
 			if (mVU->prog.prog[i].block[j]) delete mVU->prog.prog[i].block[j];
 		}
 	}
@@ -122,6 +114,7 @@ microVUt(void) mVUclose() {
 microVUt(void) mVUclear(u32 addr, u32 size) {
 
 	microVU* mVU = mVUx;
+	memset(&mVU->prog.lpState, 0, sizeof(mVU->prog.lpState));
 	mVU->prog.cleared = 1; // Next execution searches/creates a new microprogram
 	// Note: It might be better to copy old recompiled blocks to the new microprogram rec data
 	// however, if games primarily do big writes, its probably not worth it.
@@ -129,77 +122,57 @@ microVUt(void) mVUclear(u32 addr, u32 size) {
 	// that its probably not worth it...
 }
 
-// Executes for number of cycles
-microVUt(void*) __fastcall mVUexecute(u32 startPC, u32 cycles) {
-/*	
-	Pseudocode: (ToDo: implement # of cycles)
-	1) Search for existing program
-	2) If program not found, goto 5
-	3) Search for recompiled block
-	4) If recompiled block found, goto 6
-	5) Recompile as much blocks as possible
-	6) Return start execution address of block
-*/
-	microVU* mVU = mVUx;
-	if ( mVUsearchProg(mVU) ) { // Found Program
-		//microBlock* block = mVU->prog.prog[mVU->prog.cur].block[startPC]->search(mVU->prog.lastPipelineState);
-		//if (block) return block->x86ptrStart; // Found Block
-	}
-	// Recompile code
-	return NULL;
-}
-
-void* __fastcall mVUexecuteVU0(u32 startPC, u32 cycles) {
-	return mVUexecute<0>(startPC, cycles);
-}
-void* __fastcall mVUexecuteVU1(u32 startPC, u32 cycles) {
-	return mVUexecute<1>(startPC, cycles);
-}
-
 //------------------------------------------------------------------
 // Micro VU - Private Functions
 //------------------------------------------------------------------
 
 // Clears program data (Sets used to 1 because calling this function implies the program will be used at least once)
-__forceinline void mVUclearProg(microVU* mVU, int progIndex) {
+microVUt(void) mVUclearProg(int progIndex) {
+	microVU* mVU = mVUx;
 	mVU->prog.prog[progIndex].used = 1;
+	mVU->prog.prog[progIndex].x86ptr = mVU->prog.prog[progIndex].x86start;
 	for (u32 i = 0; i < (mVU->progSize / 2); i++) {
 		mVU->prog.prog[progIndex].block[i]->reset();
 	}
 }
 
 // Caches Micro Program
-__forceinline void mVUcacheProg(microVU* mVU, int progIndex) {
+microVUt(void) mVUcacheProg(int progIndex) {
+	microVU* mVU = mVUx;
 	memcpy_fast(mVU->prog.prog[progIndex].data, mVU->regs->Micro, mVU->microSize);
+	mVUdumpProg(progIndex);
 }
 
 // Finds the least used program, (if program list full clears and returns an old program; if not-full, returns free program)
-__forceinline int mVUfindLeastUsedProg(microVU* mVU) {
+microVUt(int) mVUfindLeastUsedProg() {
+	microVU* mVU = mVUx;
 	if (mVU->prog.total < mVU->prog.max) {
 		mVU->prog.total++;
-		mVUcacheProg(mVU, mVU->prog.total); // Cache Micro Program
+		mVUcacheProg<vuIndex>(mVU->prog.total); // Cache Micro Program
+		Console::Notice("microVU%d: Cached MicroPrograms = %d", params vuIndex, mVU->prog.total+1);
 		return mVU->prog.total;
 	}
 	else {
-		int j = 0;
-		u32 smallest = mVU->prog.prog[0].used;
-		for (int i = 1; i <= mVU->prog.total; i++) {
+		int j = (mVU->prog.cur + 1) & mVU->prog.max;
+		/*u32 smallest = mVU->prog.prog[j].used;
+		for (int i = ((j+1)&mVU->prog.max), z = 0; z < mVU->prog.max; i = (i+1)&mVU->prog.max, z++) {
 			if (smallest > mVU->prog.prog[i].used) {
 				smallest = mVU->prog.prog[i].used;
 				j = i;
 			}
-		}
-		mVUclearProg(mVU, j); // Clear old data if overwriting old program
-		mVUcacheProg(mVU, j); // Cache Micro Program
+		}*/
+		mVUclearProg<vuIndex>(j); // Clear old data if overwriting old program
+		mVUcacheProg<vuIndex>(j); // Cache Micro Program
+		Console::Notice("microVU%d: MicroProgram Cache Full!", params vuIndex);
 		return j;
 	}
 }
 
 // Searches for Cached Micro Program and sets prog.cur to it (returns 1 if program found, else returns 0)
-__forceinline int mVUsearchProg(microVU* mVU) {
+microVUt(int) mVUsearchProg() {
+	microVU* mVU = mVUx;
 	if (mVU->prog.cleared) { // If cleared, we need to search for new program
 		for (int i = 0; i <= mVU->prog.total; i++) {
-			if (i == mVU->prog.cur) continue; // We can skip the current program. (ToDo: Verify that games don't clear, and send the same microprogram :/)
 			if (!memcmp_mmx(mVU->prog.prog[i].data, mVU->regs->Micro, mVU->microSize)) {
 				mVU->prog.cur = i;
 				mVU->prog.cleared = 0;
@@ -207,14 +180,14 @@ __forceinline int mVUsearchProg(microVU* mVU) {
 				return 1;
 			}
 		}
-		mVU->prog.cur = mVUfindLeastUsedProg(mVU); // If cleared and program not found, make a new program instance
+		mVU->prog.cur = mVUfindLeastUsedProg<vuIndex>(); // If cleared and program not found, make a new program instance
 		mVU->prog.cleared = 0;
 		return 0;
 	}
 	mVU->prog.prog[mVU->prog.cur].used++;
 	return 1; // If !cleared, then we're still on the same program as last-time ;)
 }
-
+/*
 // Block Invalidation
 __forceinline void mVUinvalidateBlock(microVU* mVU, u32 addr, u32 size) {
 
@@ -234,99 +207,32 @@ __forceinline void mVUinvalidateBlock(microVU* mVU, u32 addr, u32 size) {
 		mVU->prog.prog[mVU->prog.cur].block[i]->clearFast();
 	}
 }
-
-//------------------------------------------------------------------
-// Dispatcher Functions
-//------------------------------------------------------------------
-
-#ifdef _MSC_VER
-// Runs VU0 for number of cycles
-__declspec(naked) void __fastcall startVU0(u32 startPC, u32 cycles) {
-	__asm {
-		// __fastcall = The first two DWORD or smaller arguments are passed in ECX and EDX registers; all other arguments are passed right to left.
-		call mVUexecuteVU0
-
-		/*backup cpu state*/
-		push ebx;
-		push ebp;
-		push esi;
-		push edi;
-
-		ldmxcsr g_sseVUMXCSR
-		/* Should set xmmZ? */
-		jmp eax
-	}
-}
-
-// Runs VU1 for number of cycles
-__declspec(naked) void __fastcall startVU1(u32 startPC, u32 cycles) {
-	__asm {
-
-		call mVUexecuteVU1
-
-		/*backup cpu state*/
-		push ebx;
-		push ebp;
-		push esi;
-		push edi;
-
-		ldmxcsr g_sseVUMXCSR
-
-		jmp eax
-	}
-}
-
-// Exit point
-__declspec(naked) void __fastcall endVU0(u32 startPC, u32 cycles) {
-	__asm {
-
-		//call mVUcleanUpVU0
-
-		/*restore cpu state*/
-		pop edi;
-		pop esi;
-		pop ebp;
-		pop ebx;
-		
-		ldmxcsr g_sseMXCSR
-		emms
-
-		ret
-	}
-}
-#else
-extern "C"
-{
-extern void __fastcall startVU0(u32 startPC, u32 cycles);
-extern void __fastcall startVU1(u32 startPC, u32 cycles);
-extern void __fastcall endVU0(u32 startPC, u32 cycles);
-}
-#endif
+*/
 //------------------------------------------------------------------
 // Wrapper Functions - Called by other parts of the Emu
 //------------------------------------------------------------------
 
-__forceinline void initVUrec(VURegs* vuRegs, const int vuIndex) {
+void initVUrec(VURegs* vuRegs, const int vuIndex) {
 	if (!vuIndex)	mVUinit<0>(vuRegs);
 	else			mVUinit<1>(vuRegs);
 }
 
-__forceinline void closeVUrec(const int vuIndex) {
+void closeVUrec(const int vuIndex) {
 	if (!vuIndex)	mVUclose<0>();
 	else			mVUclose<1>();
 }
 
-__forceinline void resetVUrec(const int vuIndex) {
+void resetVUrec(const int vuIndex) {
 	if (!vuIndex)	mVUreset<0>();
 	else			mVUreset<1>();
 }
 
-__forceinline void clearVUrec(u32 addr, u32 size, const int vuIndex) {
+void clearVUrec(u32 addr, u32 size, const int vuIndex) {
 	if (!vuIndex)	mVUclear<0>(addr, size);
 	else			mVUclear<1>(addr, size);
 }
 
-__forceinline void runVUrec(u32 startPC, u32 cycles, const int vuIndex) {
+void runVUrec(u32 startPC, u32 cycles, const int vuIndex) {
 	if (!vuIndex)	startVU0(startPC, cycles);
 	else			startVU1(startPC, cycles);
 }

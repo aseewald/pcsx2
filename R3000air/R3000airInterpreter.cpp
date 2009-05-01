@@ -102,7 +102,7 @@ static __releaseinline void intStep()
 
 	if( opcode.U32 == 0 )	// Iggy on the NOP please!  (Iggy Nop!)
 	{
-		PSXCPU_LOG( "NOP\n" );
+		PSXCPU_LOG( "NOP" );
 
 		iopRegs.pc			 = iopRegs.VectorPC;
 		iopRegs.VectorPC	+= 4;
@@ -129,9 +129,9 @@ static __releaseinline void intStep()
 		diag.GetValuesComment( m_comment );
 		
 		if( m_comment.empty() )
-			PSXCPU_LOG( "%s\n%s", m_disasm.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
+			PSXCPU_LOG( "%s%s", m_disasm.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
 		else
-			PSXCPU_LOG( "%-34s ; %s\n%s", m_disasm.c_str(), m_comment.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
+			PSXCPU_LOG( "%-34s ; %s%s", m_disasm.c_str(), m_comment.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
 	}
 
 	Instruction dudley( opcode );

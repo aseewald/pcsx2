@@ -45,9 +45,6 @@ static const uptr m_pagemask = getpagesize()-1;
 // Linux implementation of SIGSEGV handler.  Bind it using sigaction().
 void SysPageFaultExceptionFilter( int signal, siginfo_t *info, void * )
 {
-	int err;
-
-	//DevCon::Error("SysPageFaultExceptionFilter!");
 	// get bad virtual address
 	uptr offset = (u8*)info->si_addr - psM;
 
@@ -291,12 +288,6 @@ void OnStates_SaveOther(GtkMenuItem *menuitem, gpointer user_data)
 	gdk_window_raise(FileSel->window);
 }
 
-/* Quick macros for checking shift, control, alt, and caps lock. */
-#define SHIFT_EVT(evt) ((evt == XK_Shift_L) || (evt == XK_Shift_R))
-#define CTRL_EVT(evt) ((evt == XK_Control_L) || (evt == XK_Control_L))
-#define ALT_EVT(evt) ((evt == XK_Alt_L) || (evt == XK_Alt_R))
-#define CAPS_LOCK_EVT(evt) (evt == XK_Caps_Lock)
-
 bool SysInit()
 {
 	if (sinit) return true;
@@ -426,9 +417,6 @@ namespace HostGui
 
 	void ResetMenuSlots()
 	{
-		GtkWidget *Item;
-		char str[g_MaxPath], str2[g_MaxPath];
-		
 		for (int i = 0; i < 5; i++)
 		{
 			Slots[i] = States_isSlotUsed(i);
@@ -450,98 +438,100 @@ namespace HostGui
 		SysExecute();
 	}
 
-	void __fastcall KeyEvent(keyEvent* ev)
-	{
-		static int shift = 0;
+/* Quick macros for checking shift, control, alt, and caps lock. */
+#define SHIFT_EVT(evt) ((evt == XK_Shift_L) || (evt == XK_Shift_R))
+#define CTRL_EVT(evt) ((evt == XK_Control_L) || (evt == XK_Control_R))
+#define ALT_EVT(evt) ((evt == XK_Alt_L) || (evt == XK_Alt_R))
+#define CAPS_LOCK_EVT(evt) (evt == XK_Caps_Lock)
 
-		if (ev == NULL) return;
+        void __fastcall KeyEvent(keyEvent* ev)
+        {
+		struct KeyModifiers *keymod = &keymodifiers;
 
-		if (GSkeyEvent != NULL) GSkeyEvent(ev);
+                if (ev == NULL) return;
 
-		if (ev->evt == KEYPRESS)
-		{
-			if (SHIFT_EVT(ev->key))
-				shift = 1;
-			if (CAPS_LOCK_EVT(ev->key))
-			{
-				//Set up anything we want to happen while caps lock is down.
-			}
+                if (GSkeyEvent != NULL) GSkeyEvent(ev);
 
-			switch (ev->key)
-			{
-				case XK_F1:
-				case XK_F2:
-				case XK_F3:
-				case XK_F4:
-				case XK_F5:
-				case XK_F6:
-				case XK_F7:
-				case XK_F8:
-				case XK_F9:
-				case XK_F10:
-				case XK_F11:
-				case XK_F12:
-					try
-					{
-						ProcessFKeys(ev->key - XK_F1 + 1, shift);
-					}
-					catch (Exception::CpuStateShutdown&)
-					{
-						// Woops!  Something was unrecoverable.  Bummer.
-						// Let's give the user a RunGui!
+                if (ev->evt == KEYPRESS)
+                {
+			if (SHIFT_EVT(ev->key)) keymod->shift = TRUE;
+			if (CTRL_EVT(ev->key)) keymod->control = TRUE;
+			if (ALT_EVT(ev->key)) keymod->alt = TRUE;
+			if (CAPS_LOCK_EVT(ev->key)) keymod->capslock = TRUE;
 
-						g_EmulationInProgress = false;
-						SysEndExecution();
-					}
-					break;
+                        switch (ev->key)
+                        {
+                                case XK_F1:
+                                case XK_F2:
+                                case XK_F3:
+                                case XK_F4:
+                                case XK_F5:
+                                case XK_F6:
+                                case XK_F7:
+                                case XK_F8:
+                                case XK_F9:
+                                case XK_F10:
+                                case XK_F11:
+                                case XK_F12:
+                                        try
+                                        {
+                                                ProcessFKeys(ev->key - XK_F1 + 1, keymod);
+                                        }
+                                        catch (Exception::CpuStateShutdown&)
+                                        {
+                                                // Woops!  Something was unrecoverable.  Bummer.
+                                                // Let's give the user a RunGui!
 
-				case XK_Tab:
-					CycleFrameLimit(0);
-					break;
+                                                g_EmulationInProgress = false;
+                                                SysEndExecution();
+                                        }
+                                        break;
 
-				case XK_Escape:
-					signal(SIGINT, SIG_DFL);
-					signal(SIGPIPE, SIG_DFL);
+                                case XK_Tab:
+                                        CycleFrameLimit(0);
+                                        break;
 
-	#ifdef PCSX2_DEVBUILD
-					if (g_SaveGSStream >= 3)
-					{
-						g_SaveGSStream = 4;// gs state
-						break;
-					}
-	#endif
-					SysEndExecution();
+                                case XK_Escape:
+                                        signal(SIGINT, SIG_DFL);
+                                        signal(SIGPIPE, SIG_DFL);
 
-					if (g_Startup.NoGui) exit(0);
+        #ifdef PCSX2_DEVBUILD
+                                        if (g_SaveGSStream >= 3)
+                                        {
+                                                g_SaveGSStream = 4;// gs state
+                                                break;
+                                        }
+        #endif
+                                        SysEndExecution();
 
-					// fixme: The GUI is now capable of receiving control back from the
-					// emulator.  Which means that when we call SysEscapeExecute() here, the
-					// emulation loop in ExecuteCpu() will exit.  You should be able to set it
-					// up so that it returns control to the existing GTK event loop, instead of
-					// always starting a new one via RunGui().  (but could take some trial and
-					// error)  -- (air)
-					
-					// Easier said then done; running gtk in two threads at the same time can't be
-					// done, and working around that is pretty fiddly.
-					RunGui();
-					break;
+                                        if (g_Startup.NoGui) exit(0);
 
-				default:
-					GSkeyEvent(ev);
-					break;
-			}
-		}
-		else if (ev->evt == KEYRELEASE)
-		{
-			if (SHIFT_EVT(ev->key))
-				shift = 0;
-			if (CAPS_LOCK_EVT(ev->key))
-			{
-				//Release caps lock
-			}
-		}
+                                        // fixme: The GUI is now capable of receiving control back from the
+                                        // emulator.  Which means that when we call SysEscapeExecute() here, the
+                                        // emulation loop in ExecuteCpu() will exit.  You should be able to set it
+                                        // up so that it returns control to the existing GTK event loop, instead of
+                                        // always starting a new one via RunGui().  (but could take some trial and
+                                        // error)  -- (air)
+                                        
+                                        // Easier said then done; running gtk in two threads at the same time can't be
+                                        // done, and working around that is pretty fiddly.
+                                        RunGui();
+                                        break;
 
-		return;
-	}
+                                default:
+                                        GSkeyEvent(ev);
+                                        break;
+                        }
+                }
+                else if (ev->evt == KEYRELEASE)
+                {
+			if (SHIFT_EVT(ev->key)) keymod->shift = FALSE;
+			if (CTRL_EVT(ev->key)) keymod->control = FALSE;
+			if (ALT_EVT(ev->key)) keymod->alt = FALSE;
+			if (CAPS_LOCK_EVT(ev->key)) keymod->capslock = FALSE;
+                }
+
+                return;
+        }
 
 }

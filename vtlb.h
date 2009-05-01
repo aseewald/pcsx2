@@ -23,10 +23,12 @@ typedef  void __fastcall vtlbMemW128FP(u32 addr,const mem128_t* data);
 
 typedef u32 vtlbHandler;
 
+extern void vtlb_Core_Alloc();
+extern void vtlb_Core_Shutdown();
 extern void vtlb_Init();
 extern void vtlb_Reset();
 extern void vtlb_Term();
-extern u8* vtlb_malloc( uint size, uint align, uptr tryBaseAddress );
+extern u8* vtlb_malloc( uint size, uint align );
 extern void vtlb_free( void* pmem, uint size );
 
 
@@ -67,6 +69,8 @@ extern void vtlb_DynGenRead32_Const( u32 bits, bool sign, u32 addr_const );
 
 namespace vtlb_private
 {
+	static const uint VTLB_ALLOC_SIZE = 0x2900000;	//this is a bit more than required
+
 	static const uint VTLB_PAGE_BITS = 12;
 	static const uint VTLB_PAGE_MASK = 4095;
 	static const uint VTLB_PAGE_SIZE = 4096;
@@ -75,9 +79,21 @@ namespace vtlb_private
 	static const uint VTLB_PMAP_SZ = 0x20000000;
 	static const uint VTLB_VMAP_ITEMS = 0x100000000ULL / VTLB_PAGE_SIZE;
 
-	extern void* RWFT[5][2][128];
-	extern s32 pmap[VTLB_PMAP_ITEMS];	//512KB
-	extern s32 vmap[VTLB_VMAP_ITEMS];   //4MB
+	struct MapData
+	{
+		u8* alloc_base;			//base of the memory array
+		int alloc_current;		//current base
+
+		s32 pmap[VTLB_PMAP_ITEMS];	//512KB
+		s32 vmap[VTLB_VMAP_ITEMS];   //4MB
+
+		// first indexer -- 8/16/32/64/128 bit tables [values 0-4]
+		// second indexer -- read/write  [0 or 1]
+		// third indexer -- 128 possible handlers!
+		void* RWFT[5][2][128];
+	};
+
+	PCSX2_ALIGNED_EXTERN( 64, MapData vtlbdata );
 }
 
 #endif

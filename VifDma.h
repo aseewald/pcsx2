@@ -32,23 +32,22 @@ struct vifStruct {
 	int cmd;
 	int irq;
 	int cl;
-	int wl;
+	int qwcalign;
 	u8 usn;
-	u8 done;
-	u8 vifstalled;
-	u8 stallontag;
+	
+	bool done;
+	bool vifstalled;
+	bool stallontag;
+	
 	u8 irqoffset; // 32bit offset where next vif code is
-    u32 savedtag; // need this for backwards compat with save states
+	u32 savedtag; // need this for backwards compat with save states
 	u32 vifpacketsize;
 	u8 inprogress;
 	u8 dmamode;
 };
 
 extern vifStruct vif0, vif1;
-extern int Path3transfer;
-
-#define vif0ch ((DMACh*)&PS2MEM_HW[0x8000])
-#define vif1ch ((DMACh*)&PS2MEM_HW[0x9000])
+extern bool Path3transfer;
 
 void __fastcall UNPACK_S_32( u32 *dest, u32 *data, int size );
 

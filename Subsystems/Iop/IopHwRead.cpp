@@ -159,17 +159,17 @@ u8 __fastcall iopHwRead8_Page1( u32 addr )
 			if( (masked_addr >= 0x600) && (masked_addr < 0x700) )
 			{
 				ret = USBread8( addr );
-				PSXHW_LOG( "Hardware Read8 from USB: addr 0x%08x = 0x%02x\n", addr, ret );
+				PSXHW_LOG( "Hardware Read8 from USB: addr 0x%08x = 0x%02x", addr, ret );
 			}
 			else
 			{
 				ret = psxHu8(addr);
-				PSXHW_LOG( "*Unknown Hardware Read8 from addr 0x%08x = 0x%02x\n", addr, ret );
+				PSXHW_LOG( "*Unknown Hardware Read8 from addr 0x%08x = 0x%02x", addr, ret );
 			}
 		return ret;
 	}
 
-	PSXHW_LOG( "*Hardware Read 8 from addr 0x%08x = 0x%02x\n", addr, ret );
+	PSXHW_LOG( "*Hardware Read 8 from addr 0x%08x = 0x%02x", addr, ret );
 	return ret;
 }
 
@@ -182,11 +182,11 @@ u8 __fastcall iopHwRead8_Page3( u32 addr )
 
 	if( addr == 0x1f083100 )	// PS/EE/IOP conf related
 	{
-		PSXHW_LOG( "Hardware Read8 from addr 0x%08x [IOP Ram Status] - returning 0x10\n", addr );
+		PSXHW_LOG( "Hardware Read8 from addr 0x%08x [IOP Ram Status] - returning 0x10", addr );
 		return 0x10; // Dram 2M
 	}
 
-	PSXHW_LOG( "*Unknown Hardware Read8 from addr 0x%08x = 0x%02x\n", addr, psxHu8(addr) );
+	PSXHW_LOG( "*Unknown Hardware Read8 from addr 0x%08x = 0x%02x", addr, psxHu8(addr) );
 	return psxHu8( addr );
 }
 
@@ -202,12 +202,12 @@ u8 __fastcall iopHwRead8_Page8( u32 addr )
 	if( addr == 0x1f808264 )
 	{
 		ret = sio2_fifoOut();//sio2 serial data feed/fifo_out
-		PSXHW_LOG( "Hardware Read8 from SIO FIFO 0x%08x = 0x%02x\n", addr, ret );
+		PSXHW_LOG( "Hardware Read8 from SIO FIFO 0x%08x = 0x%02x", addr, ret );
 	}
 	else
 	{
 		ret = psxHu8( addr );
-		PSXHW_LOG( "*Unknown Hardware Read8 from addr 0x%08x = 0x%02x\n", addr, ret );
+		PSXHW_LOG( "*Unknown Hardware Read8 from addr 0x%08x = 0x%02x", addr, ret );
 	}
 	return ret;	
 }
@@ -393,10 +393,10 @@ static __forceinline T _HwRead_16or32_Page1( u32 addr )
 			// The IOP emulates the GPU itself through the EE's hardware.
 
 			/*case 0x1f801810:
-				PSXHW_LOG("GPU DATA 32bit write %lx\n", value);
+				PSXHW_LOG("GPU DATA 32bit write %lx", value);
 				GPU_writeData(value); return;
 			case 0x1f801814:
-				PSXHW_LOG("GPU STATUS 32bit write %lx\n", value);
+				PSXHW_LOG("GPU STATUS 32bit write %lx", value);
 				GPU_writeStatus(value); return;
 
 			case 0x1f801820:
@@ -418,7 +418,7 @@ static __forceinline T _HwRead_16or32_Page1( u32 addr )
 		}
 	}
 	
-	PSXHW_LOG( "Hardware Read%s from %s addr 0x%08x = 0x%04x\n",
+	PSXHW_LOG( "Hardware Read%s from %s addr 0x%08x = 0x%04x",
 		sizeof(T) == 2 ? "16" : "32", regname, addr, ret
 	);
 	return ret;
@@ -443,7 +443,7 @@ u16 __fastcall iopHwRead16_Page3( u32 addr )
 	jASSUME( (addr & 0xfffff000) == 0x1f803 );
 
 	u16 ret = psxHu16( addr );
-	PSXHW_LOG( "*Unknown Hardware Read16 from addr 0x%08x = 0x%04x\n", addr, ret );
+	PSXHW_LOG( "*Unknown Hardware Read16 from addr 0x%08x = 0x%04x", addr, ret );
 	return ret;
 }
 
@@ -455,7 +455,7 @@ u16 __fastcall iopHwRead16_Page8( u32 addr )
 	jASSUME( (addr & 0xfffff000) == 0x1f808 );
 
 	u16 ret = psxHu16( addr );
-	PSXHW_LOG( "*Unknown Hardware Read16 from addr 0x%08x = 0x%04x\n", addr, ret );
+	PSXHW_LOG( "*Unknown Hardware Read16 from addr 0x%08x = 0x%04x", addr, ret );
 	return ret;
 }
 
@@ -490,7 +490,7 @@ u32 __fastcall iopHwRead32_Page8( u32 addr )
 		{
 			const int parm = (masked_addr-0x200) / 4;
 			const u32 ret = sio2_getSend3( parm );
-			PSXHW_LOG( "Hardware Read32 from SIO2 param[%d] = 0x%08x\n", parm, ret );
+			PSXHW_LOG( "Hardware Read32 from SIO2 param[%d] = 0x%08x", parm, ret );
 			return ret;
 		}
 		else if( masked_addr < 0x260 )
@@ -500,7 +500,7 @@ u32 __fastcall iopHwRead32_Page8( u32 addr )
 			
 			const int parm = (masked_addr-0x240) / 8;
 			const u32 ret = (masked_addr & 4) ? sio2_getSend2( parm ) : sio2_getSend1( parm );
-			PSXHW_LOG( "Hardware Read32 from SIO2 send%d[%d] = 0x%08x\n",
+			PSXHW_LOG( "Hardware Read32 from SIO2 send%d[%d] = 0x%08x",
 				(masked_addr & 4) ? 2 : 1, parm, ret
 			);
 			return ret;
@@ -548,16 +548,16 @@ u32 __fastcall iopHwRead32_Page8( u32 addr )
 			
 			default:
 				ret = psxHu32( addr );
-				PSXHW_LOG( "*Unknown Hardware Read32 from addr 0x%08x = 0x%08x\n", addr, ret );
+				PSXHW_LOG( "*Unknown Hardware Read32 from addr 0x%08x = 0x%08x", addr, ret );
 			return ret;
 		}
 
-		PSXHW_LOG( "Hardware Read32 from [%s] addr 0x%08x = 0x%02x\n", regname, addr, ret );
+		PSXHW_LOG( "Hardware Read32 from [%s] addr 0x%08x = 0x%02x", regname, addr, ret );
 		return ret;
 	}
 
 	u32 ret = psxHu32( addr );
-	PSXHW_LOG( "*Unknown Hardware Read32 from addr 0x%08x = 0x%08x\n", addr, ret );
+	PSXHW_LOG( "*Unknown Hardware Read32 from addr 0x%08x = 0x%08x", addr, ret );
 	return ret;
 }
 

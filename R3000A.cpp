@@ -115,7 +115,7 @@ void iopException(u32 code, u32 bd)
 			case 0xa0:
 
 				if (call != 0x28 && call != 0xe)
-					PSXBIOS_LOG("Bios call a0: %s (%x) %x,%x,%x,%x\n", biosA0n[call], call, psxRegs.GPR.n.a0, psxRegs.GPR.n.a1, psxRegs.GPR.n.a2, psxRegs.GPR.n.a3);
+					PSXBIOS_LOG("Bios call a0: %s (%x) %x,%x,%x,%x", biosA0n[call], call, psxRegs.GPR.n.a0, psxRegs.GPR.n.a1, psxRegs.GPR.n.a2, psxRegs.GPR.n.a3);
 
 				if (biosA0[call])
 			   		biosA0[call]();
@@ -123,14 +123,14 @@ void iopException(u32 code, u32 bd)
 
 			case 0xb0:
 				if (call != 0x17 && call != 0xb)
-					PSXBIOS_LOG("Bios call b0: %s (%x) %x,%x,%x,%x\n", biosB0n[call], call, psxRegs.GPR.n.a0, psxRegs.GPR.n.a1, psxRegs.GPR.n.a2, psxRegs.GPR.n.a3);
+					PSXBIOS_LOG("Bios call b0: %s (%x) %x,%x,%x,%x", biosB0n[call], call, psxRegs.GPR.n.a0, psxRegs.GPR.n.a1, psxRegs.GPR.n.a2, psxRegs.GPR.n.a3);
 
 				if (biosB0[call])
 			   		biosB0[call]();
 				break;
 
 			case 0xc0:
-				PSXBIOS_LOG("Bios call c0: %s (%x) %x,%x,%x,%x\n", biosC0n[call], call, psxRegs.GPR.n.a0, psxRegs.GPR.n.a1, psxRegs.GPR.n.a2, psxRegs.GPR.n.a3);
+				PSXBIOS_LOG("Bios call c0: %s (%x) %x,%x,%x,%x", biosC0n[call], call, psxRegs.GPR.n.a0, psxRegs.GPR.n.a1, psxRegs.GPR.n.a2, psxRegs.GPR.n.a3);
 			
 				if (biosC0[call])
 			   		biosC0[call]();
@@ -173,7 +173,7 @@ __forceinline void PSX_INT( IopEventId n, s32 ecycle )
 
 	// Exception: IRQ16 - SIO - it drops ints like crazy when handling PAD stuff.
 	//if( /*n!=16 &&*/ psxRegs.interrupt & (1<<n) )
-	//	SysPrintf( "***** IOP > Twice-thrown int on IRQ %d\n", n );
+	//	Console::WriteLn( "***** IOP > Twice-thrown int on IRQ %d", n );
 
 	psxRegs.interrupt |= 1 << n;
 
@@ -228,7 +228,7 @@ __forceinline void _iopTestInterrupts()
 	}
 }
 
-void iopEventTest()
+__releaseinline void iopEventTest()
 {
 	if( iopTestCycle( psxNextsCounter, psxNextCounter ) )
 	{
@@ -252,7 +252,7 @@ void iopEventTest()
 
 	if ((psxRegs.CP0.n.Status & 0xFE01) >= 0x401)
 	{
-		PSXCPU_LOG("Interrupt: %x  %x\n", psxHu32(0x1070), psxHu32(0x1074));
+		PSXCPU_LOG("Interrupt: %x  %x", psxHu32(0x1070), psxHu32(0x1074));
 		iopException(0, 0);
 		iopBranchAction = true;
 	}
@@ -282,6 +282,6 @@ void iopTestIntc()
 void iopExecuteBios() {
 /*	while (psxRegs.pc != 0x80030000)
 		psxCpu->ExecuteBlock();
-	PSX_LOG("*BIOS END*\n");
+	PSX_LOG("*BIOS END*");
 */
 }

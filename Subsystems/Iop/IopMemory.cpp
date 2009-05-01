@@ -82,18 +82,27 @@ public:
 	}
 	
 protected:
-	void AssignLookup( uint ioppage, u8* dest, uint numpages=1 )
+	void AssignLookup( uint startaddr, u8* dest, uint bytesize=1 )
 	{
-		const uint idx = ioppage >> PageBitShift;
-		for( uint i=0; i<numpages; ++i, dest+=PageSize )
-			Contents[idx+i] = (uptr)dest;
+		const uint startpage = startaddr / PageSize;
+		const uint endpage = (startaddr + bytesize + (PageSize-1)) / PageSize;	// rounded up.
+
+		for( uint i=startpage; i<endpage; ++i, dest+=PageSize )
+		{
+			jASSUME( i < PageCount );		// because I'm fallible.
+			Contents[i] = (uptr)dest;
+		}
 	}
 
-	void AssignHandler( uint ioppage, HandlerIdentifier handidx, uint numpages=1 )
+	void AssignHandler( uint startaddr, HandlerIdentifier handidx, uint bytesize=1 )
 	{
-		const uint idx = ioppage >> PageBitShift;
-		for( uint i=0; i<numpages; ++i )
-			Contents[idx+i] = handidx;
+		const uint startpage = startaddr / PageSize;
+		const uint endpage = (startaddr + bytesize + (PageSize-1)) / PageSize;	// rounded up.
+		for( uint i=startpage; i<endpage; ++i )
+		{
+			jASSUME( i < PageCount );		// really really fallible
+			Contents[i] = handidx;
+		}
 	}
 
 };

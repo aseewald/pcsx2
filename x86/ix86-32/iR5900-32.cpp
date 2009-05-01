@@ -30,6 +30,9 @@
 #include "iR5900Jump.h"
 #include "iR5900LoadStore.h"
 #include "iR5900Move.h"
+
+#include "BaseblockEx.h"
+
 #include "iMMI.h"
 #include "iFPU.h"
 #include "iCOP0.h"
@@ -44,7 +47,9 @@
 #include "Paths.h"
 
 #include "NakedAsm.h"
+#include "Dump.h"
 
+using namespace x86Emitter;
 using namespace R5900;
 
 // used to disable register freezing during cpuBranchTests (registers
@@ -82,17 +87,18 @@ static u32 *recRAMCopy = NULL;
 void JITCompile();
 static BaseBlocks recBlocks(EE_NUMBLOCKS, (uptr)JITCompile);
 static u8* recPtr = NULL, *recStackPtr = NULL;
-static EEINST* s_pInstCache = NULL;
+EEINST* s_pInstCache = NULL;
 static u32 s_nInstCacheSize = 0;
 
 static BASEBLOCK* s_pCurBlock = NULL;
 static BASEBLOCKEX* s_pCurBlockEx = NULL;
-static u32 s_nEndBlock = 0; // what pc the current block ends	
+u32 s_nEndBlock = 0; // what pc the current block ends	
 static u32 s_nHasDelay = 0;
+static bool s_nBlockFF;
 
 // save states for branches
 GPR_reg64 s_saveConstRegs[32];
-static u16 s_savex86FpuState, s_saveiCWstate;
+static u16 s_savex86FpuState;
 static u32 s_saveHasConstReg = 0, s_saveFlushedConstReg = 0, s_saveRegHasLive1 = 0, s_saveRegHasSignExt = 0;
 static EEINST* s_psaveInstInfo = NULL;
 
@@ -104,114 +110,8 @@ static u32 dumplog = 0;
 #define dumplog 0
 #endif
 
-#ifdef PCSX2_DEVBUILD
-// and not sure what these might have once been used for... (air)
-//static const char *txt0 = "EAX = %x : ECX = %x : EDX = %x\n";
-//static const char *txt0RC = "EAX = %x : EBX = %x : ECX = %x : EDX = %x : ESI = %x : EDI = %x\n";
-//static const char *txt1 = "REG[%d] = %x_%x\n";
-//static const char *txt2 = "M32 = %x\n";
-#endif
-
 static void iBranchTest(u32 newpc = 0xffffffff, bool noDispatch=false);
 static void ClearRecLUT(BASEBLOCK* base, int count);
-
-////////////////////////////////////////////////////
-static void iDumpBlock( int startpc, u8 * ptr )
-{
-	FILE *f;
-	string filename;
-	u32 i, j;
-	EEINST* pcur;
-	u8 used[34];
-	u8 fpuused[33];
-	int numused, count, fpunumused;
-
-	Console::Status( "dump1 %x:%x, %x", params startpc, pc, cpuRegs.cycle );
-	Path::CreateDirectory( "dumps" );
-	ssprintf( filename, "dumps\\R5900dump%.8X.txt", startpc );
-
-	fflush( stdout );
-//	f = fopen( "dump1", "wb" );
-//	fwrite( ptr, 1, (u32)x86Ptr[0] - (u32)ptr, f );
-//	fclose( f );
-//
-//	sprintf( command, "objdump -D --target=binary --architecture=i386 dump1 > %s", filename );
-//	system( command );
-
-	f = fopen( filename.c_str(), "w" );
-
-	std::string output;
-
-    if( disR5900GetSym(startpc) != NULL )
-        fprintf(f, "%s\n", disR5900GetSym(startpc));
-	for ( i = startpc; i < s_nEndBlock; i += 4 ) {
-		disR5900Fasm( output, memRead32( i ), i );
-		fprintf( f, output.c_str() );
-	}
-
-	// write the instruction info
-
-	fprintf(f, "\n\nlive0 - %x, live1 - %x, live2 - %x, lastuse - %x\nmmx - %x, xmm - %x, used - %x\n",
-		EEINST_LIVE0, EEINST_LIVE1, EEINST_LIVE2, EEINST_LASTUSE, EEINST_MMX, EEINST_XMM, EEINST_USED);
-
-	memzero_obj(used);
-	numused = 0;
-	for(i = 0; i < ArraySize(s_pInstCache->regs); ++i) {
-		if( s_pInstCache->regs[i] & EEINST_USED ) {
-			used[i] = 1;
-			numused++;
-		}
-	}
-
-	memzero_obj(fpuused);
-	fpunumused = 0;
-	for(i = 0; i < ArraySize(s_pInstCache->fpuregs); ++i) {
-		if( s_pInstCache->fpuregs[i] & EEINST_USED ) {
-			fpuused[i] = 1;
-			fpunumused++;
-		}
-	}
-
-	fprintf(f, "       ");
-	for(i = 0; i < ArraySize(s_pInstCache->regs); ++i) {
-		if( used[i] ) fprintf(f, "%2d ", i);
-	}
-	for(i = 0; i < ArraySize(s_pInstCache->fpuregs); ++i) {
-		if( fpuused[i] ) fprintf(f, "%2d ", i);
-	}
-	fprintf(f, "\n");
-
-	fprintf(f, "       ");
-	for(i = 0; i < ArraySize(s_pInstCache->regs); ++i) {
-		if( used[i] ) fprintf(f, "%s ", disRNameGPR[i]);
-	}
-	for(i = 0; i < ArraySize(s_pInstCache->fpuregs); ++i) {
-		if( fpuused[i] ) fprintf(f, "%s ", i<32?"FR":"FA");
-	}
-	fprintf(f, "\n");
-
-	pcur = s_pInstCache+1;
-	for( i = 0; i < (s_nEndBlock-startpc)/4; ++i, ++pcur) {
-		fprintf(f, "%2d: %2.2x ", i+1, pcur->info);
-		
-		count = 1;
-		for(j = 0; j < ArraySize(s_pInstCache->regs); j++) {
-			if( used[j] ) {
-				fprintf(f, "%2.2x%s", pcur->regs[j], ((count%8)&&count<numused)?"_":" ");
-				++count;
-			}
-		}
-		count = 1;
-		for(j = 0; j < ArraySize(s_pInstCache->fpuregs); j++) {
-			if( fpuused[j] ) {
-				fprintf(f, "%2.2x%s", pcur->fpuregs[j], ((count%8)&&count<fpunumused)?"_":" ");
-				++count;
-			}
-		}
-		fprintf(f, "\n");
-	}
-	fclose( f );
-}
 
 #ifdef PCSX2_VM_COISSUE
 static u8 _eeLoadWritesRs(u32 tempcode)
@@ -295,7 +195,7 @@ void _eeFlushAllUnused()
 	}
 
 	//TODO when used info is done for FPU and VU0
-	for(i = 0; i < XMMREGS; ++i) {
+	for(i = 0; i < iREGCNT_XMM; ++i) {
 		if( xmmregs[i].inuse && xmmregs[i].type != XMMTYPE_GPRREG )
 			_freeXMMreg(i);
 	}
@@ -323,7 +223,9 @@ u32* _eeGetConstReg(int reg)
 
 void _eeMoveGPRtoR(x86IntRegType to, int fromgpr)
 {
-	if( GPR_IS_CONST1(fromgpr) )
+	if( fromgpr == 0 )
+		XOR32RtoR( to, to );	// zero register should use xor, thanks --air
+	else if( GPR_IS_CONST1(fromgpr) )
 		MOV32ItoR( to, g_cpuConstRegs[fromgpr].UL[0] );
 	else {
 		int mmreg;
@@ -365,7 +267,7 @@ void _eeMoveGPRtoM(u32 to, int fromgpr)
 void _eeMoveGPRtoRm(x86IntRegType to, int fromgpr)
 {
 	if( GPR_IS_CONST1(fromgpr) )
-		MOV32ItoRmOffset( to, g_cpuConstRegs[fromgpr].UL[0], 0 );
+		MOV32ItoRm( to, g_cpuConstRegs[fromgpr].UL[0] );
 	else {
 		int mmreg;
 		
@@ -378,7 +280,7 @@ void _eeMoveGPRtoRm(x86IntRegType to, int fromgpr)
 		}
 		else {
 			MOV32MtoR(EAX, (int)&cpuRegs.GPR.r[ fromgpr ].UL[ 0 ] );
-			MOV32RtoRm(to, EAX );
+			MOV32RtoRm( to, EAX );
 		}
 	}
 }
@@ -386,7 +288,7 @@ void _eeMoveGPRtoRm(x86IntRegType to, int fromgpr)
 int _flushXMMunused()
 {
 	int i;
-	for (i=0; i<XMMREGS; i++) {
+	for (i=0; i<iREGCNT_XMM; i++) {
 		if (!xmmregs[i].inuse || xmmregs[i].needed || !(xmmregs[i].mode&MODE_WRITE) ) continue;
 		
 		if (xmmregs[i].type == XMMTYPE_GPRREG ) {
@@ -405,7 +307,7 @@ int _flushXMMunused()
 int _flushMMXunused()
 {
 	int i;
-	for (i=0; i<MMXREGS; i++) {
+	for (i=0; i<iREGCNT_MMX; i++) {
 		if (!mmxregs[i].inuse || mmxregs[i].needed || !(mmxregs[i].mode&MODE_WRITE) ) continue;
 		
 		if( MMX_ISGPR(mmxregs[i].reg) ) {
@@ -516,6 +418,9 @@ static void recAlloc()
 	x86FpuState = FPU_STATE;
 }
 
+PCSX2_ALIGNED16( static u16 manual_page[Ps2MemSize::Base >> 12] );
+PCSX2_ALIGNED16( static u8 manual_counter[Ps2MemSize::Base >> 12] );
+
 ////////////////////////////////////////////////////
 void recResetEE( void )
 {
@@ -523,8 +428,10 @@ void recResetEE( void )
 
 	maxrecmem = 0;
 
-	memset_8<0xcd, REC_CACHEMEM>(recMem);
+	memset_8<0xcc, REC_CACHEMEM>(recMem);	// 0xcc is INT3
 	memzero_ptr<m_recBlockAllocSize>( m_recBlockAlloc );
+	memzero_obj( manual_page );
+	memzero_obj( manual_counter );
 	ClearRecLUT((BASEBLOCK*)m_recBlockAlloc,
 		(((Ps2MemSize::Base + Ps2MemSize::Rom + Ps2MemSize::Rom1) / 4)));
 
@@ -577,15 +484,14 @@ void recResetEE( void )
 	// so a fix will have to wait until later. -_- (air)
 
 	//x86SetPtr(recMem+REC_CACHEMEM);
-	//dyna_block_discard_recmem=(u8*)x86Ptr[0];
-	//JMP32( (uptr)&dyna_block_discard - ( (u32)x86Ptr[0] + 5 ));
+	//dyna_block_discard_recmem=(u8*)x86Ptr;
+	//JMP32( (uptr)&dyna_block_discard - ( (u32)x86Ptr + 5 ));
 
 	x86SetPtr(recMem);
 
 	recPtr = recMem;
 	recStackPtr = recStack;
 	x86FpuState = FPU_STATE;
-	iCWstate = 0;
 
 	branch = 0;
 	SetCPUState(Config.sseMXCSR, Config.sseVUMXCSR);
@@ -606,8 +512,9 @@ static void recShutdown( void )
 	s_nInstCacheSize = 0;
 }
 
-// Ignored by Linux
+#ifdef _MSC_VER
 #pragma warning(disable:4731) // frame pointer register 'ebp' modified by inline assembly code
+#endif
 
 void recStep( void ) {
 }
@@ -675,7 +582,7 @@ static void __naked DispatcherReg()
 	}
 }
 
-__forceinline void recExecute()
+void recExecute()
 {
 	// Optimization note : Compared pushad against manually pushing the regs one-by-one.
 	// Manually pushing is faster, especially on Core2's and such. :)
@@ -789,7 +696,7 @@ void recSYSCALL( void ) {
 	CMP32ItoM((uptr)&cpuRegs.pc, pc);
 	j8Ptr[0] = JE8(0);
 	ADD32ItoM((uptr)&cpuRegs.cycle, eeScaleBlockCycles());
-	JMP32((uptr)DispatcherReg - ( (uptr)x86Ptr[0] + 5 ));
+	JMP32((uptr)DispatcherReg - ( (uptr)x86Ptr + 5 ));
 	x86SetJ8(j8Ptr[0]);
 	//branch = 2;
 }
@@ -818,7 +725,6 @@ static void ClearRecLUT(BASEBLOCK* base, int count)
 		base[i].SetFnptr((uptr)JITCompile);
 }
 
-// Returns the offset to the next instruction after any cleared memory
 void recClear(u32 addr, u32 size)
 {
 	BASEBLOCKEX* pexblock;
@@ -985,7 +891,6 @@ void SetBranchImm( u32 imm )
 void SaveBranchState()
 {
 	s_savex86FpuState = x86FpuState;
-	s_saveiCWstate = iCWstate;
 	s_savenBlockCycles = s_nBlockCycles;
 	memcpy(s_saveConstRegs, g_cpuConstRegs, sizeof(g_cpuConstRegs));
 	s_saveHasConstReg = g_cpuHasConstReg;
@@ -1002,7 +907,6 @@ void SaveBranchState()
 void LoadBranchState()
 {
 	x86FpuState = s_savex86FpuState;
-	iCWstate = s_saveiCWstate;
 	s_nBlockCycles = s_savenBlockCycles;
 
 	memcpy(g_cpuConstRegs, s_saveConstRegs, sizeof(g_cpuConstRegs));
@@ -1034,8 +938,6 @@ void iFlushCall(int flushtype)
 	if( flushtype & FLUSH_CACHED_REGS )
 		_flushConstRegs();
 
-	LoadCW();
-	
 	if (x86FpuState==MMX_STATE) {
 		if (cpucaps.has3DNOWInstructionExtensions) FEMMS();
 		else EMMS();
@@ -1048,12 +950,12 @@ void iFlushCall(int flushtype)
 //	int i;
 //	for(i = 0; i < 32; ++i ) {
 //		if( fpuRegs.fpr[i].UL== 0x7f800000 || fpuRegs.fpr[i].UL == 0xffc00000) {
-//			SysPrintf("bad fpu: %x %x %x\n", i, cpuRegs.cycle, g_lastpc);
+//			Console::WriteLn("bad fpu: %x %x %x", params i, cpuRegs.cycle, g_lastpc);
 //		}
 //
 //		if( VU0.VF[i].UL[0] == 0xffc00000 || //(VU0.VF[i].UL[1]&0xffc00000) == 0xffc00000 ||
 //			VU0.VF[i].UL[0] == 0x7f800000) {
-//			SysPrintf("bad vu0: %x %x %x\n", i, cpuRegs.cycle, g_lastpc);
+//			Console::WriteLn("bad vu0: %x %x %x", params i, cpuRegs.cycle, g_lastpc);
 //		}
 //	}
 //}
@@ -1067,7 +969,7 @@ u32 eeScaleBlockCycles()
 	// caused by sync hacks and such, since games seem to care a lot more about
 	// these small blocks having accurate cycle counts.
 
-	if( s_nBlockCycles <= (5<<3) || (CHECK_EE_CYCLERATE == 0) )
+	if( s_nBlockCycles <= (5<<3) || (Config.Hacks.EECycleRate == 0) )
 		return s_nBlockCycles >> 3;
 
 	uint scalarLow, scalarMid, scalarHigh;
@@ -1075,7 +977,7 @@ u32 eeScaleBlockCycles()
 	// Note: larger blocks get a smaller scalar, to help keep
 	// them from becoming "too fat" and delaying branch tests.
 
-	switch( CHECK_EE_CYCLERATE )
+	switch( Config.Hacks.EECycleRate )
 	{
 		case 0:	return s_nBlockCycles >> 3;
 
@@ -1143,19 +1045,27 @@ static void iBranchTest(u32 newpc, bool noDispatch)
 	// Equiv code to:
 	//    cpuRegs.cycle += blockcycles;
 	//    if( cpuRegs.cycle > g_nextBranchCycle ) { DoEvents(); }
-	MOV32MtoR(EAX, (uptr)&cpuRegs.cycle);
-	ADD32ItoR(EAX, eeScaleBlockCycles());
-	MOV32RtoM((uptr)&cpuRegs.cycle, EAX); // update cycles
-	SUB32MtoR(EAX, (uptr)&g_nextBranchCycle);
 
-	if (!noDispatch) {
-		if (newpc == 0xffffffff)
-			JS32((uptr)DispatcherReg - ( (uptr)x86Ptr[0] + 6 ));
-		else
-			iBranch(newpc, 1);
+	if (Config.Hacks.IdleLoopFF && s_nBlockFF) {
+		xMOV(eax, ptr32[&g_nextBranchCycle]);
+		xADD(ptr32[&cpuRegs.cycle], eeScaleBlockCycles());
+		xCMP(eax, ptr32[&cpuRegs.cycle]);
+		xCMOVL(eax, ptr32[&cpuRegs.cycle]);
+		xMOV(ptr32[&cpuRegs.cycle], eax);
+		RET();
+	} else {
+		MOV32MtoR(EAX, (uptr)&cpuRegs.cycle);
+		ADD32ItoR(EAX, eeScaleBlockCycles());
+		MOV32RtoM((uptr)&cpuRegs.cycle, EAX); // update cycles
+		SUB32MtoR(EAX, (uptr)&g_nextBranchCycle);
+		if (!noDispatch) {
+			if (newpc == 0xffffffff)
+				JS32((uptr)DispatcherReg - ( (uptr)x86Ptr + 6 ));
+			else
+				iBranch(newpc, 1);
+		}
+		RET();
 	}
-
-	RET();
 }
 
 static void checkcodefn()
@@ -1165,7 +1075,7 @@ static void checkcodefn()
 #ifdef _MSC_VER
 	__asm mov pctemp, eax;
 #else
-    __asm__("movl %%eax, %0" : "=m"(pctemp) );
+    __asm__("movl %%eax, %[pctemp]" : [pctemp]"=m"(pctemp) );
 #endif
 
 	Console::Error("code changed! %x", params pctemp);
@@ -1180,10 +1090,8 @@ void recompileNextInstruction(int delayslot)
 	s_pCode = (int *)PSM( pc );
 	assert(s_pCode);
 
-	// why?
-#ifdef _DEBUG
-	MOV32ItoR(EAX, pc);
-#endif
+	if( IsDebugBuild )
+		MOV32ItoR(EAX, pc);		// acts as a tag for delimiting recompiled instructions when viewing x86 disasm.
 
 	cpuRegs.code = *(int *)s_pCode;
 	pc += 4;
@@ -1213,7 +1121,7 @@ void recompileNextInstruction(int delayslot)
 
 	g_pCurInstInfo++;
 
-	for(i = 0; i < MMXREGS; ++i) {
+	for(i = 0; i < iREGCNT_MMX; ++i) {
 		if( mmxregs[i].inuse ) {
 			assert( MMX_ISGPR(mmxregs[i].reg) );
 			count = _recIsRegWritten(g_pCurInstInfo, (s_nEndBlock-pc)/4 + 1, XMMTYPE_GPRREG, mmxregs[i].reg-MMX_GPR);
@@ -1222,7 +1130,7 @@ void recompileNextInstruction(int delayslot)
 		}
 	}
 
-	for(i = 0; i < XMMREGS; ++i) {
+	for(i = 0; i < iREGCNT_XMM; ++i) {
 		if( xmmregs[i].inuse ) {
 			count = _recIsRegWritten(g_pCurInstInfo, (s_nEndBlock-pc)/4 + 1, xmmregs[i].type, xmmregs[i].reg);
 			if( count > 0 ) xmmregs[i].counter = 1000-count;
@@ -1232,62 +1140,33 @@ void recompileNextInstruction(int delayslot)
 
 	const OPCODE& opcode = GetCurrentInstruction();
 
-	// peephole optimizations
-#ifdef PCSX2_VM_COISSUE
-	if( g_pCurInstInfo->info & EEINSTINFO_COREC ) {
+ 	//assert( !(g_pCurInstInfo->info & EEINSTINFO_NOREC) );
 
-		if( g_pCurInstInfo->numpeeps > 1 ) {
-			switch(_Opcode_) {
-				case 30: recLQ_coX(g_pCurInstInfo->numpeeps); break;
-				case 31: recSQ_coX(g_pCurInstInfo->numpeeps); break;
-				case 49: recLWC1_coX(g_pCurInstInfo->numpeeps); break;
-				case 57: recSWC1_coX(g_pCurInstInfo->numpeeps); break;
-				case 55: recLD_coX(g_pCurInstInfo->numpeeps); break;
-				case 63: recSD_coX(g_pCurInstInfo->numpeeps, 1); break; //not sure if should be set to 1 or 0; looks like "1" handles alignment, so i'm going with that for now
+	// if this instruction is a jump or a branch, exit right away
+	if( delayslot ) {
+		switch(_Opcode_) {
+			case 1:
+				switch(_Rt_) {
+					case 0: case 1: case 2: case 3: case 0x10: case 0x11: case 0x12: case 0x13:
+						Console::Notice("branch %x in delay slot!", params cpuRegs.code);
+						_clearNeededX86regs();
+						_clearNeededMMXregs();
+						_clearNeededXMMregs();
+						return;
+				}
+				break;
 
-				jNO_DEFAULT
-			}
-			pc += g_pCurInstInfo->numpeeps*4;
-			s_nBlockCycles += (g_pCurInstInfo->numpeeps+1) * opcode.cycles;
-			g_pCurInstInfo += g_pCurInstInfo->numpeeps;
-		}
-		else {
-			recBSC_co[_Opcode_]();
-			pc += 4;
-			g_pCurInstInfo++;
-			s_nBlockCycles += opcode.cycles*2;
+			case 2: case 3: case 4: case 5: case 6: case 7: case 0x14: case 0x15: case 0x16: case 0x17:
+				Console::Notice("branch %x in delay slot!", params cpuRegs.code);
+				_clearNeededX86regs();
+				_clearNeededMMXregs();
+				_clearNeededXMMregs();
+				return;
 		}
 	}
-	else
-#endif
-	{
-	 	//assert( !(g_pCurInstInfo->info & EEINSTINFO_NOREC) );
-
-		// if this instruction is a jump or a branch, exit right away
-		if( delayslot ) {
-			switch(_Opcode_) {
-				case 1:
-					switch(_Rt_) {
-						case 0: case 1: case 2: case 3: case 0x10: case 0x11: case 0x12: case 0x13:
-							Console::Notice("branch %x in delay slot!", params cpuRegs.code);
-							_clearNeededX86regs();
-							_clearNeededMMXregs();
-							_clearNeededXMMregs();
-							return;
-					}
-					break;
-
-				case 2: case 3: case 4: case 5: case 6: case 7: case 0x14: case 0x15: case 0x16: case 0x17:
-					Console::Notice("branch %x in delay slot!", params cpuRegs.code);
-					_clearNeededX86regs();
-					_clearNeededMMXregs();
-					_clearNeededXMMregs();
-					return;
-			}
-		}
-		opcode.recompile();
-		s_nBlockCycles += opcode.cycles;
-	}
+	//If thh COP0 DIE bit is disabled, double the cycles. Happens rarely.
+	s_nBlockCycles += opcode.cycles * (2 - ((cpuRegs.CP0.n.Config >> 18) & 0x1));
+	opcode.recompile();
 
 	if( !delayslot ) {
 		if( s_bFlushReg ) {
@@ -1312,6 +1191,9 @@ void recompileNextInstruction(int delayslot)
 //	_freeMMXregs();
 //	_flushCachedRegs();
 //	g_cpuHasConstReg = 1;
+
+	if (!delayslot && x86Ptr - recPtr > 0x1000)
+		s_nEndBlock = pc;
 }
 
 extern u32 psxdump;
@@ -1346,8 +1228,17 @@ void badespfn() {
 
 void __fastcall dyna_block_discard(u32 start,u32 sz)
 {
-	DevCon::WriteLn("dyna_block_discard %08X , count %d", params start,sz);
-	Cpu->Clear(start,sz);
+	DevCon::WriteLn("dyna_block_discard .. start: %08X  count=%d", params start,sz);
+	Cpu->Clear(start, sz);
+}
+
+
+void __fastcall dyna_page_reset(u32 start,u32 sz)
+{
+	DevCon::WriteLn("dyna_page_reset .. start=%08X  size=%d", params start,sz*4);
+	Cpu->Clear(start & ~0xfffUL, 0x400);
+	manual_counter[start >> 12]++;
+	mmap_MarkCountedRamPage(PSM(start), start & ~0xfffUL);
 }
 
 void recRecompile( const u32 startpc )
@@ -1377,7 +1268,11 @@ void recRecompile( const u32 startpc )
 
 	x86SetPtr( recPtr );
 	x86Align(16);
-	recPtr = x86Ptr[_EmitterId_];
+	recPtr = x86Ptr;
+
+	s_nBlockFF = false;
+	if (HWADDR(startpc) == 0x81fc0)
+		s_nBlockFF = true;
 
 	s_pCurBlock = PC_GETBLOCK(startpc);
 
@@ -1390,7 +1285,7 @@ void recRecompile( const u32 startpc )
 	s_pCurBlockEx = recBlocks.New(HWADDR(startpc), (uptr)recPtr);
 
 	if( s_pCurBlockEx == NULL ) {
-		//SysPrintf("ee reset (blocks)\n");
+		//Console::WriteLn("ee reset (blocks)");
 		recResetEE();
 		x86SetPtr( recPtr );
 		s_pCurBlockEx = recBlocks.New(HWADDR(startpc), (uptr)recPtr);
@@ -1404,7 +1299,6 @@ void recRecompile( const u32 startpc )
 	s_nBlockCycles = 0;
 	pc = startpc;
 	x86FpuState = FPU_STATE;
-	iCWstate = 0;
 	g_cpuHasConstReg = g_cpuFlushedConstReg = 1;
 	g_cpuPrevRegHasLive1 = g_cpuRegHasLive1 = 0xffffffff;
 	g_cpuPrevRegHasSignExt = g_cpuRegHasSignExt = 0;
@@ -1432,25 +1326,41 @@ void recRecompile( const u32 startpc )
 	
 	while(1) {
 		BASEBLOCK* pblock = PC_GETBLOCK(i);
-		if (i != startpc && pblock->GetFnptr() != (uptr)JITCompile && pblock->GetFnptr() != (uptr)JITCompileInBlock) {
-			// branch = 3
-			willbranch3 = 1;
-			s_nEndBlock = i;
-			break;
+
+		if(i != startpc)	// Block size truncation checks.
+		{
+			if( (i & 0xffc) == 0x0 )	// breaks blocks at 4k page boundaries
+			{
+				willbranch3 = 1;
+				s_nEndBlock = i;
+
+				// Log the pagesplits verbosely for now, until we see if any games are affected 
+				// adversely by excessive splits.
+				DevCon::Notice( "Pagesplit @ %08X : size=%d insts", params startpc, (i-startpc) / 4 );
+
+				break;
+			}
+
+			if (pblock->GetFnptr() != (uptr)JITCompile && pblock->GetFnptr() != (uptr)JITCompileInBlock)
+			{
+				willbranch3 = 1;
+				s_nEndBlock = i;
+				break;
+			}
 		}
+
 		//HUH ? PSM ? whut ? THIS IS VIRTUAL ACCESS GOD DAMMIT
 		cpuRegs.code = *(int *)PSM(i);
 
 		switch(cpuRegs.code >> 26) {
 			case 0: // special
-
 				if( _Funct_ == 8 || _Funct_ == 9 ) { // JR, JALR
 					s_nEndBlock = i + 8;
 					s_nHasDelay = 1;
 					goto StartRecomp;
 				}
-
 				break;
+				
 			case 1: // regimm
 				
 				if( _Rt_ < 4 || (_Rt_ >= 16 && _Rt_ < 20) ) {
@@ -1464,7 +1374,6 @@ void recRecompile( const u32 startpc )
 
 					goto StartRecomp;
 				}
-
 				break;
 
 			case 2: // J
@@ -1570,98 +1479,6 @@ StartRecomp:
 			// instruction being analyzed.
 			if( usecop2 ) vucycle++;
 
-			// peephole optimizations //
-#ifdef PCSX2_VM_COISSUE
-			if( i < s_nEndBlock-4 && recompileCodeSafe(i) ) {
-				u32 curcode = cpuRegs.code;
-				u32 nextcode = *(u32*)PSM(i+4);
-				if( _eeIsLoadStoreCoIssue(curcode, nextcode) && recBSC_co[curcode>>26] != NULL ) {
-
-					// rs has to be the same, and cannot be just written
-					if( ((curcode >> 21) & 0x1F) == ((nextcode >> 21) & 0x1F) && !_eeLoadWritesRs(curcode) ) {
-
-						if( _eeIsLoadStoreCoX(curcode) && ((nextcode>>16)&0x1f) != ((curcode>>21)&0x1f) ) {
-							// see how many stores there are
-							u32 j;
-							// use xmmregs since only supporting lwc1,lq,swc1,sq
-							for(j = i+8; j < s_nEndBlock && j < i+4*XMMREGS; j += 4 ) {
-								u32 nncode = *(u32*)PSM(j);
-								if( (nncode>>26) != (curcode>>26) || ((curcode>>21)&0x1f) != ((nncode>>21)&0x1f) ||
-									_eeLoadWritesRs(nncode))
-									break;
-							}
-
-							if( j > i+8 ) {
-								u32 num = (j-i)>>2; // number of stores that can coissue
-								assert( num <= XMMREGS );
-
-								g_pCurInstInfo[0].numpeeps = num-1;
-								g_pCurInstInfo[0].info |= EEINSTINFO_COREC;
-
-								while(i < j-4) {
-									g_pCurInstInfo++;
-									g_pCurInstInfo[0].info |= EEINSTINFO_NOREC;
-									i += 4;	
-								}
-
-								continue;
-							}
-
-							// fall through
-						}
-
-						// unaligned loadstores
-
-						// if LWL, check if LWR and that offsets are +3 away
-						switch(curcode >> 26) {
-							case 0x22: // LWL
-								if( (nextcode>>26) != 0x26 || ((s16)nextcode)+3 != (s16)curcode )
-									continue;
-								break;
-							case 0x26: // LWR
-								if( (nextcode>>26) != 0x22 || ((s16)nextcode) != (s16)curcode+3 )
-									continue;
-								break;
-
-							case 0x2a: // SWL
-								if( (nextcode>>26) != 0x2e || ((s16)nextcode)+3 != (s16)curcode )
-									continue;
-								break;
-							case 0x2e: // SWR
-								if( (nextcode>>26) != 0x2a || ((s16)nextcode) != (s16)curcode+3 )
-									continue;
-								break;
-
-							case 0x1a: // LDL
-								if( (nextcode>>26) != 0x1b || ((s16)nextcode)+7 != (s16)curcode )
-									continue;
-								break;
-							case 0x1b: // LWR
-								if( (nextcode>>26) != 0x1aa || ((s16)nextcode) != (s16)curcode+7 )
-									continue;
-								break;
-
-							case 0x2c: // SWL
-								if( (nextcode>>26) != 0x2d || ((s16)nextcode)+7 != (s16)curcode )
-									continue;
-								break;
-							case 0x2d: // SWR
-								if( (nextcode>>26) != 0x2c || ((s16)nextcode) != (s16)curcode+7 )
-									continue;
-								break;
-						}
-						
-						// good enough
-						g_pCurInstInfo[0].info |= EEINSTINFO_COREC;
-						g_pCurInstInfo[0].numpeeps = 1;
-						g_pCurInstInfo[1].info |= EEINSTINFO_NOREC;
-						g_pCurInstInfo++;
-						i += 4;
-						continue;
-					}
-				}
-			}
-#endif // end peephole
 		}
 		// This *is* important because g_pCurInstInfo is checked a bit later on and
 		// if it's not equal to s_pInstCache it handles recompilation differently.
@@ -1691,10 +1508,13 @@ StartRecomp:
 		iDumpBlock(startpc, recPtr);
 #endif
 
-	u32 sz=(s_nEndBlock-startpc)>>2;
+	// fixme!  The following manual/protected block code can be greatly simplified now.
+	// It originally had to account for cross-page blocks, but we have since guaranteed
+	// that no block will cross a page boundary.
 
-	u32 inpage_ptr=startpc;
-	u32 inpage_sz=sz*4;
+	u32 sz = (s_nEndBlock-startpc) >> 2;
+	u32 inpage_ptr = HWADDR(startpc);
+	u32 inpage_sz  = sz*4;
 
 	while(inpage_sz)
 	{
@@ -1704,36 +1524,76 @@ StartRecomp:
 
 		if(PageType!=-1)
 		{
-			if (PageType==0)
+			if (PageType==0) {
 				mmap_MarkCountedRamPage(PSM(inpage_ptr),inpage_ptr&~0xFFF);
+				manual_page[inpage_ptr >> 12] = 0;
+			}
 			else
 			{
-				MOV32ItoR(ECX, startpc);
-				MOV32ItoR(EDX, sz);
-
-				u32 lpc=inpage_ptr;
-				u32 stg=pgsz;
+				xMOV( ecx, inpage_ptr );
+				xMOV( edx, pgsz / 4 );
+				//xMOV( eax, startpc );		// uncomment this to access startpc (as eax) in dyna_block_discard
+				
+				u32 lpc = inpage_ptr;
+				u32 stg = pgsz;
 				while(stg>0)
 				{
-					// was dyna_block_discard_recmem.  See note in recResetEE for details.
-					CMP32ItoM((uptr)PSM(lpc),*(u32*)PSM(lpc));
-					JNE32(((u32)&dyna_block_discard)- ( (u32)x86Ptr[0] + 6 ));
+					xCMP( ptr32[PSM(lpc)], *(u32*)PSM(lpc) );
+					xJNE( dyna_block_discard );
 
-					stg-=4;
-					lpc+=4;
+					stg -= 4;
+					lpc += 4;
 				}
-				DbgCon::WriteLn("Manual block @ %08X : %08X %d %d %d %d", params
-					startpc,inpage_ptr,pgsz,0x1000-inpage_offs,inpage_sz,sz*4);
+				
+				// Tweakpoint!  3 is a 'magic' number representing the number of times a counted block
+				// is re-protected before the recompiler gives up and sets it up as an uncounted (permanent)
+				// manual block.  4 definitely seemed too high, but 2 might be better?  Side effects of a
+				// lower threshold: over extended gameplay with several map changes, a game's overall
+				// performance could degrade.
+
+				// (ideally, perhaps, manual_counter should be reset to 0 every few minutes?)
+
+				if (startpc != 0x81fc0 && manual_counter[inpage_ptr >> 12] <= 3) {
+				
+					// Counted blocks add a weighted (by block size) value into manual_page each time they're
+					// run.  If the block gets run a lot, it resets and re-protects itself in the hope
+					// that whatever forced it to be manually-checked before was a 1-time deal.
+
+					// Counted blocks have a secondary threshold check in manual_counter, which forces a block
+					// to 'uncounted' mode if it's recompiled several time.  This protects against excessive
+					// recompilation of blocks that reside on the same codepage as data.
+
+					// fixme? Currently this algo is kinda dumb and results in the forced recompilation of a
+					// lot of blocks before it decides to mark a 'busy' page as uncounted.  There might be
+					// be a more clever approach that could streamline this process, by doing a first-pass
+					// test using the vtlb memory protection (without recompilation!) to reprotect a counted
+					// block.  But unless a new also is relatively simple in implementation, it's probably
+					// not worth the effort (tests show that we have lots of recompiler memory to spare, and
+					// that the current amount of recompilation is fairly cheap).
+
+					xADD(ptr16[&manual_page[inpage_ptr >> 12]], sz);
+					xJC( dyna_page_reset );
+
+					// note: clearcnt is measured per-page, not per-block!
+					DbgCon::WriteLn( "Manual block @ %08X : size=%3d  page/offs=%05X/%03X  inpgsz=%d  clearcnt=%d",
+						params startpc, sz, inpage_ptr>>12, inpage_offs, inpage_sz, manual_counter[inpage_ptr >> 12] );
+				}
+				else
+				{
+					DbgCon::Notice( "Uncounted Manual block @ %08X : size=%3d page/offs=%05X/%03X  inpgsz=%d",
+						params startpc, sz, inpage_ptr>>12, inpage_offs, pgsz, inpage_sz );
+				}
+
 			}
 		}
-		inpage_ptr+=pgsz;
-		inpage_sz-=pgsz;
+		inpage_ptr += pgsz;
+		inpage_sz  -= pgsz;
 	}
-
-	// finally recompile //
+	
+	// Finally: Generate x86 recompiled code!
 	g_pCurInstInfo = s_pInstCache;
 	while (!branch && pc < s_nEndBlock) {
-		recompileNextInstruction(0);
+		recompileNextInstruction(0);		// For the love of recursion, batman!
 	}
 
 #ifdef _DEBUG
@@ -1798,19 +1658,31 @@ StartRecomp:
 			ADD32ItoM((int)&cpuRegs.cycle, eeScaleBlockCycles() );
 
 		if( willbranch3 || !branch) {
+
 			iFlushCall(FLUSH_EVERYTHING);
-			iBranch(pc, 0);
+
+			// Split Block concatenation mode.
+			// This code is run when blocks are split either to keep block sizes manageable
+			// or because we're crossing a 4k page protection boundary in ps2 mem.  The latter
+			// case can result in very short blocks which should not issue branch tests for
+			// performance reasons.
+
+			int numinsts = (pc - startpc) / 4;
+			if( numinsts > 12 )
+				iBranchTest(pc);
+			else
+				iBranch(pc,0);		// unconditional static link
 		}
 	}
 
-	assert( x86Ptr[0] < recMem+REC_CACHEMEM );
+	assert( x86Ptr < recMem+REC_CACHEMEM );
 	assert( recStackPtr < recStack+RECSTACK_SIZE );
 	assert( x86FpuState == 0 );
 
-	assert(x86Ptr[_EmitterId_] - recPtr < 0x10000);
-	s_pCurBlockEx->x86size = x86Ptr[_EmitterId_] - recPtr;
+	assert(x86Ptr - recPtr < 0x10000);
+	s_pCurBlockEx->x86size = x86Ptr - recPtr;
 
-	recPtr = x86Ptr[0];
+	recPtr = x86Ptr;
 
 	assert( (g_cpuHasConstReg&g_cpuFlushedConstReg) == g_cpuHasConstReg );
 

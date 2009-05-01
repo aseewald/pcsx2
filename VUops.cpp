@@ -54,7 +54,7 @@ void _vuFMACflush(VURegs * VU) {
 		if (VU->fmac[i].enable == 0) continue;
 
 		if ((VU->cycle - VU->fmac[i].sCycle) >= VU->fmac[i].Cycle) {
-			VUM_LOG("flushing FMAC pipe[%d] (macflag=%x)\n", i, VU->fmac[i].macflag);
+			VUM_LOG("flushing FMAC pipe[%d] (macflag=%x)", i, VU->fmac[i].macflag);
 
 			VU->fmac[i].enable = 0;
 			VU->VI[REG_MAC_FLAG].UL = VU->fmac[i].macflag;
@@ -68,7 +68,7 @@ void _vuFDIVflush(VURegs * VU) {
 	if (VU->fdiv.enable == 0) return;
 
 	if ((VU->cycle - VU->fdiv.sCycle) >= VU->fdiv.Cycle) {
-		VUM_LOG("flushing FDIV pipe\n");
+		VUM_LOG("flushing FDIV pipe");
 
 		VU->fdiv.enable = 0;
 		VU->VI[REG_Q].UL = VU->fdiv.reg.UL;
@@ -80,7 +80,7 @@ void _vuEFUflush(VURegs * VU) {
 	if (VU->efu.enable == 0) return;
 
 	if ((VU->cycle - VU->efu.sCycle) >= VU->efu.Cycle) {
-//		VUM_LOG("flushing EFU pipe\n");
+//		VUM_LOG("flushing EFU pipe");
 		
 		VU->efu.enable = 0;
 		VU->VI[REG_P].UL = VU->efu.reg.UL;
@@ -101,7 +101,7 @@ void _vuFlushAll(VURegs* VU)
 			nRepeat = 1;
 
 			if ((VU->cycle - VU->fmac[i].sCycle) >= VU->fmac[i].Cycle) {
-				VUM_LOG("flushing FMAC pipe[%d] (macflag=%x)\n", i, VU->fmac[i].macflag);
+				VUM_LOG("flushing FMAC pipe[%d] (macflag=%x)", i, VU->fmac[i].macflag);
 				
 				VU->fmac[i].enable = 0;
 				VU->VI[REG_MAC_FLAG].UL = VU->fmac[i].macflag;
@@ -115,7 +115,7 @@ void _vuFlushAll(VURegs* VU)
 			nRepeat = 1;
 			
 			if ((VU->cycle - VU->fdiv.sCycle) >= VU->fdiv.Cycle) {
-				VUM_LOG("flushing FDIV pipe\n");
+				VUM_LOG("flushing FDIV pipe");
 
 				nRepeat = 1;
 				VU->fdiv.enable = 0;
@@ -129,7 +129,7 @@ void _vuFlushAll(VURegs* VU)
 			nRepeat = 1;
 
 			if ((VU->cycle - VU->efu.sCycle) >= VU->efu.Cycle) {
-	//			VUM_LOG("flushing EFU pipe\n");
+	//			VUM_LOG("flushing EFU pipe");
 
 				nRepeat = 1;
 				VU->efu.enable = 0;
@@ -165,7 +165,7 @@ void _vuFMACTestStall(VURegs * VU, int reg, int xyzw) {
 	VU->VI[REG_MAC_FLAG].UL = VU->fmac[i].macflag;
 	VU->VI[REG_STATUS_FLAG].UL = VU->fmac[i].statusflag;
 	VU->VI[REG_CLIP_FLAG].UL = VU->fmac[i].clipflag;
-	VUM_LOG("FMAC[%d] stall %d\n", i, cycle);
+	VUM_LOG("FMAC[%d] stall %d", i, cycle);
 
 	VU->cycle+= cycle;
 	_vuTestPipes(VU);
@@ -179,11 +179,10 @@ void _vuFMACAdd(VURegs * VU, int reg, int xyzw) {
 		if (VU->fmac[i].enable == 1) continue;
 		break;
 	}
-	if (i==8) {
-//		SysPrintf("*PCSX2*: error , out of fmacs %d\n", VU->cycle);
-	}
+	//if (i==8) Console::Error("*PCSX2*: error , out of fmacs %d", params VU->cycle);
+	
 
-	VUM_LOG("adding FMAC pipe[%d]; xyzw=%x\n", i, xyzw);
+	VUM_LOG("adding FMAC pipe[%d]; xyzw=%x", i, xyzw);
 
 	VU->fmac[i].enable = 1;
 	VU->fmac[i].sCycle = VU->cycle;
@@ -196,7 +195,7 @@ void _vuFMACAdd(VURegs * VU, int reg, int xyzw) {
 }
 
 void _vuFDIVAdd(VURegs * VU, int cycles) {
-	VUM_LOG("adding FDIV pipe\n");
+	VUM_LOG("adding FDIV pipe");
 
 	VU->fdiv.enable = 1;
 	VU->fdiv.sCycle = VU->cycle;
@@ -220,7 +219,7 @@ void _vuFlushFDIV(VURegs * VU) {
 	if (VU->fdiv.enable == 0) return;
 
 	cycle = VU->fdiv.Cycle - (VU->cycle - VU->fdiv.sCycle);
-	VUM_LOG("waiting FDIV pipe %d\n", cycle);
+	VUM_LOG("waiting FDIV pipe %d", cycle);
 
 	VU->fdiv.enable = 0;
 	VU->cycle+= cycle;
@@ -234,7 +233,7 @@ void _vuFlushEFU(VURegs * VU) {
 	if (VU->efu.enable == 0) return;
 
 	cycle = VU->efu.Cycle - (VU->cycle - VU->efu.sCycle);
-//	VUM_LOG("waiting EFU pipe %d\n", cycle);
+//	VUM_LOG("waiting EFU pipe %d", cycle);
 
 	VU->efu.enable = 0;
 	VU->cycle+= cycle;
@@ -317,7 +316,6 @@ void _vuAddLowerStalls(VURegs * VU, _VURegsNum *VUregsn) {
 /*   VU Upper instructions    */
 /******************************/
 #ifndef INT_VUDOUBLEHACK
-static u32 d;
 float vuDouble(u32 f)
 {
 	switch(f & 0x7f800000){
@@ -325,10 +323,13 @@ float vuDouble(u32 f)
 			f &= 0x80000000;
 			return *(float*)&f;
 			break;
-		case 0x7f800000:
+		case 0x7f800000: 
+		{
+			u32 d;
 			d = (f & 0x80000000)|0x7f7fffff;
 			return *(float*)&d;
 			break;
+		}
 		default:
 			return *(float*)&f;
 			break;
@@ -1308,25 +1309,27 @@ void _vuMINIw(VURegs * VU) {
 }
 
 void _vuOPMULA(VURegs * VU) { 
-    VU->ACC.i.x = VU_MACx_UPDATE(VU, vuDouble(VU->VF[_Fs_].i.y) * vuDouble(VU->VF[_Ft_].i.z)); 
-    VU->ACC.i.y = VU_MACy_UPDATE(VU, vuDouble(VU->VF[_Fs_].i.z) * vuDouble(VU->VF[_Ft_].i.x)); 
-    VU->ACC.i.z = VU_MACz_UPDATE(VU, vuDouble(VU->VF[_Fs_].i.x) * vuDouble(VU->VF[_Ft_].i.y)); 
-    VU_STAT_UPDATE(VU); 
+	VU->ACC.i.x = VU_MACx_UPDATE(VU, vuDouble(VU->VF[_Fs_].i.y) * vuDouble(VU->VF[_Ft_].i.z)); 
+	VU->ACC.i.y = VU_MACy_UPDATE(VU, vuDouble(VU->VF[_Fs_].i.z) * vuDouble(VU->VF[_Ft_].i.x)); 
+	VU->ACC.i.z = VU_MACz_UPDATE(VU, vuDouble(VU->VF[_Fs_].i.x) * vuDouble(VU->VF[_Ft_].i.y)); 
+	VU_STAT_UPDATE(VU); 
 }/*last updated  8/05/03 shadow*/
 
 void _vuOPMSUB(VURegs * VU) { 
 	VECTOR * dst;
 	float ftx, fty, ftz;
 	float fsx, fsy, fsz;
-    if (_Fd_ == 0) dst = &RDzero;
-	else dst = &VU->VF[_Fd_];
+	if (_Fd_ == 0) 
+		dst = &RDzero;
+	else
+		dst = &VU->VF[_Fd_];
 
 	ftx = vuDouble(VU->VF[_Ft_].i.x); fty = vuDouble(VU->VF[_Ft_].i.y); ftz = vuDouble(VU->VF[_Ft_].i.z);
 	fsx = vuDouble(VU->VF[_Fs_].i.x); fsy = vuDouble(VU->VF[_Fs_].i.y); fsz = vuDouble(VU->VF[_Fs_].i.z);
-    dst->i.x = VU_MACx_UPDATE(VU, vuDouble(VU->ACC.i.x) - fsy * ftz); 
-    dst->i.y = VU_MACy_UPDATE(VU, vuDouble(VU->ACC.i.y) - fsz * ftx); 
-    dst->i.z = VU_MACz_UPDATE(VU, vuDouble(VU->ACC.i.z) - fsx * fty); 
-    VU_STAT_UPDATE(VU); 
+	dst->i.x = VU_MACx_UPDATE(VU, vuDouble(VU->ACC.i.x) - fsy * ftz); 
+	dst->i.y = VU_MACy_UPDATE(VU, vuDouble(VU->ACC.i.y) - fsz * ftx); 
+	dst->i.z = VU_MACz_UPDATE(VU, vuDouble(VU->ACC.i.z) - fsx * fty); 
+	VU_STAT_UPDATE(VU); 
 }/*last updated  8/05/03 shadow*/
 
 void _vuNOP(VURegs * VU) { 
@@ -1409,7 +1412,7 @@ void _vuCLIP(VURegs * VU) {
 	float value = fabs(vuDouble(VU->VF[_Ft_].i.w));
 
 	VU->clipflag <<= 6; 
-    if ( vuDouble(VU->VF[_Fs_].i.x) > +value ) VU->clipflag|= 0x01;
+	if ( vuDouble(VU->VF[_Fs_].i.x) > +value ) VU->clipflag|= 0x01;
 	if ( vuDouble(VU->VF[_Fs_].i.x) < -value ) VU->clipflag|= 0x02;
 	if ( vuDouble(VU->VF[_Fs_].i.y) > +value ) VU->clipflag|= 0x04;
 	if ( vuDouble(VU->VF[_Fs_].i.y) < -value ) VU->clipflag|= 0x08;
@@ -1430,10 +1433,9 @@ void _vuDIV(VURegs * VU) {
 	float ft = vuDouble(VU->VF[_Ft_].UL[_Ftf_]);
 	float fs = vuDouble(VU->VF[_Fs_].UL[_Fsf_]);
 
-//	_vuFMACTestStall(VU, _Fs_); _vuFMACTestStall(VU, _Ft_);
 	VU->statusflag = (VU->statusflag&0xfcf)|((VU->statusflag&0x30)<<6);
 
-    if (ft == 0.0) {
+	if (ft == 0.0) {
 		if (fs == 0.0) {
 			VU->statusflag |= 0x10;
 		} else {
@@ -1454,15 +1456,12 @@ void _vuDIV(VURegs * VU) {
 void _vuSQRT(VURegs * VU) { 
 	float ft = vuDouble(VU->VF[_Ft_].UL[_Ftf_]);
 
-//	_vuFMACTestStall(VU, _Ft_);
 	VU->statusflag = (VU->statusflag&0xfcf)|((VU->statusflag&0x30)<<6);
 
-	if (ft < 0.0 )
-		VU->statusflag |= 0x10;
+	if (ft < 0.0 ) VU->statusflag |= 0x10;
 	VU->q.F = sqrt(fabs(ft));
 	VU->q.F = vuDouble(VU->q.UL);
 } //last update 15/01/06 zerofrog
-
 
 /* Eminent Bug - Dvisior == 0 Check Missing ( D Flag Not Set ) */
 /* REFIXED....ASADR; rerefixed....zerofrog */
@@ -1471,7 +1470,6 @@ void _vuRSQRT(VURegs * VU) {
 	float fs = vuDouble(VU->VF[_Fs_].UL[_Fsf_]);
 	float temp; 
 
-//	_vuFMACTestStall(VU, _Fs_); _vuFMACTestStall(VU, _Ft_);
 	VU->statusflag = (VU->statusflag&0xfcf)|((VU->statusflag&0x30)<<6);
 
 	if ( ft == 0.0 ) {
@@ -1506,7 +1504,6 @@ void _vuRSQRT(VURegs * VU) {
 		VU->q.F = vuDouble(VU->q.UL);
 	} 
 } //last update 15/01/06 zerofrog
-
 
 void _vuIADDI(VURegs * VU) { 
 	s16 imm = ((VU->code >> 6) & 0x1f); 
@@ -1566,7 +1563,7 @@ void _vuMFIR(VURegs * VU) {
 // Big bug!!! mov from fs to ft not ft to fs. asadr
 void _vuMTIR(VURegs * VU) { 
 	if(_Ft_ == 0) return;
-    VU->VI[_Ft_].US[0] =  *(u16*)&VU->VF[_Fs_].F[_Fsf_]; 
+	VU->VI[_Ft_].US[0] =  *(u16*)&VU->VF[_Fs_].F[_Fsf_]; 
 } 
 
 void _vuMR32(VURegs * VU) {
@@ -1588,7 +1585,7 @@ void _vuLQ(VURegs * VU) {
 	if (_Ft_ == 0) return; 
  
 	imm = (VU->code & 0x400) ? (VU->code & 0x3ff) | 0xfc00 : (VU->code & 0x3ff); 
-	addr = (imm + VU->VI[_Fs_].SS[0]) * 16;
+	addr = ((imm + VU->VI[_Fs_].SS[0]) * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 
  	ptr = (u32*)GET_VU_MEM(VU, addr);
 	if (_X) VU->VF[_Ft_].UL[0] = ptr[0]; 
@@ -1604,7 +1601,7 @@ void _vuLQD( VURegs * VU ) {
 	if (_Fs_ != 0) VU->VI[_Fs_].US[0]--; 
 	if (_Ft_ == 0) return;
 
-	addr = VU->VI[_Fs_].US[0] * 16;
+	addr = (VU->VI[_Fs_].US[0] * 16) & (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u32*)GET_VU_MEM(VU, addr);
 	if (_X) VU->VF[_Ft_].UL[0] = ptr[0]; 
 	if (_Y) VU->VF[_Ft_].UL[1] = ptr[1]; 
@@ -1617,14 +1614,14 @@ void _vuLQI(VURegs * VU) {
 		u32 addr;
 		u32 *ptr;
 
-		addr = VU->VI[_Fs_].US[0] * 16;
+		addr = (VU->VI[_Fs_].US[0] * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 		ptr = (u32*)GET_VU_MEM(VU, addr);
 		if (_X) VU->VF[_Ft_].UL[0] = ptr[0]; 
 		if (_Y) VU->VF[_Ft_].UL[1] = ptr[1]; 
 		if (_Z) VU->VF[_Ft_].UL[2] = ptr[2]; 
 		if (_W) VU->VF[_Ft_].UL[3] = ptr[3]; 
-   }
-   if (_Fs_ != 0) VU->VI[_Fs_].US[0]++; 
+	}
+	if (_Fs_ != 0) VU->VI[_Fs_].US[0]++; 
 }
 
 /* addr is now signed. Asadr */
@@ -1634,7 +1631,7 @@ void _vuSQ(VURegs * VU) {
 	u32 *ptr; 
  
 	imm = (VU->code & 0x400) ? (VU->code & 0x3ff) | 0xfc00 : (VU->code & 0x3ff); 
-	addr = (imm + VU->VI[_Ft_].SS[0]) * 16;
+	addr = ((imm + VU->VI[_Ft_].SS[0]) * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u32*)GET_VU_MEM(VU, addr);
 	if (_X) ptr[0] = VU->VF[_Fs_].UL[0]; 
 	if (_Y) ptr[1] = VU->VF[_Fs_].UL[1]; 
@@ -1647,7 +1644,7 @@ void _vuSQD(VURegs * VU) {
 	u32 *ptr; 
  
 	if(_Ft_ != 0) VU->VI[_Ft_].US[0]--; 
-	addr = VU->VI[_Ft_].US[0] * 16;
+	addr = (VU->VI[_Ft_].US[0] * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u32*)GET_VU_MEM(VU, addr);
 	if (_X) ptr[0] = VU->VF[_Fs_].UL[0]; 
 	if (_Y) ptr[1] = VU->VF[_Fs_].UL[1]; 
@@ -1659,7 +1656,7 @@ void _vuSQI(VURegs * VU) {
 	u32 addr;
 	u32 *ptr; 
  
-	addr = VU->VI[_Ft_].US[0] * 16;
+	addr = (VU->VI[_Ft_].US[0] * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u32*)GET_VU_MEM(VU, addr);
 	if (_X) ptr[0] = VU->VF[_Fs_].UL[0];
 	if (_Y) ptr[1] = VU->VF[_Fs_].UL[1];
@@ -1676,7 +1673,7 @@ void _vuILW(VURegs * VU) {
 	if (_Ft_ == 0) return; 
  
  	imm = (VU->code & 0x400) ? (VU->code & 0x3ff) | 0xfc00 : (VU->code & 0x3ff); 
-	addr = (imm + VU->VI[_Fs_].SS[0]) * 16;
+	addr = ((imm + VU->VI[_Fs_].SS[0]) * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u16*)GET_VU_MEM(VU, addr);
 	if (_X) VU->VI[_Ft_].US[0] = ptr[0]; 
 	if (_Y) VU->VI[_Ft_].US[0] = ptr[2]; 
@@ -1690,7 +1687,7 @@ void _vuISW(VURegs * VU) {
 	u16 *ptr; 
  
  	imm = (VU->code & 0x400) ? (VU->code & 0x3ff) | 0xfc00 : (VU->code & 0x3ff); 
-	addr = (imm + VU->VI[_Fs_].SS[0]) * 16;
+	addr = ((imm + VU->VI[_Fs_].SS[0]) * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u16*)GET_VU_MEM(VU, addr);
 	if (_X) { ptr[0] = VU->VI[_Ft_].US[0]; ptr[1] = 0; }
 	if (_Y) { ptr[2] = VU->VI[_Ft_].US[0]; ptr[3] = 0; }
@@ -1703,7 +1700,7 @@ void _vuILWR(VURegs * VU) {
 	u16 *ptr; 
 	if (_Ft_ == 0) return; 
  
-	addr = VU->VI[_Fs_].US[0] * 16;
+	addr = (VU->VI[_Fs_].US[0] * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u16*)GET_VU_MEM(VU, addr);
 	if (_X) VU->VI[_Ft_].US[0] = ptr[0]; 
 	if (_Y) VU->VI[_Ft_].US[0] = ptr[2]; 
@@ -1715,7 +1712,7 @@ void _vuISWR(VURegs * VU) {
 	u32 addr;
 	u16 *ptr; 
  
-	addr = VU->VI[_Fs_].US[0] * 16;
+	addr = (VU->VI[_Fs_].US[0] * 16) & (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u16*)GET_VU_MEM(VU, addr);
 	if (_X) { ptr[0] = VU->VI[_Ft_].US[0]; ptr[1] = 0; }
 	if (_Y) { ptr[2] = VU->VI[_Ft_].US[0]; ptr[3] = 0; }
@@ -1734,7 +1731,6 @@ As an example for setting the polynomial variable correctly, the 23-bit M-series
   would be specified as (1 << 14).
 */
 
-
 //The two-tap 23 stage M-series polynomials are x23+x18 and x23+x14 ((1 << 18) and (1 << 14), respectively). 
 //The reverse sequences can be generated by x23+x(23-18) and x23+x(23-14) ((1 << 9) and (1 << 5), respectively)
 u32 poly = 1 << 5;
@@ -1744,23 +1740,13 @@ void SetPoly(u32 newPoly) {
 }
 
 void AdvanceLFSR(VURegs * VU) {
-	// code from www.project-fao.org
+	// code from www.project-fao.org (which is no longer there)
 	int x = (VU->VI[REG_R].UL >> 4) & 1;
 	int y = (VU->VI[REG_R].UL >> 22) & 1;
 	VU->VI[REG_R].UL <<= 1;
 	VU->VI[REG_R].UL ^= x ^ y;
 	VU->VI[REG_R].UL = (VU->VI[REG_R].UL&0x7fffff)|0x3f800000;
 }
-// old
-//	u32 lfsr = VU->VI[REG_R].UL & 0x007FFFFF;
-//	u32 oldlfsr = lfsr;
-//	lfsr <<= 1;
-//	if (oldlfsr & 0x00400000) {
-//		lfsr ^= poly;
-//		lfsr |= 1;
-//	}
-//
-//	VU->VI[REG_R].UL = 0x3F800000 | (lfsr & 0x007FFFFF);
 
 void _vuRINIT(VURegs * VU) {
 	VU->VI[REG_R].UL = 0x3F800000 | (VU->VF[_Fs_].UL[_Fsf_] & 0x007FFFFF);
@@ -1863,7 +1849,6 @@ void _vuFCGET(VURegs * VU) {
 
 s32 _branchAddr(VURegs * VU) {
 	s32 bpc = VU->VI[REG_TPC].SL + ( _Imm11_ * 8 ); 
-	//if (bpc < 0) bpc = VU->VI[REG_TPC].SL + _UImm11_ * 8; 
 	bpc&= (VU == &VU1) ? 0x3fff : 0x0fff;
 	return bpc;
 }
@@ -1871,8 +1856,6 @@ s32 _branchAddr(VURegs * VU) {
 void _setBranch(VURegs * VU, u32 bpc) {
 	VU->branch = 2;
 	VU->branchpc = bpc;
-//	VU->vuExec(VU);
-//	VU->VI[REG_TPC].UL = bpc; 
 }
 
 void _vuIBEQ(VURegs * VU) { 
@@ -1925,9 +1908,7 @@ void _vuB(VURegs * VU) {
 void _vuBAL(VURegs * VU) { 
 	s32 bpc = _branchAddr(VU);
 
-	if (_Ft_) {
-		VU->VI[_Ft_].US[0] = (VU->VI[REG_TPC].UL + 8)/8;
-	}
+	if (_Ft_) VU->VI[_Ft_].US[0] = (VU->VI[REG_TPC].UL + 8)/8;
 
 	_setBranch(VU, bpc);
 }
@@ -1939,9 +1920,7 @@ void _vuJR(VURegs * VU) {
 
 void _vuJALR(VURegs * VU) { 
     u32 bpc = VU->VI[_Fs_].US[0] * 8;
-	if (_Ft_) {
-		VU->VI[_Ft_].US[0] = (VU->VI[REG_TPC].UL + 8)/8;
-	}
+	if (_Ft_) VU->VI[_Ft_].US[0] = (VU->VI[REG_TPC].UL + 8)/8;
 
 	_setBranch(VU, bpc);
 }
@@ -2066,9 +2045,20 @@ void _vuXITOP(VURegs * VU) {
 
 void _vuXGKICK(VURegs * VU)
 {
+	u32* ptr = (u32*)GET_VU_MEM(VU, (VU->VI[_Fs_].US[0]*16) & (VU == &VU1 ? 0x3fff : 0xfff));
+//	int temp = 0x4000 - ((VU->VI[_Fs_].US[0]*16) & 0x3fff);
+//	u32 tempmem[0x8000];
+	
 	// flush all pipelines first (in the right order)
 	_vuFlushAll(VU);
-	GSGIFTRANSFER1((u32*)VU->Mem, (VU->VI[_Fs_].US[0]*16) & 0x3fff);
+
+	//Gonna be slow but reshuffles the memory so overflows wont occur
+	/*	memset(tempmem, 0, sizeof(tempmem));
+		memcpy(tempmem, ptr, temp);
+		ptr = (u32*)GET_VU_MEM(VU, 0);
+		memcpy(&tempmem[temp], ptr, ((VU->VI[_Fs_].US[0]*16) & 0x3fff));
+		GSGIFTRANSFER1((u32*)&tempmem[0], 0);
+	} else*/ GSGIFTRANSFER1((u32*)VU->Mem, (VU->VI[_Fs_].US[0]*16) & 0x3fff);
 }
 
 void _vuXTOP(VURegs * VU) {
@@ -2247,8 +2237,6 @@ void _vuRegs##OP(VURegs * VU, _VURegsNum *VUregsn) { \
 	VUregsn->VIread  = GET_VF0_FLAG(_Fs_); \
 	VUregsn->cycles  = _cycles; \
 }
-
-
 
 VUREGS_FTFS(ABS);
 
@@ -2531,13 +2519,23 @@ void _vuRegsMTIR(VURegs * VU, _VURegsNum *VUregsn) {
 	VUregsn->pipe = VUPIPE_FMAC;
     VUregsn->VFwrite = 0;
 	VUregsn->VFread0 = _Fs_;
-    VUregsn->VFr0xyzw= _XYZW;
+    VUregsn->VFr0xyzw= 1 << (3-_Fsf_);
 	VUregsn->VFread1 = 0;
     VUregsn->VIwrite = 1 << _Ft_;
     VUregsn->VIread  = GET_VF0_FLAG(_Fs_);
 }
 
-VUREGS_FTFS(MR32);
+void _vuRegsMR32(VURegs * VU, _VURegsNum *VUregsn) { 
+	VUregsn->pipe = VUPIPE_FMAC; 
+	VUregsn->VFwrite = _Ft_; 
+	VUregsn->VFwxyzw = _XYZW; 
+	VUregsn->VFread0 = _Fs_; 
+	VUregsn->VFr0xyzw= (_XYZW >> 1) | ((_XYZW << 3) & 0xf);  //rotate
+	VUregsn->VFread1 = 0; 
+	VUregsn->VFr1xyzw = 0xff; 
+	VUregsn->VIwrite = 0; 
+	VUregsn->VIread  = (_Ft_ ? GET_VF0_FLAG(_Fs_) : 0); 
+}
 
 void _vuRegsLQ(VURegs * VU, _VURegsNum *VUregsn) {
 	VUregsn->pipe = VUPIPE_FMAC;
@@ -2719,7 +2717,7 @@ void _vuRegsFSSET(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
     VUregsn->VIwrite = 1 << REG_STATUS_FLAG;
-    VUregsn->VIread  = 0;//1 << REG_STATUS_FLAG; this kills speed
+	VUregsn->VIread  = 0;
 }
 
 void _vuRegsFMAND(VURegs * VU, _VURegsNum *VUregsn) {

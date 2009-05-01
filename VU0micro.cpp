@@ -38,26 +38,6 @@ using namespace R5900;
 
 #define VF_VAL(x) ((x==0x80000000)?0:(x))
 
-void iDumpVU0Registers()
-{
-	// fixme: This code is outdated, broken, and lacks printed labels.
-	// Needs heavy mods to be useful.
-#if 0
-	int i;
-	
-	for(i = 1; i < 32; ++i) {
-		__Log("v%d: %x %x %x %x, vi: ", i, VF_VAL(VU0.VF[i].UL[3]), VF_VAL(VU0.VF[i].UL[2]),
-			VF_VAL(VU0.VF[i].UL[1]), VF_VAL(VU0.VF[i].UL[0]));
-		if( i == REG_Q || i == REG_P ) __Log("%f\n", VU0.VI[i].F);
-		else if( i == REG_MAC_FLAG ) __Log("%x\n", 0);//VU0.VI[i].UL&0xff);
-		else if( i == REG_STATUS_FLAG ) __Log("%x\n", 0);//VU0.VI[i].UL&0x03);
-		else if( i == REG_CLIP_FLAG ) __Log("0\n");
-		else __Log("%x\n", VU0.VI[i].UL);
-	}
-	__Log("vfACC: %f %f %f %f\n", VU0.ACC.F[3], VU0.ACC.F[2], VU0.ACC.F[1], VU0.ACC.F[0]);
-#endif
-}
-
 // This is called by the COP2 as per the CTC instruction
 void vu0ResetRegs()
 {
@@ -73,7 +53,7 @@ void VU0MI_XTOP() {
 }
 
 void vu0ExecMicro(u32 addr) {
-	VUM_LOG("vu0ExecMicro %x\n", addr);
+	VUM_LOG("vu0ExecMicro %x", addr);
 	
 	if(VU0.VI[REG_VPU_STAT].UL & 0x1) {
 		DevCon::Notice("vu0ExecMicro > Stalling for previous microprogram to finish");
@@ -95,13 +75,13 @@ void vu0ExecMicro(u32 addr) {
 void VU0unknown() {
 	assert(0);
 	
-	CPU_LOG("Unknown VU micromode opcode called\n"); 
+	CPU_LOG("Unknown VU micromode opcode called"); 
 }  
 
 void VU0regsunknown(_VURegsNum *VUregsn) {
 	assert(0);
 	
-	CPU_LOG("Unknown VU micromode opcode called\n"); 
+	CPU_LOG("Unknown VU micromode opcode called"); 
 }  
  
 _vuRegsTables(VU0, VU0regs);

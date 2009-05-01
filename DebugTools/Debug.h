@@ -71,9 +71,11 @@ namespace R3000A
 	extern char* disR3000AF(u32 code, u32 pc);
 }
 
+extern bool enableLogging;
 #ifdef PCSX2_DEVBUILD
 
 extern u32 varLog;
+extern bool enableLogging;
 
 void SourceLog( u16 protocol, u8 source, u32 cpuPc, u32 cpuCycle, const char *fmt, ...);
 void __Log( const char* fmt, ... );
@@ -187,6 +189,8 @@ extern bool SrcLog_GPU( const char* fmt, ... );
 #define CACHE_LOG 0&&
 #define MEMCARDS_LOG 0&&
 #endif
+
+//#define VIFUNPACKDEBUG //enable unpack debugging output
 
 #ifdef VIFUNPACKDEBUG
 #define VIFUNPACK_LOG VIF_LOG

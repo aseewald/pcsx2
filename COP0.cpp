@@ -25,15 +25,18 @@
 u32 s_iLastCOP0Cycle = 0;
 u32 s_iLastPERFCycle[2] = { 0, 0 };
 
-void UpdateCP0Status() {
-	u32 value = cpuRegs.CP0.n.Status.val;
+__releaseinline void UpdateCP0Status() {
+	//currently the 2 memory modes are not implemented. Given this function is called so much,
+	//it's commented out for now. Only the interrupt test is needed. (rama)
 
-	if (value & 0x06 ||
-		(value & 0x18) == 0) { // Kernel Mode (KSU = 0 | EXL = 1 | ERL = 1)*/
-		memSetKernelMode();	// Kernel memory always
-	} else { // User Mode
-		memSetUserMode();
-	}
+	//u32 value = cpuRegs.CP0.n.Status.val;
+
+	//if (value & 0x06 ||
+	//	(value & 0x18) == 0) { // Kernel Mode (KSU = 0 | EXL = 1 | ERL = 1)*/
+	//	memSetKernelMode();	// Kernel memory always
+	//} else { // User Mode
+	//	memSetUserMode();
+	//}
 	cpuTestHwInts();
 }
 
@@ -87,7 +90,7 @@ void MapTLB(int i)
 
 void UnmapTLB(int i)
 {
-	//SysPrintf("Clear TLB %d: %08x-> [%08x %08x] S=%d G=%d ASID=%d Mask= %03X\n",i,tlb[i].VPN2,tlb[i].PFN0,tlb[i].PFN1,tlb[i].S,tlb[i].G,tlb[i].ASID,tlb[i].Mask);
+	//Console::WriteLn("Clear TLB %d: %08x-> [%08x %08x] S=%d G=%d ASID=%d Mask= %03X", params i,tlb[i].VPN2,tlb[i].PFN0,tlb[i].PFN1,tlb[i].S,tlb[i].G,tlb[i].ASID,tlb[i].Mask);
 	u32 mask, addr;
 	u32 saddr, eaddr;
 
@@ -102,7 +105,7 @@ void UnmapTLB(int i)
 		mask  = ((~tlb[i].Mask) << 1) & 0xfffff;
 		saddr = tlb[i].VPN2 >> 12;
 		eaddr = saddr + tlb[i].Mask + 1;
-	//	SysPrintf("Clear TLB: %08x ~ %08x\n",saddr,eaddr-1);
+	//	Console::WriteLn("Clear TLB: %08x ~ %08x",params saddr,eaddr-1);
 		for (addr=saddr; addr<eaddr; addr++) {
 			if ((addr & mask) == ((tlb[i].VPN2 >> 12) & mask)) { //match
 				memClearPageAddr(addr << 12);
@@ -115,7 +118,7 @@ void UnmapTLB(int i)
 		mask  = ((~tlb[i].Mask) << 1) & 0xfffff;
 		saddr = (tlb[i].VPN2 >> 12) + tlb[i].Mask + 1;
 		eaddr = saddr + tlb[i].Mask + 1;
-	//	SysPrintf("Clear TLB: %08x ~ %08x\n",saddr,eaddr-1);
+	//	Console::WriteLn("Clear TLB: %08x ~ %08x",params saddr,eaddr-1);
 		for (addr=saddr; addr<eaddr; addr++) {
 			if ((addr & mask) == ((tlb[i].VPN2 >> 12) & mask)) { //match
 				memClearPageAddr(addr << 12);
@@ -305,10 +308,10 @@ namespace COP0 {
 void MFC0()
 {
 	// Note on _Rd_ Condition 9: CP0.Count should be updated even if _Rt_ is 0.
-	if( (_Rd_ != 9) && !_Rt_ ) return;
-	if(_Rd_ != 9) { COP0_LOG("%s\n", disR5900Current.getCString() ); }
+	if ((_Rd_ != 9) && !_Rt_ ) return;
+	if (_Rd_ != 9) { COP0_LOG("%s", disR5900Current.getCString() ); }
 	
-	//if(bExecBIOS == FALSE && _Rd_ == 25) SysPrintf("MFC0 _Rd_ %x = %x\n", _Rd_, cpuRegs.CP0.r[_Rd_]);
+	//if(bExecBIOS == FALSE && _Rd_ == 25) Console::WriteLn("MFC0 _Rd_ %x = %x", params _Rd_, cpuRegs.CP0.r[_Rd_]);
 	switch (_Rd_)
 	{
 		case 12:
@@ -332,7 +335,7 @@ void MFC0()
 					cpuRegs.GPR.r[_Rt_].SD[0] = (s32)cpuRegs.PERF.n.pcr1;
 				break;
 		    }
-		    /*SysPrintf("MFC0 PCCR = %x PCR0 = %x PCR1 = %x IMM= %x\n", 
+		    /*Console::WriteLn("MFC0 PCCR = %x PCR0 = %x PCR1 = %x IMM= %x",  params
 		    cpuRegs.PERF.n.pccr, cpuRegs.PERF.n.pcr0, cpuRegs.PERF.n.pcr1, _Imm_ & 0x3F);*/
 		break;
 
@@ -357,11 +360,24 @@ void MFC0()
 void MTC0()
 {
 	COP0_LOG("%s\n", disR5900Current.getCString());
-	//if(bExecBIOS == FALSE && _Rd_ == 25) SysPrintf("MTC0 _Rd_ %x = %x\n", _Rd_, cpuRegs.CP0.r[_Rd_]);
+	//if(bExecBIOS == FALSE && _Rd_ == 25) Console::WriteLn("MTC0 _Rd_ %x = %x", params _Rd_, cpuRegs.CP0.r[_Rd_]);
 	switch (_Rd_)
 	{
+		case 9:
+			s_iLastCOP0Cycle = cpuRegs.cycle;
+			cpuRegs.CP0.r[9] = cpuRegs.GPR.r[_Rt_].UL[0];
+		break;
+		
+		case 12: 
+			WriteCP0Status(cpuRegs.GPR.r[_Rt_].UL[0]); 
+		break;
+		
+		case 24: 
+			Console::WriteLn("MTC0 Breakpoint debug Registers code = %x", params cpuRegs.code & 0x3FF);
+		break;
+		
 		case 25: 
-			/*if(bExecBIOS == FALSE && _Rd_ == 25) SysPrintf("MTC0 PCCR = %x PCR0 = %x PCR1 = %x IMM= %x\n", 
+			/*if(bExecBIOS == FALSE && _Rd_ == 25) Console::WriteLn("MTC0 PCCR = %x PCR0 = %x PCR1 = %x IMM= %x", params
 				cpuRegs.PERF.n.pccr, cpuRegs.PERF.n.pcr0, cpuRegs.PERF.n.pcr1, _Imm_ & 0x3F);*/
 			switch(_Imm_ & 0x3F)
 			{
@@ -383,17 +399,7 @@ void MTC0()
 				break;
 			}
 		break;
-		
-		case 24: 
-			Console::WriteLn("MTC0 Breakpoint debug Registers code = %x", params cpuRegs.code & 0x3FF);
-		break;
-
-		case 12: WriteCP0Status(cpuRegs.GPR.r[_Rt_].UL[0]); break;
-		case 9:
-			s_iLastCOP0Cycle = cpuRegs.cycle;
-			cpuRegs.CP0.r[9] = cpuRegs.GPR.r[_Rt_].UL[0];
-		break;
-		
+			
 		default:
 			cpuRegs.CP0.r[_Rd_] = cpuRegs.GPR.r[_Rt_].UL[0]; 
 		break;
@@ -406,34 +412,41 @@ int CPCOND0() {
 
 //#define CPCOND0	1
 
-#define BC0(cond) \
+/*#define BC0(cond) \
 	if (CPCOND0() cond) { \
 		intDoBranch(_BranchTarget_); \
-	}
+	}*/
 
 void BC0F() {
-	BC0(== 0);
-	COP0_LOG( "COP0 > BC0F\n" );
+	if (CPCOND0() == 0) intDoBranch(_BranchTarget_); 
+	COP0_LOG( "COP0 > BC0F" );
 }
 
 void BC0T() {
-	BC0(== 1);
-	COP0_LOG( "COP0 > BC0T\n" );
+	if (CPCOND0() == 1) intDoBranch(_BranchTarget_); 
+	COP0_LOG( "COP0 > BC0T" );
 }
 
-#define BC0L(cond) \
+/*#define BC0L(cond) \
 	if (CPCOND0() cond) { \
 		intDoBranch(_BranchTarget_); \
-	} else cpuRegs.pc+= 4;
-
+	} else cpuRegs.pc+= 4;*/
+	
 void BC0FL() {
-	BC0L(== 0);
-	COP0_LOG( "COP0 > BC0FL\n" );
+	if (CPCOND0() == 0) 
+		intDoBranch(_BranchTarget_); 
+	else 
+		cpuRegs.pc+= 4;
+	
+	COP0_LOG( "COP0 > BC0FL" );
 }
 
 void BC0TL() {
-	BC0L(== 1);
-	COP0_LOG( "COP0 > BCOTL\n" );
+	if (CPCOND0() == 1) 
+		intDoBranch(_BranchTarget_); 
+	else 
+		cpuRegs.pc+= 4;
+	COP0_LOG( "COP0 > BCOTL" );
 }
 
 void TLBR() {
@@ -443,7 +456,7 @@ void TLBR() {
 
 	int i = cpuRegs.CP0.n.Index&0x1f;
 
-	COP0_LOG("COP0 > TLBR\n");
+	COP0_LOG("COP0 > TLBR");
 	cpuRegs.CP0.n.PageMask = tlb[i].PageMask;
 	cpuRegs.CP0.n.EntryHi = tlb[i].EntryHi&~(tlb[i].PageMask|0x1f00);
 	cpuRegs.CP0.n.EntryLo0 = (tlb[i].EntryLo0&~1)|((tlb[i].EntryHi>>12)&1);
@@ -481,8 +494,7 @@ void TLBWR() {
 
 void TLBP() {
 	int i;
-
-
+	
 	union {
 		struct {
 			u32 VPN2:19;
@@ -493,13 +505,13 @@ void TLBP() {
 		u32 u;
 	} EntryHi32;
 
-	EntryHi32.u=cpuRegs.CP0.n.EntryHi;
+	EntryHi32.u = cpuRegs.CP0.n.EntryHi;
 
 	cpuRegs.CP0.n.Index=0xFFFFFFFF;
 	for(i=0;i<48;i++){
-		if(tlb[i].VPN2==((~tlb[i].Mask)&(EntryHi32.s.VPN2))
-		&&((tlb[i].G&1)||((tlb[i].ASID & 0xff) == EntryHi32.s.ASID))) {
-			cpuRegs.CP0.n.Index=i;
+		if (tlb[i].VPN2 == ((~tlb[i].Mask) & (EntryHi32.s.VPN2))
+		&& ((tlb[i].G&1) || ((tlb[i].ASID & 0xff) == EntryHi32.s.ASID))) {
+			cpuRegs.CP0.n.Index = i;
 			break;
 		}
 	}

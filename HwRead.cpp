@@ -62,34 +62,35 @@ __forceinline u8 hwRead8(u32 mem)
 
 	switch (mem)
 	{
-		case 0x10000000: ret = (u8)rcntRcount(0); break;
-		case 0x10000010: ret = (u8)counters[0].modeval; break;
-		case 0x10000020: ret = (u8)counters[0].target; break;
-		case 0x10000030: ret = (u8)counters[0].hold; break;
+		// Note: the values without defines = the defines + 1.
+		case RCNT0_COUNT: ret = (u8)rcntRcount(0); break;
+		case RCNT0_MODE: ret = (u8)counters[0].modeval; break;
+		case RCNT0_TARGET: ret = (u8)counters[0].target; break;
+		case RCNT0_HOLD: ret = (u8)counters[0].hold; break;
 		case 0x10000001: ret = (u8)(rcntRcount(0)>>8); break;
 		case 0x10000011: ret = (u8)(counters[0].modeval>>8); break;
 		case 0x10000021: ret = (u8)(counters[0].target>>8); break;
 		case 0x10000031: ret = (u8)(counters[0].hold>>8); break;
 
-		case 0x10000800: ret = (u8)rcntRcount(1); break;
-		case 0x10000810: ret = (u8)counters[1].modeval; break;
-		case 0x10000820: ret = (u8)counters[1].target; break;
-		case 0x10000830: ret = (u8)counters[1].hold; break;
+		case RCNT1_COUNT: ret = (u8)rcntRcount(1); break;
+		case RCNT1_MODE: ret = (u8)counters[1].modeval; break;
+		case RCNT1_TARGET: ret = (u8)counters[1].target; break;
+		case RCNT1_HOLD: ret = (u8)counters[1].hold; break;
 		case 0x10000801: ret = (u8)(rcntRcount(1)>>8); break;
 		case 0x10000811: ret = (u8)(counters[1].modeval>>8); break;
 		case 0x10000821: ret = (u8)(counters[1].target>>8); break;
 		case 0x10000831: ret = (u8)(counters[1].hold>>8); break;
 
-		case 0x10001000: ret = (u8)rcntRcount(2); break;
-		case 0x10001010: ret = (u8)counters[2].modeval; break;
-		case 0x10001020: ret = (u8)counters[2].target; break;
+		case RCNT2_COUNT: ret = (u8)rcntRcount(2); break;
+		case RCNT2_MODE: ret = (u8)counters[2].modeval; break;
+		case RCNT2_TARGET: ret = (u8)counters[2].target; break;
 		case 0x10001001: ret = (u8)(rcntRcount(2)>>8); break;
 		case 0x10001011: ret = (u8)(counters[2].modeval>>8); break;
 		case 0x10001021: ret = (u8)(counters[2].target>>8); break;
 
-		case 0x10001800: ret = (u8)rcntRcount(3); break;
-		case 0x10001810: ret = (u8)counters[3].modeval; break;
-		case 0x10001820: ret = (u8)counters[3].target; break;
+		case RCNT3_COUNT: ret = (u8)rcntRcount(3); break;
+		case RCNT3_MODE: ret = (u8)counters[3].modeval; break;
+		case RCNT3_TARGET: ret = (u8)counters[3].target; break;
 		case 0x10001801: ret = (u8)(rcntRcount(3)>>8); break;
 		case 0x10001811: ret = (u8)(counters[3].modeval>>8); break;
 		case 0x10001821: ret = (u8)(counters[3].target>>8); break;
@@ -98,7 +99,7 @@ __forceinline u8 hwRead8(u32 mem)
 			if ((mem & 0xffffff0f) == 0x1000f200)
 			{
 				if(mem == 0x1000f260) ret = 0;
-				else if(mem == 0x1000F240) {
+				else if(mem == SBUS_F240) {
 					ret = psHu32(mem);
 					//psHu32(mem) &= ~0x4000;
 				}
@@ -107,7 +108,7 @@ __forceinline u8 hwRead8(u32 mem)
 			}
 
 			ret = psHu8(mem);
-			HW_LOG("Unknown Hardware Read 8 from 0x%x = 0x%x\n", mem, ret);
+			HW_LOG("Unknown Hardware Read 8 from 0x%x = 0x%x", mem, ret);
 			break;
 	}
 
@@ -121,34 +122,34 @@ __forceinline u16 hwRead16(u32 mem)
 {
 	u16 ret;
 
-	if( mem >= 0x10002000 && mem < 0x10008000 )
+	if( mem >= IPU_CMD && mem < D0_CHCR )
 		Console::Notice("Unexpected hwRead16 from 0x%x", params mem);
 
 	switch (mem)
 	{
-		case 0x10000000: ret = (u16)rcntRcount(0); break;
-		case 0x10000010: ret = (u16)counters[0].modeval; break;
-		case 0x10000020: ret = (u16)counters[0].target; break;
-		case 0x10000030: ret = (u16)counters[0].hold; break;
+		case RCNT0_COUNT: ret = (u16)rcntRcount(0); break;
+		case RCNT0_MODE: ret = (u16)counters[0].modeval; break;
+		case RCNT0_TARGET: ret = (u16)counters[0].target; break;
+		case RCNT0_HOLD: ret = (u16)counters[0].hold; break;
 
-		case 0x10000800: ret = (u16)rcntRcount(1); break;
-		case 0x10000810: ret = (u16)counters[1].modeval; break;
-		case 0x10000820: ret = (u16)counters[1].target; break;
-		case 0x10000830: ret = (u16)counters[1].hold; break;
+		case RCNT1_COUNT: ret = (u16)rcntRcount(1); break;
+		case RCNT1_MODE: ret = (u16)counters[1].modeval; break;
+		case RCNT1_TARGET: ret = (u16)counters[1].target; break;
+		case RCNT1_HOLD: ret = (u16)counters[1].hold; break;
 
-		case 0x10001000: ret = (u16)rcntRcount(2); break;
-		case 0x10001010: ret = (u16)counters[2].modeval; break;
-		case 0x10001020: ret = (u16)counters[2].target; break;
+		case RCNT2_COUNT: ret = (u16)rcntRcount(2); break;
+		case RCNT2_MODE: ret = (u16)counters[2].modeval; break;
+		case RCNT2_TARGET: ret = (u16)counters[2].target; break;
 
-		case 0x10001800: ret = (u16)rcntRcount(3); break;
-		case 0x10001810: ret = (u16)counters[3].modeval; break;
-		case 0x10001820: ret = (u16)counters[3].target; break;
+		case RCNT3_COUNT: ret = (u16)rcntRcount(3); break;
+		case RCNT3_MODE: ret = (u16)counters[3].modeval; break;
+		case RCNT3_TARGET: ret = (u16)counters[3].target; break;
 
 		default:
 			if ((mem & 0xffffff0f) == 0x1000f200)
 			{
 				if(mem == 0x1000f260) ret = 0;
-				else if(mem == 0x1000F240) {
+				else if(mem == SBUS_F240) {
 					ret = psHu16(mem) | 0x0102;
 					psHu32(mem) &= ~0x4000;
 				}
@@ -157,7 +158,7 @@ __forceinline u16 hwRead16(u32 mem)
 				return (u16)ret;
 			}
 			ret = psHu16(mem);
-			HW_LOG("Hardware Read16 at 0x%x, value= 0x%x\n", ret, mem);
+			HW_LOG("Hardware Read16 at 0x%x, value= 0x%x", ret, mem);
 			break;
 	}
 	return ret;
@@ -213,16 +214,22 @@ static __forceinline mem32_t __hwRead32_page_0F( u32 mem, bool intchack )
 
 	mem &= 0xffff;
 
+	// INTC_STAT shortcut for heavy spinning.
+	// Performance Note: Visual Studio handles this best if we just manually check for it here,
+	// outside the context of the switch statement below.  This is likely fixed by PGO also,
+	// but it's an easy enough conditional to account for anyways.
+	
+	static const uint ics = INTC_STAT & 0xffff;
+	if( mem == ics )		// INTC_STAT
+	{
+		if( intchack ) IntCHackCheck();
+		return *((u32*)&PS2MEM_HW[ics]);
+	}
+
 	switch( mem )
 	{
-		case 0xf000:
-			if( intchack ) IntCHackCheck();
-			// This one is checked alot, so leave it commented out unless you love 600 meg logfiles.
-			//HW_LOG("INTC_STAT Read  32bit %x\n", psHu32(0xf010));
-		break;
-
 		case 0xf010:
-			HW_LOG("INTC_MASK Read32, value=0x%x\n", psHu32(INTC_MASK));
+			HW_LOG("INTC_MASK Read32, value=0x%x", psHu32(INTC_MASK));
 		break;
 
 		case 0xf130:	// 0x1000f130
@@ -315,19 +322,19 @@ mem32_t __fastcall hwRead32_generic(u32 mem)
 				case D2_SADR: regName = "DMA2_SADDR"; break;
 			}
 
-			HW_LOG( "Hardware Read32 at 0x%x (%s), value=0x%x\n", mem, regName, psHu32(mem) );
+			HW_LOG( "Hardware Read32 at 0x%x (%s), value=0x%x", mem, regName, psHu32(mem) );
 		}
 		break;
 
 		case 0x0b:
 			if( mem == D4_CHCR )
-				HW_LOG("Hardware Read32 at 0x%x (IPU1:DMA4_CHCR), value=0x%x\n", mem, psHu32(mem));
+				HW_LOG("Hardware Read32 at 0x%x (IPU1:DMA4_CHCR), value=0x%x", mem, psHu32(mem));
 		break;
 
 		case 0x0c:
 		case 0x0e:
 			if( mem == DMAC_STAT)
-				HW_LOG("DMAC_STAT Read32, value=0x%x\n", psHu32(DMAC_STAT));
+				HW_LOG("DMAC_STAT Read32, value=0x%x", psHu32(DMAC_STAT));
 		break;
 
 		jNO_DEFAULT;
@@ -359,13 +366,13 @@ void __fastcall hwRead64_generic_INTC_HACK(u32 mem, mem64_t* result )
 	if( mem == INTC_STAT ) IntCHackCheck();
 
 	*result = psHu64(mem);
-	HW_LOG("Unknown Hardware Read 64 at %x\n",mem);
+	HW_LOG("Unknown Hardware Read 64 at %x",mem);
 }
 
 void __fastcall hwRead64_generic(u32 mem, mem64_t* result )
 {
 	*result = psHu64(mem);
-	HW_LOG("Unknown Hardware Read 64 at %x\n",mem);
+	HW_LOG("Unknown Hardware Read 64 at %x",mem);
 }
 
 /////////////////////////////////////////////////////////////////////////
@@ -386,7 +393,7 @@ void __fastcall hwRead128_page_01(u32 mem, mem128_t* result )
 void __fastcall hwRead128_page_02(u32 mem, mem128_t* result )
 {
 	// IPU is currently unhandled in 128 bit mode.
-	HW_LOG("Unknown Hardware Read 128 at %x (IPU)\n",mem);
+	HW_LOG("Unknown Hardware Read 128 at %x (IPU)",mem);
 }
 
 void __fastcall hwRead128_generic(u32 mem, mem128_t* out)
@@ -394,5 +401,5 @@ void __fastcall hwRead128_generic(u32 mem, mem128_t* out)
 	out[0] = psHu64(mem);
 	out[1] = psHu64(mem+8);
 
-	HW_LOG("Unknown Hardware Read 128 at %x\n",mem);
+	HW_LOG("Unknown Hardware Read 128 at %x",mem);
 }

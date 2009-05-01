@@ -18,13 +18,8 @@
 
 #pragma once
 
-#include "PrecompiledHeader.h"
-#include <vector>
-#include <map>
+#include <map>			// used by BaseBlockEx
 #include <utility>
-
-// used to keep block information
-#define BLOCKTYPE_DELAYSLOT	1		// if bit set, delay slot
 
 // Every potential jump point in the PS2's addressable memory has a BASEBLOCK
 // associated with it. So that means a BASEBLOCK for every 4 bytes of PS2
@@ -55,12 +50,12 @@ struct BASEBLOCKEX
 class BaseBlocks
 {
 private:
-	std::vector<BASEBLOCKEX> blocks;
 	// switch to a hash map later?
 	std::multimap<u32, uptr> links;
 	typedef std::multimap<u32, uptr>::iterator linkiter_t;
 	unsigned long size;
 	uptr recompiler;
+	std::vector<BASEBLOCKEX> blocks;
 
 public:
 	BaseBlocks(unsigned long size_, uptr recompiler_) :
@@ -73,50 +68,64 @@ public:
 
 	BASEBLOCKEX* New(u32 startpc, uptr fnptr);
 	int LastIndex (u32 startpc) const;
-	BASEBLOCKEX* GetByX86(uptr ip) const;
+	BASEBLOCKEX* GetByX86(uptr ip);
 
-	inline int Index (u32 startpc) const
+	__forceinline int Index (u32 startpc) const
 	{
 		int idx = LastIndex(startpc);
-		if (idx == -1 || startpc < blocks[idx].startpc ||
-			blocks[idx].size && (startpc >= blocks[idx].startpc + blocks[idx].size * 4))
+		// fixme: I changed the parenthesis to be unambiguous, but this needs to be checked to see if ((x or y or z) and w)
+		// is correct, or ((x or y) or (z and w)), or some other variation. --arcum42
+		// Mixing &&'s and ||'s is not actually ambiguous; &&'s take precedence.  Reverted to old behavior -- ChickenLiver.
+		if ((idx == -1) || (startpc < blocks[idx].startpc) ||
+			((blocks[idx].size) && (startpc >= blocks[idx].startpc + blocks[idx].size * 4)))
 			return -1;
 		else
 			return idx;
 	}
 
-	inline BASEBLOCKEX* operator[](int idx)
+	__forceinline BASEBLOCKEX* operator[](int idx)
 	{
 		if (idx < 0 || idx >= (int)blocks.size())
 			return 0;
 		return &blocks[idx];
 	}
 
-	inline BASEBLOCKEX* Get(u32 startpc)
+	__forceinline BASEBLOCKEX* Get(u32 startpc)
 	{
 		return (*this)[Index(startpc)];
 	}
 
-	inline void Remove(int idx)
+	__forceinline void Remove(int idx)
 	{
-		u32 startpc = blocks[idx].startpc;
+		//u32 startpc = blocks[idx].startpc;
 		std::pair<linkiter_t, linkiter_t> range = links.equal_range(blocks[idx].startpc);
 		for (linkiter_t i = range.first; i != range.second; ++i)
 			*(u32*)i->second = recompiler - (i->second + 4);
+
+		if( IsDevBuild )
+		{
+			// Clear the first instruction to 0xcc (breakpoint), as a way to assert if some
+			// static jumps get left behind to this block.  Note: Do not clear more than the
+			// first byte, since this code is called during exception handlers and event handlers
+			// both of which expect to be able to return to the recompiled code.
+			
+			BASEBLOCKEX effu( blocks[idx] );
+			memset( (void*)effu.fnptr, 0xcc, 1 );
+		}
+
 		// TODO: remove links from this block?
 		blocks.erase(blocks.begin() + idx);
 	}
 
 	void Link(u32 pc, uptr jumpptr);
 
-	inline void Reset()
+	__forceinline void Reset()
 	{
 		blocks.clear();
 		links.clear();
 	}
 };
 
-#define GET_BLOCKTYPE(b) ((b)->Type)
 #define PC_GETBLOCK_(x, reclut) ((BASEBLOCK*)(reclut[((u32)(x)) >> 16] + (x)*(sizeof(BASEBLOCK)/4)))
 
 static void recLUT_SetPage(uptr reclut[0x10000], uptr hwlut[0x10000],

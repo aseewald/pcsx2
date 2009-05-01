@@ -202,10 +202,8 @@ void WinRun()
 	_doPluginOverride( "DEV9", g_Startup.dev9dll, Config.DEV9 );
 
 
-#ifndef _DEBUG
 	if( Config.Profiler )
 		ProfilerInit();
-#endif
 
 	InitCPUTicks();
 
@@ -525,6 +523,7 @@ BOOL APIENTRY GameFixes(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
         case WM_INITDIALOG:
 			if(Config.GameFixes & 0x1) CheckDlgButton(hDlg, IDC_GAMEFIX2, TRUE);//Tri-Ace fix
 			if(Config.GameFixes & 0x4) CheckDlgButton(hDlg, IDC_GAMEFIX3, TRUE);//Digimon FPU compare fix
+			if(Config.GameFixes & 0x2) CheckDlgButton(hDlg, IDC_GAMEFIX4, TRUE);//Persona3/4 fix
 			if(Config.GameFixes & 0x8) CheckDlgButton(hDlg, IDC_GAMEFIX5, TRUE);//Tales of Destiny fix
 		return TRUE;
 
@@ -534,6 +533,7 @@ BOOL APIENTRY GameFixes(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 				uint newfixes = 0;
 				newfixes |= IsDlgButtonChecked(hDlg, IDC_GAMEFIX2) ? 0x1 : 0;
 				newfixes |= IsDlgButtonChecked(hDlg, IDC_GAMEFIX3) ? 0x4 : 0;
+				newfixes |= IsDlgButtonChecked(hDlg, IDC_GAMEFIX4) ? 0x2 : 0;
 				newfixes |= IsDlgButtonChecked(hDlg, IDC_GAMEFIX5) ? 0x8 : 0;
 				
 				EndDialog(hDlg, TRUE);
@@ -798,7 +798,6 @@ LRESULT WINAPI MainWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				SaveConfig();
 				break;
 
-#ifndef _DEBUG
 			case ID_PROFILER:
 				Config.Profiler = !Config.Profiler;
 				if( Config.Profiler )
@@ -813,7 +812,6 @@ LRESULT WINAPI MainWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				}
 				SaveConfig();
 				break;
-#endif
 
 			default:
 				if (LOWORD(wParam) >= ID_LANGS && LOWORD(wParam) <= (ID_LANGS + langsMax))
@@ -987,9 +985,7 @@ void CreateMainMenu() {
 	ADDMENUITEM(0,_("Print cdvd &Info"), ID_CDVDPRINT);
 	ADDMENUITEM(0,_("Close GS Window on Esc"), ID_CLOSEGS);
 	ADDSEPARATOR(0);
-#ifndef _DEBUG
 	ADDMENUITEM(0,_("Enable &Profiler"), ID_PROFILER);
-#endif
 	ADDMENUITEM(0,_("Enable &Patches"), ID_PATCHES);
 	ADDMENUITEM(0,_("Enable &Console"), ID_CONSOLE); 
 	ADDSEPARATOR(0);

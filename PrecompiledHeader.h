@@ -33,6 +33,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////
 // Include the STL junk that's actually handy.
 
+#include <stdexcept>
 #include <algorithm>
 #include <vector>
 #include <string>
@@ -68,8 +69,10 @@ typedef int BOOL;
 // unchanged for long periods of time.
 
 #include "zlib/zlib.h"
-#include "PS2Etypes.h"
+#include "Pcsx2Defs.h"
+#include "MemcpyFast.h"
 #include "StringUtils.h"
+#include "Exceptions.h"
 
 ////////////////////////////////////////////////////////////////////
 // Compiler/OS specific macros and defines -- Begin Section
@@ -156,23 +159,17 @@ static __forceinline u32 timeGetTime()
 #endif
 
 //////////////////////////////////////////////////////////////////////////////////////////
-// Emitter Instance Identifiers.  If you add a new emitter, do it here also.
-// Note: Currently most of the instances map back to 0, since existing dynarec code all
-// shares iCore and must therefore all share the same emitter instance.
-// (note: these don't really belong here per-se, but it's an easy spot to use for now)
-enum
-{
-	EmitterId_R5900 = 0,
-	EmitterId_R3000a = EmitterId_R5900,
-	EmitterId_VU0micro = EmitterId_R5900,
-	EmitterId_VU1micro = EmitterId_R5900,
-	
-	// Cotton's new microVU, which is iCore-free
-	EmitterId_microVU0,
-	EmitterId_microVU1,
+// Dev / Debug conditionals --
+//   Consts for using if() statements instead of uglier #ifdef macros.
 
-	// Air's eventual IopRec, which will also be iCore-free
-	EmitterId_R3000air,
-		
-	EmitterId_Count			// must always be last!
-};
+#ifdef PCSX2_DEVBUILD
+static const bool IsDevBuild = true;
+#else
+static const bool IsDevBuild = false;
+#endif
+
+#ifdef _DEBUG
+static const bool IsDebugBuild = true;
+#else
+static const bool IsDebugBuild = false;
+#endif

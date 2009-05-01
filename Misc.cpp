@@ -41,6 +41,7 @@
 #include "Cache.h"
 
 #include "Paths.h"
+#include "Dump.h"
 
 using namespace std;
 using namespace R5900;
@@ -50,6 +51,8 @@ u32 BiosVersion;
 char CdromId[12];
 static int g_Pcsx2Recording = 0; // true 1 if recording video and sound
 bool renderswitch = 0;
+
+struct KeyModifiers keymodifiers = {false, false, false, false};
 
 #define NUM_STATES 10
 int StatesC = 0;
@@ -176,9 +179,9 @@ u32 GetBiosVersion() {
 }
 
 //2002-09-22 (Florin)
-int IsBIOS(char *filename, char *description)
+int IsBIOS(const char *filename, char *description)
 {
-	char ROMVER[14+1], zone[12+1];
+	char ROMVER[14+1];
 	FILE *fp;
 	unsigned int fileOffset=0, found=FALSE;
 	struct romdir rd;
@@ -200,31 +203,38 @@ int IsBIOS(char *filename, char *description)
 		return FALSE;	//Unable to locate ROMDIR structure in file or a ioprpXXX.img
 	}
 
-	while(strlen(rd.fileName) > 0){
-		if (strcmp(rd.fileName, "ROMVER") == 0){	// found romver
-			unsigned int filepos=ftell(fp);
+	while(strlen(rd.fileName) > 0)
+	{
+		if (strcmp(rd.fileName, "ROMVER") == 0)	// found romver
+		{
+			uint filepos = ftell(fp);
 			fseek(fp, fileOffset, SEEK_SET);
 			if (fread(&ROMVER, 14, 1, fp) == 0) break;
 			fseek(fp, filepos, SEEK_SET);//go back
-				
-			switch(ROMVER[4]){
-				case 'T':sprintf(zone, "T10K  "); break;
-				case 'X':sprintf(zone, "Test  ");break;
-				case 'J':sprintf(zone, "Japan "); break;
-				case 'A':sprintf(zone, "USA   "); break;
-				case 'E':sprintf(zone, "Europe"); break;
-				case 'H':sprintf(zone, "HK    "); break;
-				case 'P':sprintf(zone, "Free  "); break;
-				case 'C':sprintf(zone, "China "); break;
-				default: sprintf(zone, "%c     ",ROMVER[4]); break;//shoudn't show
+			
+			const char zonefail[2] = { ROMVER[4], '\0' };	// the default "zone" (unknown code)
+			const char* zone = zonefail;
+
+			switch(ROMVER[4])
+			{
+				case 'T': zone = "T10K  "; break;
+				case 'X': zone = "Test  "; break;
+				case 'J': zone = "Japan "; break;
+				case 'A': zone = "USA   "; break;
+				case 'E': zone = "Europe"; break;
+				case 'H': zone = "HK    "; break;
+				case 'P': zone = "Free  "; break;
+				case 'C': zone = "China "; break;
 			}
-			sprintf(description, "%s vXX.XX(XX/XX/XXXX) %s", zone,
-				ROMVER[5]=='C'?"Console":ROMVER[5]=='D'?"Devel":"");
-			strncpy(description+ 8, ROMVER+ 0, 2);//ver major
-			strncpy(description+11, ROMVER+ 2, 2);//ver minor
-			strncpy(description+14, ROMVER+12, 2);//day
-			strncpy(description+17, ROMVER+10, 2);//month
-			strncpy(description+20, ROMVER+ 6, 4);//year
+
+			sprintf(description, "%s v%c%c.%c%c(%c%c/%c%c/%c%c%c%c) %s", zone,
+				ROMVER[0], ROMVER[1],	// ver major
+				ROMVER[2], ROMVER[3],	// ver minor
+				ROMVER[12], ROMVER[13],	// day
+				ROMVER[10], ROMVER[11],	// month
+				ROMVER[6], ROMVER[7], ROMVER[8], ROMVER[9],	// year!
+				(ROMVER[5]=='C') ? "Console" : (ROMVER[5]=='D') ? "Devel" : ""
+			);
 			found = TRUE;
 		}
 
@@ -482,11 +492,12 @@ void CycleFrameLimit(int dir)
 	//SaveConfig();
 }
 
-void ProcessFKeys(int fkey, int shift)
+void ProcessFKeys(int fkey, struct KeyModifiers *keymod)
 {
 	assert(fkey >= 1 && fkey <= 12 );
 
-	switch(fkey) {
+	switch(fkey) 
+	{
 		case 1:
 			try
 			{
@@ -504,7 +515,7 @@ void ProcessFKeys(int fkey, int shift)
 			break;
 
 		case 2:
-			if( shift )
+			if( keymod->shift )
 				StatesC = (StatesC+NUM_STATES-1) % NUM_STATES;
 			else
 				StatesC = (StatesC+1) % NUM_STATES;
@@ -551,7 +562,7 @@ void ProcessFKeys(int fkey, int shift)
 			break;
 
 		case 4:
-			CycleFrameLimit(shift ? -1 : 1);
+			CycleFrameLimit(keymod->shift ? -1 : 1);
 			break;
 
 		// note: VK_F5-VK_F7 are reserved for GS
@@ -560,7 +571,8 @@ void ProcessFKeys(int fkey, int shift)
 			break;
 		
 		case 9: //gsdx "on the fly" renderer switching 
-			if (!renderswitch) {
+			if (!renderswitch) 
+			{
 				StateRecovery::MakeGsOnly();
 				g_EmulationInProgress = false;
 				CloseGS();
@@ -568,7 +580,8 @@ void ProcessFKeys(int fkey, int shift)
 				StateRecovery::Recover();
 				HostGui::BeginExecution(); //also sets g_EmulationInProgress to true later
 			}
-			else {
+			else 
+			{
 				StateRecovery::MakeGsOnly();
 				g_EmulationInProgress = false;
 				CloseGS();
@@ -578,21 +591,35 @@ void ProcessFKeys(int fkey, int shift)
 			}
 			break;
 #ifdef PCSX2_DEVBUILD
-	
+		case 10:
+			// There's likely a better way to implement this, but this seemed useful.
+			// I might add turning EE, VU0, and VU1 recs on and off by hotkey at some point, too.
+			// --arcum42
+			enableLogging = !enableLogging;
+		
+			if (enableLogging)
+				GSprintf(10, "Logging Enabled.");
+			else
+				GSprintf(10,"Logging Disabled.");
+			
+			break;
 		case 11:
-			if( mtgsThread != NULL ) {
+			if( mtgsThread != NULL ) 
+			{
 				Console::Notice( "Cannot make gsstates in MTGS mode" );
 			}
 			else
 			{
 				string Text;
-				if( strgametitle[0] != 0 ) {
+				if( strgametitle[0] != 0 ) 
+				{
 					// only take the first two words
 					char name[256], *tok;
 					string gsText;
 
 					tok = strtok(strgametitle, " ");
 					sprintf(name, "%s_", mystrlwr(tok));
+					
 					tok = strtok(NULL, " ");
 					if( tok != NULL ) strcat(name, tok);
 
@@ -600,28 +627,32 @@ void ProcessFKeys(int fkey, int shift)
 					Text = Path::Combine( SSTATES_DIR, gsText );
 				}
 				else
+				{
 					Text = GetGSStateFilename();
-
+				}
+				
 				SaveGSState(Text);
 			}
 			break;
 #endif
 
 		case 12:
-			if( shift ) {
+			if( keymod->shift ) 
+			{
 #ifdef PCSX2_DEVBUILD
 				iDumpRegisters(cpuRegs.pc, 0);
 				Console::Notice("hardware registers dumped EE:%x, IOP:%x\n", params cpuRegs.pc, iopRegs.pc);
 #endif
 			}
-			else {
+			else 
+			{
 				g_Pcsx2Recording ^= 1;
-				if( mtgsThread != NULL ) {
+				
+				if( mtgsThread != NULL ) 
 					mtgsThread->SendSimplePacket(GS_RINGTYPE_RECORD, g_Pcsx2Recording, 0, 0);
-				}
-				else {
-					if( GSsetupRecording != NULL ) GSsetupRecording(g_Pcsx2Recording, NULL);
-				}
+				else if( GSsetupRecording != NULL ) 
+					GSsetupRecording(g_Pcsx2Recording, NULL);
+				
 				if( SPU2setupRecording != NULL ) SPU2setupRecording(g_Pcsx2Recording, NULL);  
 			}
 			break;
