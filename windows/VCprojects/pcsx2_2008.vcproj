@@ -2195,42 +2195,6 @@
 					>
 				</File>
 				<File
-					RelativePath="..\..\IopMem.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\..\IopMem.h"
-					>
-				</File>
-				<File
-					RelativePath="..\..\IopMemory.cpp"
-					>
-					<FileConfiguration
-						Name="Debug|Win32"
-						ExcludedFromBuild="true"
-						>
-						<Tool
-							Name="VCCLCompilerTool"
-						/>
-					</FileConfiguration>
-					<FileConfiguration
-						Name="Devel|Win32"
-						ExcludedFromBuild="true"
-						>
-						<Tool
-							Name="VCCLCompilerTool"
-						/>
-					</FileConfiguration>
-					<FileConfiguration
-						Name="Release|Win32"
-						ExcludedFromBuild="true"
-						>
-						<Tool
-							Name="VCCLCompilerTool"
-						/>
-					</FileConfiguration>
-				</File>
-				<File
 					RelativePath="..\..\IopSio2.cpp"
 					>
 				</File>
@@ -2345,6 +2309,34 @@
 							>
 						</File>
 					</Filter>
+				</Filter>
+				<Filter
+					Name="Memory"
+					>
+					<File
+						RelativePath="..\..\Subsystems\Iop\IopHwRead.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\Subsystems\Iop\IopHwWrite.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\IopMem.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\IopMem.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\Subsystems\Iop\IopMemory.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\Subsystems\Iop\IopSifMemory.cpp"
+						>
+					</File>
 				</Filter>
 			</Filter>
 			<Filter
@@ -3190,10 +3182,6 @@
 				>
 			</File>
 		</Filter>
-		<File
-			RelativePath=".\ClassDiagram1.cd"
-			>
-		</File>
 		<File
 			RelativePath="..\..\Common.h"
 			>

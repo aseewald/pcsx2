@@ -509,12 +509,6 @@ u32 psxHwRead32(u32 add) {
 			PSXCNT_LOG("T5 target read32: %lx\n", hard);
 			return hard;
 
-		case 0x1f801450:
-			hard = psxHu32(add);
-			PSXHW_LOG("%08X ICFG 32bit read %x\n", iopRegs.pc, hard);
-			return hard;
-
-
 		case 0x1F8010C0:
 			HW_DMA4_MADR = SPU2ReadMemAddr(0);
 			return HW_DMA4_MADR;

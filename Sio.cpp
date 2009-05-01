@@ -99,7 +99,8 @@ u8 sioRead8() {
 			}*/
 		}
 	}
-		//PAD_LOG("sio read8 ;ret = %x\n", ret);
+
+	PAD_LOG("sio read8: ret = %02x\n", ret);
 	return ret;
 }
 

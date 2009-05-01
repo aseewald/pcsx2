@@ -264,7 +264,7 @@ __instinline void Inst::DIV()
 
 	// Div on MIPS Magic:
 	// * If Rt is zero, then the result is undefined by MIPS standard.  EE/IOP results are pretty
-	//   consistent, however:  Hi == Rs, Lo == (Rs > 0) ? -1 : 1
+	//   consistent, however:  Hi == Rs, Lo == (Rs >= 0) ? -1 : 1
 
 	// * MIPS has special defined behavior on signed DIVs, to cope with it's lack of overflow
 	//   exception handling.  If Rs == -0x80000000 (which is the same as unsigned 0x80000000 on
@@ -286,7 +286,7 @@ __instinline void Inst::DIV()
 	else if( Rt == 0 )
 	{
 		const s32 Rs = GetRs().SL;
-		SetHiLo( Rs, (Rs > 0) ? -1 : 1 );
+		SetHiLo( Rs, (Rs >= 0) ? -1 : 1 );
 		return;
 	}
 
