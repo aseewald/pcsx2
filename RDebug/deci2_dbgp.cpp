@@ -145,8 +145,8 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 						if (iregs[i].number==14) iopRegs.CP0.n.EPC=iopRegs.pc;
 						iregs[i].value=iopRegs.CP0.r[iregs[i].number].UL;
 						break;
-					case 6:iregs[i].value=iopRegs.CP2D.r[iregs[i].number]; break;
-					case 7:iregs[i].value=iopRegs.CP2C.r[iregs[i].number]; break;
+					//case 6:iregs[i].value=iopRegs.CP2D.r[iregs[i].number]; break;
+					//case 7:iregs[i].value=iopRegs.CP2C.r[iregs[i].number]; break;
 					default:
 						iregs[0].value++;//dummy; might be assert(0)
 					}
@@ -194,8 +194,8 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 						iopRegs.CP0.r[iregs[i].number].UL=iregs[i].value;
 						if (iregs[i].number==14) iopRegs.pc=iopRegs.CP0.n.EPC;
 						break;
-					case 6:iopRegs.CP2D.r[iregs[i].number]=iregs[i].value; break;
-					case 7:iopRegs.CP2C.r[iregs[i].number]=iregs[i].value; break;
+					//case 6:iopRegs.CP2D.r[iregs[i].number]=iregs[i].value; break;
+					//case 7:iopRegs.CP2C.r[iregs[i].number]=iregs[i].value; break;
 					default:
 						;//dummy; might be assert(0)
 					}

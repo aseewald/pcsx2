@@ -23,12 +23,46 @@ namespace IopMemory {
 
 using namespace Internal;
 
+// Template-compatible version of the psxHu macro.  Used for writing.
+#define psxHu(mem)	(*(u32*)&psxH[(mem) & 0xffff])
+
+
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-void __fastcall iopHwWrite8_Page1( u32 addr, u8 val )
+template< typename T >
+static __forceinline void _generic_write( u32 addr, T val )
 {
-	// all addresses are assumed to be prefixed with 0x1f801xxx:
-	jASSUME( (addr >> 12) == 0x1f801 );
+	int bitsize = (sizeof(T) == 1) ? 8 : ( (sizeof(T) == 2) ? 16 : 32 );
+	PSXHW_LOG( "HwWrite%d to %s, addr 0x%08x = 0x%08x\n", bitsize, _log_GetIopHwName<T>(addr), addr, val );
+	psxHu(addr) = val;
+}
+
+void __fastcall iopHwWrite8_generic( u32 addr, mem8_t val )		{ _generic_write<mem8_t>( addr, val ); }
+void __fastcall iopHwWrite16_generic( u32 addr, mem16_t val )	{ _generic_write<mem16_t>( addr, val ); }
+void __fastcall iopHwWrite32_generic( u32 addr, mem32_t val )	{ _generic_write<mem32_t>( addr, val ); }
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+template< typename T >
+static __forceinline T _generic_read( u32 addr )
+{
+	int bitsize = (sizeof(T) == 1) ? 8 : ( (sizeof(T) == 2) ? 16 : 32 );
+
+	T ret = psxHu(addr);
+	PSXHW_LOG( "HwRead%d from %s, addr 0x%08x = 0x%08x\n", bitsize, _log_GetIopHwName<T>(addr), addr, ret );
+	return ret;
+}
+
+mem8_t __fastcall iopHwRead8_generic( u32 addr )	{ return _generic_read<mem8_t>( addr ); }
+mem16_t __fastcall iopHwRead16_generic( u32 addr )	{ return _generic_read<mem16_t>( addr ); }
+mem32_t __fastcall iopHwRead32_generic( u32 addr )	{ return _generic_read<mem32_t>( addr ); }
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+void __fastcall iopHwWrite8_Page1( u32 addr, mem8_t val )
+{
+	HwAddrPrep( 1 );
 
 	u32 masked_addr = pgmsk( addr );
 
@@ -49,12 +83,12 @@ void __fastcall iopHwWrite8_Page1( u32 addr, u8 val )
 		default:
 			if( masked_addr >= 0x100 && masked_addr < 0x130 )
 			{
-				DevCon::Notice( "*Hardware Write8 to Counter16 [ignored] [addr=0x%02x]", params addr, psxHu8(addr) );
+				DevCon::Notice( "HwWrite8 to Counter16 [ignored], addr 0x%08x = 0x%02x", params addr, psxHu8(addr) );
 				psxHu8( addr ) = val;
 			}
 			else if( masked_addr >= 0x480 && masked_addr < 0x4a0 )
 			{
-				DevCon::Notice( "*Hardware Write8 to Counter32 [ignored] [addr=0x%02x]", params addr, psxHu8(addr) );
+				DevCon::Notice( "HwWrite8 to Counter32 [ignored], addr 0x%08x = 0x%02x", params addr, psxHu8(addr) );
 				psxHu8( addr ) = val;
 			}
 			else if( masked_addr >= pgmsk(HW_USB_START) && masked_addr < pgmsk(HW_USB_END) )
@@ -68,16 +102,15 @@ void __fastcall iopHwWrite8_Page1( u32 addr, u8 val )
 		break;
 	}
 
-	PSXHW_LOG( "*Hardware Write8 to %s, addr 0x%08x = 0x%02x\n", _log_GetIopHwName<u8>(addr), addr, val );
+	PSXHW_LOG( "HwWrite8 to %s, addr 0x%08x = 0x%02x\n", _log_GetIopHwName<mem8_t>(addr), addr, val );
 }
 
 static char g_pbuf[1024];
 static int g_pbufi;
 
-void __fastcall iopHwWrite8_Page3( u32 addr, u8 val )
+void __fastcall iopHwWrite8_Page3( u32 addr, mem8_t val )
 {
-	// all addresses are assumed to be prefixed with 0x1f803xxx:
-	jASSUME( (addr >> 12) == 0x1f803 );
+	HwAddrPrep( 3 );
 
 	if( addr == 0x1f80380c )	// STDOUT
 	{
@@ -98,26 +131,22 @@ void __fastcall iopHwWrite8_Page3( u32 addr, u8 val )
 		}
 	}
 
-	PSXHW_LOG( "Hardware Write8 to %s, addr 0x%08x = 0x%02x", _log_GetIopHwName<u8>(addr), addr, psxHu8(addr) );
+	PSXHW_LOG( "HwWrite8 to %s, addr 0x%08x = 0x%02x", _log_GetIopHwName<mem8_t>(addr), addr, psxHu8(addr) );
 	psxHu8( addr ) = val;
 }
 
-void __fastcall iopHwWrite8_Page8( u32 addr, u8 val )
+void __fastcall iopHwWrite8_Page8( u32 addr, mem8_t val )
 {
-	// all addresses are assumed to be prefixed with 0x1f808xxx:
-	jASSUME( (addr >> 12) == 0x1f808 );
+	HwAddrPrep( 8 );
 
 	if( addr == HW_SIO2_DATAIN )	// sio2 serial data feed input
 		sio2_serialIn( val );
 	else
 		psxHu8( addr ) = val;
 
-	PSXHW_LOG( "Hardware Write8 to %s, addr 0x%08x = 0x%02x", _log_GetIopHwName<u8>(addr), addr, psxHu8(addr) );
+	PSXHW_LOG( "HwWrite8 to %s, addr 0x%08x = 0x%02x", _log_GetIopHwName<mem8_t>(addr), addr, psxHu8(addr) );
 	
 }
-
-// Template-compatible version of the psxHu macro.  Used for writing.
-#define psxHu(mem)	(*(u32*)&psxH[(mem) & 0xffff])
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Templated handler for both 32 and 16 bit write operations, to Page 1 registers.
@@ -125,8 +154,7 @@ void __fastcall iopHwWrite8_Page8( u32 addr, u8 val )
 template< typename T >
 static __forceinline void _HwWrite_16or32_Page1( u32 addr, T val )
 {
-	// all addresses are assumed to be prefixed with 0x1f801xxx:
-	jASSUME( (addr >> 12) == 0x1f801 );
+	HwAddrPrep( 1 );
 
 	// all addresses should be aligned to the data operand size:
 	jASSUME(
@@ -210,7 +238,7 @@ static __forceinline void _HwWrite_16or32_Page1( u32 addr, T val )
 			SPU2write( addr, val );
 		else
 		{
-			DevCon::Notice( "*PCSX2* SPU2 Hardware Write32 (addr=0x%08X)?  What manner of trickery is this?!", params addr );
+			DevCon::Notice( "HwWrite32 to SPU2? (addr=0x%08X) .. What manner of trickery is this?!", params addr );
 			//psxHu(addr) = val;
 		}
 	}
@@ -423,7 +451,7 @@ static __forceinline void _HwWrite_16or32_Page1( u32 addr, T val )
 		}
 	}
 	
-	PSXHW_LOG( "Hardware Write%s to %s, addr 0x%08x = 0x%04x",
+	PSXHW_LOG( "HwWrite%s to %s, addr 0x%08x = 0x%08x",
 		sizeof(T) == 2 ? "16" : "32", _log_GetIopHwName<T>( addr ), addr, val
 	);
 }
@@ -431,46 +459,42 @@ static __forceinline void _HwWrite_16or32_Page1( u32 addr, T val )
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-void __fastcall iopHwWrite16_Page1( u32 addr, u16 val )
+void __fastcall iopHwWrite16_Page1( u32 addr, mem16_t val )
 {
-	_HwWrite_16or32_Page1<u16>( addr, val );
+	_HwWrite_16or32_Page1<mem16_t>( addr, val );
 }
 
-void __fastcall iopHwWrite16_Page3( u32 addr, u16 val )
+void __fastcall iopHwWrite16_Page3( u32 addr, mem16_t val )
 {
-	// all addresses are assumed to be prefixed with 0x1f803xxx:
-	jASSUME( (addr >> 12) == 0x1f803 );
+	HwAddrPrep( 3 );
 	psxHu16(addr) = val;
-	PSXHW_LOG( "Hardware Write16 to %s, addr 0x%08x = 0x%04x", _log_GetIopHwName<u16>( addr ), addr, val );
+	PSXHW_LOG( "HwWrite16 to %s, addr 0x%08x = 0x%04x", _log_GetIopHwName<mem16_t>( addr ), addr, val );
 }
 
-void __fastcall iopHwWrite16_Page8( u32 addr, u16 val )
+void __fastcall iopHwWrite16_Page8( u32 addr, mem16_t val )
 {
-	// all addresses are assumed to be prefixed with 0x1f808xxx:
-	jASSUME( (addr >> 12) == 0x1f808 );
+	HwAddrPrep( 8 );
 	psxHu16(addr) = val;
-	PSXHW_LOG( "Hardware Write16 to %s, addr 0x%08x = 0x%04x", _log_GetIopHwName<u16>( addr ), addr, val );
+	PSXHW_LOG( "HwWrite16 to %s, addr 0x%08x = 0x%04x", _log_GetIopHwName<mem16_t>( addr ), addr, val );
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-void __fastcall iopHwWrite32_Page1( u32 addr, u32 val )
+void __fastcall iopHwWrite32_Page1( u32 addr, mem32_t val )
 {
-	_HwWrite_16or32_Page1<u32>( addr, val );
+	_HwWrite_16or32_Page1<mem32_t >( addr, val );
 }
 
-void __fastcall iopHwWrite32_Page3( u32 addr, u32 val )
+void __fastcall iopHwWrite32_Page3( u32 addr, mem32_t val )
 {
-	// all addresses are assumed to be prefixed with 0x1f803xxx:
-	jASSUME( (addr >> 12) == 0x1f803 );
+	HwAddrPrep( 3 );
 	psxHu16(addr) = val;
-	PSXHW_LOG( "Hardware Write32 to %s, addr 0x%08x = 0x%04x", _log_GetIopHwName<u16>( addr ), addr, val );
+	PSXHW_LOG( "HwWrite32 to %s, addr 0x%08x = 0x%04x", _log_GetIopHwName<mem32_t>( addr ), addr, val );
 }
 
-void __fastcall iopHwWrite32_Page8( u32 addr, u32 val )
+void __fastcall iopHwWrite32_Page8( u32 addr, mem32_t val )
 {
-	// all addresses are assumed to be prefixed with 0x1f808xxx:
-	jASSUME( (addr >> 12) == 0x1f808 );
+	HwAddrPrep( 8 );
 
 	u32 masked_addr = addr & 0x0fff;
 
@@ -493,37 +517,21 @@ void __fastcall iopHwWrite32_Page8( u32 addr, u32 val )
 		{
 			switch( masked_addr )
 			{
-				case 0x264:		// unknown / reserved.
-				case 0x26C:		// recv1 [read-only]
-				case 0x270:		// recv2 [read-only]
-				case 0x274:		// recv3 [read-only]
+				mcase(HW_SIO2_CTRL):	sio2_setCtrl( val );	break;
+				mcase(0x1f808278):		sio2_set8278( val );	break;
+				mcase(0x1f80827C):		sio2_set827C( val );	break;
+				mcase(HW_SIO2_INTR):	sio2_setIntr( val );	break;
+
+				// Other SIO2 registers are read-only, no-ops on write.
+				default:
 					psxHu32(addr) = val;
-				break;
-
-				case 0x268:
-					sio2_setCtrl( val );
-				break;
-
-				case 0x278:
-					sio2_set8278( val );
-				break;
-
-				case 0x27C:
-					sio2_set827C( val );
-				break;
-
-				case 0x280:
-					sio2_setIntr( val );
-				break;
-				
-				jNO_DEFAULT;
+				break;					
 			}
 		}
 	}
 	else psxHu32(addr) = val;
 
-	PSXHW_LOG( "Hardware Write32 to %s, addr 0x%08x = 0x%02x", _log_GetIopHwName<u32>( addr ), addr, val );
-
+	PSXHW_LOG( "HwWrite32 to %s, addr 0x%08x = 0x%02x", _log_GetIopHwName<mem32_t>( addr ), addr, val );
 }
 
 }

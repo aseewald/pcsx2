@@ -479,13 +479,6 @@
 						PrecompiledHeaderFile="$(IntDir)\win32.pch"
 					/>
 				</FileConfiguration>
-				<FileConfiguration
-					Name="Release|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-					/>
-				</FileConfiguration>
 			</File>
 			<File
 				RelativePath="..\McdConfigDlg.cpp"
@@ -573,13 +566,6 @@
 						PrecompiledHeaderFile="$(IntDir)\win32.pch"
 					/>
 				</FileConfiguration>
-				<FileConfiguration
-					Name="Release|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-					/>
-				</FileConfiguration>
 			</File>
 			<File
 				RelativePath="..\RDebugger.cpp"
@@ -664,13 +650,6 @@
 						UsePrecompiledHeader="1"
 						PrecompiledHeaderThrough="Win32.h"
 						PrecompiledHeaderFile="$(IntDir)\win32.pch"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Release|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
 					/>
 				</FileConfiguration>
 			</File>
@@ -789,7 +768,6 @@
 					</FileConfiguration>
 					<FileConfiguration
 						Name="Devel|Win32"
-						ExcludedFromBuild="true"
 						>
 						<Tool
 							Name="VCCLCompilerTool"
@@ -799,7 +777,6 @@
 					</FileConfiguration>
 					<FileConfiguration
 						Name="Release|Win32"
-						ExcludedFromBuild="true"
 						>
 						<Tool
 							Name="VCCLCompilerTool"
@@ -818,7 +795,6 @@
 					</FileConfiguration>
 					<FileConfiguration
 						Name="Devel|Win32"
-						ExcludedFromBuild="true"
 						>
 						<Tool
 							Name="VCCustomBuildTool"
@@ -826,7 +802,6 @@
 					</FileConfiguration>
 					<FileConfiguration
 						Name="Release|Win32"
-						ExcludedFromBuild="true"
 						>
 						<Tool
 							Name="VCCustomBuildTool"
@@ -847,7 +822,6 @@
 					</FileConfiguration>
 					<FileConfiguration
 						Name="Devel|Win32"
-						ExcludedFromBuild="true"
 						>
 						<Tool
 							Name="VCCLCompilerTool"
@@ -857,7 +831,6 @@
 					</FileConfiguration>
 					<FileConfiguration
 						Name="Release|Win32"
-						ExcludedFromBuild="true"
 						>
 						<Tool
 							Name="VCCLCompilerTool"
@@ -878,7 +851,6 @@
 					</FileConfiguration>
 					<FileConfiguration
 						Name="Devel|Win32"
-						ExcludedFromBuild="true"
 						>
 						<Tool
 							Name="VCCLCompilerTool"
@@ -888,7 +860,6 @@
 					</FileConfiguration>
 					<FileConfiguration
 						Name="Release|Win32"
-						ExcludedFromBuild="true"
 						>
 						<Tool
 							Name="VCCLCompilerTool"
@@ -1744,22 +1715,6 @@
 					>
 				</File>
 				<File
-					RelativePath="..\..\IopHw.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\..\IopHw.h"
-					>
-				</File>
-				<File
-					RelativePath="..\..\IopMem.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\..\IopMem.h"
-					>
-				</File>
-				<File
 					RelativePath="..\..\IopSio2.cpp"
 					>
 				</File>
@@ -1778,6 +1733,14 @@
 				<Filter
 					Name="Hardware"
 					>
+					<File
+						RelativePath="..\..\IopHw.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\IopHw.h"
+						>
+					</File>
 					<File
 						RelativePath="..\..\ps2\Iop\IopHw_Internal.h"
 						>
@@ -1976,68 +1939,28 @@
 					</Filter>
 				</Filter>
 				<Filter
-					Name="iR3000air"
+					Name="Memory"
 					>
 					<File
-						RelativePath="..\..\R3000air\iR3000air.cpp"
-						>
-						<FileConfiguration
-							Name="Debug|Win32"
-							ExcludedFromBuild="true"
-							>
-							<Tool
-								Name="VCCLCompilerTool"
-							/>
-						</FileConfiguration>
-						<FileConfiguration
-							Name="Devel|Win32"
-							ExcludedFromBuild="true"
-							>
-							<Tool
-								Name="VCCLCompilerTool"
-							/>
-						</FileConfiguration>
-						<FileConfiguration
-							Name="Release|Win32"
-							ExcludedFromBuild="true"
-							>
-							<Tool
-								Name="VCCLCompilerTool"
-							/>
-						</FileConfiguration>
-					</File>
-					<File
-						RelativePath="..\..\R3000air\iR3000air.h"
+						RelativePath="..\..\IopMem.cpp"
 						>
 					</File>
 					<File
-						RelativePath="..\..\R3000air\iR3000airIntermediate.cpp"
+						RelativePath="..\..\IopMem.h"
 						>
-						<FileConfiguration
-							Name="Debug|Win32"
-							ExcludedFromBuild="true"
-							>
-							<Tool
-								Name="VCCLCompilerTool"
-							/>
-						</FileConfiguration>
-						<FileConfiguration
-							Name="Devel|Win32"
-							ExcludedFromBuild="true"
-							>
-							<Tool
-								Name="VCCLCompilerTool"
-							/>
-						</FileConfiguration>
-						<FileConfiguration
-							Name="Release|Win32"
-							ExcludedFromBuild="true"
-							>
-							<Tool
-								Name="VCCLCompilerTool"
-							/>
-						</FileConfiguration>
 					</File>
+					<File
+						RelativePath="..\..\ps2\Iop\IopMemory.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\ps2\Iop\IopSifMemory.cpp"
+						>
+					</File>
+				</Filter>
+				<Filter
+					Name="R3000air"
+					>
 					<File
 						RelativePath="..\..\R3000air\R3000Air.cpp"
 						>
@@ -2047,34 +1970,50 @@
 						>
 					</File>
 					<File
-						RelativePath="..\..\R3000air\R3000airDiagnostic.cpp"
-						>
-					</File>
-					<File
 						RelativePath="..\..\R3000air\R3000airInstruction.inl"
-						>
-					</File>
-					<File
-						RelativePath="..\..\R3000air\R3000airInterpreter.cpp"
-						>
-					</File>
-					<File
-						RelativePath="..\..\R3000air\R3000airOpcodeImpl.inl"
 						>
 					</File>
 					<File
 						RelativePath="..\..\R3000air\R3000airOpcodeTables.inl"
 						>
 					</File>
+					<Filter
+						Name="Interpreter"
+						>
+						<File
+							RelativePath="..\..\R3000air\R3000airDiagnostic.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\R3000airInterpreter.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\R3000airOpcodeImpl.inl"
+							>
+						</File>
+					</Filter>
+					<Filter
+						Name="Dynarec"
+						>
+						<File
+							RelativePath="..\..\R3000air\dynarec\iR3000air.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\dynarec\iR3000air.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\dynarec\iR3000airIntermediate.cpp"
+							>
+						</File>
+					</Filter>
 				</Filter>
 			</Filter>
 			<Filter
 				Name="GS"
 				>
-				<File
-					RelativePath="..\..\Gif.cpp"
-					>
-				</File>
 				<File
 					RelativePath="..\..\GS.cpp"
 					>
@@ -2628,6 +2567,10 @@
 						>
 					</File>
 					<File
+						RelativePath="..\..\MemoryTypes.h"
+						>
+					</File>
+					<File
 						RelativePath="..\..\x86\ix86-32\recVTLB.cpp"
 						>
 					</File>
@@ -2675,6 +2618,10 @@
 				<Filter
 					Name="DMAC"
 					>
+					<File
+						RelativePath="..\..\Gif.cpp"
+						>
+					</File>
 					<Filter
 						Name="Vif"
 						>
@@ -2852,27 +2799,6 @@
 			<File
 				RelativePath="..\..\Saveslots.cpp"
 				>
-				<FileConfiguration
-					Name="Debug|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Devel|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Release|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-					/>
-				</FileConfiguration>
 			</File>
 			<File
 				RelativePath="..\..\SaveState.cpp"
@@ -3445,6 +3371,7 @@
 						<Tool
 							Name="VCCLCompilerTool"
 							PrecompiledHeaderThrough="Win32.h"
+							PrecompiledHeaderFile="$(IntDir)\win32.pch"
 						/>
 					</FileConfiguration>
 					<FileConfiguration
@@ -3453,6 +3380,7 @@
 						<Tool
 							Name="VCCLCompilerTool"
 							PrecompiledHeaderThrough="Win32.h"
+							PrecompiledHeaderFile="$(IntDir)\win32.pch"
 						/>
 					</FileConfiguration>
 				</File>
@@ -3593,10 +3521,6 @@
 				</File>
 				<File
 					RelativePath="..\..\x86\ix86\ix86_types.h"
-					>
-				</File>
-				<File
-					RelativePath="..\..\x86\ix86\ix86_writers.inl"
 					>
 				</File>
 				<Filter

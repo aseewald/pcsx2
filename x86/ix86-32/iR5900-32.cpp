@@ -76,7 +76,6 @@ u32 g_cpuHasConstReg = 0, g_cpuFlushedConstReg = 0;
 
 #define X86
 static const int RECSTACK_SIZE = 0x00010000;
-static const int EE_NUMBLOCKS = (1<<15);
 
 static u8 *recMem = NULL;			// the recompiled blocks will be here
 static u8* recStack = NULL;			// stack mem
@@ -85,7 +84,7 @@ static BASEBLOCK *recROM = NULL;		// and here
 static BASEBLOCK *recROM1 = NULL;		// also here
 static u32 *recRAMCopy = NULL;
 void JITCompile();
-static BaseBlocks recBlocks(EE_NUMBLOCKS, (uptr)JITCompile);
+static BaseBlocks recBlocks((uptr)JITCompile);
 static u8* recPtr = NULL, *recStackPtr = NULL;
 EEINST* s_pInstCache = NULL;
 static u32 s_nInstCacheSize = 0;
@@ -341,14 +340,21 @@ int _flushUnusedConstReg()
 	return 0;
 }
 
+// ------------------------------------------------------------------------
+// recAllocStackMem -- an optimization trick to write data to a location so that
+// recompiled code can reference it later on during execution.
+//
+// Intended use is for setting up 64/128 bit SSE immediates, primarily.
+//
 u32* recAllocStackMem(int size, int align)
 {
-	// write to a temp loc, trick
-	if( (u32)recStackPtr % align ) recStackPtr += align - ((u32)recStackPtr%align);
+	recStackPtr += align - ((u32)recStackPtr % align);
 	recStackPtr += size;
 	return (u32*)(recStackPtr-size);
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////
+//
 static const int REC_CACHEMEM = 0x01000000;
 static void __fastcall dyna_block_discard(u32 start,u32 sz);
 
@@ -1282,13 +1288,6 @@ void recRecompile( const u32 startpc )
 	assert(!s_pCurBlockEx || s_pCurBlockEx->startpc != HWADDR(startpc));
 
 	s_pCurBlockEx = recBlocks.New(HWADDR(startpc), (uptr)recPtr);
-
-	if( s_pCurBlockEx == NULL ) {
-		//Console::WriteLn("ee reset (blocks)");
-		recResetEE();
-		x86SetPtr( recPtr );
-		s_pCurBlockEx = recBlocks.New(HWADDR(startpc), (uptr)recPtr);
-	}
 
 	assert(s_pCurBlockEx);
 

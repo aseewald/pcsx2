@@ -24,9 +24,6 @@ u8 *psxP = NULL;
 u8 *psxH = NULL;	// standard hardware registers (0x000->0x3ff is the scratchpad)
 u8 *psxS = NULL;	// 'undocumented' SIF communication registers
 
-uptr *psxMemWLUT = NULL;
-const uptr *psxMemRLUT = NULL;
-
 static u8* m_psxAllMem = NULL;
 static const uint m_psxMemSize =
 	Ps2MemSize::IopRam +
@@ -54,7 +51,24 @@ void psxMemAlloc()
 
 // Note!  Resetting the IOP's memory state is dependent on having *all* psx memory allocated,
 // which is performed by MemInit and PsxMemInit()
-void psxMemReset()
+
+void psxMemShutdown()
+{
+	vtlb_free( m_psxAllMem, m_psxMemSize );
+	m_psxAllMem = NULL;
+
+	psxM = psxP = psxH = psxS = NULL;
+
+	safe_aligned_free(psxMemWLUT);
+	psxMemRLUT = NULL;
+}
+
+#if 1
+
+uptr *psxMemWLUT = NULL;
+const uptr *psxMemRLUT = NULL;
+
+void _psxMemReset()
 {
 	jASSUME( psxMemWLUT != NULL );
 	jASSUME( m_psxAllMem != NULL );
@@ -106,18 +120,7 @@ void psxMemReset()
 	//for (i=0; i<0x0008; i++) psxMemWLUT[i + 0xbfc0] = (uptr)&psR[i << 16];
 }
 
-void psxMemShutdown()
-{
-	vtlb_free( m_psxAllMem, m_psxMemSize );
-	m_psxAllMem = NULL;
-
-	psxM = psxP = psxH = psxS = NULL;
-
-	safe_aligned_free(psxMemWLUT);
-	psxMemRLUT = NULL;
-}
-
-u8 iopMemRead8(u32 mem)
+u8 __fastcall _iopMemRead8(u32 mem)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
@@ -142,7 +145,7 @@ u8 iopMemRead8(u32 mem)
 	}
 	else if (t == 0x1f40)
 	{
-		return psxHw4Read8(mem);
+		return IopMemory::iopHw4Read8(mem);
 	}
 	else
 	{
@@ -161,7 +164,7 @@ u8 iopMemRead8(u32 mem)
 	}
 }
 
-u16 iopMemRead16(u32 mem)
+u16 __fastcall _iopMemRead16(u32 mem)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
@@ -227,7 +230,7 @@ u16 iopMemRead16(u32 mem)
 	}
 }
 
-u32 iopMemRead32(u32 mem)
+u32 __fastcall _iopMemRead32(u32 mem)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
@@ -296,7 +299,7 @@ u32 iopMemRead32(u32 mem)
 	}
 }
 
-void iopMemWrite8(u32 mem, u8 value)
+void __fastcall _iopMemWrite8(u32 mem, u8 value)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
@@ -331,7 +334,7 @@ void iopMemWrite8(u32 mem, u8 value)
 	}
 	else if (t == 0x1f40)
 	{
-		psxHw4Write8(mem, value);
+		IopMemory::iopHw4Write8(mem, value);
 	}
 	else
 	{
@@ -358,7 +361,7 @@ void iopMemWrite8(u32 mem, u8 value)
 	}
 }
 
-void iopMemWrite16(u32 mem, u16 value)
+void __fastcall _iopMemWrite16(u32 mem, u16 value)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
@@ -440,7 +443,7 @@ void iopMemWrite16(u32 mem, u16 value)
 	}
 }
 
-void iopMemWrite32(u32 mem, u32 value)
+void __fastcall _iopMemWrite32(u32 mem, u32 value)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
@@ -536,3 +539,7 @@ void iopMemWrite32(u32 mem, u32 value)
 		}
 	}
 }
+
+#endif
+
+

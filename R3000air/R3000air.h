@@ -68,74 +68,12 @@ union CP0Regs
 	IntSign32 r[32];
 };
 
-struct SVector2D {
-	s16 x, y;
-};
-
-struct SVector2Dz {
-	s16 z, pad;
-};
-
-struct SVector3D {
-	s16 x, y, z, pad;
-};
-
-struct LVector3D {
-	s16 x, y, z, pad;
-};
-
-struct CBGR {
-	u8 r, g, b, c;
-};
-
-struct SMatrix3D {
-	s16 m11, m12, m13, m21, m22, m23, m31, m32, m33, pad;
-};
-
-union CP2Data
-{
-	struct
-	{
-		SVector3D   v0, v1, v2;
-		CBGR        rgb;
-		s32         otz;
-		s32         ir0, ir1, ir2, ir3;
-		SVector2D   sxy0, sxy1, sxy2, sxyp;
-		SVector2Dz  sz0, sz1, sz2, sz3;
-		CBGR        rgb0, rgb1, rgb2;
-		s32         reserved;
-		s32         mac0, mac1, mac2, mac3;
-		u32         irgb, orgb;
-		s32         lzcs, lzcr;
-	} n;
-	u32 r[32];
-};
-
-union CP2Ctrl
-{
-	struct
-	{
-		SMatrix3D rMatrix;
-		s32      trX, trY, trZ;
-		SMatrix3D lMatrix;
-		s32      rbk, gbk, bbk;
-		SMatrix3D cMatrix;
-		s32      rfc, gfc, bfc;
-		s32      ofx, ofy;
-		s32      h;
-		s32      dqa, dqb;
-		s32      zsf3, zsf4;
-		s32      flag;
-	} n;
-	u32 r[32];
-};
-
+//////////////////////////////////////////////////////////////////////////////////////////
+//
 struct Registers
 {
 	GPRRegs GPR;		// General Purpose Registers
 	CP0Regs CP0;		// Coprocessor0 Registers
-	CP2Data CP2D; 		// Cop2 data registers
-	CP2Ctrl CP2C; 		// Cop2 control registers
 
 	u32 pc;				// Program counter for the next instruction fetch
 	u32 VectorPC;		// pc to vector to after the next instruction fetch
@@ -154,10 +92,6 @@ struct Registers
 	
 	u32 DivUnitCycles;	// number of cycles pending on the current div unit instruction (mult and div both run in the same unit)
 
-	// old wacky data related to the PS1 GPU?
-	//u32 _msflag[32];
-	//u32 _smflag[32];
-	
 	// Sets a new PC in "abrupt" fashion (without consideration for delay slot).
 	// Effectively cancels the delay slot instruction, making this ideal for use
 	// in raising exceptions.

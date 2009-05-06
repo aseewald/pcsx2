@@ -20,6 +20,15 @@
 
 #include "IopCommon.h"
 
+// ------------------------------------------------------------------------
+// Maskes the address and checks it for validity/sanity.  (if the assertion here fails
+// it means the LUTs in IopMemory are malformed).
+//
+#define HwAddrPrep( page ) \
+	addr &= AddressMask; \
+	jASSUME( (addr >> 12) == (0x1f800+page) )
+
+
 namespace IopMemory {
 namespace Internal {
 

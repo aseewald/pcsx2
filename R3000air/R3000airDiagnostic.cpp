@@ -79,7 +79,7 @@ bool InstDiag::ParamIsRead( const uint pidx ) const
 			return false;
 
 		case Param_AddrImm:		// Address Immediate (Rs + Imm()), used by load/store
-			return false;
+			return true;		// always true since we want to see the result 
 
 		case Param_BranchOffset:
 			return false;
@@ -139,7 +139,7 @@ void InstDiag::GetParamName( const uint pidx, string& dest ) const
 			// TODO : Calculate label.
 			//AddrImm()
 			ssprintf( dest, "0x%4.4x(%s)", (s32)Imm(), tbl_regname_gpr[_Rs_] );
-		break;
+		return;
 
 		case Param_BranchOffset:
 			// TODO : Calculate label.
@@ -281,7 +281,6 @@ void InstDiag::GetValuesComment( string& dest ) const
 #define Form_RsRt			Param_Rs, Param_Rt, Param_None
 #define Form_RdRtSa			Param_Rd, Param_Rt, Param_Sa
 #define Form_RdRtRs			Param_Rd, Param_Rt, Param_Rs
-#define Form_Rd				Param_Rd, Param_None, Param_None
 #define Form_Rs				Param_Rs, Param_None, Param_None
 #define Form_RsRd			Param_Rs, Param_Rd, Param_None
 
@@ -291,7 +290,6 @@ void InstDiag::GetValuesComment( string& dest ) const
 
 #define Form_RtImm16		Param_Rt, Param_Imm16, Param_None
 #define Form_RtAddrImm		Param_Rt, Param_AddrImm, Param_None
-#define Form_RtStore		Param_None, Param_Rt, Param_AddrImm
 
 #define Form_Cop0Load_RtRd		Param_Rt, Param_Fs, Param_None
 #define Form_Cop0Store_RtRd		Param_None, Param_Rt, Param_Fs
@@ -441,11 +439,11 @@ MakeDiagS( LHU,		Form_RtAddrImm )
 MakeDiagS( LW,		Form_RtAddrImm )
 MakeDiagS( LWL,		Form_RtAddrImm )
 MakeDiagS( LWR,		Form_RtAddrImm )
-MakeDiagS( SB,		Form_RtStore )
-MakeDiagS( SH,		Form_RtStore )
-MakeDiagS( SW,		Form_RtStore )
-MakeDiagS( SWL,		Form_RtStore )
-MakeDiagS( SWR,		Form_RtStore )
+MakeDiagS( SB,		Form_RtAddrImm )
+MakeDiagS( SH,		Form_RtAddrImm )
+MakeDiagS( SW,		Form_RtAddrImm )
+MakeDiagS( SWL,		Form_RtAddrImm )
+MakeDiagS( SWR,		Form_RtAddrImm )
 
 /*********************************************************
 * Moves between GPR and COPx                             *
