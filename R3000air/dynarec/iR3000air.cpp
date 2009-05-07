@@ -16,6 +16,18 @@ namespace IopMemory
 		//
 		PCSX2_ALIGNED( 0x1000, static u8 m_IndirectDispatchers[0x1000] );
 
+		template< typename T >
+		static uint GetOperandIndex()
+		{
+			switch( sizeof(T) )
+			{
+				case 1: return 0;
+				case 2: return 1;
+				case 4: return 2;
+				jNO_DEFAULT;
+			}
+		}
+
 		// ------------------------------------------------------------------------
 		// mode        - 0 for read, 1 for write!
 		// operandsize - 0 thru 2 represents 8, 16, and 32 bits.
@@ -27,25 +39,24 @@ namespace IopMemory
 			// more frequently than a hot sex hotline at 1:15am is probably a good thing.
 
 			// 3*64?  Because 3 operand types per each mode :D
-
+			
 			return &m_IndirectDispatchers[(mode*(3*64)) + (operandsize*64)];
+		}
+
+		template< typename T >
+		static void CallIndirectDispatcher( int mode )
+		{
+			xCALL( GetIndirectDispatcherPtr(mode, GetOperandIndex<T>()) );
 		}
 
 		// ------------------------------------------------------------------------
 		// Generates a JB instruction that targets the appropriate templated instance of
 		// the vtlb Indirect Dispatcher.
 		//
-		static void DynGen_IndirectDispatch( int mode, int bits )
+		template< typename T >
+		static void DynGen_IndirectDispatch( int mode )
 		{
-			int szidx;
-			switch( bits )
-			{
-				case 8:		szidx=0;	break;
-				case 16:	szidx=1;	break;
-				case 32:	szidx=2;	break;
-				jNO_DEFAULT;
-			}
-			xJB( GetIndirectDispatcherPtr( mode, szidx ) );
+			xJB( GetIndirectDispatcherPtr( mode, GetOperandIndex<T>() ) );
 		}
 	}
 	
@@ -78,145 +89,432 @@ namespace IopMemory
 		}
 
 		HostSys::MemProtect( m_IndirectDispatchers, 0x1000, Protect_ReadOnly, true );
-
 	}
-}
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
-static void DynGen_DirectRead32( const IntermediateInstruction& info, const ModSibBase& src )
-{
-	if( info.DestRt.IsReg() )
-		xMOV( info.DestRt.GetReg(), src );
-	else
+	struct ConstLoadOpInfo
 	{
-		// edx is open when we're being called. :)
-		xMOV( edx, src );
-		info.MoveToRt( edx );
-	}
-}
+		const u32 addr;
+		const u32 masked;
+		const sptr xlated;
+		
+		ConstLoadOpInfo( const IntermediateInstruction& info ) :
+			addr( info.IsConst.Rs + info.GetImm() ),
+			masked( addr & AddressMask ),
+			xlated( tbl_Translation.Contents[masked / PageSize] )
+		{
+		}
+	};
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
-static void DynGen_DirectWrite32( const IntermediateInstruction& info, const ModSibStrict<u32>& dest )
-{
-	xTEST( ptr32[&iopRegs.CP0.n.Status], 0x10000 );
-	xForwardJNZ8 skipWrite;
-
-	// The data being written is either a register or an immediate, held in Rt.
-
-	info.MoveRtTo( dest, edx );
-	skipWrite.SetTarget();
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////
-// Loads address in Rs+Imm into Rt.
-//
-void recLW( const IntermediateInstruction& info )
-{
-	using namespace IopMemory;
-	using namespace IopMemory::Internal;
-
-	if( info.IsConst.Rs )
+	//////////////////////////////////////////////////////////////////////////////////////////
+	// Loads address in Rs+Imm into Rt.
+	//
+	template< typename T >
+	static void DynGen_LoadOp( const IntermediateInstruction& info )
 	{
-		// ---------------------------------------------------
-		//    Constant Propagation on the Src Address (Rs)
-		// ---------------------------------------------------
-		
-		const u32 srcaddr = info.IsConst.Rs + info.GetImm();
-		const u32 masked = srcaddr & AddressMask;
-		
-		const sptr xlated = tbl_Translation.Contents[masked / PageSize];
-		if( xlated > HandlerId_Maximum )
-			DynGen_DirectRead32( info, ptr[xlated] );
+		if( info.IsConst.Rs )
+		{
+			// ---------------------------------------------------
+			//    Constant Propagation on the Src Address (Rs)
+			// ---------------------------------------------------
+
+			const ConstLoadOpInfo constinfo( info );
+
+			if( constinfo.xlated > HandlerId_Maximum )
+				info.MoveToRt( ptrT[constinfo.xlated] );
+			else
+			{
+				xMOV( ecx, constinfo.addr );
+				CallIndirectDispatcher<T>( 0 );
+				switch( sizeof(T) )
+				{
+					case 1:	info.MoveToRt( al ); break;
+					case 2:	info.MoveToRt( ax ); break;				
+					case 4:	info.MoveToRt( eax ); break;
+				}
+			}
+		}
 		else
 		{
-			xMOV( ecx, srcaddr );
-			xCALL( GetIndirectDispatcherPtr( 0,32 ) );
+			// --------------------------------------------------
+			//    Full Implementation (no const optimizations)
+			// --------------------------------------------------
+
+			info.MoveRsTo( ecx );
+			info.AddImmTo( ecx );
+
+			xMOV( eax, ecx );
+			xAND( eax, AddressMask );
+			xSHR( eax, PageBitShift );
+
+			xMOV( ebx, 0xcdcdcdcd );
+			uptr* writeback = ((uptr*)xGetPtr()) - 1;
+
+			xMOV( eax, ptr[(eax*4)+tbl_Translation.Contents] );
+			xCMP( eax, HandlerId_Maximum );
+			DynGen_IndirectDispatch<T>( 0 );
+
+			// Direct Access on Load Operation:
+
+			xAND( ecx, PageMask );
+			info.MoveToRt( ptrT[ecx+eax] );
+
+			*writeback = (uptr)xGetPtr();		// return target for indirect's call/ret
+		}
+	}
+
+	//////////////////////////////////////////////////////////////////////////////////////////
+	//
+	template< typename T>
+	static void DynGen_DirectWrite( const IntermediateInstruction& info, const ModSibStrict<T>& dest )
+	{
+		xTEST( ptr32[&iopRegs.CP0.n.Status], 0x10000 );
+		xForwardJNZ8 skipWrite;
+
+		// The data being written is either a register or an immediate, held in Rt.
+
+		info.MoveRtTo( dest );
+		skipWrite.SetTarget();
+	}
+
+	//////////////////////////////////////////////////////////////////////////////////////////
+	//
+	template< typename T >
+	static void DynGen_StoreOp( const IntermediateInstruction& info )
+	{
+		if( info.IsConst.Rs )
+		{
+			// ---------------------------------------------------
+			//    Constant Propagation on the Dest Address (Rs)
+			// ---------------------------------------------------
+
+			const ConstLoadOpInfo constinfo( info );
+			
+			if( constinfo.xlated > HandlerId_Maximum )
+				DynGen_DirectWrite( info, ptrT[constinfo.xlated] );
+			else
+			{
+				// Indirect writes don't need a check against the CP0 write bit.
+				xMOV( ecx, constinfo.addr );
+				info.MoveRtTo( edx );
+				CallIndirectDispatcher<T>( 1 );
+			}
+		}
+		else
+		{
+			// --------------------------------------------------
+			//    Full Implementation (no const optimizations)
+			// --------------------------------------------------
+
+			info.MoveRsTo( ecx );
+			info.AddImmTo( ecx );
+
+			xMOV( eax, ecx );
+			xAND( eax, AddressMask );
+			xSHR( eax, PageBitShift );
+
+			xMOV( ebx, 0xcdcdcdcd );
+			uptr* writeback = ((uptr*)xGetPtr()) - 1;
+
+			xMOV( eax, ptr[(eax*4) + tbl_Translation.Contents] );
+			xCMP( eax, HandlerId_Maximum );
+			DynGen_IndirectDispatch<T>( 1 );
+
+			// Direct Access on Load Operation:
+
+			xAND( ecx, PageMask );
+			DynGen_DirectWrite( info, ptrT[ecx+eax] );
+
+			*writeback = (uptr)xGetPtr();		// return target for indirect's call/ret
+		}
+	}
+	
+	//////////////////////////////////////////////////////////////////////////////////////////
+	//
+	static void DynGen_LoadWord_LorR( const IntermediateInstruction& info, bool IsLoadRight )
+	{
+		if( info.IsConst.Rs )
+		{
+			// ---------------------------------------------------
+			//    Constant Propagation on the Src Address (Rs)
+			// ---------------------------------------------------
+
+			const ConstLoadOpInfo constinfo( info );
+			const uint shift		= (constinfo.addr & 3) << 3;
+			const uint aligned_addr	= constinfo.addr & ~3;
+			const uint rtmask		= IsLoadRight ? (0xffffff00 << (24-shift)) : (0x00ffffff >> shift);
+			const uint memshift		= IsLoadRight ? shift : (24 - shift);
+			
+			// Load from memory, merge, and write back.
+			
+			if( constinfo.xlated > HandlerId_Maximum )
+				xMOV( eax, ptr32[constinfo.xlated] );
+			else
+			{
+				xMOV( ecx, aligned_addr );
+				CallIndirectDispatcher<u32>( 0 );
+			}
+			
+			// Merge!  and WriteBack!
+			// code: SetRt_UL( (GetRt().UL & rtmask) | (mem << memshift) );
+			
+			info.MoveRtTo( ebx );
+			if( IsLoadRight )	xSHR( eax, memshift );
+			else				xSHL( eax, memshift );
+
+			xAND( ebx, rtmask );
+			xOR( eax, ebx );
+			info.MoveToRt( eax );
+		}
+		else
+		{
+			// --------------------------------------------------
+			//    Full Implementation (no const optimizations)
+			// --------------------------------------------------
+
+			info.MoveRsTo( ecx );
+			info.AddImmTo( ecx );
+
+			xMOV( eax, ecx );
+
+			xAND( eax, AddressMask & ~3 );	// mask off bottom bits as well as top!
+			xSHR( eax, PageBitShift );
+			xMOV( ebx, 0xcdcdcdcd );
+			uptr* writeback = ((uptr*)xGetPtr()) - 1;
+
+			xMOV( eax, ptr[(eax*4)+tbl_Translation.Contents] );
+			xPUSH( ecx );		// save the original address
+			xAND( ecx, ~3 );	// mask off bottom bits.
+			xCMP( eax, HandlerId_Maximum );
+
+			DynGen_IndirectDispatch<u32>( 0 );
+
+			// Direct Access on Load Operation (loads eax with data):
+
+			xAND( ecx, PageMask );
+			xMOV( eax, ptr32[ecx+eax] );
+
+			// Post LoadOp: Calculate shift, aligned address, rtmask, and memshift:
+			
+			*writeback = (uptr)xGetPtr();		// return target for indirect's call/ret
+			xPOP( ecx );
+			xAND( ecx, 3 );
+			xSHL( ecx, 3 );		// ecx == shift
+
+			info.MoveRtTo( ebx );
+			
+			if( IsLoadRight )
+			{
+				xSHR( eax, cl );	// ecx == shift/memshift
+
+				xMOV( edx, 0xffffff00 );
+				xNEG( ecx );
+				xADD( ecx, 24 );	// ecx == rtshift
+				xSHL( edx, cl );	// edx == rtmask
+
+				// Operation: SetRt_UL( (GetRt().UL & rtmask) | (mem << memshift) );
+				xAND( ebx, edx );
+				xSHL( eax, cl );
+				xOR( eax, ebx );
+			}
+			else	// LoadWordLeft!
+			{
+				xMOV( edx, 0x00ffffff );
+				xSHR( edx, cl );	// edx == rtmask
+
+				xNEG( ecx );
+				xADD( ecx, 24 );	// ecx == memshift
+
+				// Operation: SetRt_UL( (GetRt().UL & rtmask) | (mem << memshift) );
+				xAND( ebx, edx );
+				xSHL( eax, cl );
+				xOR( eax, ebx );
+			}
+
 			info.MoveToRt( eax );
 		}
 	}
-	else
+
+	//////////////////////////////////////////////////////////////////////////////////////////
+	//
+	static void DynGen_StoreWord_LorR( const IntermediateInstruction& info, bool IsStoreRight )
 	{
-		// --------------------------------------------------
-		//    Full Implementation (no const optimizations)
-		// --------------------------------------------------
-		
-		info.MoveRsTo( ecx );
-		info.AddImmTo( ecx );
+		if( info.IsConst.Rs )
+		{
+			// ---------------------------------------------------
+			//    Constant Propagation on the Src Address (Rs)
+			// ---------------------------------------------------
 
-		xMOV( eax, ecx );
-		xAND( eax, AddressMask );
-		xSHR( eax, PageBitShift );
+			const ConstLoadOpInfo constinfo( info );
+			const uint shift		= (constinfo.addr & 3) << 3;
+			const uint aligned_addr	= constinfo.addr & ~3;
 
-		xMOV( ebx, 0xcdcdcdcd );
-		uptr* writeback = ((uptr*)xGetPtr()) - 1;
+			const uint memmask		= IsStoreRight ? (0x00ffffff >> (24-shift)) : (0xffffff00 << shift);
+			const uint rtshift		= IsStoreRight ? shift : (24 - shift);
+			
+			// Load from memory, merge, and write back.
+			
+			if( constinfo.xlated > HandlerId_Maximum )
+				xMOV( eax, ptr32[constinfo.xlated] );
+			else
+			{
+				xMOV( ecx, aligned_addr );
+				CallIndirectDispatcher<u32>( 0 );
+			}
+			
+			// Merge!  and WriteBack!  [Right inverts the Rt shift]
+			//	MemoryWrite32( aligned_addr,
+			//		(( GetRt().UL >> rtshift )) | (mem & memmask)
+			//	);
+			
+			info.MoveRtTo( ebx );
+			if( IsStoreRight )	xSHL( ebx, rtshift );	// inverted Rt shift!
+			else				xSHR( ebx, rtshift );
+			xAND( eax, memmask );
+			xOR( eax, ebx );
 
-		xMOV( eax, ptr[(eax*4)+tbl_Translation.Contents] );
-		xCMP( eax, HandlerId_Maximum );
-		DynGen_IndirectDispatch( 0, 32 );
+			// Store the value to memory -->
 
-		// Direct Access on Load Operation:
+			if( constinfo.xlated > HandlerId_Maximum )
+				xMOV( ptr32[constinfo.xlated], eax );
+			else
+			{
+				xMOV( ecx, aligned_addr );
+				xMOV( edx, eax );
+				CallIndirectDispatcher<u32>( 1 );
+			}
+		}
+		else
+		{
+			// --------------------------------------------------
+			//    Full Implementation (no const optimizations)
+			// --------------------------------------------------
 
-		xAND( ecx, PageMask );
-		DynGen_DirectRead32( info, ptr[ecx+eax] );
+			info.MoveRsTo( ecx );
+			info.AddImmTo( ecx );
 
-		*writeback = (uptr)xGetPtr();		// return target for indirect's call/ret
+			xMOV( eax, ecx );
+
+			xAND( eax, AddressMask & ~3 );	// mask off bottom bits as well as top!
+			xSHR( eax, PageBitShift );
+			xMOV( ebx, 0xcdcdcdcd );
+			uptr* writeback = ((uptr*)xGetPtr()) - 1;
+
+			xMOV( eax, ptr[(eax*4)+tbl_Translation.Contents] );
+			xPUSH( ecx );		// save the original address
+			xPUSH( ecx );		// twice!!
+			xPUSH( eax );		// and save the translated address
+			xAND( ecx, ~3 );	// mask off bottom bits.
+			xCMP( eax, HandlerId_Maximum );
+
+			DynGen_IndirectDispatch<u32>( 0 );
+
+			// Direct Access on Load Operation (loads eax with data):
+
+			xAND( ecx, PageMask );
+			xMOV( eax, ptr32[ecx+eax] );
+
+			// Post LoadOp: Calculate shift, aligned address, rtmask, and memshift:
+			
+			*writeback = (uptr)xGetPtr();		// return target for indirect's call/ret
+			xPOP( ecx );
+			xAND( ecx, 3 );
+			xSHL( ecx, 3 );		// ecx == shift
+
+			info.MoveRtTo( edx );
+
+			if( IsStoreRight )
+			{
+				xSHL( edx, cl );
+
+				xMOV( ebx, 0x00ffffff );
+				xNEG( ecx );
+				xADD( ecx, 24 );
+				xSHR( ebx, cl );	// edx == memmask  (0x00ffffff >> (24 - shift))
+
+				xAND( eax, ebx );
+				xOR( edx, eax );
+			}
+			else	// LoadWordLeft!
+			{
+				xMOV( ebx, 0xffffff00 );
+				xSHL( ebx, cl );	// edx == memmask
+				xAND( eax, ebx );	// eax == mem & (0xffffff00 << shift)
+
+				xNEG( ecx );
+				xADD( ecx, 24 );	// ecx == rtshift
+				xSHR( edx, cl );
+
+				xOR( edx, eax );	// edx == value to be written back to memory
+			}
+
+			// Store to Memory -->
+			
+			xPOP( ecx );		// original physical address
+			xPOP( eax );		// translated address
+			xMOV( ebx, 0xcdcdcdcd );
+			writeback = ((uptr*)xGetPtr()) - 1;
+			xCMP( eax, HandlerId_Maximum );
+
+			DynGen_IndirectDispatch<u32>( 1 );
+
+			// Direct Access on Load Operation:
+			xAND( ecx, PageMask );
+			DynGen_DirectWrite( info, ptr32[ecx+eax] );
+
+			*writeback = (uptr)xGetPtr();		// return target for indirect's call/ret
+		}
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
+void recLB( const IntermediateInstruction& info )
+{
+	IopMemory::DynGen_LoadOp<u8>( info );
+}
+
+void recLH( const IntermediateInstruction& info )
+{
+	IopMemory::DynGen_LoadOp<u16>( info );
+}
+
+void recLW( const IntermediateInstruction& info )
+{
+	IopMemory::DynGen_LoadOp<u32>( info );
+}
+
+void recLWL( const IntermediateInstruction& info )
+{
+	IopMemory::DynGen_LoadWord_LorR( info, false );
+}
+
+void recLWR( const IntermediateInstruction& info )
+{
+	IopMemory::DynGen_LoadWord_LorR( info, true );
+}
+//////////////////////////////////////////////////////////////////////////////////////////
 // Loads address in Rs+Imm into Rt.
 //
+void recSB( const IntermediateInstruction& info )
+{
+	IopMemory::DynGen_StoreOp<u32>( info );
+}
+
+void recSH( const IntermediateInstruction& info )
+{
+	IopMemory::DynGen_StoreOp<u32>( info );
+}
+
 void recSW( const IntermediateInstruction& info )
 {
-	using namespace IopMemory;
-	using namespace IopMemory::Internal;
+	IopMemory::DynGen_StoreOp<u32>( info );
+}
 
-	if( info.IsConst.Rs )
-	{
-		// ---------------------------------------------------
-		//    Constant Propagation on the Dest Address (Rs)
-		// ---------------------------------------------------
-		
-		const u32 dstaddr = info.IsConst.Rs + info.GetImm();
-		const u32 masked = dstaddr & AddressMask;
-		
-		const sptr xlated = tbl_Translation.Contents[masked / PageSize];
-		if( xlated > HandlerId_Maximum )
-			DynGen_DirectWrite32( info, ptr32[xlated] );
-		else
-		{
-			xMOV( ecx, dstaddr );
-			info.MoveRtTo( edx );
-			xCALL( GetIndirectDispatcherPtr( 1, 32 ) );
-		}
-	}
-	else
-	{
-		// --------------------------------------------------
-		//    Full Implementation (no const optimizations)
-		// --------------------------------------------------
-		
-		info.MoveRsTo( ecx );
-		info.AddImmTo( ecx );
+void recSWL( const IntermediateInstruction& info )
+{
+	IopMemory::DynGen_StoreWord_LorR( info, false );
+}
 
-		xMOV( eax, ecx );
-		xAND( eax, AddressMask );
-		xSHR( eax, PageBitShift );
-
-		xMOV( ebx, 0xcdcdcdcd );
-		uptr* writeback = ((uptr*)xGetPtr()) - 1;
-
-		xMOV( eax, ptr[(eax*4)+tbl_Translation.Contents] );
-		xCMP( eax, HandlerId_Maximum );
-		DynGen_IndirectDispatch( 1, 32 );
-
-		// Direct Access on Load Operation:
-
-		xAND( ecx, PageMask );
-		DynGen_DirectWrite32( info, ptr32[ecx+eax] );
-
-		*writeback = (uptr)xGetPtr();		// return target for indirect's call/ret
-	}
+void recSWR( const IntermediateInstruction& info )
+{
+	IopMemory::DynGen_StoreWord_LorR( info, true );
 }

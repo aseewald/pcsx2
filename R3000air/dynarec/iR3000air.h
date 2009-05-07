@@ -5,6 +5,8 @@
 
 using namespace x86Emitter;
 
+#define ptrT xAddressIndexer<T>()
+
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 class xImmOrReg
@@ -78,7 +80,9 @@ public:
 	
 	const xImmOrReg ixImm;
 	const GprStatus IsConst;
-	
+
+	const bool SignExtendOnLoad;
+
 public:
 	s32 GetImm() const { return ixImm.GetImm(); }
 
@@ -149,13 +153,89 @@ public:
 	}
 
 	// ------------------------------------------------------------------------
-	void MoveToRt( const xRegister32& src ) const 
+	template< typename T >
+	void MoveToRt( const xRegister<T>& src, const xRegister32& tempreg ) const
 	{
-		if( !DestRt.IsReg() )
+		if( DestRt.IsReg() )
+		{
+			if( SignExtendOnLoad )
+				xMOVSX( DestRt.GetReg(), src );
+			else
+				xMOVZX( DestRt.GetReg(), src );
+		}
+		else
+		{
+			// pooh.. gotta move the 'hard' way :(
+			// (src->temp->dest)
+
+			if( SignExtendOnLoad )
+				xMOVSX( tempreg, src );
+			else
+				xMOVZX( tempreg, src );
+
+			xMOV( DestRt.GetMem(), src );
+		}
+	}
+
+	template<>
+	void MoveToRt<u32>( const xRegister<u32>& src, const xRegister32& tempreg ) const
+	{
+		if( DestRt.IsReg() )
 			xMOV( DestRt.GetReg(), src );
 		else
-			xMOV( DestRt.GetMem(), src );
+		{
+			// pooh.. gotta move the 'hard' way :(
+			// (src->temp->dest)
+
+			xMOV( tempreg, src );
+			xMOV( DestRt.GetMem(), tempreg );
+		}
 	}
+
+	template< typename T >
+	void MoveToRt( const ModSibStrict<T>& src, const xRegister32& tempreg ) const
+	{
+		if( DestRt.IsReg() )
+		{
+			if( SignExtendOnLoad )
+				xMOVSX( DestRt.GetReg(), src );
+			else
+				xMOVZX( DestRt.GetReg(), src );
+		}
+		else
+		{
+			// pooh.. gotta move the 'hard' way :(
+			// (src->temp->dest)
+
+			if( SignExtendOnLoad )
+				xMOVSX( tempreg, src );
+			else
+				xMOVZX( tempreg, src );
+
+			xMOV( DestRt.GetMem(), tempreg );
+		}
+	}
+
+	template<>
+	void MoveToRt<u32>( const ModSibStrict<u32>& src, const xRegister32& tempreg ) const
+	{
+		if( DestRt.IsReg() )
+			xMOV( DestRt.GetReg(), src );
+		else
+		{
+			// pooh.. gotta move the 'hard' way :(
+			// (src->temp->dest)
+
+			xMOV( tempreg, src );
+			xMOV( DestRt.GetMem(), tempreg );
+		}
+	}
+
+	template< typename T > void MoveToRt( const xRegister<T>& src ) const		{ MoveToRt( src, edx ); }
+	template< typename T > void MoveToRt( const ModSibStrict<T>& src ) const	{ MoveToRt( src, edx ); }
+
+	template<> void MoveToRt<u32>( const xRegister<u32>& src ) const			{ MoveToRt( src, edx ); }
+	template<> void MoveToRt<u32>( const ModSibStrict<u32>& src ) const			{ MoveToRt( src, edx ); }
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
