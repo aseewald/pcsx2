@@ -775,13 +775,6 @@
 							PrecompiledHeaderFile="$(IntDir)\win32.pch"
 						/>
 					</FileConfiguration>
-					<FileConfiguration
-						Name="Release|Win32"
-						>
-						<Tool
-							Name="VCCLCompilerTool"
-						/>
-					</FileConfiguration>
 				</File>
 				<File
 					RelativePath=".\..\Debugger.h"
@@ -829,13 +822,6 @@
 							PrecompiledHeaderFile="$(IntDir)\Win32.pch"
 						/>
 					</FileConfiguration>
-					<FileConfiguration
-						Name="Release|Win32"
-						>
-						<Tool
-							Name="VCCLCompilerTool"
-						/>
-					</FileConfiguration>
 				</File>
 				<File
 					RelativePath=".\..\Debugreg.cpp"
@@ -856,13 +842,6 @@
 							Name="VCCLCompilerTool"
 							PrecompiledHeaderThrough="Win32.h"
 							PrecompiledHeaderFile="$(IntDir)\Win32.pch"
-						/>
-					</FileConfiguration>
-					<FileConfiguration
-						Name="Release|Win32"
-						>
-						<Tool
-							Name="VCCLCompilerTool"
 						/>
 					</FileConfiguration>
 				</File>
@@ -2006,6 +1985,10 @@
 						</File>
 						<File
 							RelativePath="..\..\R3000air\dynarec\iR3000airIntermediate.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\dynarec\iR3000airMemory.cpp"
 							>
 						</File>
 					</Filter>

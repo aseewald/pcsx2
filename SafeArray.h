@@ -316,7 +316,7 @@ public:
 	virtual SafeList<T>* Clone() const
 	{
 		SafeList<T>* retval = new SafeList<T>( m_length );
-		memcpy_fast( retval->GetPtr(), m_ptr, sizeof(T) * m_length );
+		memcpy_fast( retval->m_ptr, m_ptr, sizeof(T) * m_length );
 		return retval;
 	}
 

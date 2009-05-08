@@ -138,11 +138,19 @@ static __releaseinline void intStep()
 	Instruction::Process( dudley );
 
 	// prep the iopRegs for the next instruction fetch -->
+	// 
+	// Typically VectorPC points to the delay slot instruction on branches, and the GetNextPC()
+	// references the *target* of the branch.  Thus the delay slot is processed on the next
+	// pass (unless an exception occurs), and *then* we vector to the branch target.
+	//
+	// note: In the case of raised exceptions, VectorPC and GetNextPC() be overridden during
+	//  instruction processing above.
+	
 	iopRegs.pc			= iopRegs.VectorPC;
 	iopRegs.VectorPC	= dudley.GetNextPC();
 	iopRegs.IsDelaySlot	= dudley.IsBranchType();
 
-	// Test for interrupts after updating the PC, otherwise the EPC on exception
+	// Test for interrupts *after* updating the PC, otherwise the EPC on exception
 	// vector will be wrong!
 	if( intInterruptTest() )
 	{
