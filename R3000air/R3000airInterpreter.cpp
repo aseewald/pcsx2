@@ -35,7 +35,7 @@
 
 namespace R3000Exception
 {
-	BaseExcept::~BaseExcept() {}
+	BaseExcept::~BaseExcept() throw() {} 
 }
 
 namespace R3000Air {

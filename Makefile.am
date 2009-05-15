@@ -3,25 +3,37 @@ INCLUDES = -I@srcdir@/x86/  -I@srcdir@/../common/include -I@srcdir@/../3rdparty
 noinst_LIBRARIES = libpcsx2.a
 
 libpcsx2_a_SOURCES = \
-CDVD.cpp CDVDiso.cpp CDVDisodrv.cpp COP0.cpp COP2.cpp Cache.cpp CdRom.cpp Console.cpp HwRead.cpp HwWrite.cpp \
-Counters.cpp Decode_XA.cpp Elfheader.cpp FPU.cpp FPU2.cpp FiFo.cpp Gif.cpp GS.cpp Hw.cpp Interpreter.cpp \
-IopBios.cpp IopCounters.cpp IopDma.cpp IopHw.cpp IopMem.cpp IopSio2.cpp MMI.cpp MTGS.cpp \
-Memory.cpp MemoryCard.cpp Misc.cpp Patch.cpp PathUtils.cpp Plugins.cpp PrecompiledHeader.cpp R3000A.cpp \
-R3000AInterpreter.cpp R3000AOpcodeTables.cpp R5900.cpp R5900OpcodeImpl.cpp R5900OpcodeTables.cpp \
-SPR.cpp SaveState.cpp Sif.cpp Sio.cpp SourceLog.cpp Stats.cpp System.cpp ThreadTools.cpp \
-VU0.cpp VU0micro.cpp VU0microInterp.cpp VU1micro.cpp VU1microInterp.cpp VUflags.cpp VUmicroMem.cpp VUops.cpp \
-Vif.cpp VifDma.cpp vssprintf.cpp vtlb.cpp xmlpatchloader.cpp  AlignedMalloc.cpp \
-RecoverySystem.cpp Saveslots.cpp Dump.cpp
+AlignedMalloc.cpp  Decode_XA.cpp  HwRead.cpp       MTGS.cpp                  Sio.cpp             VUflags.cpp \
+CDVD.cpp           Dump.cpp       HwWrite.cpp                     SourceLog.cpp       VUmicroMem.cpp \
+CDVDiso.cpp        Elfheader.cpp  Interpreter.cpp  Memory.cpp             R5900.cpp               Stats.cpp           VUops.cpp \
+CDVDisodrv.cpp     FPU.cpp        IopBios.cpp      MemoryCard.cpp         R5900OpcodeImpl.cpp     System.cpp          Vif.cpp \
+COP0.cpp           FPU2.cpp       IopCounters.cpp  Misc.cpp               R5900OpcodeTables.cpp   ThreadTools.cpp     VifDma.cpp \
+COP2.cpp           FiFo.cpp       IopDma.cpp       Patch.cpp              RecoverySystem.cpp      VU0.cpp             vssprintf.cpp \
+Cache.cpp          GS.cpp         IopHw.cpp        PathUtils.cpp          SPR.cpp                 VU0micro.cpp        vtlb.cpp \
+CdRom.cpp          Gif.cpp        IopMem.cpp       Plugins.cpp            SaveState.cpp           VU0microInterp.cpp  xmlpatchloader.cpp \
+Console.cpp         IopSio2.cpp      PrecompiledHeader.cpp  Saveslots.cpp           VU1micro.cpp \
+Counters.cpp       Hw.cpp         MMI.cpp                       Sif.cpp                 VU1microInterp.cpp
+#R3000A.cpp R3000AInterpreter.cpp R3000AOpcodeTables.cpp  Mdec.cpp HashTools.cpp
 
 libpcsx2_a_SOURCES += \	
 ps2/Iop/IopHwRead.cpp ps2/Iop/IopHwWrite.cpp ps2/Iop/IopHw_Internal.h
 
 libpcsx2_a_SOURCES += \
-CDVD.h CDVDiso.h CDVDisodrv.h CDVDlib.h COP0.h Cache.h CdRom.h Common.h Counters.h Decode_XA.h \
-Elfheader.h Exceptions.h GS.h Hw.h IopBios.h IopBios2.h IopCounters.h IopDma.h IopHw.h IopMem.h IopSio2.h Memcpyfast.h \
-Memory.h MemoryTypes.h MemoryCard.h Misc.h Patch.h Paths.h Plugins.h PrecompiledHeader.h IopCommon.h R3000A.h R5900.h R5900OpcodeTables.h \
-SPR.h SamplProf.h SaveState.h Sif.h Sifcmd.h Sio.h SafeArray.h Stats.h StringUtils.h System.h Threading.h \
-VU.h VUflags.h VUmicro.h VUops.h Vif.h VifDma.h cheatscpp.h vtlb.h NakedAsm.h R5900Exceptions.h HostGui.h Pcsx2Config.h \
-Dump.h
+CDVD.h        Common.h       IopDma.h      MemoryCard.h   PrecompiledHeader.h  SPR.h        Stats.h        VUops.h \
+CDVDiso.h     Counters.h    HostGui.h      IopHw.h       MemoryTypes.h               SafeArray.h  StringUtils.h  Vif.h \
+CDVDisodrv.h  Decode_XA.h   Hw.h           IopMem.h      Misc.h            SamplProf.h  System.h       VifDma.h \
+CDVDlib.h     Dump.h        IopBios.h      IopSio2.h     NakedAsm.h     R5900.h              SaveState.h  Threading.h    cheatscpp.h \
+COP0.h        Elfheader.h   IopBios2.h             Patch.h        R5900Exceptions.h    Sif.h        VU.h           vtlb.h \
+Cache.h       Exceptions.h  IopCommon.h    MemcpyFast.h  Paths.h        R5900OpcodeTables.h  Sifcmd.h     VUflags.h \
+CdRom.h       GS.h          IopCounters.h  Memory.h      Plugins.h      RedtapeWindows.h     Sio.h        VUmicro.h
+#R3000A.h  R3000Exceptions.h Mdec.h  HashMap.h 
+
+libpcsx2_a_SOURCES += \
+R3000air/R3000air.cpp  R3000air/R3000airDiagnostic.cpp   R3000air/R3000airInterpreter.cpp  R3000air/R3000airOpcodeTables.inl \
+R3000air/R3000air.h    R3000air/R3000airInstruction.inl  R3000air/R3000airOpcodeImpl.inl
+
+libpcsx2_a_SOURCES += \
+R3000air/dynarec/iR3000air.cpp  R3000air/dynarec/iR3000air.h  R3000air/dynarec/iR3000airArithmetic.cpp  \
+R3000air/dynarec/iR3000airBranch.cpp  R3000air/dynarec/iR3000airIntermediate.cpp  R3000air/dynarec/iR3000airMemory.cpp
 
 SUBDIRS = x86 . DebugTools IPU RDebug tinyxml Linux
