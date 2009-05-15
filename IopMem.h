@@ -40,7 +40,8 @@ static __forceinline const T* iopVirtMemR( u32 mem )
 	return (const T*)&psxM[mem & 0x1fffff];
 }
 
-// Obtains a pointer to the IOP's physical mapping (bypasses the TLB)
+// Obtains a pointer to the IOP's physical mapping (bypasses the TLB).
+// This function is intended for use by DMA address resolution only.
 static __forceinline u8* iopPhysMem( u32 addr )
 {
 	return &psxM[addr & 0x1fffff];
@@ -74,6 +75,9 @@ extern void psxMemShutdown();
 extern u8   iopMemRead8 (u32 mem);
 extern u16  iopMemRead16(u32 mem);
 extern u32  iopMemRead32(u32 mem);
+extern u8   iopMemDirectRead8 (u32 mem);
+extern u16  iopMemDirectRead16(u32 mem);
+extern u32  iopMemDirectRead32(u32 mem);
 extern void iopMemWrite8 (u32 mem, mem8_t value);
 extern void iopMemWrite16(u32 mem, mem16_t value);
 extern void iopMemWrite32(u32 mem, mem32_t value);

@@ -1,20 +1,20 @@
 /*  Pcsx2 - Pc Ps2 Emulator
-*  Copyright (C) 2009  Pcsx2-Playground Team
-*
-*  This program is free software; you can redistribute it and/or modify
-*  it under the terms of the GNU General Public License as published by
-*  the Free Software Foundation; either version 2 of the License, or
-*  (at your option) any later version.
-*  
-*  This program is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*  
-*  You should have received a copy of the GNU General Public License
-*  along with this program; if not, write to the Free Software
-*  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
-*/
+ *  Copyright (C) 2009  Pcsx2 Team
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *  
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *  
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ */
 
 // Micro VU recompiler! - author: cottonvibes(@gmail.com)
 
@@ -43,6 +43,7 @@ microVUt(void) mVUinit(VURegs* vuRegsPtr) {
 	mVU->microSize	= (vuIndex ? 0x4000 : 0x1000);
 	mVU->progSize	= (vuIndex ? 0x4000 : 0x1000) / 4;
 	mVU->cache		= NULL;
+	mVU->cacheSize	= mVUcacheSize;
 	memset(&mVU->prog, 0, sizeof(mVU->prog));
 	mVUprint((vuIndex) ? "microVU1: init" : "microVU0: init");
 
@@ -117,10 +118,6 @@ microVUt(void) mVUclear(u32 addr, u32 size) {
 	microVU* mVU = mVUx;
 	memset(&mVU->prog.lpState, 0, sizeof(mVU->prog.lpState));
 	mVU->prog.cleared = 1; // Next execution searches/creates a new microprogram
-	// Note: It might be better to copy old recompiled blocks to the new microprogram rec data
-	// however, if games primarily do big writes, its probably not worth it.
-	// The cost of invalidating bad blocks is also kind of expensive, which is another reason
-	// that its probably not worth it...
 }
 
 //------------------------------------------------------------------
@@ -131,6 +128,7 @@ microVUt(void) mVUclear(u32 addr, u32 size) {
 microVUt(void) mVUclearProg(int progIndex) {
 	microVU* mVU = mVUx;
 	mVU->prog.prog[progIndex].used = 1;
+	mVU->prog.prog[progIndex].sFlagHack = 0;
 	mVU->prog.prog[progIndex].x86ptr = mVU->prog.prog[progIndex].x86start;
 	for (u32 i = 0; i < (mVU->progSize / 2); i++) {
 		mVU->prog.prog[progIndex].block[i]->reset();
@@ -142,6 +140,7 @@ microVUt(void) mVUcacheProg(int progIndex) {
 	microVU* mVU = mVUx;
 	memcpy_fast(mVU->prog.prog[progIndex].data, mVU->regs->Micro, mVU->microSize);
 	mVUdumpProg(progIndex);
+	mVUcheckSflag<vuIndex>(progIndex);
 }
 
 // Finds the least used program, (if program list full clears and returns an old program; if not-full, returns free program)

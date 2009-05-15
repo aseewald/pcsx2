@@ -96,6 +96,7 @@ const xAddressIndexer<u8> ptr8;
 // ------------------------------------------------------------------------
 
 template< typename OperandType > const xRegisterBase<OperandType> xRegisterBase<OperandType>::Empty;
+
 const xAddressReg xAddressReg::Empty;
 
 const xRegisterSSE

@@ -142,6 +142,7 @@ __instinline void Inst::ADDI()
 	s64 result = (s64)GetRs().SL + Imm();
 	_OverflowCheck( *this, result );
 	SetRt_SL( (s32)result );
+	SetSideEffects();		// because of overflow exception handling.
 }
 
 // Rt = Rs + Im (no exception)
@@ -195,6 +196,7 @@ __instinline void Inst::ADD()
 	
 	_OverflowCheck( *this, result );
 	SetRd_SL( (s32)result );
+	SetSideEffects();		// because of overflow exception handling.
 }
 
 // Rd = Rs - Rt		(Exception on Integer Overflow)
@@ -204,6 +206,7 @@ __instinline void Inst::SUB()
 
 	_OverflowCheck( *this, result );
 	SetRd_SL( (s32)result );
+	SetSideEffects();		// because of overflow exception handling.
 }
 
 __instinline void Inst::ADDU()	// Rd = Rs + Rt
@@ -274,23 +277,23 @@ __instinline void Inst::DIV()
 	// [TODO] : This could be handled with an exception or signal handler instead of conditionals.
 
 	const s32 Rt = GetRt().SL;
-	if( Rt == -1 )
-	{
-		const u32 Rs = GetRs().UL;
-		if( Rs == 0x80000000 )
-		{
-			SetHiLo( 0, 0x80000000 );
-			return;
-		}
-	}
-	else if( Rt == 0 )
+	const s32 Rs = GetRs().SL;
+
+	if( Rt == 0 )
 	{
 		const s32 Rs = GetRs().SL;
 		SetHiLo( Rs, (Rs >= 0) ? -1 : 1 );
 		return;
 	}
+	else if( Rt == -1 )
+	{
+		if( Rs == (s32)0x80000000 )
+		{
+			SetHiLo( 0, 0x80000000 );
+			return;
+		}
+	}
 
-	const s32 Rs = GetRs().SL;
 	SetHiLo( (Rs % Rt), (Rs / Rt) );
 }
 
@@ -416,7 +419,7 @@ __instinline void Inst::SYSCALL()
 
 void Inst::_RFE()
 {
-	HasSideEffects();
+	SetSideEffects();
 	iopRegs.CP0.n.Status = (iopRegs.CP0.n.Status & 0xfffffff0) | ((iopRegs.CP0.n.Status & 0x3c) >> 2);
 }
 
@@ -607,11 +610,13 @@ __instinline void Inst::CFC0()
 __instinline void Inst::MTC0()
 {
 	SetFs_UL( GetRt().UL );
+	SetSideEffects();
 }
 
 __instinline void Inst::CTC0()
 {
 	SetFs_UL( GetRt().UL );
+	SetSideEffects();
 }
 
 /*********************************************************

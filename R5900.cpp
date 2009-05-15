@@ -519,11 +519,8 @@ __releaseinline void cpuTestINTCInts()
 	// the current branch...
 	if( !eeEventTestIsActive )
 		cpuSetNextBranchDelta( 4 );
-	else if(psxCycleEE > 0)
-	{
-		psxBreak += psxCycleEE;		// record the number of cycles the IOP didn't run.
-		psxCycleEE = 0;
-	}
+	else
+		iopRegs.StopExecution();
 }
 
 __forceinline void cpuTestDMACInts()
@@ -542,11 +539,8 @@ __forceinline void cpuTestDMACInts()
 	// the current branch...
 	if( !eeEventTestIsActive )
 		cpuSetNextBranchDelta( 4 );
-	else if(psxCycleEE > 0)
-	{
-		psxBreak += psxCycleEE;		// record the number of cycles the IOP didn't run.
-		psxCycleEE = 0;
-	}
+	else
+		iopRegs.StopExecution();
 }
 
 __forceinline void cpuTestTIMRInts() {
@@ -614,13 +608,12 @@ __forceinline void CPU_INT( u32 n, s32 ecycle)
 
 	// Interrupt is happening soon: make sure both EE and IOP are aware.
 
-	if( ecycle <= 28 && psxCycleEE > 0 )
+	if( ecycle <= 28 )
 	{
-		// If running in the IOP, force it to break immediately into the EE.
+		// If running in the IOP, schedule it to break immediately into the EE.
 		// the EE's branch test is due to run.
 
-		psxBreak += psxCycleEE;		// record the number of cycles the IOP didn't run.
-		psxCycleEE = 0;
+		iopRegs.StopExecution();
 	}
 
 	cpuSetNextBranchDelta( cpuRegs.eCycle[n] );

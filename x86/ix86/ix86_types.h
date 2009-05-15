@@ -206,7 +206,6 @@ __forceinline void xWrite( T val )
 
 		int Id;
 
-		xRegisterBase( const xRegisterBase<OperandType>& src ) : Id( src.Id ) {}
 		xRegisterBase(): Id( -1 ) {}
 		explicit xRegisterBase( int regId ) : Id( regId ) { jASSUME( Id >= -1 && Id < 8 ); }
 
@@ -220,12 +219,6 @@ __forceinline void xWrite( T val )
 
 		bool operator==( const xRegisterBase<OperandType>& src ) const	{ return (Id == src.Id); }
 		bool operator!=( const xRegisterBase<OperandType>& src ) const	{ return (Id != src.Id); }
-
-		xRegisterBase<OperandType>& operator=( const xRegisterBase<OperandType>& src )
-		{
-			Id = src.Id;
-			return *this;
-		}
 	};
 
 	//////////////////////////////////////////////////////////////////////////////////////////
@@ -234,18 +227,14 @@ __forceinline void xWrite( T val )
 	class xRegister : public xRegisterBase<OperandType>
 	{
 	public:
-		static const xRegister Empty;		// defined as an empty/unused value (-1)
-
-	public:
 		xRegister(): xRegisterBase<OperandType>() {}
-		xRegister( const xRegister& src ) : xRegisterBase<OperandType>( src.Id ) {}
-		explicit xRegister( const xRegisterBase<OperandType>& src ) : xRegisterBase<OperandType>( src ) {}
+		xRegister( const xRegisterBase<OperandType>& src ) : xRegisterBase<OperandType>( src ) {}
 		explicit xRegister( int regId ) : xRegisterBase<OperandType>( regId ) {}
 		
 		bool operator==( const xRegister<OperandType>& src ) const	{ return this->Id == src.Id; }
 		bool operator!=( const xRegister<OperandType>& src ) const	{ return this->Id != src.Id; }
 
-		xRegister<OperandType>& operator=( const xRegister<OperandType>& src )
+		xRegister<OperandType>& operator=( const xRegisterBase<OperandType>& src )
 		{
 			this->Id = src.Id;
 			return *this;
@@ -262,14 +251,13 @@ __forceinline void xWrite( T val )
 
 	public:
 		xRegisterSIMD(): xRegisterBase<OperandType>() {}
-		xRegisterSIMD( const xRegisterSIMD& src ) : xRegisterBase<OperandType>( src.Id ) {}
 		explicit xRegisterSIMD( const xRegisterBase<OperandType>& src ) : xRegisterBase<OperandType>( src ) {}
 		explicit xRegisterSIMD( int regId ) : xRegisterBase<OperandType>( regId ) {}
 		
 		bool operator==( const xRegisterSIMD<OperandType>& src ) const	{ return this->Id == src.Id; }
 		bool operator!=( const xRegisterSIMD<OperandType>& src ) const	{ return this->Id != src.Id; }
 
-		xRegisterSIMD<OperandType>& operator=( const xRegisterSIMD<OperandType>& src )
+		xRegisterSIMD<OperandType>& operator=( const xRegisterBase<OperandType>& src )
 		{
 			this->Id = src.Id;
 			return *this;
@@ -319,6 +307,9 @@ __forceinline void xWrite( T val )
 		xAddressInfo operator+( s32 right ) const;
 		xAddressInfo operator+( const void* right ) const;
 
+		xAddressInfo operator-( s32 right ) const;
+		xAddressInfo operator-( const void* right ) const;
+
 		xAddressInfo operator*( u32 factor ) const;
 		xAddressInfo operator<<( u32 shift ) const;
 		
@@ -328,7 +319,7 @@ __forceinline void xWrite( T val )
 			return *this;
 		}
 	};
-
+	
 	//////////////////////////////////////////////////////////////////////////////////////////
 	//
 	class xAddressInfo
@@ -635,7 +626,7 @@ __forceinline void xWrite( T val )
 		JccComparisonType m_cc;		// comparison type of the instruction
 
 	public:
-		const int GetMaxInstructionSize() const
+		int GetMaxInstructionSize() const
 		{
 			jASSUME( m_cc != Jcc_Unknown );
 			return ( m_cc == Jcc_Unconditional ) ? 5 : 6;
@@ -765,6 +756,26 @@ __forceinline void xWrite( T val )
 		#include "implement/incdec.h"
 		#include "implement/test.h"
 		#include "implement/jmpcall.h"
+	}
+
+	static __forceinline xAddressInfo operator+( const void* addr, const xAddressReg& reg )
+	{
+		return xAddressInfo( reg, (sptr)addr );
+	}
+
+	static __forceinline xAddressInfo operator+( const void* addr, const xAddressInfo& reg )
+	{
+		return xAddressInfo( (sptr)addr ).Add( reg );
+	}
+
+	static __forceinline xAddressInfo operator+( s32 addr, const xAddressReg& reg )
+	{
+		return xAddressInfo( reg, (sptr)addr );
+	}
+
+	static __forceinline xAddressInfo operator+( s32 addr, const xAddressInfo& reg )
+	{
+		return xAddressInfo( (sptr)addr ).Add( reg );
 	}
 }
 

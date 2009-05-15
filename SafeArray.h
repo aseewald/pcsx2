@@ -200,7 +200,7 @@ protected:
 //
 //
 template< typename T >
-class SafeList
+class SafeList : public NoncopyableObject
 {
 public:
 	static const int DefaultChunkSize = 0x80 * sizeof(T);
@@ -222,7 +222,7 @@ protected:
 		return (T*)realloc( m_ptr, newsize * sizeof(T) );
 	}
 	
-	void _boundsCheck( uint i )
+	void _boundsCheck( uint i ) const 
 	{
 #ifdef PCSX2_DEVBUILD
 		if( i >= (uint)m_length )
@@ -240,6 +240,7 @@ protected:
 public:	
 	virtual ~SafeList()
 	{
+		safe_free( m_ptr );
 	}
 
 	explicit SafeList( const std::string& name="Unnamed" ) : 
@@ -260,6 +261,12 @@ public:
 	{
 		if( m_ptr == NULL )
 			throw Exception::OutOfMemory();
+
+		for( int i=0; i<m_allocsize; ++i )
+		{
+			new (&m_ptr[i]) T();
+		}
+
 	}
 
 	// Returns the size of the list, as according to the array type.  This includes
@@ -276,7 +283,7 @@ public:
 	{
 		if( blockSize > m_allocsize )
 		{
-			const uint newalloc = blockSize + ChunkSize;
+			const int newalloc = blockSize + ChunkSize;
 			m_ptr = _virtual_realloc( newalloc );
 			if( m_ptr == NULL )
 			{
@@ -286,20 +293,50 @@ public:
 					"New size: " + to_string( newalloc ) + " bytes"
 				);
 			}
-			m_allocsize = newalloc;
+
+			for( ; m_allocsize<newalloc; ++m_allocsize )
+			{
+				new (&m_ptr[m_allocsize]) T();
+			}
+
+			//m_allocsize = newalloc;
 		}
+	}
+	
+	// Sets the item length to zero.  Does not free memory allocations.
+	void Clear()
+	{
+		m_length = 0;
+	}
+	
+	// Appends an item to the end of the list and returns a handle to it.
+	T& New()
+	{
+		MakeRoomFor( m_length + 1 );
+		return m_ptr[m_length];
 	}
 
 	// Gets an element of this memory allocation much as if it were an array.
 	// DevBuilds : Throws Exception::IndexBoundsFault() if the index is invalid.
-	T& operator[]( int idx ) { return *_getPtr( (uint)idx ); }
-	const T& operator[]( int idx ) const { return *_getPtr( (uint)idx ); }
-	
+	T& operator[]( int idx )				{ return *_getPtr( (uint)idx ); }
+	const T& operator[]( int idx ) const	{ return *_getPtr( (uint)idx ); }
+
+	T* GetPtr()				{ return m_ptr; }
+	const T* GetPtr() const	{ return m_ptr; }
+
 	int Add( const T& src )
 	{
 		MakeRoomFor( m_length + 1 );
 		m_ptr[m_length] = src;
 		return m_length++;
+	}
+
+	// Same as Add, but returns the handle of the new object instead of it's array index.
+	T& AddNew( const T& src )
+	{
+		MakeRoomFor( m_length + 1 );
+		m_ptr[m_length] = src;
+		return m_ptr[m_length];
 	}
 	
 	// Performs a standard array-copy removal of the given item.  All items past the

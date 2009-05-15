@@ -389,7 +389,7 @@ mem32_t __fastcall iopHwRead32_Page8( u32 addr )
 			const int parm = (masked_addr-0x240) / 8;
 			ret = (masked_addr & 4) ? sio2_getSend2( parm ) : sio2_getSend1( parm );
 		}
-		else
+		else if( masked_addr <= 0x280 )
 		{
 			switch( masked_addr )
 			{
@@ -416,6 +416,10 @@ mem32_t __fastcall iopHwRead32_Page8( u32 addr )
 					ret = psxHu32(addr);
 				break;
 			}
+		}
+		else if( masked_addr >= pgmsk(HW_FW_START) && masked_addr <= pgmsk(HW_FW_END) )
+		{
+			ret = FWread32( addr );
 		}
 	}
 	else ret = psxHu32(addr);

@@ -1,26 +1,26 @@
 /*  Pcsx2 - Pc Ps2 Emulator
-*  Copyright (C) 2009  Pcsx2-Playground Team
-*
-*  This program is free software; you can redistribute it and/or modify
-*  it under the terms of the GNU General Public License as published by
-*  the Free Software Foundation; either version 2 of the License, or
-*  (at your option) any later version.
-*  
-*  This program is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*  
-*  You should have received a copy of the GNU General Public License
-*  along with this program; if not, write to the Free Software
-*  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
-*/
+ *  Copyright (C) 2009  Pcsx2 Team
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *  
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *  
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ */
 
 #pragma once
 #ifdef PCSX2_MICROVU
 
 //------------------------------------------------------------------
-// Micro VU - recPass 0 Functions
+// Micro VU - Pass 1 Functions
 //------------------------------------------------------------------
 
 //------------------------------------------------------------------
@@ -51,7 +51,6 @@
 
 microVUt(void) mVUanalyzeFMAC1(int Fd, int Fs, int Ft) {
 	microVU* mVU = mVUx;
-	//mVUprint("microVU: FMAC1 Opcode");
 	mVUinfo |= _doStatus;
 	analyzeReg1(Fs);
 	analyzeReg1(Ft);
@@ -64,7 +63,6 @@ microVUt(void) mVUanalyzeFMAC1(int Fd, int Fs, int Ft) {
 
 microVUt(void) mVUanalyzeFMAC2(int Fs, int Ft) {
 	microVU* mVU = mVUx;
-	//mVUprint("microVU: FMAC2 Opcode");
 	analyzeReg1(Fs);
 	analyzeReg2(Ft);
 }
@@ -84,7 +82,6 @@ microVUt(void) mVUanalyzeFMAC2(int Fs, int Ft) {
 
 microVUt(void) mVUanalyzeFMAC3(int Fd, int Fs, int Ft) {
 	microVU* mVU = mVUx;
-	//mVUprint("microVU: FMAC3 Opcode");
 	mVUinfo |= _doStatus;
 	analyzeReg1(Fs);
 	analyzeReg3(Ft);
@@ -115,7 +112,6 @@ microVUt(void) mVUanalyzeFMAC4(int Fs, int Ft) {
 
 microVUt(void) mVUanalyzeIALU1(int Id, int Is, int It) {
 	microVU* mVU = mVUx;
-	//mVUprint("microVU: IALU1 Opcode");
 	if (!Id) { mVUinfo |= _isNOP; }
 	analyzeVIreg1(Is);
 	analyzeVIreg1(It);
@@ -124,7 +120,6 @@ microVUt(void) mVUanalyzeIALU1(int Id, int Is, int It) {
 
 microVUt(void) mVUanalyzeIALU2(int Is, int It) {
 	microVU* mVU = mVUx;
-	//mVUprint("microVU: IALU2 Opcode");
 	if (!It) { mVUinfo |= _isNOP; }
 	analyzeVIreg1(Is);
 	analyzeVIreg2(It, 1);
@@ -211,7 +206,6 @@ microVUt(void) mVUanalyzeMFP(int Ft) {
 
 microVUt(void) mVUanalyzeLQ(int Ft, int Is, bool writeIs) {
 	microVU* mVU = mVUx;
-	//mVUprint("microVU: LQ Opcode");
 	analyzeVIreg1(Is);
 	analyzeReg2(Ft);
 	if (!Ft)	 { mVUinfo |= (writeIs && Is) ? _noWriteVF : _isNOP; }
@@ -255,9 +249,9 @@ microVUt(void) mVUanalyzeR2(int Ft, bool canBeNOP) {
 microVUt(void) mVUanalyzeSflag(int It) {
 	microVU* mVU = mVUx;
 	if (!It) { mVUinfo |= _isNOP; }
-	else {  // Sets _isSflag at instruction that FSxxx opcode reads it's status flag from
+	else {
 		mVUinfo |= _swapOps;
-		if (mVUcount < 4)	{ mVUregs.needExactMatch = 1; }
+		if (mVUcount < 4)	{ mVUpBlock->pState.needExactMatch |= 0xf /*<< mVUcount*/; }
 		if (mVUcount >= 1)	{ incPC2(-2); mVUinfo |= _isSflag; incPC2(2); }
 		// Note: _isSflag is used for status flag optimizations.
 		// Do to stalls, it can only be set one instruction prior to the status flag read instruction
@@ -285,7 +279,7 @@ microVUt(void) mVUanalyzeMflag(int Is, int It) {
 	if (!It) { mVUinfo |= _isNOP; }
 	else { // Need set _doMac for 4 previous Ops (need to do all 4 because stalls could change the result needed)
 		mVUinfo |= _swapOps;
-		if (mVUcount < 4) { mVUregs.needExactMatch = 1; }
+		if (mVUcount < 4) { mVUpBlock->pState.needExactMatch |= 0xf << (/*mVUcount +*/ 4); }
 		int curPC = iPC;
 		for (int i = mVUcount, j = 0; i > 1; i--, j++) {
 			incPC2(-2);
@@ -295,6 +289,16 @@ microVUt(void) mVUanalyzeMflag(int Is, int It) {
 	}
 	analyzeVIreg1(Is);
 	analyzeVIreg2(It, 1);
+}
+
+//------------------------------------------------------------------
+// Cflag - Clip Flag Opcodes
+//------------------------------------------------------------------
+
+microVUt(void) mVUanalyzeCflag() {
+	microVU* mVU = mVUx;
+	mVUinfo |= _swapOps;
+	if (mVUcount < 4) { mVUpBlock->pState.needExactMatch |= 0xf << (/*mVUcount +*/ 8); }
 }
 
 //------------------------------------------------------------------

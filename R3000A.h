@@ -26,10 +26,6 @@ using namespace R3000Air;
 extern bool iopBranchAction;
 extern bool iopEventTestIsActive;
 
-extern s32 psxBreak;
-extern s32 psxCycleEE;
-
-
 ////////////////////////////////////////////////////////////////////
 // R3000A  Public Interface / API
 
@@ -45,7 +41,7 @@ struct R3000Acpu
 
 extern R3000Acpu *psxCpu;
 //extern R3000Acpu psxInt;
-//extern R3000Acpu psxRec;
+extern R3000Acpu psxRec;
 extern R3000Acpu iopInt;
 
 extern void iopReset();

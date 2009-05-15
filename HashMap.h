@@ -488,7 +488,7 @@ public:
 /// 	};
 ///   </code>
 /// </example>
-template< class Key, class T >
+template< typename Key, typename T >
 class SpecializedHashMap : public google::dense_hash_map<Key, T, typename Key::UnaryHashCode, typename Key::UnaryEquals>
 {
 public:
@@ -508,11 +508,10 @@ public:
 	///   parameter.  This is a more favorable alternative to the indexer operator since the
 	///   indexer implementation can and will create new entries for every request that 
 	/// </remarks>
-	void TryGetValue( const Key& key, T& outval ) const
+	T* TryGetValue( const Key& key ) const
 	{
 		const_iterator iter = find( key );
-		if( iter != end() )
-			outval = iter->second;
+		return ( iter != end() ) ? &iter->second : NULL;
 	}
 	
 	const T& GetValue( Key key ) const
@@ -534,7 +533,7 @@ public:
 ///   as performance of those types will generally be superior.  For that matter, don't use this class at all!
 ///   Use the string-specialized classes <see cref="Dictionary" /> and <see cref="UnicodeDictionary" />.
 /// </remarks>
-template< class Key, class T >
+template< typename Key, typename T >
 class HashMap : public google::dense_hash_map<Key, T, CommonHashClass>
 {
 public:
@@ -562,16 +561,26 @@ public:
 	///   parameter.  This is a more favorable alternative to the indexer operator since the
 	///   indexer implementation can and will create new entries for every request that 
 	/// </remarks>
-	void TryGetValue( const Key& key, T& outval ) const
+	T* TryGetValue( const Key& key )
 	{
 		const_iterator iter = find( key );
-		if( iter != end() )
-			outval = iter->second;
+		return ( iter != end() ) ? &iter->second : NULL;
+	}
+
+	const T* TryGetValue( const Key& key ) const
+	{
+		const_iterator iter = find( key );
+		return ( iter != end() ) ? &iter->second : NULL;
 	}
 	
+	T& GetValue( Key key )
+	{
+		return (find( key ))->second;
+	}
+
 	const T& GetValue( Key key ) const
 	{
-		return (this->find( key ))->second;
+		return (find( key ))->second;
 	}
 };
 
@@ -583,7 +592,7 @@ public:
 ///   This class does not support Unicode character sets natively.  To use Unicode strings as keys,
 ///   use <see cref="UnicodeDictionary"/> instead.
 /// </remarks>
-template< class T >
+template< typename T >
 class Dictionary : public HashMap<std::string, T>
 {
 public:
@@ -607,7 +616,7 @@ private:
 ///   If you're only using the hash for friendly named array access (via string constants)
 ///   then you should probably just stick to using the regular dictionary.
 /// </remarks>
-template< class T >
+template< typename T >
 class UnicodeDictionary : public HashMap<std::wstring, T>
 {
 public:

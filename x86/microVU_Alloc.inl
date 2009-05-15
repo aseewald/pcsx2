@@ -1,26 +1,26 @@
 /*  Pcsx2 - Pc Ps2 Emulator
-*  Copyright (C) 2009  Pcsx2-Playground Team
-*
-*  This program is free software; you can redistribute it and/or modify
-*  it under the terms of the GNU General Public License as published by
-*  the Free Software Foundation; either version 2 of the License, or
-*  (at your option) any later version.
-*  
-*  This program is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*  
-*  You should have received a copy of the GNU General Public License
-*  along with this program; if not, write to the Free Software
-*  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
-*/
+ *  Copyright (C) 2009  Pcsx2 Team
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *  
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *  
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ */
 
 #pragma once
 #ifdef PCSX2_MICROVU
 
 //------------------------------------------------------------------
-// Micro VU - recPass 1 Functions
+// Micro VU - Pass 2 Functions
 //------------------------------------------------------------------
 
 //------------------------------------------------------------------
@@ -665,37 +665,39 @@ microVUt(void) mVUallocFMAC26b(int& ACCw, int& ACCr) {
 // Flag Allocators
 //------------------------------------------------------------------
 
-#define getFlagReg(regX, fInst) {		\
-	switch (fInst) {					\
-		case 0: regX = gprF0;	break;  \
-		case 1: regX = gprF1;	break;  \
-		case 2: regX = gprF2;	break;  \
-		case 3: regX = gprF3;	break;  \
-	}									\
+#define getFlagReg(regX, fInst) {														\
+	switch (fInst) {																	\
+		case 0: regX = gprF0;	break;													\
+		case 1: regX = gprF1;	break;													\
+		case 2: regX = gprF2;	break;													\
+		case 3: regX = gprF3;	break;													\
+		default:																		\
+			Console::Error("microVU: Flag Instance Error (fInst = %d)", params fInst);	\
+			regX = gprF0;																\
+			break;																		\
+	}																					\
 }
 
 microVUt(void) mVUallocSFLAGa(int reg, int fInstance) {
-	microVU* mVU = mVUx;
 	getFlagReg(fInstance, fInstance);
 	MOVZX32R16toR(reg, fInstance);
 }
 
 microVUt(void) mVUallocSFLAGb(int reg, int fInstance) {
 	getFlagReg(fInstance, fInstance);
-	MOV16RtoR(fInstance, reg);
+	//AND32ItoR(reg, 0xffff);
+	MOV32RtoR(fInstance, reg);
 }
 
 microVUt(void) mVUallocMFLAGa(int reg, int fInstance) {
-	getFlagReg(fInstance, fInstance);
-	MOV32RtoR(reg, fInstance);
-	SHR32ItoR(reg, 16);
+	microVU* mVU = mVUx;
+	MOVZX32M16toR(reg, (uptr)&mVU->macFlag[fInstance]);
 }
 
 microVUt(void) mVUallocMFLAGb(int reg, int fInstance) {
-	getFlagReg(fInstance, fInstance);
-	AND32ItoR(fInstance, 0xffff);
-	SHL32ItoR(reg, 16);
-	OR32RtoR(fInstance, reg);
+	microVU* mVU = mVUx;
+	//AND32ItoR(reg, 0xffff);
+	MOV32RtoM((uptr)&mVU->macFlag[fInstance], reg);
 }
 
 microVUt(void) mVUallocCFLAGa(int reg, int fInstance) {

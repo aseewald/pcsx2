@@ -38,8 +38,7 @@ namespace R3000Exception
 	BaseExcept::~BaseExcept() {}
 }
 
-namespace R3000Air
-{
+namespace R3000Air {
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Branch delay note:  it's actually legal for the R3000 to have branch instructions in
@@ -55,14 +54,15 @@ namespace R3000Air
 static void intAlloc() { }
 static void intReset() { }
 
+//////////////////////////////////////////////////////////////////////////////////////////
 // Tests the iop Interrupt status to see if something needs to raise an
 // exception.
-
+//
 // Implementation notes: Interrupt-style exceptions are raised inline, through  re-assignment
 // of the iopRegs.pc (which differs from other exceptions based on C++ SEH handlers).
 // Interrupts happen a lot, unlike other types of exceptions, so handling them inline is a
 // must (SEH is slow and intended for 'exceptional' use only).
-static __forceinline bool intInterruptTest()
+static __forceinline bool intExceptionTest()
 {
 	if( psxHu32(0x1078) == 0 ) return false;
 	if( (psxHu32(0x1070) & psxHu32(0x1074)) == 0 ) return false;
@@ -72,7 +72,9 @@ static __forceinline bool intInterruptTest()
 	return true;
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////
 // Yay hack!  This is here until I replace it with a non-shitty event system.
+//
 static void intEventTest()
 {
 	if( iopTestCycle( iopRegs.NextsCounter, iopRegs.NextCounter ) )
@@ -92,16 +94,23 @@ static void intEventTest()
 	}
 }
 
+#ifdef PCSX2_DEVBUILD
 static string m_disasm;
 static string m_comment;
+#endif
 
+//////////////////////////////////////////////////////////////////////////////////////////
 // Steps over the next instruction.
+//
 static __releaseinline void intStep()
 {
-	Opcode opcode( iopMemRead32( iopRegs.pc ) );
+	Opcode opcode( iopMemDirectRead32( iopRegs.pc ) );
 
 	if( opcode.U32 == 0 )	// Iggy on the NOP please!  (Iggy Nop!)
 	{
+		// Optimization note: NOPs are almost never issued in pairs, so changing the if()
+		// above into a while() actually decreases overall performance.
+
 		PSXCPU_LOG( "NOP" );
 
 		iopRegs.pc			 = iopRegs.VectorPC;
@@ -109,19 +118,19 @@ static __releaseinline void intStep()
 		iopRegs.IsDelaySlot	 = false;
 
 		iopRegs.cycle++;
-		psxCycleEE -= 8;
 
 		if( iopRegs.DivUnitCycles > 0 )
 			iopRegs.DivUnitCycles--;
 		
-		opcode = iopMemRead32( iopRegs.pc );
+		opcode = iopMemDirectRead32( iopRegs.pc );
 	}
 
 	s32 woot = iopRegs.NextBranchCycle - iopRegs.cycle;
 	if( woot <= 0 )
 		intEventTest();
 
-	if( IsDevBuild && (varLog & 0x00100000) )
+	#ifdef PCSX2_DEVBUILD
+	if( varLog & 0x00100000 )
 	{
 		InstructionDiagnostic diag( opcode );
 		diag.Process();
@@ -133,6 +142,7 @@ static __releaseinline void intStep()
 		else
 			PSXCPU_LOG( "%-34s ; %s%s", m_disasm.c_str(), m_comment.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
 	}
+	#endif
 
 	Instruction dudley( opcode );
 	Instruction::Process( dudley );
@@ -141,7 +151,9 @@ static __releaseinline void intStep()
 	// 
 	// Typically VectorPC points to the delay slot instruction on branches, and the GetNextPC()
 	// references the *target* of the branch.  Thus the delay slot is processed on the next
-	// pass (unless an exception occurs), and *then* we vector to the branch target.
+	// pass (unless an exception occurs), and *then* we vector to the branch target.  In other
+	// words, VectorPC acts as an instruction prefetch, only we prefetch just the PC (doing a
+	// full-on instruction prefetch is less efficient).
 	//
 	// note: In the case of raised exceptions, VectorPC and GetNextPC() be overridden during
 	//  instruction processing above.
@@ -152,7 +164,7 @@ static __releaseinline void intStep()
 
 	// Test for interrupts *after* updating the PC, otherwise the EPC on exception
 	// vector will be wrong!
-	if( intInterruptTest() )
+	if( intExceptionTest() )
 	{
 		iopRegs.pc			 = iopRegs.VectorPC;
 		iopRegs.VectorPC	+= 4;
@@ -160,7 +172,6 @@ static __releaseinline void intStep()
 	}
 
 	iopRegs.cycle++;
-	psxCycleEE -= 8;
 
 	// ------------------------------------------------------------------------
 	// The DIV pipe runs in parallel to the rest of the CPU, but if one of the dependent instructions
@@ -172,7 +183,6 @@ static __releaseinline void intStep()
 		if( dudley.GetDivStall() != 0 )
 		{
 			iopRegs.cycle += iopRegs.DivUnitCycles;
-			psxCycleEE -= iopRegs.DivUnitCycles * 8;
 			iopRegs.DivUnitCycles = dudley.GetDivStall();	// stall for the following instruction.
 		}
 	}
@@ -182,7 +192,7 @@ static __releaseinline void intStep()
 static void intExecute()
 {
 	while( true )
-	{	
+	{
 		intStep();
 	}
 }
@@ -194,16 +204,17 @@ static void intExecute()
 // on if events occurred).
 static s32 intExecuteBlock( s32 eeCycles )
 {	
-	// psxBreak and psxCycleEE are used to determine the actual number of cycles run.
-	psxBreak = 0;
-	psxCycleEE = eeCycles;
+	iopRegs.IsExecuting = true;
+	iopRegs.eeCycleStart = iopRegs.cycle;
+	iopRegs.eeCycleDelta = eeCycles/8;
 
-	while (psxCycleEE > 0)
+	do
 	{
-		// Fetch current instruction, and interpret!
 		intStep();
-	}
-	return psxBreak + psxCycleEE;
+	} while( iopTestCycle( iopRegs.eeCycleStart, iopRegs.eeCycleDelta ) == 0 );
+	
+	iopRegs.IsExecuting = false;
+	return eeCycles - ((iopRegs.cycle - iopRegs.eeCycleStart) * 8);
 }
 
 static void intClear(u32 Addr, u32 Size) { }

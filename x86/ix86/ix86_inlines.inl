@@ -73,6 +73,18 @@ namespace x86Emitter
 		return xAddressInfo( *this, (s32)right );
 	}
 
+	// ------------------------------------------------------------------------
+	__forceinline xAddressInfo xAddressReg::operator-( s32 right ) const
+	{
+		return xAddressInfo( *this, -right );
+	}
+
+	__forceinline xAddressInfo xAddressReg::operator-( const void* right ) const
+	{
+		return xAddressInfo( *this, -(s32)right );
+	}
+
+	// ------------------------------------------------------------------------
 	__forceinline xAddressInfo xAddressReg::operator*( u32 right ) const
 	{
 		return xAddressInfo( Empty, *this, right );
@@ -216,7 +228,11 @@ namespace x86Emitter
 			if( !is_s8( displacement ) )
 			{
 				assert( false );
+// Don't ask. --arcum42
+#if !defined(__LINUX__) || !defined(DEBUG)
+
 				Console::Error( "Emitter Error: Invalid short jump displacement = 0x%x", params (int)displacement );
+#endif
 			}
 			BasePtr[-1] = (s8)displacement;
 		}

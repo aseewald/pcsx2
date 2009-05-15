@@ -1,5 +1,5 @@
 /*  Pcsx2 - Pc Ps2 Emulator
-*  Copyright (C) 2009  Pcsx2-Playground Team
+*  Copyright (C) 2009  Pcsx2 Team
 *
 *  This program is free software; you can redistribute it and/or modify
 *  it under the terms of the GNU General Public License as published by
@@ -15,6 +15,7 @@
 *  along with this program; if not, write to the Free Software
 *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 */
+
 #pragma once
 #ifdef PCSX2_MICROVU
 
@@ -33,13 +34,15 @@ microVUt(void) mVUupdateFlags(int reg, int regT1, int regT2, int xyzw, bool modX
 	static u8 *pjmp, *pjmp2;
 	static const u16 flipMask[16] = {0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15};
 
+	//SysPrintf("doStatus = %d; doMac = %d\n", doStatus>>9, doMac>>8);
+	if (mVUflagHack) { mVUinfo &= ~_doStatus; }
 	if (!doFlags) return;
 	if (!doMac) { regT1 = reg; }
 	else		{ SSE2_PSHUFD_XMM_to_XMM(regT1, reg, 0x1B); } // Flip wzyx to xyzw
 	if (doStatus) {
 		getFlagReg(sReg, fsInstance); // Set sReg to valid GPR by Cur Flag Instance
 		mVUallocSFLAGa<vuIndex>(sReg, fpsInstance); // Get Prev Status Flag
-		AND16ItoR(sReg, 0xff0); // Keep Sticky and D/I flags
+		AND32ItoR(sReg, 0xff0); // Keep Sticky and D/I flags
 	}
 
 	//-------------------------Check for Signed flags------------------------------
@@ -52,7 +55,7 @@ microVUt(void) mVUupdateFlags(int reg, int regT1, int regT2, int xyzw, bool modX
 
 	SSE_MOVMSKPS_XMM_to_R32(mReg, regT2); // Move the sign bits of the t1reg
 
-	AND16ItoR(mReg, AND_XYZW);  // Grab "Is Signed" bits from the previous calculation
+	AND32ItoR(mReg, AND_XYZW);  // Grab "Is Signed" bits from the previous calculation
 	pjmp = JZ8(0); // Skip if none are
 		if (doMac)	  SHL16ItoR(mReg, 4 + ADD_XYZW);
 		if (doStatus) OR16ItoR(sReg, 0x82); // SS, S flags
@@ -61,7 +64,7 @@ microVUt(void) mVUupdateFlags(int reg, int regT1, int regT2, int xyzw, bool modX
 
 	//-------------------------Check for Zero flags------------------------------
 
-	AND16ItoR(gprT2, AND_XYZW);  // Grab "Is Zero" bits from the previous calculation
+	AND32ItoR(gprT2, AND_XYZW);  // Grab "Is Zero" bits from the previous calculation
 	pjmp = JZ8(0); // Skip if none are
 		if (doMac)	  { SHIFT_XYZW(gprT2); OR32RtoR(mReg, gprT2); }	
 		if (doStatus) { OR16ItoR(sReg, 0x41); } // ZS, Z flags		
@@ -77,15 +80,6 @@ microVUt(void) mVUupdateFlags(int reg, int regT1, int regT2, int xyzw, bool modX
 //------------------------------------------------------------------
 // Helper Macros
 //------------------------------------------------------------------
-
-#define mVUlogFtFs() { mVUlog(".%s vf%02d, vf%02d", _XYZW_String, _Ft_, _Fs_); }
-#define mVUlogFd()	 { mVUlog(".%s vf%02d, vf%02d", _XYZW_String, _Fd_, _Fs_); }
-#define mVUlogACC()	 { mVUlog(".%s ACC, vf%02d", _XYZW_String, _Fs_); }
-#define mVUlogFt()	 { mVUlog(", vf%02d", _Ft_); }
-#define mVUlogBC()	 { mVUlog(", vf%02d%s", _Ft_, _BC_String); }
-#define mVUlogI()	 { mVUlog(", I"); }
-#define mVUlogQ()	 { mVUlog(", Q"); }
-#define mVUlogCLIP() { mVUlog("w.xyz vf%02d, vf%02dw", _Fs_, _Ft_); }
 
 // FMAC1 - Normal FMAC Opcodes
 #define mVU_FMAC1(operation, OPname) {								\

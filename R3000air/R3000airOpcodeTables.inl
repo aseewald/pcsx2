@@ -49,8 +49,8 @@ namespace R3000Air
 #define su(func) case (__COUNTER__-baseval): Instruction::_dispatch_##func(inst); return;
 #define null() case (__COUNTER__-baseval): break;
 
-template< typename T >
-__forceinline void Instruction::_dispatch_SPECIAL( T& inst )
+template< typename T > __forceinline 
+void Instruction::_dispatch_SPECIAL( T& inst )
 {
 	static const int baseval = __COUNTER__ + 1;
 
@@ -68,8 +68,8 @@ __forceinline void Instruction::_dispatch_SPECIAL( T& inst )
 	inst.Unknown();
 }
 
-template< typename T >
-__forceinline void Instruction::_dispatch_REGIMM( T& inst )
+template< typename T > __forceinline 
+void Instruction::_dispatch_REGIMM( T& inst )
 {
 	static const int baseval = __COUNTER__ + 1;
 
@@ -82,8 +82,8 @@ __forceinline void Instruction::_dispatch_REGIMM( T& inst )
 	inst.Unknown();
 }
 
-template< typename T >
-__forceinline void Instruction::_dispatch_COP0( T& inst )
+template< typename T > __forceinline 
+void Instruction::_dispatch_COP0( T& inst )
 {
 	static const int baseval = __COUNTER__ + 1;
 
@@ -98,8 +98,8 @@ __forceinline void Instruction::_dispatch_COP0( T& inst )
 	inst.Unknown();
 }
 
-template< typename T >
-__forceinline void Instruction::_dispatch_COP2( T& inst )
+template< typename T > __forceinline 
+void Instruction::_dispatch_COP2( T& inst )
 {
 	// _Funct_ is the opcode type.  Opcode 0 references the CP0BASIC table.
 	// But!  No COP2 instructions are valid in our emulator, since we don't
@@ -108,8 +108,8 @@ __forceinline void Instruction::_dispatch_COP2( T& inst )
 	inst.Unknown();
 }
 
-template< typename T >
-void __forceinline Instruction::Process( T& inst )
+template< typename T > __forceinline
+void Instruction::Process( T& inst )
 {
 	static const int baseval = __COUNTER__ + 1;
 

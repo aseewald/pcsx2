@@ -210,7 +210,7 @@ void SysAllocateDynarecs()
 	{
 		// R5900 and R3000a must be rec-enabled together for now so if either fails they both fail.
 		recCpu.Allocate();
-		//psxRec.Allocate();
+		psxRec.Allocate();
 	}
 	catch( Exception::BaseException& ex )
 	{
@@ -224,7 +224,7 @@ void SysAllocateDynarecs()
 		g_Session.ForceDisableEErec = true;
 
 		recCpu.Shutdown();
-		//psxRec.Shutdown();
+		psxRec.Shutdown();
 	}
 
 	try
@@ -288,7 +288,7 @@ void SysShutdownDynarecs()
 	// Special SuperVU "complete" terminator.
 	SuperVUDestroy( -1 );
 
-	//psxRec.Shutdown();
+	psxRec.Shutdown();
 	recCpu.Shutdown();
 }
 
@@ -307,7 +307,8 @@ void SysClearExecutionCache()
 	if( CHECK_EEREC )
 	{
 		Cpu = &recCpu;
-		psxCpu = &iopInt;
+		psxCpu = &psxRec;
+		//psxCpu = &iopInt;
 	}
 	else
 	{
@@ -400,8 +401,8 @@ void SysPrepareExecution( const char* elf_file, bool use_bios )
 			return;
 		}
 
-		// Don't Open CDVD plugin if directly loading an elf file
-		if (elf_file) { g_Startup.BootMode = BootMode_Elf; }
+		g_Startup.BootMode = (elf_file) ? BootMode_Elf : BootMode_Normal;
+
 		if (OpenPlugins(NULL) == -1) { 
 			return; 
 		}

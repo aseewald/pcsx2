@@ -21,16 +21,6 @@
 #include "IopCommon.h"
 #include "R5900.h"
 
-// This value is used when the IOP execution is broken to return control to the EE.
-// (which happens when the IOP throws EE-bound interrupts).  It holds the value of
-// psxCycleEE (which is set to zero to facilitate the code break), so that the unrun
-// cycles can be accounted for later.
-s32 psxBreak = 0;
-
-// tracks the IOP's current sync status with the EE.  When it dips below zero,
-// control is returned to the EE.
-s32 psxCycleEE = -1;
-
 // Used to signal to the EE when important actions that need IOP-attention have
 // happened (hsyncs, vsyncs, IOP exceptions, etc).  IOP runs code whenever this
 // is true, even if it's already running ahead a bit.
@@ -40,7 +30,7 @@ bool iopEventTestIsActive = false;
 
 namespace R3000Air
 {
-PCSX2_ALIGNED16(Registers iopRegs);
+	PCSX2_ALIGNED16(Registers iopRegs);
 }
 
 R3000Acpu *psxCpu;
@@ -55,10 +45,7 @@ void iopReset()
 	iopRegs.CP0.n.Status = 0x10900000; // COP0 enabled | BEV = 1 | TS = 1
 	iopRegs.CP0.n.PRid   = 0x0000001f; // PRevID = Revision ID, same as the IOP R3000A
 
-	psxBreak = 0;
-	psxCycleEE = -1;
 	iopRegs.NextBranchCycle = iopRegs.cycle + 4;
-	
 	iopRegs.VectorPC = iopRegs.pc + 4;
 	iopRegs.IsDelaySlot = false;
 
@@ -179,11 +166,8 @@ __forceinline void PSX_INT( IopEventId n, s32 ecycle )
 
 	iopSetNextBranchDelta( ecycle );
 
-	if( psxCycleEE < 0 )
+	if( !iopRegs.IsExecuting )
 	{
-		// The EE called this int, so inform it to branch as needed:
-		// fixme - this doesn't take into account EE/IOP sync (the IOP may be running
-		// ahead or behind the EE as per the EEsCycles value)
 		s32 iopDelta = (iopRegs.NextBranchCycle-iopRegs.cycle)*8;
 		cpuSetNextBranchDelta( iopDelta );
 	}

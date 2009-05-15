@@ -27,24 +27,6 @@ namespace R3000Air {
 	const bool Instruction::IsBranchType() const
 	{
 		return m_IsBranchType;
-
-		/*switch(_Opcode_)
-		{
-			case 0: // special
-				return _Funct_ == 8 || _Funct_ == 9;
-			break;
-
-			case 1: // regimm
-				return _Rt_ == 0 || _Rt_ == 1 || _Rt_ == 16 || _Rt_ == 17;
-			break;
-
-			// J / JAL / Branches
-			case 2:
-			case 3:
-			case 4: case 5: case 6: case 7: 
-				return true;
-		}
-		return false;*/
 	}
 
 	// Sets the link to the next instruction in the given GPR
@@ -95,5 +77,4 @@ namespace R3000Air {
 		iopException( code, iopRegs.IsDelaySlot );
 		m_NextPC = iopRegs.VectorPC+4;
 	}
-
 }

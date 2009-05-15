@@ -89,14 +89,24 @@ static void _rcntSet( int cntidx )
 
 	c = (u64)((overflowCap - counter.count) * counter.rate) - (iopRegs.cycle - counter.sCycleT);
 	c += iopRegs.cycle - iopRegs.NextsCounter;		// adjust for time passed since last rcntUpdate();
-	if(c < (u64)iopRegs.NextCounter) iopRegs.NextCounter = (u32)c;
+
+	if(c < (u64)iopRegs.NextCounter) 
+	{
+		iopRegs.NextCounter = (u32)c;
+		iopSetNextBranch( iopRegs.NextsCounter, iopRegs.NextCounter );	//Need to update on counter resets/target changes
+	}
 
 	//if((counter.mode & 0x10) == 0 || psxCounters[i].target > 0xffff) continue;
 	if( counter.target & IOPCNT_FUTURE_TARGET ) return;
 
 	c = (s64)((counter.target - counter.count) * counter.rate) - (iopRegs.cycle - counter.sCycleT);
 	c += iopRegs.cycle - iopRegs.NextsCounter;		// adjust for time passed since last rcntUpdate();
-	if(c < (u64)iopRegs.NextCounter) iopRegs.NextCounter = (u32)c;
+
+	if(c < (u64)iopRegs.NextCounter) 
+	{
+		iopRegs.NextCounter = (u32)c;
+		iopSetNextBranch( iopRegs.NextsCounter, iopRegs.NextCounter );	//Need to update on counter resets/target changes
+	}
 }
 
 
@@ -381,6 +391,11 @@ void psxRcntUpdate()
 	int i;
 	//u32 change = 0;
 
+	iopRegs.NextBranchCycle = iopRegs.cycle + 32;
+
+	iopRegs.NextCounter = 0x7fffffff;
+	iopRegs.NextsCounter = iopRegs.cycle;
+
 	for (i=0; i<=5; i++)
 	{
 		s32 change = iopRegs.cycle - psxCounters[i].sCycleT;
@@ -422,6 +437,7 @@ void psxRcntUpdate()
 
 		//if( psxCounters[i].count >= psxCounters[i].target ) _rcntTestTarget( i );
 	}
+	
 
 	iopRegs.NextCounter = 0xffffff;
 	iopRegs.NextsCounter = iopRegs.cycle;

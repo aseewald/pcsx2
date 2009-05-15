@@ -1586,6 +1586,30 @@
 					>
 				</File>
 			</Filter>
+			<Filter
+				Name="Google"
+				>
+				<File
+					RelativePath="..\..\..\3rdparty\google\dense_hash_map"
+					>
+				</File>
+				<File
+					RelativePath="..\..\..\3rdparty\google\dense_hash_set"
+					>
+				</File>
+				<File
+					RelativePath="..\..\..\3rdparty\google\sparsehash\densehashtable.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\..\3rdparty\google\sparsehash\sparseconfig.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\..\3rdparty\google\type_traits.h"
+					>
+				</File>
+			</Filter>
 		</Filter>
 		<Filter
 			Name="Docs"
@@ -1737,97 +1761,9 @@
 					Name="R3000A"
 					>
 					<File
-						RelativePath="..\..\R3000A.cpp"
-						>
-						<FileConfiguration
-							Name="Debug|Win32"
-							ExcludedFromBuild="true"
-							>
-							<Tool
-								Name="VCCLCompilerTool"
-							/>
-						</FileConfiguration>
-						<FileConfiguration
-							Name="Devel|Win32"
-							ExcludedFromBuild="true"
-							>
-							<Tool
-								Name="VCCLCompilerTool"
-							/>
-						</FileConfiguration>
-						<FileConfiguration
-							Name="Release|Win32"
-							ExcludedFromBuild="true"
-							>
-							<Tool
-								Name="VCCLCompilerTool"
-							/>
-						</FileConfiguration>
-					</File>
-					<File
 						RelativePath="..\..\R3000A.h"
 						>
 					</File>
-					<Filter
-						Name="Interpreter"
-						>
-						<File
-							RelativePath="..\..\R3000AInterpreter.cpp"
-							>
-							<FileConfiguration
-								Name="Debug|Win32"
-								ExcludedFromBuild="true"
-								>
-								<Tool
-									Name="VCCLCompilerTool"
-								/>
-							</FileConfiguration>
-							<FileConfiguration
-								Name="Devel|Win32"
-								ExcludedFromBuild="true"
-								>
-								<Tool
-									Name="VCCLCompilerTool"
-								/>
-							</FileConfiguration>
-							<FileConfiguration
-								Name="Release|Win32"
-								ExcludedFromBuild="true"
-								>
-								<Tool
-									Name="VCCLCompilerTool"
-								/>
-							</FileConfiguration>
-						</File>
-						<File
-							RelativePath="..\..\R3000AOpcodeTables.cpp"
-							>
-							<FileConfiguration
-								Name="Debug|Win32"
-								ExcludedFromBuild="true"
-								>
-								<Tool
-									Name="VCCLCompilerTool"
-								/>
-							</FileConfiguration>
-							<FileConfiguration
-								Name="Devel|Win32"
-								ExcludedFromBuild="true"
-								>
-								<Tool
-									Name="VCCLCompilerTool"
-								/>
-							</FileConfiguration>
-							<FileConfiguration
-								Name="Release|Win32"
-								ExcludedFromBuild="true"
-								>
-								<Tool
-									Name="VCCLCompilerTool"
-								/>
-							</FileConfiguration>
-						</File>
-					</Filter>
 					<Filter
 						Name="Dynarec"
 						>
@@ -1981,6 +1917,14 @@
 						</File>
 						<File
 							RelativePath="..\..\R3000air\dynarec\iR3000air.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\dynarec\iR3000airArithmetic.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\dynarec\iR3000airBranch.cpp"
 							>
 						</File>
 						<File
@@ -2509,6 +2453,10 @@
 							</File>
 							<File
 								RelativePath="..\..\x86\microVU_Execute.inl"
+								>
+							</File>
+							<File
+								RelativePath="..\..\x86\microVU_Flags.inl"
 								>
 							</File>
 							<File

@@ -72,36 +72,68 @@ union CP0Regs
 //
 struct Registers
 {
-	GPRRegs GPR;		// General Purpose Registers
-	CP0Regs CP0;		// Coprocessor0 Registers
+	GPRRegs GPR;			// General Purpose Registers
+	CP0Regs CP0;			// Coprocessor0 Registers
 
-	u32 pc;				// Program counter for the next instruction fetch
-	u32 VectorPC;		// pc to vector to after the next instruction fetch
-	bool IsDelaySlot;
-	
+	u32 pc;					// Program counter for the next instruction fetch
+	u32 VectorPC;			// pc to vector to after the next instruction fetch
+
 	u32 cycle;
+	u32 DivUnitCycles;		// number of cycles pending on the current div unit instruction (mult and div both run in the same unit)
+
 	u32 interrupt;
-	u32 sCycle[32];		// start cycle for signaled ints
-	s32 eCycle[32];		// cycle delta for signaled ints (sCycle + eCycle == branch cycle)
+	u32 sCycle[32];			// start cycle for signaled ints
+	s32 eCycle[32];			// cycle delta for signaled ints (sCycle + eCycle == branch cycle)
 
-	s32 NextCounter;
 	u32 NextsCounter;
+	s32 NextCounter;
 
-	// Controls when branch tests are performed.
-	u32 NextBranchCycle;
-	
-	u32 DivUnitCycles;	// number of cycles pending on the current div unit instruction (mult and div both run in the same unit)
+	u32 eeCycleStart;		// [used for synchronizing with the EE]
+	s32 eeCycleDelta;		// [used for synchronizing with the EE]
+
+	u32 NextBranchCycle;	// Controls when branch tests are performed.
+
+	bool IsDelaySlot;
+	bool IsExecuting;
 
 	// Sets a new PC in "abrupt" fashion (without consideration for delay slot).
 	// Effectively cancels the delay slot instruction, making this ideal for use
 	// in raising exceptions.
-	void SetExceptionPC( u32 newpc )
+	__releaseinline void SetExceptionPC( u32 newpc )
 	{
 		//pc = newpc;
 		VectorPC = newpc;
 		IsDelaySlot = false;
 	}
 	
+	__releaseinline void SetNextBranch( u32 startCycle, s32 delta )
+	{
+		// typecast the conditional to signed so that things don't blow up
+		// if startCycle is greater than our next branch cycle.
+
+		if( (int)(NextBranchCycle - startCycle) > delta )
+			NextBranchCycle = startCycle + delta;
+	}
+
+	__releaseinline void SetNextBranchDelta( s32 delta )
+	{
+		SetNextBranch( cycle, delta );
+	}
+
+	__releaseinline int TestCycle( u32 startCycle, s32 delta )
+	{
+		// typecast the conditional to signed so that things don't explode
+		// if the startCycle is ahead of our current cpu cycle.
+
+		return (int)(cycle - startCycle) >= delta;
+	}
+
+	__releaseinline void StopExecution()
+	{
+		if( !IsExecuting ) return;
+		eeCycleDelta = 0;
+		SetNextBranchDelta( 0 );
+	}
 };
 
 PCSX2_ALIGNED16_EXTERN(Registers iopRegs);
@@ -274,6 +306,8 @@ struct Opcode
 	u32 ImmU() const { return (u16)U32; }
 	u32 TrapCode() const { return (u16)(U32 >> 6); };
 
+	Opcode() {}
+
 	Opcode( u32 src ) :
 		U32( src ) {}
 };
@@ -293,16 +327,16 @@ public:
 	// ------------------------------------------------------------------------
 	// Precached values for the instruction (makes debugging and processing simpler).
 
-	const Opcode _Opcode_;	// the instruction opcode
+	Opcode _Opcode_;	// the instruction opcode
 
-	const u32 _Rd_;
-	const u32 _Rt_;
-	const u32 _Rs_;
-	const u32 _Pc_;		// program counter for this specific instruction
+	u32 _Rd_;
+	u32 _Rt_;
+	u32 _Rs_;
+	u32 _Pc_;		// program counter for this specific instruction
 
 protected:
 	// ------------------------------------------------------------------------
-	// Interpretation status vars, updated post-Process, and accessable via read-only
+	// Interpretation status vars, updated post-Process, and accessible via read-only
 	// public accessors.
 
 	u32 m_NextPC;		// new PC after instruction has finished execution.
@@ -310,6 +344,8 @@ protected:
 	bool m_IsBranchType;
 
 public:
+	Instruction() {}
+
 	Instruction( const Opcode& opcode ) :
 		_Opcode_( opcode )
 	,	_Rd_( opcode.Rd() )
@@ -320,6 +356,18 @@ public:
 	,	m_DivStall( 0 )
 	,	m_IsBranchType( false )
 	{
+	}
+	
+	__releaseinline void Assign( const Opcode& opcode )
+	{
+		_Opcode_	= opcode;
+		_Rd_		= opcode.Rd();
+		_Rt_		= opcode.Rt();
+		_Rs_		= opcode.Rs();
+		_Pc_		= iopRegs.pc;
+		m_NextPC	= iopRegs.VectorPC + 4;
+		m_DivStall	= 0;
+		m_IsBranchType = false;
 	}
 
 public:
@@ -435,7 +483,7 @@ protected:
 	// used to flag instructions which have a "critical" side effect elsewhere in emulation-
 	// land -- such as modifying COP0 registers, or other functions which cannot be safely
 	// optimized.
-	virtual void HasSideEffects() const {}
+	virtual void SetSideEffects() const {}
 
 	// -------------------------------------------------------------------------
 	// Helpers used to initialize the object state.
@@ -459,6 +507,8 @@ protected:
 	GprStatus m_WritesGPR;
 
 public:
+	InstructionOptimizer() {}
+
 	InstructionOptimizer( const Opcode& opcode ) :
 		Instruction( opcode )
 	,	m_HasSideEffects( false )
@@ -466,6 +516,23 @@ public:
 		m_ReadsGPR.Value = false;
 		m_WritesGPR.Value = false;
 	}
+	
+	__releaseinline void Assign( const Opcode& opcode )
+	{
+		Instruction::Assign( opcode );
+		m_HasSideEffects = false;
+		m_ReadsGPR.Value = false;
+		m_WritesGPR.Value = false;
+	}
+
+public:
+	bool ReadsRd() const { return m_ReadsGPR.Rd; }
+	bool ReadsRt() const { return m_ReadsGPR.Rt; }
+	bool ReadsRs() const { return m_ReadsGPR.Rs; }
+	bool ReadsHi() const { return m_ReadsGPR.Hi; }
+	bool ReadsLo() const { return m_ReadsGPR.Lo; }
+	bool ReadsFs() const { return m_ReadsGPR.Fs; }
+	bool HasSideEffects() const { return m_HasSideEffects; }
 
 protected:
 	// ------------------------------------------------------------------------
@@ -504,7 +571,7 @@ protected:
 	virtual void MemoryWrite16( u32 addr, u16 val );
 	virtual void MemoryWrite32( u32 addr, u32 val );
 
-	void HasSideEffects() { m_HasSideEffects = true; }
+	virtual void SetSideEffects() { m_HasSideEffects = true; }
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////

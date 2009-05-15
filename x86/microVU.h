@@ -1,5 +1,5 @@
 /*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2009  Pcsx2-Playground Team
+ *  Copyright (C) 2009  Pcsx2 Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -17,8 +17,8 @@
  */
 
 #pragma once
-#define mVUdebug	// Prints Extra Info to Console
-#define mVUlogProg	// Dumps MicroPrograms into microVU0.txt/microVU1.txt
+//#define mVUdebug	// Prints Extra Info to Console
+//#define mVUlogProg	// Dumps MicroPrograms into microVU0.txt/microVU1.txt
 #include "Common.h"
 #include "VU.h"
 #include "GS.h"
@@ -49,16 +49,17 @@ public:
 	}
 	microBlock* search(microRegInfo* pState) {
 		if (listSize < 0) return NULL;
-		//if (blockList[0].pState.needExactMatch) { // Needs Detailed Search (Exact Match of Pipeline State)
+		if (pState->needExactMatch) { // Needs Detailed Search (Exact Match of Pipeline State)
 			for (int i = 0; i <= listSize; i++) {
-				if (!memcmp(pState, &blockList[i].pState, sizeof(microRegInfo) - 1)) return &blockList[i];
+				if (!memcmp(pState, &blockList[i].pState, sizeof(microRegInfo)/* - 4*/)) return &blockList[i];
 			}
-		/*}
+		}
 		else { // Can do Simple Search (Only Matches the Important Pipeline Stuff)
 			for (int i = 0; i <= listSize; i++) {
-				if ((blockList[i].pState.q == pState->q) && (blockList[i].pState.p == pState->p)) { return &blockList[i]; }
+				if ((blockList[i].pState.q == pState->q) && (blockList[i].pState.p == pState->p) 
+				&&  (blockList[i].pState.flags == pState->flags)) { return &blockList[i]; }
 			}
-		}*/
+		}
 		return NULL;
 	}
 };
@@ -67,6 +68,7 @@ template<u32 progSize>
 struct microProgram {
 	u32 data[progSize/4];
 	u32 used;		// Number of times its been used
+	u32 sFlagHack;	// Optimize out Status Flag Updates if Program doesn't use Status Flags
 	u8* x86ptr;		// Pointer to program's recompilation code
 	u8* x86start;	// Start of program's rec-cache
 	u8* x86end;		// Limit of program's rec-cache
@@ -74,7 +76,7 @@ struct microProgram {
 	microAllocInfo<progSize> allocInfo;
 };
 
-#define mMaxProg 16 // The amount of Micro Programs Recs will 'remember' (For n = 1, 2, 4, 8, 16, etc...)
+#define mMaxProg 32 // The amount of Micro Programs Recs will 'remember' (For n = 1, 2, 4, 8, 16, etc...)
 template<u32 pSize>
 struct microProgManager {
 	microProgram<pSize>	prog[mMaxProg];	// Store MicroPrograms in memory
@@ -86,11 +88,12 @@ struct microProgManager {
 	microRegInfo		lpState;		// Pipeline state from where program left off (useful for continuing execution)
 };
 
+#define mVUcacheSize (0x1f00000 / ((vuIndex) ? 1 : 4))
 struct microVU {
 	u32 index;		// VU Index (VU0 or VU1)
 	u32 microSize;	// VU Micro Memory Size
 	u32 progSize;	// VU Micro Program Size (microSize/4)
-	static const u32 cacheSize = 0x800000; // VU Cache Size
+	u32 cacheSize;	// VU Cache Size
 
 	microProgManager<0x4000> prog; // Micro Program Data
 
@@ -101,7 +104,6 @@ struct microVU {
 	u8*		exitFunct;	 // Ptr Function to the Exit code for recompiled programs
 	u32		code;		 // Contains the current Instruction
 	u32		iReg;		 // iReg (only used in recompilation, not execution)
-	u32		clipFlag[4]; // 4 instances of clip flag (used in execution)
 	u32		divFlag;	 // 1 instance of I/D flags
 	u32		VIbackup[2]; // Holds a backup of a VI reg if modified before a branch
 	u32		branch;		 // Holds branch compare result (IBxx) OR Holds address to Jump to (JALR/JR)
@@ -111,7 +113,9 @@ struct microVU {
 	u32		totalCycles;
 	u32		cycles;
 
-	PCSX2_ALIGNED16(u32 xmmPQb[4]); // Backup for xmmPQ
+	PCSX2_ALIGNED16(u32 macFlag[4]);  // 4 instances of mac  flag (used in execution)
+	PCSX2_ALIGNED16(u32 clipFlag[4]); // 4 instances of clip flag (used in execution)
+	PCSX2_ALIGNED16(u32 xmmPQb[4]);   // Backup for xmmPQ
 };
 
 // microVU rec structs
@@ -150,5 +154,6 @@ typedef void (*mVUrecCall)(u32, u32) __attribute__((__fastcall)); // Not sure if
 #include "microVU_Upper.inl"
 #include "microVU_Lower.inl"
 #include "microVU_Tables.inl"
+#include "microVU_Flags.inl"
 #include "microVU_Compile.inl"
 #include "microVU_Execute.inl"

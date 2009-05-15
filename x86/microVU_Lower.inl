@@ -1,20 +1,20 @@
 /*  Pcsx2 - Pc Ps2 Emulator
-*  Copyright (C) 2009  Pcsx2-Playground Team
-*
-*  This program is free software; you can redistribute it and/or modify
-*  it under the terms of the GNU General Public License as published by
-*  the Free Software Foundation; either version 2 of the License, or
-*  (at your option) any later version.
-*  
-*  This program is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*  
-*  You should have received a copy of the GNU General Public License
-*  along with this program; if not, write to the Free Software
-*  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
-*/
+ *  Copyright (C) 2009  Pcsx2 Team
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *  
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *  
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ */
 
 #pragma once
 #ifdef PCSX2_MICROVU
@@ -431,6 +431,7 @@ microVUf(void) mVU_ESUM() {
 
 microVUf(void) mVU_FCAND() {
 	microVU* mVU = mVUx;
+	pass1 { mVUanalyzeCflag<vuIndex>(); }
 	pass2 { 
 		mVUallocCFLAGa<vuIndex>(gprT1, fvcInstance);
 		AND32ItoR(gprT1, _Imm24_);
@@ -439,10 +440,12 @@ microVUf(void) mVU_FCAND() {
 		mVUallocVIb<vuIndex>(gprT1, 1);
 	}
 	pass3 { mVUlog("FCAND vi01, $%x", _Imm24_); }
+	pass4 { mVUflagInfo |= 0xf << (/*mVUcount +*/ 8); }
 }
 
 microVUf(void) mVU_FCEQ() {
 	microVU* mVU = mVUx;
+	pass1 { mVUanalyzeCflag<vuIndex>(); }
 	pass2 { 
 		mVUallocCFLAGa<vuIndex>(gprT1, fvcInstance);
 		XOR32ItoR(gprT1, _Imm24_);
@@ -451,20 +454,24 @@ microVUf(void) mVU_FCEQ() {
 		mVUallocVIb<vuIndex>(gprT1, 1);
 	}
 	pass3 { mVUlog("FCEQ vi01, $%x", _Imm24_); }
+	pass4 { mVUflagInfo |= 0xf << (/*mVUcount +*/ 8); }
 }
 
 microVUf(void) mVU_FCGET() {
 	microVU* mVU = mVUx;
+	pass1 { mVUanalyzeCflag<vuIndex>(); }
 	pass2 { 
 		mVUallocCFLAGa<vuIndex>(gprT1, fvcInstance);
 		AND32ItoR(gprT1, 0xfff);
 		mVUallocVIb<vuIndex>(gprT1, _It_);
 	}
-	pass3 { mVUlog("FCGET vi%02d", _Ft_); }
+	pass3 { mVUlog("FCGET vi%02d", _Ft_);	   }
+	pass4 { mVUflagInfo |= 0xf << (/*mVUcount +*/ 8); }
 }
 
 microVUf(void) mVU_FCOR() {
 	microVU* mVU = mVUx;
+	pass1 { mVUanalyzeCflag<vuIndex>(); }
 	pass2 { 
 		mVUallocCFLAGa<vuIndex>(gprT1, fvcInstance);
 		OR32ItoR(gprT1, _Imm24_);
@@ -473,6 +480,7 @@ microVUf(void) mVU_FCOR() {
 		mVUallocVIb<vuIndex>(gprT1, 1);
 	}
 	pass3 { mVUlog("FCOR vi01, $%x", _Imm24_); }
+	pass4 { mVUflagInfo |= 0xf << (/*mVUcount +*/ 8); }
 }
 
 microVUf(void) mVU_FCSET() {
@@ -499,6 +507,7 @@ microVUf(void) mVU_FMAND() {
 		mVUallocVIb<vuIndex>(gprT1, _It_);
 	}
 	pass3 { mVUlog("FMAND vi%02d, vi%02d", _Ft_, _Fs_); }
+	pass4 { mVUflagInfo |= 0xf << (/*mVUcount +*/ 4);   }
 }
 
 microVUf(void) mVU_FMEQ() {
@@ -513,6 +522,7 @@ microVUf(void) mVU_FMEQ() {
 		mVUallocVIb<vuIndex>(gprT1, _It_);
 	}
 	pass3 { mVUlog("FMEQ vi%02d, vi%02d", _Ft_, _Fs_); }
+	pass4 { mVUflagInfo |= 0xf << (/*mVUcount +*/ 4);  }
 }
 
 microVUf(void) mVU_FMOR() {
@@ -525,6 +535,7 @@ microVUf(void) mVU_FMOR() {
 		mVUallocVIb<vuIndex>(gprT1, _It_);
 	}
 	pass3 { mVUlog("FMOR vi%02d, vi%02d", _Ft_, _Fs_); }
+	pass4 { mVUflagInfo |= 0xf << (/*mVUcount +*/ 4);  }
 }
 
 //------------------------------------------------------------------
@@ -540,6 +551,7 @@ microVUf(void) mVU_FSAND() {
 		mVUallocVIb<vuIndex>(gprT1, _It_);
 	}
 	pass3 { mVUlog("FSAND vi%02d, $%x", _Ft_, _Imm12_); }
+	pass4 { mVUflagInfo |= 0xf << (/*mVUcount +*/ 0); mVUsFlagHack = 0; }
 }
 
 microVUf(void) mVU_FSEQ() {
@@ -553,6 +565,7 @@ microVUf(void) mVU_FSEQ() {
 		mVUallocVIb<vuIndex>(gprT1, _It_);
 	}
 	pass3 { mVUlog("FSEQ vi%02d, $%x", _Ft_, _Imm12_); }
+	pass4 { mVUflagInfo |= 0xf << (/*mVUcount +*/ 0); mVUsFlagHack = 0; }
 }
 
 microVUf(void) mVU_FSOR() {
@@ -564,6 +577,7 @@ microVUf(void) mVU_FSOR() {
 		mVUallocVIb<vuIndex>(gprT1, _It_);
 	}
 	pass3 { mVUlog("FSOR vi%02d, $%x", _Ft_, _Imm12_); }
+	pass4 { mVUflagInfo |= 0xf << (/*mVUcount +*/ 0); mVUsFlagHack = 0; }
 }
 
 microVUf(void) mVU_FSSET() {
@@ -572,11 +586,12 @@ microVUf(void) mVU_FSSET() {
 	pass2 { 
 		int flagReg1, flagReg2;
 		getFlagReg(flagReg1, fsInstance);
-		if (!(doStatus||doDivFlag)) { getFlagReg(flagReg2, fpsInstance); MOV16RtoR(flagReg1, flagReg2); } // Get status result from last status setting instruction	
+		if (!(doStatus||doDivFlag)) { getFlagReg(flagReg2, fpsInstance); MOV32RtoR(flagReg1, flagReg2); } // Get status result from last status setting instruction	
 		AND16ItoR(flagReg1, 0x03f); // Remember not to modify upper 16 bits because of mac flag 
 		OR16ItoR (flagReg1, (_Imm12_ & 0xfc0));
 	}
 	pass3 { mVUlog("FSSET $%x", _Imm12_); }
+	pass4 { mVUsFlagHack = 0; }
 }
 
 //------------------------------------------------------------------

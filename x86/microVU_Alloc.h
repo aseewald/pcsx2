@@ -1,23 +1,22 @@
 /*  Pcsx2 - Pc Ps2 Emulator
-*  Copyright (C) 2009  Pcsx2-Playground Team
-*
-*  This program is free software; you can redistribute it and/or modify
-*  it under the terms of the GNU General Public License as published by
-*  the Free Software Foundation; either version 2 of the License, or
-*  (at your option) any later version.
-*  
-*  This program is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*  
-*  You should have received a copy of the GNU General Public License
-*  along with this program; if not, write to the Free Software
-*  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
-*/
+ *  Copyright (C) 2009  Pcsx2 Team
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *  
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *  
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ */
 
 #pragma once
-
 
 union regInfo {
 	u32 reg;
@@ -29,6 +28,10 @@ union regInfo {
 	};
 };
 
+#if defined(_MSC_VER)
+#pragma pack(push, 1)
+#pragma warning(disable:4996)
+#endif
 struct microRegInfo {
 	regInfo VF[32];
 	u8 VI[32];
@@ -36,9 +39,14 @@ struct microRegInfo {
 	u8 p;
 	u8 r;
 	u8 xgkick;
-	u8 clip;
-	u8 needExactMatch; // If set, block needs an exact match of pipeline state (needs to be last byte in struct)
+	u8 flags; // clip x2 :: status x2
+	u32 needExactMatch; // If set, block needs an exact match of pipeline state (needs to be last 2 bytes in struct)
+#if defined(_MSC_VER)
 };
+#pragma pack(pop)
+#else
+} __attribute__((packed));
+#endif
 
 struct microTempRegInfo {
 	regInfo VF[2];	// Holds cycle info for Fd, VF[0] = Upper Instruction, VF[1] = Lower Instruction
@@ -59,6 +67,7 @@ struct microBlock {
 
 template<u32 pSize>
 struct microAllocInfo {
+	microBlock*		 pBlock;   // Pointer to a block in mVUblocks
 	microBlock		 block;	   // Block/Pipeline info
 	microTempRegInfo regsTemp; // Temp Pipeline info (used so that new pipeline info isn't conflicting between upper and lower instructions in the same cycle)
 	u8  branch;			// 0 = No Branch, 1 = B. 2 = BAL, 3~8 = Conditional Branches, 9 = JALR, 10 = JR
@@ -66,6 +75,7 @@ struct microAllocInfo {
 	u32 count;			// Number of VU 64bit instructions ran (starts at 0 for each block)
 	u32 curPC;			// Current PC
 	u32 startPC;		// Start PC for Cur Block
+	u32 sFlagHack;		// Optimize out all Status flag updates if microProgram doesn't use Status flags
 	u32 info[pSize/8];	// Info for Instructions in current block
 	u8 stall[pSize/8];	// Info on how much each instruction stalled (stores the max amount of cycles to stall for the current opcodes)
 };

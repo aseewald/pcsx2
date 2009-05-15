@@ -154,7 +154,21 @@ PCSX2_ALIGNED( 64, void* const tbl_IndirectHandlers[2][3][ HandlerId_Maximum ] )
 //
 
 // ------------------------------------------------------------------------
-template< typename T >
+// Fast 'shortcut' memory access for when the source address is known to be
+// a *direct* mapping.  (excludes hardware registers and such).
+//
+template< typename T > __releaseinline
+T __fastcall DirectReadType( u32 iopaddr )
+{
+	const uptr masked = iopaddr & AddressMask;
+	const sptr tab = tbl_Translation.Contents[masked/PageSize];
+
+	jASSUME( tab > HandlerId_Maximum );
+	return *(T*)(tab+(masked & PageMask));
+}
+
+// ------------------------------------------------------------------------
+template< typename T > __releaseinline
 T __fastcall ReadType( u32 iopaddr )
 {
 	const uptr masked = iopaddr & AddressMask;
@@ -178,7 +192,7 @@ T __fastcall ReadType( u32 iopaddr )
 }
 
 // ------------------------------------------------------------------------
-template< typename T >
+template< typename T > __releaseinline
 void __fastcall WriteType( u32 iopaddr, T writeval )
 {
 	const uptr masked = iopaddr & AddressMask;
@@ -212,6 +226,10 @@ using namespace IopMemory;
 __forceinline u8   iopMemRead8 (u32 mem) { return ReadType<mem8_t>( mem ); }
 __forceinline u16  iopMemRead16(u32 mem) { return ReadType<mem16_t>( mem ); }
 __forceinline u32  iopMemRead32(u32 mem) { return ReadType<mem32_t>( mem ); }
+
+__forceinline u8   iopMemDirectRead8 (u32 mem) { return DirectReadType<mem8_t>( mem ); }
+__forceinline u16  iopMemDirectRead16(u32 mem) { return DirectReadType<mem16_t>( mem ); }
+__forceinline u32  iopMemDirectRead32(u32 mem) { return DirectReadType<mem32_t>( mem ); }
 
 __forceinline void iopMemWrite8 (u32 mem, mem8_t value) { WriteType<mem8_t>( mem, value ); }
 __forceinline void iopMemWrite16(u32 mem, mem16_t value) { WriteType<mem16_t>( mem, value ); }
