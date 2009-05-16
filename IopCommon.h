@@ -20,14 +20,18 @@
 
 #define PSXCLK	(36864000ULL)	/* 36.864 Mhz */
 
-#include "Common.h"
+#define PLUGINtypedefs
+#define PLUGINfuncs
+
+#include "System.h"
+#include "SaveState.h"
+
 #include "R3000A.h"
+#include "DebugTools/Debug.h"
 
 #include "CdRom.h"
 #include "CDVD.h"
-
 #include "Sio.h"
-#include "Sif.h"
 
 #include "IopDma.h"
 #include "IopMem.h"
@@ -35,5 +39,6 @@
 #include "IopBios.h"
 #include "IopCounters.h"
 #include "IopSio2.h"
+#include "R3000Exceptions.h"
 
 #endif /* __IOPCOMMON_H__ */

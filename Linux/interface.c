@@ -523,6 +523,9 @@ create_AdvDlg (void)
   gtk_dialog_add_action_widget (GTK_DIALOG (AdvDlg), button80, GTK_RESPONSE_CANCEL);
   GTK_WIDGET_SET_FLAGS (button80, GTK_CAN_DEFAULT);
 
+  g_signal_connect ((gpointer) AdvDlg, "close",
+                    G_CALLBACK (On_Dialog_Close),
+                    NULL);
   g_signal_connect ((gpointer) AdvDefaultBtn, "clicked",
                     G_CALLBACK (on_Advanced_Defaults),
                     NULL);
@@ -831,6 +834,9 @@ create_SpeedHacksDlg (void)
   gtk_dialog_add_action_widget (GTK_DIALOG (SpeedHacksDlg), button98, GTK_RESPONSE_CANCEL);
   GTK_WIDGET_SET_FLAGS (button98, GTK_CAN_DEFAULT);
 
+  g_signal_connect ((gpointer) SpeedHacksDlg, "close",
+                    G_CALLBACK (On_Dialog_Close),
+                    NULL);
   g_signal_connect ((gpointer) EECycleHackScale, "value_changed",
                     G_CALLBACK (on_ee_slider_changed),
                     NULL);
@@ -969,6 +975,9 @@ create_GameFixDlg (void)
   gtk_dialog_add_action_widget (GTK_DIALOG (GameFixDlg), button83, GTK_RESPONSE_CANCEL);
   GTK_WIDGET_SET_FLAGS (button83, GTK_CAN_DEFAULT);
 
+  g_signal_connect ((gpointer) GameFixDlg, "close",
+                    G_CALLBACK (On_Dialog_Close),
+                    NULL);
   g_signal_connect ((gpointer) cancelbutton1, "clicked",
                     G_CALLBACK (on_Game_Fix_OK),
                     NULL);
@@ -2036,7 +2045,7 @@ create_ConfDlg (void)
   GtkWidget *hbuttonbox24;
   GtkWidget *GtkButton_FWconfigure;
   GtkWidget *GtkButton_FWtest;
-  GtkWidget *GtkButton_FireWireabout;
+  GtkWidget *GtkButton_FWabout;
   GtkWidget *label30;
   GtkWidget *GtkLabel_Bios;
   GtkWidget *hbox5;
@@ -2385,11 +2394,11 @@ create_ConfDlg (void)
   gtk_container_add (GTK_CONTAINER (hbuttonbox24), GtkButton_FWtest);
   GTK_WIDGET_SET_FLAGS (GtkButton_FWtest, GTK_CAN_DEFAULT);
 
-  GtkButton_FireWireabout = gtk_button_new_with_mnemonic (_("About"));
-  gtk_widget_set_name (GtkButton_FireWireabout, "GtkButton_FireWireabout");
-  gtk_widget_show (GtkButton_FireWireabout);
-  gtk_container_add (GTK_CONTAINER (hbuttonbox24), GtkButton_FireWireabout);
-  GTK_WIDGET_SET_FLAGS (GtkButton_FireWireabout, GTK_CAN_DEFAULT);
+  GtkButton_FWabout = gtk_button_new_with_mnemonic (_("About"));
+  gtk_widget_set_name (GtkButton_FWabout, "GtkButton_FWabout");
+  gtk_widget_show (GtkButton_FWabout);
+  gtk_container_add (GTK_CONTAINER (hbuttonbox24), GtkButton_FWabout);
+  GTK_WIDGET_SET_FLAGS (GtkButton_FWabout, GTK_CAN_DEFAULT);
 
   label30 = gtk_label_new (_("FireWire"));
   gtk_widget_set_name (label30, "label30");
@@ -2518,7 +2527,7 @@ create_ConfDlg (void)
   g_signal_connect ((gpointer) GtkButton_FWtest, "clicked",
                     G_CALLBACK (OnConfButton),
                     NULL);
-  g_signal_connect ((gpointer) GtkButton_FireWireabout, "clicked",
+  g_signal_connect ((gpointer) GtkButton_FWabout, "clicked",
                     G_CALLBACK (OnConfButton),
                     NULL);
   g_signal_connect ((gpointer) GtkButton_SelectPluginsDir, "clicked",
@@ -2585,7 +2594,7 @@ create_ConfDlg (void)
   GLADE_HOOKUP_OBJECT (ConfDlg, hbuttonbox24, "hbuttonbox24");
   GLADE_HOOKUP_OBJECT (ConfDlg, GtkButton_FWconfigure, "GtkButton_FWconfigure");
   GLADE_HOOKUP_OBJECT (ConfDlg, GtkButton_FWtest, "GtkButton_FWtest");
-  GLADE_HOOKUP_OBJECT (ConfDlg, GtkButton_FireWireabout, "GtkButton_FireWireabout");
+  GLADE_HOOKUP_OBJECT (ConfDlg, GtkButton_FWabout, "GtkButton_FWabout");
   GLADE_HOOKUP_OBJECT (ConfDlg, label30, "label30");
   GLADE_HOOKUP_OBJECT (ConfDlg, GtkLabel_Bios, "GtkLabel_Bios");
   GLADE_HOOKUP_OBJECT (ConfDlg, hbox5, "hbox5");
@@ -4156,6 +4165,9 @@ create_CpuDlg (void)
   gtk_dialog_add_action_widget (GTK_DIALOG (CpuDlg), button97, 0);
   GTK_WIDGET_SET_FLAGS (button97, GTK_CAN_DEFAULT);
 
+  g_signal_connect ((gpointer) CpuDlg, "close",
+                    G_CALLBACK (On_Dialog_Close),
+                    NULL);
   g_signal_connect ((gpointer) button96, "clicked",
                     G_CALLBACK (OnCpu_Ok),
                     NULL);
@@ -4521,6 +4533,9 @@ create_Logging (void)
   gtk_dialog_add_action_widget (GTK_DIALOG (Logging), Logging2Cancel, GTK_RESPONSE_CANCEL);
   GTK_WIDGET_SET_FLAGS (Logging2Cancel, GTK_CAN_DEFAULT);
 
+  g_signal_connect ((gpointer) Logging, "close",
+                    G_CALLBACK (On_Dialog_Close),
+                    NULL);
   g_signal_connect ((gpointer) Logging_Ok, "clicked",
                     G_CALLBACK (OnLogging_Ok),
                     NULL);
@@ -4747,6 +4762,9 @@ create_MemDlg (void)
   gtk_dialog_add_action_widget (GTK_DIALOG (MemDlg), okbutton1, GTK_RESPONSE_CANCEL);
   GTK_WIDGET_SET_FLAGS (okbutton1, GTK_CAN_DEFAULT);
 
+  g_signal_connect ((gpointer) MemDlg, "close",
+                    G_CALLBACK (On_Dialog_Close),
+                    NULL);
   g_signal_connect ((gpointer) memcardcancelbutton, "clicked",
                     G_CALLBACK (OnMemcards_Ok),
                     NULL);

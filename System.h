@@ -28,6 +28,8 @@
 #include "Misc.h"
 #include "Threading.h"		// to use threading stuff, include the Threading namespace in your file.
 
+#define PCSX2_VERSION "(beta)"
+
 enum PageProtectionMode
 {
 	Protect_NoAccess = 0,

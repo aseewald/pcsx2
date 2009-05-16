@@ -20,7 +20,8 @@
 
 #include <time.h>
 
-#include "IopCommon.h"
+#include "Common.h"
+#include "R3000A.h"
 #include "Stats.h"
 
 #include "Paths.h"

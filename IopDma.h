@@ -61,23 +61,27 @@ extern void cdvdDmaInterrupt(s32 channel);
 //#else
 #endif
 
-void psxDma2(u32 madr, u32 bcr, u32 chcr);
-void psxDma3(u32 madr, u32 bcr, u32 chcr);
-void psxDma4(u32 madr, u32 bcr, u32 chcr);
-void psxDma6(u32 madr, u32 bcr, u32 chcr);
-void psxDma7(u32 madr, u32 bcr, u32 chcr);
-void psxDma8(u32 madr, u32 bcr, u32 chcr);
-void psxDma9(u32 madr, u32 bcr, u32 chcr);
-void psxDma10(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma2(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma3(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma4(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma6(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma7(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma8(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma9(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma10(u32 madr, u32 bcr, u32 chcr);
 
-int  psxDma4Interrupt();
-int  psxDma7Interrupt();
-void  dev9Interrupt();
-void dev9Irq(int cycles);
-void  usbInterrupt();
-void usbIrq(int cycles);
-void fwIrq();
-void spu2Irq();
+extern int  psxDma4Interrupt();
+extern int  psxDma7Interrupt();
+extern void dev9Interrupt();
+extern void dev9Irq(int cycles);
+extern void usbInterrupt();
+extern void usbIrq(int cycles);
+extern void fwIrq();
+extern void spu2Irq();
+
+extern void  sif1Interrupt();
+extern void  sif0Interrupt();
+
 
 extern void iopIntcIrq( uint irqType );
 extern void iopTestIntc();

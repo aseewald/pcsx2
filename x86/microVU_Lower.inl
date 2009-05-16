@@ -74,7 +74,7 @@ microVUf(void) mVU_DIV() {
 		x86SetJ8(djmp);
 
 		mVUunpack_xyzw<vuIndex>(xmmFs, xmmFs, 0);
-		mVUmergeRegs<vuIndex>(xmmPQ, xmmFs, writeQ ? 4 : 8);
+		mVUmergeRegs(xmmPQ, xmmFs, writeQ ? 4 : 8);
 	}
 	pass3 { mVUlog("DIV Q, vf%02d%s, vf%02d%s", _Fs_, _Fsf_String, _Ft_, _Ftf_String); }
 }
@@ -92,7 +92,7 @@ microVUf(void) mVU_SQRT() {
 		if (CHECK_VU_OVERFLOW) SSE_MINSS_XMM_to_XMM(xmmFt, xmmMax); // Clamp infinities (only need to do positive clamp since xmmFt is positive)
 		SSE_SQRTSS_XMM_to_XMM(xmmFt, xmmFt);
 		mVUunpack_xyzw<vuIndex>(xmmFt, xmmFt, 0);
-		mVUmergeRegs<vuIndex>(xmmPQ, xmmFt, writeQ ? 4 : 8);
+		mVUmergeRegs(xmmPQ, xmmFt, writeQ ? 4 : 8);
 	}
 	pass3 { mVUlog("SQRT Q, vf%02d%s", _Ft_, _Ftf_String); }
 }
@@ -130,7 +130,7 @@ microVUf(void) mVU_RSQRT() {
 		x86SetJ8(djmp);
 
 		mVUunpack_xyzw<vuIndex>(xmmFs, xmmFs, 0);
-		mVUmergeRegs<vuIndex>(xmmPQ, xmmFs, writeQ ? 4 : 8);
+		mVUmergeRegs(xmmPQ, xmmFs, writeQ ? 4 : 8);
 	}
 	pass3 { mVUlog("RSQRT Q, vf%02d%s, vf%02d%s", _Fs_, _Fsf_String, _Ft_, _Ftf_String); }
 }
@@ -485,7 +485,7 @@ microVUf(void) mVU_FCOR() {
 
 microVUf(void) mVU_FCSET() {
 	microVU* mVU = mVUx;
-	pass1 { mVUinfo |= doClip; }
+	pass1 { mVUinfo |= _doClip; }
 	pass2 { 
 		MOV32ItoR(gprT1, _Imm24_);
 		mVUallocCFLAGb<vuIndex>(gprT1, fcInstance);
@@ -699,7 +699,7 @@ microVUf(void) mVU_ISUBIU() {
 
 microVUf(void) mVU_MFIR() {
 	microVU* mVU = mVUx;
-	pass1 { if (!_Ft_) { mVUinfo |= _isNOP; } analyzeVIreg1(_Is_); analyzeReg2(_Ft_); }
+	pass1 { if (!_Ft_) { mVUinfo |= _isNOP; } analyzeVIreg1(_Is_); analyzeReg2(_Ft_, 1); }
 	pass2 { 
 		mVUallocVIa<vuIndex>(gprT1, _Is_);
 		MOVSX32R16toR(gprT1, gprT1);
@@ -722,7 +722,7 @@ microVUf(void) mVU_MFP() {
 
 microVUf(void) mVU_MOVE() {
 	microVU* mVU = mVUx;
-	pass1 { if (!_Ft_ || (_Ft_ == _Fs_)) { mVUinfo |= _isNOP; } analyzeReg1(_Fs_); analyzeReg2(_Ft_); }
+	pass1 { mVUanalyzeMOVE<vuIndex>(_Fs_, _Ft_); }
 	pass2 { 
 		mVUloadReg<vuIndex>(xmmT1, (uptr)&mVU->regs->VF[_Fs_].UL[0], _X_Y_Z_W);
 		mVUsaveReg<vuIndex>(xmmT1, (uptr)&mVU->regs->VF[_Ft_].UL[0], _X_Y_Z_W, 1);
@@ -1225,10 +1225,9 @@ microVUf(void) mVU_IBNE() {
 microVUf(void) mVU_JR() {
 	microVU* mVU = mVUx;
 	mVUbranch = 9;
-	pass1 { mVUanalyzeBranch1<vuIndex>(_Is_); }
+	pass1 { analyzeVIreg1(_Is_); }
 	pass2 {
-		if (memReadIs) MOV32MtoR(gprT1, (uptr)&mVU->VIbackup[0]);
-		else mVUallocVIa<vuIndex>(gprT1, _Is_);
+		mVUallocVIa<vuIndex>(gprT1, _Is_);
 		SHL32ItoR(gprT1, 3);
 		AND32ItoR(gprT1, vuIndex ? 0x3ff8 : 0xff8);
 		MOV32RtoM((uptr)&mVU->branch, gprT1);
@@ -1239,10 +1238,9 @@ microVUf(void) mVU_JR() {
 microVUf(void) mVU_JALR() {
 	microVU* mVU = mVUx;
 	mVUbranch = 10;
-	pass1 { mVUanalyzeBranch1<vuIndex>(_Is_); analyzeVIreg2(_It_, 1); }
+	pass1 { analyzeVIreg1(_Is_); analyzeVIreg2(_It_, 1); }
 	pass2 {
-		if (memReadIs) MOV32MtoR(gprT1, (uptr)&mVU->VIbackup[0]);
-		else mVUallocVIa<vuIndex>(gprT1, _Is_);
+		mVUallocVIa<vuIndex>(gprT1, _Is_);
 		SHL32ItoR(gprT1, 3);
 		AND32ItoR(gprT1, vuIndex ? 0x3ff8 : 0xff8);
 		MOV32RtoM((uptr)&mVU->branch, gprT1);

@@ -5,16 +5,9 @@
 #include "IopCommon.h"
 
 extern void _psxMemReset();
-extern u8   __fastcall _iopMemRead8 (u32 mem);
-extern u16  __fastcall _iopMemRead16(u32 mem);
-extern u32  __fastcall _iopMemRead32(u32 mem);
-extern void __fastcall _iopMemWrite8 (u32 mem, mem8_t value);
-extern void __fastcall _iopMemWrite16(u32 mem, mem16_t value);
-extern void __fastcall _iopMemWrite32(u32 mem, mem32_t value);
 
 namespace IopMemory
 {
-
 // standard constructor initializes the static IOP translation table.
 void TranslationTable::Initialize()
 {
@@ -27,7 +20,7 @@ void TranslationTable::Initialize()
 	// Mirror the 2MB of IOP memory four times consecutively, filling up the lower
 	// 8mb with maps:
 	for( int i=0; i<4; ++i )
-		AssignLookup( Ps2MemSize::IopRam*i, psxM, Ps2MemSize::IopRam );
+		AssignLookup( Ps2MemSize::IopRam*i, iopMem->Ram, Ps2MemSize::IopRam );
 
 	AssignLookup ( 0x1fc00000, PS2MEM_ROM,  Ps2MemSize::Rom );
 	AssignLookup ( 0x1e000000, PS2MEM_ROM1, Ps2MemSize::Rom1 );
@@ -38,7 +31,7 @@ void TranslationTable::Initialize()
 
 	// Hardware Registers, mapped to psxH, with three handlers for special register areas
 	// at 0x1f801, 0x1f803, and 0x1f808 pages.
-	AssignLookup ( 0x1f800000, psxH, PageSize*0x10 );
+	AssignLookup ( 0x1f800000, iopMem->Hardware, PageSize*0x10 );
 
 	AssignHandler( 0x1f801000, HandlerId_Hardware_Page1 );
 	AssignHandler( 0x1f803000, HandlerId_Hardware_Page3 );
@@ -132,8 +125,8 @@ FnType_Write32* const uWrite32 = UnmappedWrite<mem32_t>;
 	iopHw##mode##bits##_Page1, \
 	iopHw##mode##bits##_Page3, \
 	iopHw##mode##bits##_Page8, \
-	_dev9_##mode##bits, \
-	_iopMem##mode##bits
+	_dev9_##mode##bits
+	//_iopMem##mode##bits
 
 PCSX2_ALIGNED( 64, void* const tbl_IndirectHandlers[2][3][ HandlerId_Maximum ] ) =
 {
@@ -235,9 +228,25 @@ __forceinline void iopMemWrite8 (u32 mem, mem8_t value) { WriteType<mem8_t>( mem
 __forceinline void iopMemWrite16(u32 mem, mem16_t value) { WriteType<mem16_t>( mem, value ); }
 __forceinline void iopMemWrite32(u32 mem, mem32_t value) { WriteType<mem32_t>( mem, value ); }
 
+IopMemoryAlloc* iopMem = NULL;
+
+void psxMemAlloc()
+{
+	if( iopMem == NULL )
+		iopMem = (IopMemoryAlloc*)vtlb_malloc( sizeof( IopMemoryAlloc ), 4096 );
+}
+
+void psxMemShutdown()
+{
+	vtlb_free( iopMem, sizeof( IopMemoryAlloc ) );
+}
+
 void psxMemReset()
 {
-	_psxMemReset();
+	jASSUME( iopMem != NULL );
+	DbgCon::Status( "Resetting IOP Memory..." );
+
+	memzero_ptr<sizeof(IopMemoryAlloc)>( iopMem );
 	tbl_Translation.Initialize();
 	recInitialize();
 }

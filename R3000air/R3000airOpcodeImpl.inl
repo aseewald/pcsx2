@@ -22,7 +22,7 @@
 #include "R3000Exceptions.h"
 #include "IopMem.h"
 
-namespace R3000Air
+namespace R3000A
 {
 
 typedef Instruction Inst;
@@ -417,7 +417,7 @@ __instinline void Inst::SYSCALL()
 	RaiseException( IopExcCode::Syscall );
 }
 
-void Inst::_RFE()
+__instinline void Inst::_RFE()
 {
 	SetSideEffects();
 	iopRegs.CP0.n.Status = (iopRegs.CP0.n.Status & 0xfffffff0) | ((iopRegs.CP0.n.Status & 0x3c) >> 2);

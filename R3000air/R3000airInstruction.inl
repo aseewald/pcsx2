@@ -22,9 +22,9 @@
 #include "IopMem.h"
 
 
-namespace R3000Air {
+namespace R3000A {
 
-	const bool Instruction::IsBranchType() const
+	__instinline const bool Instruction::IsBranchType() const
 	{
 		return m_IsBranchType;
 	}

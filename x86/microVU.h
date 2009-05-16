@@ -19,6 +19,7 @@
 #pragma once
 //#define mVUdebug	// Prints Extra Info to Console
 //#define mVUlogProg	// Dumps MicroPrograms into microVU0.txt/microVU1.txt
+
 #include "Common.h"
 #include "VU.h"
 #include "GS.h"
@@ -64,20 +65,21 @@ public:
 	}
 };
 
-template<u32 progSize>
+template<u32 progSize> // progSize = VU program memory size / 4
 struct microProgram {
-	u32 data[progSize/4];
+	u32 data[progSize];
 	u32 used;		// Number of times its been used
+	u32 last_used;	// counters # of frames since last use (starts at 3 and counts backwards to 0 for each 30fps vsync)
 	u32 sFlagHack;	// Optimize out Status Flag Updates if Program doesn't use Status Flags
 	u8* x86ptr;		// Pointer to program's recompilation code
 	u8* x86start;	// Start of program's rec-cache
 	u8* x86end;		// Limit of program's rec-cache
-	microBlockManager* block[progSize/8];
+	microBlockManager* block[progSize/2];
 	microAllocInfo<progSize> allocInfo;
 };
 
-#define mMaxProg 32 // The amount of Micro Programs Recs will 'remember' (For n = 1, 2, 4, 8, 16, etc...)
-template<u32 pSize>
+#define mMaxProg 32		// The amount of Micro Programs Recs will 'remember' (For n = 1, 2, 4, 8, 16, etc...)
+template<u32 pSize>		// pSize = VU program memory size / 4
 struct microProgManager {
 	microProgram<pSize>	prog[mMaxProg];	// Store MicroPrograms in memory
 	static const int	max = mMaxProg - 1; 
@@ -88,14 +90,19 @@ struct microProgManager {
 	microRegInfo		lpState;		// Pipeline state from where program left off (useful for continuing execution)
 };
 
-#define mVUcacheSize (0x1f00000 / ((vuIndex) ? 1 : 4))
+#define mVUcacheSize (0x2000000 / ((vuIndex) ? 1 : 4))
 struct microVU {
+
+	PCSX2_ALIGNED16(u32 macFlag[4]);  // 4 instances of mac  flag (used in execution)
+	PCSX2_ALIGNED16(u32 clipFlag[4]); // 4 instances of clip flag (used in execution)
+	PCSX2_ALIGNED16(u32 xmmPQb[4]);   // Backup for xmmPQ
+
 	u32 index;		// VU Index (VU0 or VU1)
 	u32 microSize;	// VU Micro Memory Size
 	u32 progSize;	// VU Micro Program Size (microSize/4)
 	u32 cacheSize;	// VU Cache Size
 
-	microProgManager<0x4000> prog; // Micro Program Data
+	microProgManager<0x4000/4> prog; // Micro Program Data
 
 	FILE*	logFile;	 // Log File Pointer
 	VURegs*	regs;		 // VU Regs Struct
@@ -109,13 +116,8 @@ struct microVU {
 	u32		branch;		 // Holds branch compare result (IBxx) OR Holds address to Jump to (JALR/JR)
 	u32		p;			 // Holds current P instance index
 	u32		q;			 // Holds current Q instance index
-	u32		espBackup;	 // Temp Backup for ESP
-	u32		totalCycles;
-	u32		cycles;
-
-	PCSX2_ALIGNED16(u32 macFlag[4]);  // 4 instances of mac  flag (used in execution)
-	PCSX2_ALIGNED16(u32 clipFlag[4]); // 4 instances of clip flag (used in execution)
-	PCSX2_ALIGNED16(u32 xmmPQb[4]);   // Backup for xmmPQ
+	u32		totalCycles; // Total Cycles that mVU is expected to run for
+	u32		cycles;		 // Cycles Counter
 };
 
 // microVU rec structs
@@ -132,19 +134,24 @@ microVUt(void) mVUreset();
 microVUt(void) mVUclose();
 microVUt(void) mVUclear(u32, u32);
 
+// Prototypes for Linux
+void  __fastcall mVUcleanUpVU0();
+void  __fastcall mVUcleanUpVU1();
+void* __fastcall mVUcompileVU0(u32 startPC, uptr pState);
+void* __fastcall mVUcompileVU1(u32 startPC, uptr pState);
+microVUf(void) mVUopU();
+microVUf(void) mVUopL();
+
 // Private Functions
 microVUt(void)		mVUclearProg(microVU* mVU, int progIndex);
 microVUt(int)		mVUfindLeastUsedProg(microVU* mVU);
-microVUt(int)		mVUsearchProg(microVU* mVU);
+microVUt(int)		mVUsearchProg();
 microVUt(void)		mVUcacheProg(microVU* mVU, int progIndex);
 void* __fastcall	mVUexecuteVU0(u32 startPC, u32 cycles);
 void* __fastcall	mVUexecuteVU1(u32 startPC, u32 cycles);
 
-#ifndef __LINUX__
 typedef void (__fastcall *mVUrecCall)(u32, u32);
-#else
-typedef void (*mVUrecCall)(u32, u32) __attribute__((__fastcall)); // Not sure if this is correct syntax (should be close xD)
-#endif
+
 
 // Include all the *.inl files (Needed because C++ sucks with templates and *.cpp files)
 #include "microVU_Misc.inl"

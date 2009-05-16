@@ -15,7 +15,8 @@ Console.cpp         IopSio2.cpp      PrecompiledHeader.cpp  Saveslots.cpp       
 Counters.cpp       Hw.cpp         MMI.cpp                       Sif.cpp                 VU1microInterp.cpp
 #R3000A.cpp R3000AInterpreter.cpp R3000AOpcodeTables.cpp  Mdec.cpp HashTools.cpp
 
-libpcsx2_a_SOURCES += \	
+
+libpcsx2_a_SOURCES += \
 ps2/Iop/IopHwRead.cpp ps2/Iop/IopHwWrite.cpp ps2/Iop/IopHw_Internal.h
 
 libpcsx2_a_SOURCES += \

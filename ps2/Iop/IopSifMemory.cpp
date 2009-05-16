@@ -1,5 +1,7 @@
 
 #include "PrecompiledHeader.h"
+
+#include "Common.h"		// needed to communicate with EE's memory space
 #include "IopCommon.h"
 
 namespace IopMemory

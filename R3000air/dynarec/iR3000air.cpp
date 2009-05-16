@@ -280,7 +280,7 @@ static void DynGen_Functions()
 	DynFunc::JITCompile = xGetPtr();
 	xMOV( eax, &iopRegs.cycle );
 	xSUB( eax, &iopRegs.NextBranchCycle );
-	xForwardJG8 label_callEvent;
+	xForwardJNS8 label_callEvent;
 	xCALL( recRecompile );
 	xForwardJump8 label_dispatcher;
 
@@ -324,7 +324,7 @@ void DynGen_BeginBranch( const IntermediateInstruction& il, recBlockItem& block 
 	xADD( eax, m_RecState.GetScaledBlockCycles() );
 	xMOV( &iopRegs.cycle, eax );
 	xSUB( eax, &iopRegs.NextBranchCycle );
-	xJG( DynFunc::CallEventHandler );
+	xJNS( DynFunc::CallEventHandler );
 }
 
 void DynGen_BranchReg()

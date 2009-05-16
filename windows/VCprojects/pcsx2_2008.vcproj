@@ -1690,6 +1690,10 @@
 					>
 				</File>
 				<File
+					RelativePath="..\..\CDVD_internal.h"
+					>
+				</File>
+				<File
 					RelativePath="..\..\IopBios.cpp"
 					>
 				</File>
@@ -1731,6 +1735,10 @@
 				</File>
 				<File
 					RelativePath="..\..\Sio.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\sio_internal.h"
 					>
 				</File>
 				<Filter
@@ -1859,6 +1867,30 @@
 					<File
 						RelativePath="..\..\IopMem.cpp"
 						>
+						<FileConfiguration
+							Name="Debug|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Devel|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Release|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
 					</File>
 					<File
 						RelativePath="..\..\IopMem.h"

@@ -21,8 +21,6 @@
 #include <stdio.h>
 #include "R3000air/R3000air.h"
 
-using namespace R3000Air;
-
 extern bool iopBranchAction;
 extern bool iopEventTestIsActive;
 

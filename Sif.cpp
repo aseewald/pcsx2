@@ -20,7 +20,9 @@
 
 #define _PC_	// disables MIPS opcode macros.
 
+#include "Common.h"
 #include "IopCommon.h"
+#include "Sif.h"
 #include "Sifcmd.h"
 
 using namespace std;

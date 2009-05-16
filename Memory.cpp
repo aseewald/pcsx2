@@ -186,7 +186,7 @@ void memMapPhy()
 	vtlb_MapBlock(psER,0x1e040000,Ps2MemSize::ERom);//Writable ?
 
 	//IOP mem
-	vtlb_MapBlock(psxM,0x1c000000,0x00800000);
+	vtlb_MapBlock(iopMem->Ram,0x1c000000,Ps2MemSize::IopRam);
 
 	//These fallback to mem* stuff ...
 	vtlb_MapHandler(tlb_fallback_1,0x10000000,0x10000);

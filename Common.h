@@ -22,12 +22,11 @@
 #include "Pcsx2Defs.h"
 
 #define BIAS 2   // Bus is half of the actual ps2 speed
+
 //#define PS2CLK   36864000	/* 294.912 mhz */
 //#define PSXCLK	 9216000	/* 36.864 Mhz */
 //#define PSXCLK	186864000	/* 36.864 Mhz */
 #define PS2CLK 294912000 //hz	/* 294.912 mhz */
-
-#define PCSX2_VERSION "(beta)"
 
 #include "System.h"
 

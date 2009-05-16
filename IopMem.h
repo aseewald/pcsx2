@@ -21,12 +21,17 @@
 #include "MemoryTypes.h"
 
 extern u8 *psxM;
-extern u8 *psxP;
 extern u8 *psxH;
 extern u8 *psxS;
-extern uptr *psxMemWLUT;
-extern const uptr *psxMemRLUT;
 
+struct IopMemoryAlloc
+{
+	u8 Ram[Ps2MemSize::IopRam];
+	u8 Hardware[Ps2MemSize::IopHardware];
+	u8 Sif[0x100];
+};
+
+extern IopMemoryAlloc* iopMem;
 
 // Obtains a read-safe pointer into the IOP's physical memory, with TLB address translation.
 // Returns NULL if the address maps to an invalid/unmapped physical address.
@@ -37,36 +42,29 @@ extern const uptr *psxMemRLUT;
 template<typename T>
 static __forceinline const T* iopVirtMemR( u32 mem )
 {
-	return (const T*)&psxM[mem & 0x1fffff];
+	return (const T*)&iopMem->Ram[mem & 0x1fffff];
 }
 
 // Obtains a pointer to the IOP's physical mapping (bypasses the TLB).
 // This function is intended for use by DMA address resolution only.
 static __forceinline u8* iopPhysMem( u32 addr )
 {
-	return &psxM[addr & 0x1fffff];
+	return &iopMem->Ram[addr & 0x1fffff];
 }
 
-#define psxSs8(mem)		psxS[(mem) & 0xffff]
-#define psxSs16(mem)	(*(s16*)&psxS[(mem) & 0x00ff])
-#define psxSs32(mem)	(*(s32*)&psxS[(mem) & 0x00ff])
-#define psxSu8(mem)		(*(u8*) &psxS[(mem) & 0x00ff])
-#define psxSu16(mem)	(*(u16*)&psxS[(mem) & 0x00ff])
-#define psxSu32(mem)	(*(u32*)&psxS[(mem) & 0x00ff])
+#define psxSs8(mem)		iopMem->Sif[(mem) & 0xffff]
+#define psxSs16(mem)	(*(s16*)&iopMem->Sif[(mem) & 0x00ff])
+#define psxSs32(mem)	(*(s32*)&iopMem->Sif[(mem) & 0x00ff])
+#define psxSu8(mem)		(*(u8*) &iopMem->Sif[(mem) & 0x00ff])
+#define psxSu16(mem)	(*(u16*)&iopMem->Sif[(mem) & 0x00ff])
+#define psxSu32(mem)	(*(u32*)&iopMem->Sif[(mem) & 0x00ff])
 
-#define psxPs8(mem)		psxP[(mem) & 0xffff]
-#define psxPs16(mem)	(*(s16*)&psxP[(mem) & 0xffff])
-#define psxPs32(mem)	(*(s32*)&psxP[(mem) & 0xffff])
-#define psxPu8(mem)		(*(u8*) &psxP[(mem) & 0xffff])
-#define psxPu16(mem)	(*(u16*)&psxP[(mem) & 0xffff])
-#define psxPu32(mem)	(*(u32*)&psxP[(mem) & 0xffff])
-
-#define psxHs8(mem)		psxH[(mem) & 0xffff]
-#define psxHs16(mem)	(*(s16*)&psxH[(mem) & 0xffff])
-#define psxHs32(mem)	(*(s32*)&psxH[(mem) & 0xffff])
-#define psxHu8(mem)		(*(u8*) &psxH[(mem) & 0xffff])
-#define psxHu16(mem)	(*(u16*)&psxH[(mem) & 0xffff])
-#define psxHu32(mem)	(*(u32*)&psxH[(mem) & 0xffff])
+#define psxHs8(mem)		iopMem->Hardware[(mem) & 0xffff]
+#define psxHs16(mem)	(*(s16*)&iopMem->Hardware[(mem) & 0xffff])
+#define psxHs32(mem)	(*(s32*)&iopMem->Hardware[(mem) & 0xffff])
+#define psxHu8(mem)		(*(u8*) &iopMem->Hardware[(mem) & 0xffff])
+#define psxHu16(mem)	(*(u16*)&iopMem->Hardware[(mem) & 0xffff])
+#define psxHu32(mem)	(*(u32*)&iopMem->Hardware[(mem) & 0xffff])
 
 extern void psxMemAlloc();
 extern void psxMemReset();
@@ -99,7 +97,7 @@ namespace IopMemory
 		HandlerId_Hardware_Page3,
 		HandlerId_Hardware_Page8,
 		HandlerId_Dev9,
-		HandlerId_LegacyAPI,
+		//HandlerId_LegacyAPI,
 
 		HandlerId_Hardware4,
 		HandlerId_SPU2,

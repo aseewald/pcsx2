@@ -24,7 +24,7 @@
 #include "R3000Exceptions.h"
 #include "IopMem.h"
 
-namespace R3000Air
+namespace R3000A
 {
 typedef InstructionDiagnostic InstDiag;		// makes life easier on the verboseness front.
 typedef InstDiagInfo RetType;				// makes life even more easier on the verboseness front.

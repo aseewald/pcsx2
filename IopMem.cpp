@@ -19,11 +19,6 @@
 #include "PrecompiledHeader.h"
 #include "IopCommon.h"
 
-u8 *psxM = NULL;
-u8 *psxP = NULL;
-u8 *psxH = NULL;	// standard hardware registers (0x000->0x3ff is the scratchpad)
-u8 *psxS = NULL;	// 'undocumented' SIF communication registers
-
 static u8* m_psxAllMem = NULL;
 static const uint m_psxMemSize =
 	Ps2MemSize::IopRam +

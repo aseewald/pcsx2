@@ -28,10 +28,7 @@ bool iopBranchAction = false;
 
 bool iopEventTestIsActive = false;
 
-namespace R3000Air
-{
-	PCSX2_ALIGNED16(Registers iopRegs);
-}
+PCSX2_ALIGNED16(R3000A::Registers iopRegs);
 
 R3000Acpu *psxCpu;
 

@@ -31,8 +31,8 @@ namespace R3000Exception
 	class BaseExcept : public Ps2Generic
 	{
 	public:
-		const R3000Air::Registers cpuState;
-		const R3000Air::Instruction Inst;
+		const R3000A::Registers cpuState;
+		const R3000A::Instruction Inst;
 
 	protected:
 		const bool m_IsDelaySlot;
@@ -40,9 +40,9 @@ namespace R3000Exception
 	public:
 		virtual ~BaseExcept() throw()=0;
 
-		explicit BaseExcept( const R3000Air::Instruction& inst, const std::string& msg ) :
+		explicit BaseExcept( const R3000A::Instruction& inst, const std::string& msg ) :
 			Exception::Ps2Generic( "(IOP) " + msg ),
-			cpuState( R3000Air::iopRegs ),
+			cpuState( iopRegs ),
 			Inst( inst ),
 			m_IsDelaySlot( iopRegs.IsDelaySlot )
 		{
@@ -63,7 +63,7 @@ namespace R3000Exception
 	public:
 		virtual ~AddressError() throw() {}
 
-		explicit AddressError( const R3000Air::Instruction& inst, u32 ps2addr, bool onWrite ) :
+		explicit AddressError( const R3000A::Instruction& inst, u32 ps2addr, bool onWrite ) :
 			BaseExcept( inst, fmt_string( "Address error, addr=0x%x [%s]", ps2addr, onWrite ? "store" : "load" ) ),
 			OnWrite( onWrite ),
 			Address( ps2addr )
@@ -81,7 +81,7 @@ namespace R3000Exception
 	public:
 		virtual ~TLBMiss() throw() {}
 
-		explicit TLBMiss( const R3000Air::Instruction& inst, u32 ps2addr, bool onWrite ) :
+		explicit TLBMiss( const R3000A::Instruction& inst, u32 ps2addr, bool onWrite ) :
 			BaseExcept( inst, fmt_string( "Tlb Miss, addr=0x%x [%s]", ps2addr, onWrite ? "store" : "load" ) ),
 			OnWrite( onWrite ),
 			Address( ps2addr )
@@ -100,7 +100,7 @@ namespace R3000Exception
 		virtual ~BusError() throw() {}
 
 		//
-		explicit BusError( const R3000Air::Instruction& inst, u32 ps2addr, bool onWrite ) :
+		explicit BusError( const R3000A::Instruction& inst, u32 ps2addr, bool onWrite ) :
 			BaseExcept( inst, fmt_string( "Bus Error, addr=0x%x [%s]", ps2addr, onWrite ? "store" : "load" ) ),
 			OnWrite( onWrite ),
 			Address( ps2addr )
@@ -114,7 +114,7 @@ namespace R3000Exception
 	public:
 		virtual ~SystemCall() throw() {}
 
-		explicit SystemCall( const R3000Air::Instruction& inst ) :
+		explicit SystemCall( const R3000A::Instruction& inst ) :
 			BaseExcept( inst, "SystemCall [SYSCALL]" )
 		{}
 	};
@@ -130,14 +130,14 @@ namespace R3000Exception
 		virtual ~Trap() throw() {}
 
 		// Generates a trap for immediate-style Trap opcodes
-		explicit Trap( const R3000Air::Instruction& inst ) :
+		explicit Trap( const R3000A::Instruction& inst ) :
 			BaseExcept( Inst, "Trap" ),
 			TrapCode( 0 )
 		{}
 
 		// Generates a trap for register-style Trap instructions, which contain an
 		// error code in the opcode
-		explicit Trap( const R3000Air::Instruction& inst, u16 trapcode ) :
+		explicit Trap( const R3000A::Instruction& inst, u16 trapcode ) :
 			BaseExcept( inst, "Trap" ),
 			TrapCode( trapcode )
 		{}
@@ -150,7 +150,7 @@ namespace R3000Exception
 	public:
 		virtual ~Break() throw() {}
 
-		explicit Break( const R3000Air::Instruction& inst ) :
+		explicit Break( const R3000A::Instruction& inst ) :
 			BaseExcept( inst, "Break Instruction" )
 		{}
 	};
@@ -162,7 +162,7 @@ namespace R3000Exception
 	public:
 		virtual ~Overflow() throw() {}
 
-		explicit Overflow( const R3000Air::Instruction& inst ) :
+		explicit Overflow( const R3000A::Instruction& inst ) :
 			BaseExcept( inst, "Overflow" )
 		{}
 	};
@@ -174,7 +174,7 @@ namespace R3000Exception
 	public:
 		virtual ~DebugBreakpoint() throw() {}
 
-		explicit DebugBreakpoint( const R3000Air::Instruction& inst ) :
+		explicit DebugBreakpoint( const R3000A::Instruction& inst ) :
 			BaseExcept( inst, "Debug Breakpoint" )
 		{}
 	};

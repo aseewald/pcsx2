@@ -966,7 +966,7 @@ void cdrReset() {
 	memzero_obj(cdr);
 	cdr.CurTrack=1;
 	cdr.File=1; cdr.Channel=1;
-	cdReadTime = (PSXCLK / 1757) * BIAS; 
+	cdReadTime = (PSXCLK / 1757) * 3;	// was BIAS, but BIAS applies to the EE's DMAC, not the IOP's. >_<
 }
 
 void SaveState::cdrFreeze()

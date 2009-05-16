@@ -26,8 +26,6 @@
 
 void psxHwReset() {
 
-	memzero_ptr<0x10000>(psxH);
-
 //	mdecInit(); //initialize mdec decoder
 	cdrReset();
 	cdvdReset();

@@ -53,6 +53,7 @@ microVUt(void) mVUstatusFlagOp() {
 		}
 	}
 	iPC = curPC;
+	Console::Status("microVU%d: FSSET Optimization", params vuIndex);
 }
 
 int findFlagInst(int* fFlag, int cycles) {
@@ -127,13 +128,13 @@ microVUt(int) mVUsetFlags(int* xStatus, int* xMac, int* xClip) {
 		mVUinfo |= findFlagInst(xMac,	 cycles) << 16; // _fvmInstance
 		mVUinfo |= findFlagInst(xClip,	 cycles) << 20; // _fvcInstance
 
-		mVUinfo |= (xS & 3) << 12; // _fsInstance
-		mVUinfo |= (xM & 3) << 10; // _fmInstance
-		mVUinfo |= (xC & 3) << 14; // _fcInstance
+		mVUinfo |= xS << 12; // _fsInstance
+		mVUinfo |= xM << 10; // _fmInstance
+		mVUinfo |= xC << 14; // _fcInstance
 
-		if (doStatus||isFSSET||doDivFlag) { xStatus	[xS] = cycles + 4; xS = (xS+1)&3; }
-		if (doMac)						  { xMac	[xM] = cycles + 4; xM = (xM+1)&3; }
-		if (doClip)						  { xClip	[xC] = cycles + 4; xC = (xC+1)&3; }
+		if (doStatus || isFSSET || doDivFlag) { xStatus[xS] = cycles + 4;  xS = (xS+1) & 3; }
+		if (doMac)							  { xMac   [xM] = cycles + 4;  xM = (xM+1) & 3; }
+		if (doClip)							  { xClip  [xC] = cycles + 4;  xC = (xC+1) & 3; }
 
 		cycles++;
 		incPC2(2);

@@ -50,28 +50,20 @@ AC_ARG_ENABLE(debug, AC_HELP_STRING([--enable-debug], [debug build]),
 if test "x$debug" == xyes
 then
  AC_DEFINE(_DEBUG,1,[_DEBUG])
- CFLAGS+=" ${DEBUG_FLAGS} -Xlinker -zmuldefs "
- CXXFLAGS+=" ${DEBUG_FLAGS} -fpermissive -Xlinker -zmuldefs "
- CCASFLAGS+=" -D_DEBUG ${DEBUG_FLAGS} "
+ CFLAGS+=" ${DEBUG_FLAGS} -Xlinker -zmuldefs -m32 "
+ CXXFLAGS+=" ${DEBUG_FLAGS} -fpermissive -Xlinker -zmuldefs -m32 "
+ CCASFLAGS+=" -D_DEBUG ${DEBUG_FLAGS}  -m32 "
  MYOBJDIR="Debug"
 else
  AC_DEFINE(NDEBUG,1,[NDEBUG])
- CFLAGS+=" ${NORMAL_FLAGS}"
- CXXFLAGS+=" ${NORMAL_FLAGS} -fpermissive -Xlinker -zmuldefs "
+ CFLAGS+=" ${NORMAL_FLAGS} -m32 "
+ CXXFLAGS+=" ${NORMAL_FLAGS} -fpermissive -Xlinker -zmuldefs -m32 "
+ CCASFLAGS+=" ${NORMAL_FLAGS} -m32 "
  MYOBJDIR="Release"
 fi
 AC_MSG_RESULT($debug)
 
 AC_CHECK_FUNCS([ _aligned_malloc _aligned_free ], AC_DEFINE(HAVE_ALIGNED_MALLOC))
-
-#AC_MSG_CHECKING(turn on memcpy_fast_)
-#AC_ARG_ENABLE(memcpyfast, AC_HELP_STRING([--enable-memcpyfast], [Turns on memcpy_fast - EXPERIMENTAL]),
-#memcpyfast=$enableval,memcpyfast=no)
-#if test "x$memcpyfast" == xyes
-#then
-# AC_DEFINE(LINUX_USE_FAST_MEMORY,1,[LINUX_USE_FAST_MEMORY])
-#fi
-#AC_MSG_RESULT($memcpyfast)
 
 #AC_MSG_CHECKING(turn on microVU)
 #AC_ARG_ENABLE(microVU, AC_HELP_STRING([--enable-microVU], [Turns on the currently incomplete microVU files - Not a good idea]),

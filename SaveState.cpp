@@ -125,9 +125,7 @@ void SaveState::FreezeAll()
 	FreezeMem(PS2MEM_SCRATCH, Ps2MemSize::Scratch);	// scratch pad 
 	FreezeMem(PS2MEM_HW, Ps2MemSize::Hardware);		// hardware memory
 
-	FreezeMem(psxM, Ps2MemSize::IopRam);		// 2 MB main memory
-	FreezeMem(psxH, Ps2MemSize::IopHardware);	// hardware memory
-	FreezeMem(psxS, 0x000100);					// iop's sif memory	
+	Freeze( *iopMem );
 
 	// Second Block - Various CPU Registers and States
 	// -----------------------------------------------

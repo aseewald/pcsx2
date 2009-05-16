@@ -21,6 +21,10 @@
 
 #include "iR3000air.h"
 
+#include "../R3000airInstruction.inl"
+#include "../R3000airOpcodeImpl.inl"
+#include "../R3000airOpcodeTables.inl"
+
 using namespace x86Emitter;
 
 namespace R3000A
@@ -100,7 +104,7 @@ void recIL_Expand( IntermediateInstruction& iInst )
 //////////////////////////////////////////////////////////////////////////////////////////
 // Generates IL for an entire block of code.
 //
-void recIL_Block( SafeList<InstructionOptimizer>& iList )
+__releaseinline void recIL_Block( SafeList<InstructionOptimizer>& iList )
 {
 	bool delaySlot = false;
 
@@ -121,8 +125,6 @@ void recIL_Block( SafeList<InstructionOptimizer>& iList )
 			InstructionOptimizer& inst( (iList.New()) );
 			inst.Assign( opcode );
 			InstructionOptimizer::Process( inst );
-
-			//iList.Add( inst );
 
 			// prep the iopRegs for the next instruction fetch -->
 			// 

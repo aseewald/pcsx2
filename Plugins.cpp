@@ -778,7 +778,7 @@ skipOpenCDVD:
 	{
 		SPU2irqCallback(spu2Irq,spu2DMA4Irq,spu2DMA7Irq);
 		if( SPU2setDMABaseAddr != NULL )
-			SPU2setDMABaseAddr((uptr)psxM);
+			SPU2setDMABaseAddr((uptr)iopMem->Ram);
 
 		if(SPU2setClockPtr != NULL)
 			SPU2setClockPtr(&iopRegs.cycle);
@@ -802,7 +802,7 @@ skipOpenCDVD:
 	{
 		USBirqCallback(usbIrq);
 		usbHandler = USBirqHandler();
-		USBsetRAM(psxM);
+		USBsetRAM(iopMem->Ram);
 		ret = USBopen((void *)&pDsp);
 		if (ret != 0) { Msgbox::Alert("Error Opening USB Plugin"); goto OpenError; }
 		OpenStatus.USB = true;

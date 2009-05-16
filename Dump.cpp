@@ -18,6 +18,7 @@
 
 ////////////////////////////////////////////////////
 #include "PrecompiledHeader.h"
+#include "Common.h"
 #include "IopCommon.h"
 #include "Counters.h"
 #include "iCore.h"

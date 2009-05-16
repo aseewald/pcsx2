@@ -21,24 +21,17 @@
 
 #include "System.h"
 
-#include "R3000A.h"
-#include "IopMem.h"
-#include "IopHw.h"
-#include "IopCounters.h"
-#include "R3000Exceptions.h"
+#include "IopCommon.h"
 
 #include "R3000airInstruction.inl"
-#include "R3000airOpcodeTables.inl"
 #include "R3000airOpcodeImpl.inl"
+#include "R3000airOpcodeTables.inl"
 
 #include "DebugTools/Debug.h"
 
-namespace R3000Exception
-{
-	BaseExcept::~BaseExcept() throw() {} 
-}
+R3000Exception::BaseExcept::~BaseExcept() throw() {}
 
-namespace R3000Air {
+namespace R3000A {
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Branch delay note:  it's actually legal for the R3000 to have branch instructions in
@@ -223,14 +216,12 @@ static void intShutdown() { }
 
 }
 
-using namespace R3000Air;
-
 R3000Acpu iopInt =
 {
-	intAlloc,
-	intReset,
-	intExecute,
-	intExecuteBlock,
-	intClear,
-	intShutdown
+	R3000A::intAlloc,
+	R3000A::intReset,
+	R3000A::intExecute,
+	R3000A::intExecuteBlock,
+	R3000A::intClear,
+	R3000A::intShutdown
 };

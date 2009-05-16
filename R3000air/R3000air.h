@@ -20,7 +20,7 @@
 
 #include <stdio.h>
 
-#define __instinline __releaseinline		// MSVC still fails to inline as much as it should
+#define __instinline __forceinline		// MSVC still fails to inline as much as it should
 
 union IntSign32
 {
@@ -34,7 +34,7 @@ union IntSign32
 	u8 UB[2];
 };
 
-namespace R3000Air
+namespace R3000A
 {
 
 union GPRRegs
@@ -135,9 +135,12 @@ struct Registers
 		SetNextBranchDelta( 0 );
 	}
 };
+}
 
-PCSX2_ALIGNED16_EXTERN(Registers iopRegs);
+PCSX2_ALIGNED16_EXTERN(R3000A::Registers iopRegs);
 
+namespace R3000A
+{
 union GprStatus
 {
 	union
