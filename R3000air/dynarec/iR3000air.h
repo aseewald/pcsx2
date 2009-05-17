@@ -401,6 +401,20 @@ struct xJumpLink
 	}
 };
 
+static const int MaxCyclesPerBlock = 128;
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// recBlockItemTemp - Temporary workspace buffer used to reduce the number of heap allocations
+// required during block recompilation.
+//
+struct recBlockItemTemp
+{
+	InstructionOptimizer inst[MaxCyclesPerBlock];
+	u32 ramcopy[MaxCyclesPerBlock];
+	int ramlen;
+	int instlen;
+};
+
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 struct recBlockItem : public NoncopyableObject
@@ -409,7 +423,7 @@ struct recBlockItem : public NoncopyableObject
 
 	// Intermediate language allocation.  If size is non-zero, then we're on our second pass
 	// and the IL should be recompiled into x86 code for direct execution.
-	SafeList<InstructionOptimizer> IL;
+	SafeArray<InstructionOptimizer> IL;
 
 	// A list of all block links dependent on this block.  If this block moves, then all links
 	// in this list need to have their x86 jump instructions rewritten.
@@ -423,15 +437,22 @@ struct recBlockItem : public NoncopyableObject
 
 	recBlockItem() :
 		x86len( 0 ),
-		IL( 16, "recBlockItem::IL" ),
-		DependentLinks( 4, "recBlockItem::DepdendentLinks" ),
-		ValidationCopy( 0, "recBlockItem::ValidationCopy" )
+		IL( "recBlockItem::IL" ),
+		DependentLinks( 4, "recBlockItem::DependentLinks" ),
+		ValidationCopy( "recBlockItem::ValidationCopy" )
 	{
+		IL.ChunkSize = 32;
+		DependentLinks.ChunkSize = 8;
+		ValidationCopy.ChunkSize = 32;
 	}
+
+	void Assign( const recBlockItemTemp& src );
 };
 
+extern recBlockItemTemp m_blockspace;
+
 // ------------------------------------------------------------------------
-extern void recIL_Block( SafeList<InstructionOptimizer>& iList );
+extern void recIL_Block();
 
 
 // ------------------------------------------------------------------------

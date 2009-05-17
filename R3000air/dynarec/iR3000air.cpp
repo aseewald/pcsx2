@@ -27,18 +27,6 @@ iopRecState m_RecState;
 namespace R3000A
 {
 
-// Allocates 8 megs of ram for the IOP's generated x86 code.  [might be better set to 4 megs?]
-static const uint xBlockCacheSize = 0x0800000;
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
-struct xBlockLutAlloc
-{
-	uptr RAM[Ps2MemSize::IopRam / 4];
-	uptr ROM[Ps2MemSize::Rom / 4];
-	uptr ROM1[Ps2MemSize::Rom1 / 4];
-};
-
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 class xBlocksMap
@@ -47,9 +35,6 @@ public:
 	typedef std::map<u32, s32> Blockmap_t;
 	typedef Blockmap_t::iterator Blockmap_iterator;
 
-	// All our recompiled blocks [including ones deleted by clears/invalidations]
-	// I don't bother to remove 'dead' blocks since it would require using a std::list instead
-	// to maintain the std::map pointer validity.
 	SafeList<recBlockItem> Blocks;
 
 	// Mapping of pc (u32) to recBlockItem* (s32).  The recBlockItem pointers are not absolute!
@@ -66,6 +51,7 @@ public:
 		Blocks( 4096, "recBlocksMap::Blocks" ),
 		Map()
 	{
+		Blocks.New();
 	}
 
 	// pc - ps2 address target of the x86 jump instruction
@@ -79,6 +65,28 @@ protected:
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
+void recBlockItem::Assign( const recBlockItemTemp& src )
+{
+	ValidationCopy.ExactAlloc( src.ramlen );
+	IL.ExactAlloc( src.instlen );
+
+	memcpy( ValidationCopy.GetPtr(), src.ramcopy, src.ramlen*sizeof(u32) );
+	memcpy( IL.GetPtr(), src.inst, src.instlen*sizeof(InstructionOptimizer) );
+}
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+
+// Allocates 8 megs of ram for the IOP's generated x86 code.  [might be better set to 4 megs?]
+static const uint xBlockCacheSize = 0x0800000;
+
+struct xBlockLutAlloc
+{
+	uptr RAM[Ps2MemSize::IopRam / 4];
+	uptr ROM[Ps2MemSize::Rom / 4];
+	uptr ROM1[Ps2MemSize::Rom1 / 4];
+};
 
 static xBlockLutAlloc* m_xBlockLutAlloc = NULL;
 static u8** m_xBlockLut = NULL;
@@ -215,19 +223,38 @@ static u32 EventHandler()
 	return 0;
 }
 
-static SafeList<InstructionOptimizer> wheelist( 32 );
-
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 static void recRecompile()
 {
-	// Prep for recompilation (reset vars, clear structs, set x86Ptr)
-	
+	// Look up block...
+	u32 masked_pc = iopRegs.pc & IopMemory::AddressMask;
+	xBlocksMap::Blockmap_iterator blowme( m_xBlockMap.Map.find( masked_pc ) );
+
 	memzero_obj( m_RecState );
 	//m_RecState.pc = iopRegs.pc;
+
+	recIL_Block();
 	
-	wheelist.Clear();
-	recIL_Block( wheelist );
+	if( blowme == m_xBlockMap.Map.end() )
+	{
+		Console::WriteLn( "IOP Caching block at PC: 0x%08x  (total blocks=%d)", params masked_pc, m_xBlockMap.Blocks.GetLength() );
+		m_xBlockMap.Map[masked_pc] = m_xBlockMap.Blocks.GetLength();
+		m_xBlockMap.Blocks.New().Assign( m_blockspace );
+	}
+	else
+	{
+		recBlockItem& mess( m_xBlockMap.Blocks[blowme->second] );
+
+		// Memory integrity check:
+		if( (mess.ValidationCopy.GetLength() != m_blockspace.ramlen) ||
+			memcmp( mess.ValidationCopy.GetPtr(), m_blockspace.ramcopy, m_blockspace.ramlen*sizeof(u32) != 0 ) )
+		{
+			Console::WriteLn( "-/- IOP Clearing block at PC: 0x%08x [oldlen=%d, newlen=%d]",
+				params masked_pc, mess.ValidationCopy.GetLength(), m_blockspace.ramlen );
+			mess.Assign( m_blockspace );
+		}
+	}
 }
 
 
@@ -269,6 +296,7 @@ static void DynGen_Functions()
 {
 	// In case init gets called multiple times:
 	HostSys::MemProtect( DynFunc::m_Dispatchers, 0x1000, Protect_ReadWrite, false );
+	memset8_obj<0xcc>( DynFunc::m_Dispatchers );
 	xSetPtr( DynFunc::m_Dispatchers );
 
 	// ------------------------------------------------------------------------
@@ -297,6 +325,9 @@ static void DynGen_Functions()
 
 	// ------------------------------------------------------------------------
 	// Dispatcher!
+	// assign the dispatcher to 64 bytes, which allows us to access it using either indirect
+	// (DynFunc::Dispatcher), or direct (DynFunc::m_Dispatchers[64]) addressing.  The direct
+	// mode is used from the recExecuteBlock as it's more efficient.
 
 	label_dispatcher.SetTarget();		// comment for conditional dispatcher test above
 	//label_dispatcher2.SetTarget();
@@ -349,6 +380,7 @@ static s32 recExecuteBlock( s32 eeCycles )
 
 	// Optimization note : Compared pushad against manually pushing the regs one-by-one.
 	// Manually pushing is faster, especially on Core2's and such. :)
+
 	__asm
 	{
 		push ebx
@@ -356,7 +388,7 @@ static s32 recExecuteBlock( s32 eeCycles )
 		push edi
 		//push ebp		// probably not needed.
 
-		call dword ptr [DynFunc::Dispatcher]
+		call [DynFunc::Dispatcher]
 
 		//pop ebp
 		pop edi
@@ -436,9 +468,6 @@ static void recShutdown()
 	SafeSysMunmap( m_xBlockCache, xBlockCacheSize );
 	safe_aligned_free( m_xBlockLutAlloc );
 }
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 
 static void recReset()
 {

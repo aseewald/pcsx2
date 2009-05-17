@@ -313,7 +313,7 @@ memSavingState::memSavingState( SafeArray<u8>& save_to ) : memBaseStateInfo( sav
 void memSavingState::FreezeMem( void* data, int size )
 {
 	const int end = m_idx+size;
-	m_memory.MakeRoomFor( end );
+	m_memory.GrowBy( size );
 
 	u8* dest = (u8*)m_memory.GetPtr();
 	const u8* src = (u8*)data;
@@ -352,7 +352,7 @@ void memSavingState::FreezePlugin( const char* name, s32 (CALLBACK *freezer)(int
 	if( fP.size == 0 ) return;
 
 	const int end = m_idx+fP.size;
-	m_memory.MakeRoomFor( end );
+	m_memory.GrowBy( fP.size );
 
 	fP.data = ((s8*)m_memory.GetPtr()) + m_idx;
 	if(freezer(FREEZE_SAVE, &fP) == -1)

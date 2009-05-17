@@ -33,63 +33,6 @@ namespace R3000A
 static const xAddressReg GPR_xIndexReg( esi );
 
 //////////////////////////////////////////////////////////////////////////////////////////
-//
-// Notes:
-//  * Interrupt/Event tests and Exception tests are not performed here.  They're done at
-//    the conclusion of the block execution, to match the same behavior that the recompiled
-//    code would implement.
-//
-__releaseinline void recIL_Step( InstructionOptimizer& dudley )
-{
-	InstructionOptimizer::Process( dudley );
-
-	// prep the iopRegs for the next instruction fetch -->
-	// 
-	// Typically VectorPC points to the delay slot instruction on branches, and the GetNextPC()
-	// references the *target* of the branch.  Thus the delay slot is processed on the next
-	// pass (unless an exception occurs), and *then* we vector to the branch target.  In other
-	// words, VectorPC acts as an instruction prefetch, only we prefetch just the PC (doing a
-	// full-on instruction prefetch is less efficient).
-	//
-	// note: In the case of raised exceptions, VectorPC and GetNextPC() can be overridden during
-	//  instruction processing above.
-
-	iopRegs.pc			= iopRegs.VectorPC;
-	iopRegs.VectorPC	= dudley.GetNextPC();
-	iopRegs.IsDelaySlot	= dudley.IsBranchType();
-
-	m_RecState.IncCycleAccum();
-	
-	// Test for DivUnit Stalls.
-	// Note: DivStallUpdater applies the stall directly to the iopRegs, instead of using the
-	// RecState's cycle accumulator.  This is because the same thing is done by the recs, and
-	// is designed to allow proper handling of stalls across branches.
-	
-	if( dudley.GetDivStall() != 0 )
-		DivStallUpdater( m_RecState.DivCycleAccum, dudley.GetDivStall() );
-}
-
-__releaseinline void recIL_StepFast( InstructionOptimizer& dudley )
-{
-	Opcode opcode( iopMemRead32( iopRegs.pc ) );
-
-	while( opcode.U32 == 0 )	// Iggy on the NOP please!  (Iggy Nop!)
-	{
-		//PSXCPU_LOG( "NOP" );
-
-		iopRegs.pc			 = iopRegs.VectorPC;
-		iopRegs.VectorPC	+= 4;
-		iopRegs.IsDelaySlot	 = false;
-
-		m_RecState.IncCycleAccum();
-		opcode = iopMemRead32( iopRegs.pc );
-	}
-
-	dudley.Assign( opcode );
-	recIL_Step( dudley );
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////
 // Builds the intermediate const and regalloc resolutions.
 //
 void recIL_Expand( IntermediateInstruction& iInst )
@@ -101,16 +44,22 @@ void recIL_Expand( IntermediateInstruction& iInst )
 	}
 }
 
+recBlockItemTemp m_blockspace;
+
 //////////////////////////////////////////////////////////////////////////////////////////
 // Generates IL for an entire block of code.
 //
-__releaseinline void recIL_Block( SafeList<InstructionOptimizer>& iList )
+void recIL_Block()
 {
 	bool delaySlot = false;
+
+	m_blockspace.ramlen = 0;
+	m_blockspace.instlen = 0;
 
 	do 
 	{
 		Opcode opcode( iopMemDirectRead32( iopRegs.pc ) );
+		m_blockspace.ramcopy[m_blockspace.ramlen++] = opcode.U32;
 
 		if( opcode.U32 == 0 )	// Iggy on the NOP please!  (Iggy Nop!)
 		{
@@ -122,7 +71,8 @@ __releaseinline void recIL_Block( SafeList<InstructionOptimizer>& iList )
 		}
 		else
 		{
-			InstructionOptimizer& inst( (iList.New()) );
+			//InstructionOptimizer& inst( (block.IL.New()) );
+			InstructionOptimizer& inst( m_blockspace.inst[m_blockspace.instlen++] );
 			inst.Assign( opcode );
 			InstructionOptimizer::Process( inst );
 
@@ -154,8 +104,8 @@ __releaseinline void recIL_Block( SafeList<InstructionOptimizer>& iList )
 		if( delaySlot ) break;
 		delaySlot = iopRegs.IsDelaySlot;
 
-	} while( m_RecState.BlockCycleAccum < 64 );
-	
+	} while( m_RecState.BlockCycleAccum < MaxCyclesPerBlock );
+
 	iopRegs.cycle += m_RecState.BlockCycleAccum;
 }
 

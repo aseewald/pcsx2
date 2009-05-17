@@ -76,21 +76,19 @@ public:
 	static const int DefaultChunkSize = 0x1000 * sizeof(T);
 
 public: 
-	const std::string Name;		// user-assigned block name
+	const char* Name;		// user-assigned block name
 	int ChunkSize;
 
 protected:
 	T* m_ptr;
 	int m_size;	// size of the allocation of memory
 
-	const static std::string m_str_Unnamed;
-
 protected:
 	// Internal constructor for use by derived classes.  This allows a derived class to
 	// use its own memory allocation (with an aligned memory, for example).
 	// Throws:
 	//   Exception::OutOfMemory if the allocated_mem pointer is NULL.
-	explicit SafeArray( const std::string& name, T* allocated_mem, int initSize ) : 
+	explicit SafeArray( const char* name, T* allocated_mem, int initSize ) : 
 	  Name( name )
 	, ChunkSize( DefaultChunkSize )
 	, m_ptr( allocated_mem )
@@ -102,7 +100,10 @@ protected:
 
 	virtual T* _virtual_realloc( int newsize )
 	{
-		return (T*)realloc( m_ptr, newsize * sizeof(T) );
+		return (T*)((m_ptr == NULL) ? 
+			malloc( newsize * sizeof(T) ) :
+			realloc( m_ptr, newsize * sizeof(T) )
+		);
 	}
 
 public:
@@ -111,7 +112,7 @@ public:
 		safe_free( m_ptr );
 	}
 
-	explicit SafeArray( const std::string& name="Unnamed" ) : 
+	explicit SafeArray( const char* name="Unnamed" ) : 
 	  Name( name )
 	, ChunkSize( DefaultChunkSize )
 	, m_ptr( NULL )
@@ -119,13 +120,13 @@ public:
 	{
 	}
 
-	explicit SafeArray( int initialSize, const std::string& name="Unnamed" ) : 
+	explicit SafeArray( int initialSize, const char* name="Unnamed" ) : 
 	  Name( name )
 	, ChunkSize( DefaultChunkSize )
-	, m_ptr( (T*)malloc( initialSize * sizeof(T) ) )
+	, m_ptr( (initialSize==0) ? NULL : (T*)malloc( initialSize * sizeof(T) ) )
 	, m_size( initialSize )
 	{
-		if( m_ptr == NULL )
+		if( (initialSize != 0) && (m_ptr == NULL) )
 			throw Exception::OutOfMemory();
 	}
 
@@ -134,24 +135,37 @@ public:
 	// Returns the size of the memory allocation in bytes.
 	int GetSizeInBytes() const { return m_size * sizeof(T); }
 
+	// reallocates the array to the explicit size.  Can be used to shrink or grow an
+	// array, and bypasses the internal threshold growth indicators.	
+	void ExactAlloc( int newsize )
+	{
+		if( newsize == m_size ) return;
+
+		m_ptr = _virtual_realloc( newsize );
+		if( m_ptr == NULL )
+		{
+			throw Exception::OutOfMemory(
+				"Out-of-memory on block re-allocation. "
+				"Old size: " + to_string( m_size ) + " bytes, "
+				"New size: " + to_string( newsize ) + " bytes"
+				);
+		}
+		m_size = newsize;
+	}
+
 	// Ensures that the allocation is large enough to fit data of the
 	// amount requested.  The memory allocation is not resized smaller.
-	void MakeRoomFor( int blockSize )
+	void MakeRoomFor( int newsize )
 	{
-		if( blockSize > m_size )
-		{
-			const uint newalloc = blockSize + ChunkSize;
-			m_ptr = _virtual_realloc( newalloc );
-			if( m_ptr == NULL )
-			{
-				throw Exception::OutOfMemory(
-					"Out-of-memory on block re-allocation. "
-					"Old size: " + to_string( m_size ) + " bytes, "
-					"New size: " + to_string( newalloc ) + " bytes"
-				);
-			}
-			m_size = newalloc;
-		}
+		if( newsize > m_size )
+			ExactAlloc( newsize );
+	}
+	
+	// Extends the containment area of the array.  Extensions are performed
+	// in chunks.
+	void GrowBy( int items )
+	{
+		MakeRoomFor( m_size + ChunkSize + items + 1 );
 	}
 
 	// Gets a pointer to the requested allocation index.
@@ -185,7 +199,7 @@ protected:
 		{
 			assert( 0 );	// makes debugging easier sometimes. :)
 			throw Exception::IndexBoundsFault(
-				"Index out of bounds on SafeArray: " + Name + 
+				"Index out of bounds on SafeArray: " + std::string(Name) + 
 				" (index=" + to_string(i) + 
 				", size=" + to_string(m_size) + ")"
 			);
@@ -206,15 +220,13 @@ public:
 	static const int DefaultChunkSize = 0x80 * sizeof(T);
 
 public: 
-	const std::string Name;		// user-assigned block name
+	const char* Name;		// user-assigned block name
 	int ChunkSize;				// assigned DefaultChunkSize on init, reconfigurable at any time.
 
 protected:
 	T* m_ptr;
 	int m_allocsize;	// size of the allocation of memory
 	uint m_length;		// length of the array (active items, not buffer allocation)
-
-	const static std::string m_str_Unnamed;
 
 protected:
 	virtual T* _virtual_realloc( int newsize )
@@ -229,7 +241,7 @@ protected:
 		{
 			assert( 0 );	// makes debugging easier sometimes. :)
 			throw Exception::IndexBoundsFault(
-				"Index out of bounds on SafeArray: " + Name + 
+				"Index out of bounds on SafeArray: " + std::string(Name) + 
 				" (index=" + to_string(i) + 
 				", length=" + to_string(m_length) + ")"
 			);
@@ -243,7 +255,7 @@ public:
 		safe_free( m_ptr );
 	}
 
-	explicit SafeList( const std::string& name="Unnamed" ) : 
+	explicit SafeList( const char* name="Unnamed" ) : 
 		Name( name )
 	,	ChunkSize( DefaultChunkSize )
 	,	m_ptr( NULL )
@@ -252,7 +264,7 @@ public:
 	{
 	}
 
-	explicit SafeList( int initialSize, const std::string& name="Unnamed" ) : 
+	explicit SafeList( int initialSize, const char* name="Unnamed" ) : 
 		Name( name )
 	,	ChunkSize( DefaultChunkSize )
 	,	m_ptr( (T*)malloc( initialSize * sizeof(T) ) )
@@ -312,8 +324,8 @@ public:
 	// Appends an item to the end of the list and returns a handle to it.
 	T& New()
 	{
-		MakeRoomFor( m_length + 1 );
-		return m_ptr[m_length];
+		_MakeRoomFor_threshold( m_length + 1 );
+		return m_ptr[m_length++];
 	}
 
 	// Gets an element of this memory allocation much as if it were an array.
@@ -326,7 +338,7 @@ public:
 
 	int Add( const T& src )
 	{
-		MakeRoomFor( m_length + 1 );
+		_MakeRoomFor_threshold( m_length + 1 );
 		m_ptr[m_length] = src;
 		return m_length++;
 	}
@@ -334,7 +346,7 @@ public:
 	// Same as Add, but returns the handle of the new object instead of it's array index.
 	T& AddNew( const T& src )
 	{
-		MakeRoomFor( m_length + 1 );
+		_MakeRoomFor_threshold( m_length + 1 );
 		m_ptr[m_length] = src;
 		return m_ptr[m_length];
 	}
@@ -358,6 +370,12 @@ public:
 	}
 
 protected:
+
+	void _MakeRoomFor_threshold( int newsize )
+	{
+		MakeRoomFor( newsize + ChunkSize );
+	}
+
 	// A safe array index fetcher.  Throws an exception if the array index
 	// is outside the bounds of the array.
 	// Performance Considerations: This function adds quite a bit of overhead
@@ -382,18 +400,21 @@ class SafeAlignedArray : public SafeArray<T>
 protected:
 	T* _virtual_realloc( int newsize )
 	{
-		return (T*)_aligned_realloc( this->m_ptr, newsize * sizeof(T), Alignment );
+		return (T*)( ( m_ptr == NULL ) ?
+			_aligned_malloc( newsize * sizeof(T), Alignment ) :
+			_aligned_realloc( m_ptr, newsize * sizeof(T), Alignment )
+		);
 	}
 
 	// Appends "(align: xx)" to the name of the allocation in devel builds.
 	// Maybe useful,maybe not... no harm in attaching it. :D
-	string _getName( const string& src )
+	/*string _getName( const string& src )
 	{
 #ifdef PCSX2_DEVBUILD
-		return src + "(align:" + to_string(Alignment) + ")";
+		return src + ;
 #endif
 		return src;
-	}
+	}*/
 
 public:
 	virtual ~SafeAlignedArray()
@@ -402,14 +423,14 @@ public:
 		// mptr is set to null, so the parent class's destructor won't re-free it.
 	}
 
-	explicit SafeAlignedArray( const std::string& name="Unnamed" ) : 
+	explicit SafeAlignedArray( const char* name="Unnamed" ) : 
 		SafeArray<T>::SafeArray( name )
 	{
 	}
 
-	explicit SafeAlignedArray( int initialSize, const std::string& name="Unnamed" ) : 
+	explicit SafeAlignedArray( int initialSize, const char* name="Unnamed" ) : 
 		SafeArray<T>::SafeArray(
-			_getName(name),
+			name,
 			(T*)_aligned_malloc( initialSize * sizeof(T), Alignment ),
 			initialSize 
 		)
