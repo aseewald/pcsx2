@@ -486,7 +486,7 @@ protected:
 	// used to flag instructions which have a "critical" side effect elsewhere in emulation-
 	// land -- such as modifying COP0 registers, or other functions which cannot be safely
 	// optimized.
-	virtual void SetSideEffects() const {}
+	virtual void SetSideEffects() {}
 
 	// -------------------------------------------------------------------------
 	// Helpers used to initialize the object state.
@@ -535,6 +535,17 @@ public:
 	bool ReadsHi() const { return m_ReadsGPR.Hi; }
 	bool ReadsLo() const { return m_ReadsGPR.Lo; }
 	bool ReadsFs() const { return m_ReadsGPR.Fs; }
+	bool ReadsMemory() const { return m_ReadsGPR.Memory; }
+
+	bool WritesRd() const { return m_WritesGPR.Rd; }
+	bool WritesRt() const { return m_WritesGPR.Rt; }
+	bool WritesRs() const { return m_WritesGPR.Rs; }
+	bool WritesHi() const { return m_WritesGPR.Hi; }
+	bool WritesLo() const { return m_WritesGPR.Lo; }
+	bool WritesFs() const { return m_WritesGPR.Fs; }
+	bool WritesLink() const { return m_WritesGPR.Link; }
+	bool WritesMemory() const { return m_WritesGPR.Memory; }
+
 	bool HasSideEffects() const { return m_HasSideEffects; }
 
 protected:
@@ -575,6 +586,58 @@ protected:
 	virtual void MemoryWrite32( u32 addr, u32 val );
 
 	virtual void SetSideEffects() { m_HasSideEffects = true; }
+};
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+class InstructionConstOpt : public InstructionOptimizer
+{
+public:
+	GprStatus SignExtendOnWrite;		// flags for each GPR, describing if it's sign-extended on write (or not)
+
+	// Const values of registers on input:
+
+	IntSign32 ConstVal_Rd;
+	IntSign32 ConstVal_Rt;
+	IntSign32 ConstVal_Rs;
+	IntSign32 ConstVal_Hi;
+	IntSign32 ConstVal_Lo;
+	
+	GprStatus IsConstInput;
+
+public:
+	InstructionConstOpt() {}
+
+	InstructionConstOpt( const Opcode& opcode ) :
+		InstructionOptimizer( opcode )
+	{
+		SignExtendOnWrite.Value = false;
+		IsConstInput.Value = false;
+	}
+
+	void Assign( const Opcode& opcode, bool constStatus[34] );
+
+public:
+	__releaseinline void Process()
+	{
+		Instruction::Process( *this );
+	}
+
+protected:
+	void SetRd_SL( s32 src ) { if(!_Rd_) return; m_WritesGPR.Rd = true; SignExtendOnWrite.Rd = true; iopRegs.GPR.r[_Rd_].SL = src; }
+	void SetRt_SL( s32 src ) { if(!_Rt_) return; m_WritesGPR.Rt = true; SignExtendOnWrite.Rt = true; iopRegs.GPR.r[_Rt_].SL = src; }
+	void SetRs_SL( s32 src ) { if(!_Rs_) return; m_WritesGPR.Rs = true; SignExtendOnWrite.Rs = true; iopRegs.GPR.r[_Rs_].SL = src; }
+	void SetHi_SL( s32 src ) { m_WritesGPR.Hi = true; SignExtendOnWrite.Hi = true; iopRegs.GPR.n.hi.SL = src; }
+	void SetLo_SL( s32 src ) { m_WritesGPR.Lo = true; SignExtendOnWrite.Lo = true; iopRegs.GPR.n.lo.SL = src; }
+	void SetFs_SL( s32 src ) { m_WritesGPR.Fs = true; SignExtendOnWrite.Fs = true; iopRegs.CP0.r[_Rd_].SL = src; }
+	void SetLink( u32 addr ) { m_WritesGPR.Link = true; iopRegs.GPR.n.ra.UL = addr; }
+
+	void SetRd_UL( u32 src ) { if(!_Rd_) return; m_WritesGPR.Rd = true; SignExtendOnWrite.Rd = false; iopRegs.GPR.r[_Rd_].UL = src; }
+	void SetRt_UL( u32 src ) { if(!_Rt_) return; m_WritesGPR.Rt = true; SignExtendOnWrite.Rt = false; iopRegs.GPR.r[_Rt_].UL = src; }
+	void SetRs_UL( u32 src ) { if(!_Rs_) return; m_WritesGPR.Rs = true; SignExtendOnWrite.Rs = false; iopRegs.GPR.r[_Rs_].UL = src; }
+	void SetHi_UL( u32 src ) { m_WritesGPR.Hi = true; SignExtendOnWrite.Hi = false; iopRegs.GPR.n.hi.UL = src; }
+	void SetLo_UL( u32 src ) { m_WritesGPR.Lo = true; SignExtendOnWrite.Lo = false; iopRegs.GPR.n.lo.UL = src; }
+	void SetFs_UL( u32 src ) { m_WritesGPR.Fs = true; SignExtendOnWrite.Fs = false; iopRegs.CP0.r[_Rd_].UL = src; }
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////

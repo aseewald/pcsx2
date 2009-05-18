@@ -62,19 +62,6 @@ protected:
 	recBlockItem& _getItem( u32 pc );
 };
 
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
-void recBlockItem::Assign( const recBlockItemTemp& src )
-{
-	ValidationCopy.ExactAlloc( src.ramlen );
-	IL.ExactAlloc( src.instlen );
-
-	memcpy( ValidationCopy.GetPtr(), src.ramcopy, src.ramlen*sizeof(u32) );
-	memcpy( IL.GetPtr(), src.inst, src.instlen*sizeof(InstructionOptimizer) );
-}
-
-
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 
@@ -92,8 +79,6 @@ static xBlockLutAlloc* m_xBlockLutAlloc = NULL;
 static u8** m_xBlockLut = NULL;
 static xBlocksMap m_xBlockMap;
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 namespace DynFunc
 {
 	// allocate one page for our naked dispatcher functions.
@@ -106,6 +91,29 @@ namespace DynFunc
 	u8* CallEventHandler = NULL;
 	u8* Dispatcher = NULL;
 	u8* ExitRec = NULL;		// just a ret!
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+void recBlockItem::Assign( const recBlockItemTemp& src )
+{
+	// Note: unchecked pages (ROM, ROM1, or other read-only non-RAM pages) specify a
+	// ramlen of 0.. so handle it accordingly:
+
+	if( src.ramlen != 0 )
+	{
+		ValidationCopy.ExactAlloc( src.ramlen );
+		memcpy( ValidationCopy.GetPtr(), src.ramcopy, src.ramlen*sizeof(u32) );
+	}
+	else
+		ValidationCopy.Dispose();
+
+	// Instruction / IL cache (which should never be zero)
+
+	jASSUME( src.instlen != 0 );
+	IL.ExactAlloc( src.instlen );
+	memcpy( IL.GetPtr(), src.inst, src.instlen*sizeof(InstructionConstOpt) );
+	clears++;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -225,20 +233,54 @@ static u32 EventHandler()
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
+
+// Block (in-)validation Patterns of the IOP, and how to optimize for it:
+//
+// Currently the IOP recompiler uses a simple (and fail-safe) approach of manually checking
+// the integrity of a block when the block is run.  I've done quite a bit of careful re-
+// search in deciding on this approach.
+//
+//
+// Q: Why not Virtual Protection like what the EErec uses?
+// A: The IOP tends to mix code and data in the same 4k page with relative certainty, such
+//    that very few pages won't end up being manually-checked anyway.  I suspect this is
+//    for two reasons; the IOP's code is likely often written in ASM as much as it is
+//    in C, and the modules are self-contained replacable units which probably just store
+//    their data at a location relative to the code (and well-packed to conserve memory,
+//    since the IOP only has 2MB).
+//
+// Q: Why not clear invalidated blocks on write?
+// A: Complexity, for one.  Self-checked manual blocks are safe against all forms of
+//    invalidation, including DMA transfers and writes from the EE's special mapping of
+//    IOP ram.  Using clears means having to carefully ensure all code that can write IOP's
+//    ram is accompanied with a Clear call.  Furthermore, block lookups are generally slow
+//    and not very cache friendly .. so there's a (good) chance manual self-checks are
+//    the same speed or faster anyway.
+// 
+
 static void recRecompile()
 {
-	// Look up block...
+	// Look up the block...
+	// (Mask the IOP address accordingly to account for the many various segments and
+	//  mirrors).
+
 	u32 masked_pc = iopRegs.pc & IopMemory::AddressMask;
+	if( masked_pc < 0x800000 )
+		masked_pc &= Ps2MemSize::IopRam-1;
+	
 	xBlocksMap::Blockmap_iterator blowme( m_xBlockMap.Map.find( masked_pc ) );
 
 	memzero_obj( m_RecState );
 	//m_RecState.pc = iopRegs.pc;
 
-	recIL_Block();
-	
 	if( blowme == m_xBlockMap.Map.end() )
 	{
-		Console::WriteLn( "IOP Caching block at PC: 0x%08x  (total blocks=%d)", params masked_pc, m_xBlockMap.Blocks.GetLength() );
+		//Console::WriteLn( "IOP First-pass block at PC: 0x%08x  (total blocks=%d)", params masked_pc, m_xBlockMap.Blocks.GetLength() );
+		recIL_Block();
+
+		if( !IsIopRamPage( masked_pc ) )	// disable block checking for non-ram (rom, rom1, etc)
+			m_blockspace.ramlen = 0;
+		
 		m_xBlockMap.Map[masked_pc] = m_xBlockMap.Blocks.GetLength();
 		m_xBlockMap.Blocks.New().Assign( m_blockspace );
 	}
@@ -246,14 +288,38 @@ static void recRecompile()
 	{
 		recBlockItem& mess( m_xBlockMap.Blocks[blowme->second] );
 
-		// Memory integrity check:
-		if( (mess.ValidationCopy.GetLength() != m_blockspace.ramlen) ||
-			memcmp( mess.ValidationCopy.GetPtr(), m_blockspace.ramcopy, m_blockspace.ramlen*sizeof(u32) != 0 ) )
+		int numinsts = mess.IL.GetLength();
+		if( numinsts != 0 )
 		{
-			Console::WriteLn( "-/- IOP Clearing block at PC: 0x%08x [oldlen=%d, newlen=%d]",
-				params masked_pc, mess.ValidationCopy.GetLength(), m_blockspace.ramlen );
-			mess.Assign( m_blockspace );
+			// Second Pass Time -- Compile to x86 code!
+			// ----------------------------------------
+
+			if(mess.ValidationCopy.GetLength() != 0)
+			{
+				// Integrity check --> if the program code has been altered just repeat the 
+				// first pass interpreter.
+
+				const u32* maskptr = (u32*)IopMemory::iopGetPhysPtr( masked_pc );
+				const u32* validptr = (u32*)mess.ValidationCopy.GetPtr();
+
+				if(	(memcmp( validptr, maskptr, mess.ValidationCopy.GetSizeInBytes()) != 0) )
+				{
+					Console::WriteLn( "-/- IOP Clearing block at PC: 0x%08x", params masked_pc );
+
+					recIL_Block();
+					mess.Assign( m_blockspace );
+					return;
+				}
+			}
+
+			//Console::WriteLn( "IOP Second-pass block at PC: 0x%08x  (total blocks=%d)", params masked_pc, m_xBlockMap.Blocks.GetLength() );
+
+			// Integrity Verified... Generate X86.
+
+			//recIL_Pass2();
+			mess.IL.Dispose();
 		}
+		recIL_Block();
 	}
 }
 

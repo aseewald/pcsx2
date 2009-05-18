@@ -76,5 +76,26 @@ namespace R3000A {
 	{
 		iopException( code, iopRegs.IsDelaySlot );
 		m_NextPC = iopRegs.VectorPC+4;
+		SetSideEffects();
+	}
+	
+	__instinline void InstructionConstOpt::Assign( const Opcode& opcode, bool constStatus[34] )
+	{
+		InstructionOptimizer::Assign( opcode );
+		SignExtendOnWrite.Value = false;
+		
+		IsConstInput.Value = false;
+		IsConstInput.Rd = constStatus[_Rd_];
+		IsConstInput.Rt = constStatus[_Rt_];
+		IsConstInput.Rs = constStatus[_Rs_];
+		IsConstInput.Hi = constStatus[32];
+		IsConstInput.Lo = constStatus[33];
+
+		ConstVal_Rd = iopRegs.GPR.r[_Rd_];
+		ConstVal_Rt = iopRegs.GPR.r[_Rt_];
+		ConstVal_Rs = iopRegs.GPR.r[_Rs_];
+
+		ConstVal_Hi = iopRegs.GPR.r[32];
+		ConstVal_Lo = iopRegs.GPR.r[33];
 	}
 }

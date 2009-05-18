@@ -145,9 +145,6 @@ namespace R3000A
 //
 class IntermediateInstruction
 {
-	// Callback to emit the instruction in question.
-	void (*Emitter)();
-
 public:
 	// Source operands can either be const/non-const and can have either a register
 	// or memory operand allocated to them (at least one but never both).  Even if
@@ -171,12 +168,7 @@ public:
 	xDirectOrIndirect DestLo;
 
 	xImmOrReg ixImm;
-	bool SignExtendOnLoad;
-	
-	InstructionOptimizer Inst;		// raw instruction information.
-
-protected:
-	GprStatus m_IsConst;
+	InstructionConstOpt Inst;		// raw instruction information.
 
 public:
 	IntermediateInstruction() :
@@ -185,9 +177,9 @@ public:
 public:
 	s32 GetImm() const { return ixImm.GetImm(); }
 	
-	bool IsConstRs() const { return m_IsConst.Rs; }
-	bool IsConstRt() const { return m_IsConst.Rt; }
-	bool IsConstRd() const { return m_IsConst.Rd; }
+	bool IsConstRs() const { return Inst.IsConstInput.Rs; }
+	bool IsConstRt() const { return Inst.IsConstInput.Rt; }
+	bool IsConstRd() const { return Inst.IsConstInput.Rd; }
 
 	void AddImmTo( const xRegister32& dest ) const 
 	{
@@ -261,7 +253,7 @@ public:
 	{
 		if( DestRt.IsReg() )
 		{
-			if( SignExtendOnLoad )
+			if( Inst.SignExtendOnWrite.Rt )
 				xMOVSX( DestRt.GetReg(), src );
 			else
 				xMOVZX( DestRt.GetReg(), src );
@@ -271,7 +263,7 @@ public:
 			// pooh.. gotta move the 'hard' way :(
 			// (src->temp->dest)
 
-			if( SignExtendOnLoad )
+			if( Inst.SignExtendOnWrite.Rt )
 				xMOVSX( tempreg, src );
 			else
 				xMOVZX( tempreg, src );
@@ -294,7 +286,7 @@ public:
 	{
 		if( DestRt.IsReg() )
 		{
-			if( SignExtendOnLoad )
+			if( Inst.SignExtendOnWrite.Rt )
 				xMOVSX( DestRt.GetReg(), src );
 			else
 				xMOVZX( DestRt.GetReg(), src );
@@ -304,7 +296,7 @@ public:
 			// pooh.. gotta move the 'hard' way :(
 			// (src->temp->dest)
 
-			if( SignExtendOnLoad )
+			if( Inst.SignExtendOnWrite.Rt )
 				xMOVSX( tempreg, src );
 			else
 				xMOVZX( tempreg, src );
@@ -409,7 +401,7 @@ static const int MaxCyclesPerBlock = 128;
 //
 struct recBlockItemTemp
 {
-	InstructionOptimizer inst[MaxCyclesPerBlock];
+	InstructionConstOpt inst[MaxCyclesPerBlock];
 	u32 ramcopy[MaxCyclesPerBlock];
 	int ramlen;
 	int instlen;
@@ -420,10 +412,11 @@ struct recBlockItemTemp
 struct recBlockItem : public NoncopyableObject
 {
 	uint x86len;	// length of the recompiled block
-
+	uint clears;	// number of times this block has been cleared and recompiled
+	
 	// Intermediate language allocation.  If size is non-zero, then we're on our second pass
 	// and the IL should be recompiled into x86 code for direct execution.
-	SafeArray<InstructionOptimizer> IL;
+	SafeArray<InstructionConstOpt> IL;
 
 	// A list of all block links dependent on this block.  If this block moves, then all links
 	// in this list need to have their x86 jump instructions rewritten.
@@ -437,6 +430,7 @@ struct recBlockItem : public NoncopyableObject
 
 	recBlockItem() :
 		x86len( 0 ),
+		clears( 0 ),
 		IL( "recBlockItem::IL" ),
 		DependentLinks( 4, "recBlockItem::DependentLinks" ),
 		ValidationCopy( "recBlockItem::ValidationCopy" )

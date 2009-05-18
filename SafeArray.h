@@ -129,6 +129,13 @@ public:
 		if( (initialSize != 0) && (m_ptr == NULL) )
 			throw Exception::OutOfMemory();
 	}
+	
+	// Clears the contents of the array to zero, and frees all memory allocations.
+	void Dispose()
+	{
+		m_size = 0;
+		safe_free( m_ptr );
+	}
 
 	// Returns the size of the memory allocation, as according to the array type.
 	int GetLength() const { return m_size; }

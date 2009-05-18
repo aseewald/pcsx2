@@ -76,7 +76,7 @@ void Instruction::_dispatch_REGIMM( T& inst )
 	switch( inst._Rt_ )
 	{
 		ex(BLTZ)    ex(BGEZ)    null()     null()     null()     null()     null()     null()
-		null()      null()      null()     null()     null()     null()     null()    null()
+		null()      null()      null()     null()     null()     null()     null()     null()
 		ex(BLTZAL)  ex(BGEZAL)  null()     null()     null()     null()     null()     null()
 	}
 	inst.Unknown();

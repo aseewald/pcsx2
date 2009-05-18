@@ -104,7 +104,7 @@ static __releaseinline void intStep()
 		// Optimization note: NOPs are almost never issued in pairs, so changing the if()
 		// above into a while() actually decreases overall performance.
 
-		PSXCPU_LOG( "NOP" );
+		PSXCPU_LOG( "NOP", iopRegs.IsDelaySlot ? "\n" : "" );
 
 		iopRegs.pc			 = iopRegs.VectorPC;
 		iopRegs.VectorPC	+= 4;

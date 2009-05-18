@@ -33,12 +33,12 @@ static __forceinline void _OverflowCheck( const Instruction& inst, u64 result )
 	// overflow, which simply compares bit 32 (rightmost bit of the upper word),
 	// against bit 31 (leftmost of the lower word).
 
-	//assert( 0 );
-
 	const u32* const resptr = (u32*)&result;
 
 	if( !!(resptr[1] & 1) != !!(resptr[0] & 0x80000000) )
 		throw R3000Exception::Overflow( inst );
+		
+	//SetSideEffects();		// because of overflow exception handling.
 }
 
 /*********************************************************
@@ -142,7 +142,6 @@ __instinline void Inst::ADDI()
 	s64 result = (s64)GetRs().SL + Imm();
 	_OverflowCheck( *this, result );
 	SetRt_SL( (s32)result );
-	SetSideEffects();		// because of overflow exception handling.
 }
 
 // Rt = Rs + Im (no exception)
@@ -196,7 +195,6 @@ __instinline void Inst::ADD()
 	
 	_OverflowCheck( *this, result );
 	SetRd_SL( (s32)result );
-	SetSideEffects();		// because of overflow exception handling.
 }
 
 // Rd = Rs - Rt		(Exception on Integer Overflow)
@@ -206,7 +204,6 @@ __instinline void Inst::SUB()
 
 	_OverflowCheck( *this, result );
 	SetRd_SL( (s32)result );
-	SetSideEffects();		// because of overflow exception handling.
 }
 
 __instinline void Inst::ADDU()	// Rd = Rs + Rt
@@ -410,17 +407,19 @@ __instinline void Inst::MTLO()	// Lo = Rs
 __instinline void Inst::BREAK()
 {
 	RaiseException( IopExcCode::Breakpoint );
+	SetSideEffects();
 }
 
 __instinline void Inst::SYSCALL()
 {
 	RaiseException( IopExcCode::Syscall );
+	SetSideEffects();
 }
 
 __instinline void Inst::_RFE()
 {
-	SetSideEffects();
 	iopRegs.CP0.n.Status = (iopRegs.CP0.n.Status & 0xfffffff0) | ((iopRegs.CP0.n.Status & 0x3c) >> 2);
+	//SetSideEffects();
 }
 
 __instinline void Inst::RFE()
@@ -610,13 +609,19 @@ __instinline void Inst::CFC0()
 __instinline void Inst::MTC0()
 {
 	SetFs_UL( GetRt().UL );
-	SetSideEffects();
+	
+	// Writes to the CP0.Status register qualifies for having side effects.
+	if( _Rd_ == 12 )
+		SetSideEffects();
 }
 
 __instinline void Inst::CTC0()
 {
 	SetFs_UL( GetRt().UL );
-	SetSideEffects();
+
+	// Writes to the CP0.Status register qualifies for having side effects.
+	if( _Rd_ == 12 )
+		SetSideEffects();
 }
 
 /*********************************************************

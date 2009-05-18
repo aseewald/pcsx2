@@ -70,6 +70,8 @@ extern void psxMemAlloc();
 extern void psxMemReset();
 extern void psxMemShutdown();
 
+extern bool IsIopRamPage( u32 iopaddr );
+
 extern u8   iopMemRead8 (u32 mem);
 extern u16  iopMemRead16(u32 mem);
 extern u32  iopMemRead32(u32 mem);
@@ -138,12 +140,7 @@ namespace IopMemory
 	PCSX2_ALIGNED_EXTERN( 64, TranslationTable tbl_Translation );		// 512k table via 4k pages
 	PCSX2_ALIGNED_EXTERN( 64, void* const tbl_IndirectHandlers[2][3][ HandlerId_Maximum ] );
 	
-	extern u8 __fastcall Read8( u32 iopaddr );
-	extern u16 __fastcall Read16( u32 iopaddr );
-	extern u32 __fastcall Read32( u32 iopaddr );
-	extern void __fastcall Write8( u32 iopaddr, u8 writeval );
-	extern void __fastcall Write16( u32 iopaddr, u16 writeval );
-	extern void __fastcall Write32( u32 iopaddr, u32 writeval );
+	extern u8* __fastcall iopGetPhysPtr( u32 iopaddr );
 
 	extern mem8_t __fastcall SifRead8( u32 iopaddr );
 	extern mem16_t __fastcall SifRead16( u32 iopaddr );
@@ -161,7 +158,6 @@ namespace IopMemory
 	extern void __fastcall iopHwWrite8_generic( u32 addr, mem8_t val );
 	extern void __fastcall iopHwWrite16_generic( u32 addr, mem16_t val );
 	extern void __fastcall iopHwWrite32_generic( u32 addr, mem32_t val );
-
 
 	extern mem8_t __fastcall iopHwRead8_Page1( u32 iopaddr );
 	extern mem8_t __fastcall iopHwRead8_Page3( u32 iopaddr );

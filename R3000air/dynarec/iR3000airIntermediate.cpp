@@ -37,7 +37,7 @@ static const xAddressReg GPR_xIndexReg( esi );
 //
 void recIL_Expand( IntermediateInstruction& iInst )
 {
-	const InstructionOptimizer& dudley = iInst.Inst;
+	const InstructionConstOpt& dudley = iInst.Inst;
 	
 	if( dudley.ReadsRd() )
 	{
@@ -45,6 +45,11 @@ void recIL_Expand( IntermediateInstruction& iInst )
 }
 
 recBlockItemTemp m_blockspace;
+
+#ifdef PCSX2_DEVBUILD
+static string m_disasm;
+static string m_comment;
+#endif
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Generates IL for an entire block of code.
@@ -56,6 +61,8 @@ void recIL_Block()
 	m_blockspace.ramlen = 0;
 	m_blockspace.instlen = 0;
 
+	bool gpr_IsConst[34] = { true, false };	// GPR0 is always const!
+
 	do 
 	{
 		Opcode opcode( iopMemDirectRead32( iopRegs.pc ) );
@@ -63,7 +70,7 @@ void recIL_Block()
 
 		if( opcode.U32 == 0 )	// Iggy on the NOP please!  (Iggy Nop!)
 		{
-			//PSXCPU_LOG( "NOP" );
+			PSXCPU_LOG( "NOP%s", iopRegs.IsDelaySlot ? "\n" : "" );
 
 			iopRegs.pc			 = iopRegs.VectorPC;
 			iopRegs.VectorPC	+= 4;
@@ -71,10 +78,55 @@ void recIL_Block()
 		}
 		else
 		{
-			//InstructionOptimizer& inst( (block.IL.New()) );
-			InstructionOptimizer& inst( m_blockspace.inst[m_blockspace.instlen++] );
-			inst.Assign( opcode );
-			InstructionOptimizer::Process( inst );
+			#ifdef PCSX2_DEVBUILD
+			if( (varLog & 0x00100000) && iopRegs.cycle > 0x40000 )
+			{
+				InstructionDiagnostic diag( opcode );
+				diag.Process();
+				diag.GetDisasm( m_disasm );
+				diag.GetValuesComment( m_comment );
+
+				if( m_comment.empty() )
+					PSXCPU_LOG( "%s%s", m_disasm.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
+				else
+					PSXCPU_LOG( "%-34s ; %s%s", m_disasm.c_str(), m_comment.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
+			}
+			#endif
+
+			InstructionConstOpt& inst( m_blockspace.inst[m_blockspace.instlen] );
+			inst.Assign( opcode, gpr_IsConst );
+			inst.Process();
+
+			// Update const status for registers.  The const status of all written registers is
+			// based on the const status of the read registers.  If the operation reads from
+			// memory or from an Fs register, then const status is always false.
+			
+			bool constStatus;
+			
+			if( inst.ReadsMemory() || inst.ReadsFs() )
+				constStatus = false;
+			else
+			{
+				constStatus = 
+					(inst.ReadsRd() ? gpr_IsConst[inst._Rd_] : true) &&
+					(inst.ReadsRt() ? gpr_IsConst[inst._Rt_] : true) &&
+					(inst.ReadsRs() ? gpr_IsConst[inst._Rs_] : true) &&
+					(inst.ReadsHi() ? gpr_IsConst[32] : true) &&
+					(inst.ReadsLo() ? gpr_IsConst[33] : true);
+			}
+
+			if( inst.WritesRd() ) gpr_IsConst[inst._Rd_] = constStatus;
+			if( inst.WritesRt() ) gpr_IsConst[inst._Rt_] = constStatus;
+			if( inst.WritesRs() ) gpr_IsConst[inst._Rs_] = constStatus;
+
+			jASSUME( gpr_IsConst[0] == true );		// GPR 0 should *always* be const
+
+			if( inst.WritesLink() ) gpr_IsConst[31] = constStatus;
+			if( inst.WritesHi() ) gpr_IsConst[32] = constStatus;
+			if( inst.WritesLo() ) gpr_IsConst[33] = constStatus;
+
+			if( !constStatus || inst.WritesMemory() || inst.IsBranchType() || inst.HasSideEffects() )
+				m_blockspace.instlen++;
 
 			// prep the iopRegs for the next instruction fetch -->
 			// 
@@ -98,6 +150,10 @@ void recIL_Block()
 
 			if( inst.GetDivStall() != 0 )
 				DivStallUpdater( m_RecState.DivCycleAccum, inst.GetDivStall() );
+
+			// RFE, SYSCALL and BREAK cause exceptions, which should terminate block recompilation:
+			if( inst.HasSideEffects() )
+				delaySlot = true;
 		}
 
 		m_RecState.IncCycleAccum();
@@ -105,6 +161,8 @@ void recIL_Block()
 		delaySlot = iopRegs.IsDelaySlot;
 
 	} while( m_RecState.BlockCycleAccum < MaxCyclesPerBlock );
+
+	jASSUME( m_blockspace.instlen != 0 );
 
 	iopRegs.cycle += m_RecState.BlockCycleAccum;
 }
@@ -120,19 +178,19 @@ ModSibStrict<u32> GPR_GetMemIndexer( uint gpridx )
 	return ptr32[GPR_xIndexReg - ((32-gpridx)*4)];
 }
 
-static SafeList<IntermediateInstruction> il_List( 128 );
+static IntermediateInstruction m_intermediates[MaxCyclesPerBlock];
 
 //////////////////////////////////////////////////////////////////////////////////////////
-// Intermediate Pass 2 -- Assigns regalloc and const prop prior to the x86 codegen.
+// Intermediate Pass 2 -- Assigns regalloc prior to the x86 codegen.
 //
-void recIL_Pass2( SafeList<InstructionOptimizer>& iList )
+void recIL_Pass2( const SafeArray<InstructionConstOpt>& iList )
 {
+
 	// First instruction starts out as a blank slate:
-	const InstructionOptimizer& first( iList[0] );
+	const InstructionConstOpt& first( iList[0] );
 	const Opcode& effop( first._Opcode_ );
 
-	il_List.Clear();
-	IntermediateInstruction& fnew( il_List.New() );
+	IntermediateInstruction& fnew( m_intermediates[0] );
 	
 	fnew.SrcRs = GPR_GetMemIndexer( effop.Rs() );
 	fnew.SrcRt = GPR_GetMemIndexer( effop.Rt() );
@@ -141,8 +199,8 @@ void recIL_Pass2( SafeList<InstructionOptimizer>& iList )
 	fnew.SrcHi = GPR_GetMemIndexer( 32 );		// Hi
 	fnew.SrcLo = GPR_GetMemIndexer( 33 );		// Lo
 
-
-	for( int i=1, len=iList.GetLength(); i<len; ++i )
+	int numinsts = iList.GetLength();
+	for( int i=1; i<numinsts; ++i )
 	{
 		
 	}
