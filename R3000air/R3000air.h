@@ -286,6 +286,18 @@ struct InstDiagInfo
 	const bool IsUnsigned;
 };
 
+enum RegField_t
+{
+	RF_Unused = -1,
+	RF_Rd = 0,
+	RF_Rt,
+	RF_Rs,
+	RF_Hi,
+	RF_Lo,
+
+	RF_Count		// total number of register fields
+};
+
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 struct Opcode
@@ -313,6 +325,20 @@ struct Opcode
 
 	Opcode( u32 src ) :
 		U32( src ) {}
+		
+	int RegField( RegField_t field ) const
+	{
+		switch( field )
+		{
+			case RF_Rd: return Rd();
+			case RF_Rt: return Rt();
+			case RF_Rs: return Rs();
+			case RF_Hi: return 32;
+			case RF_Lo: return 33;
+			
+			jNO_DEFAULT
+		}
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -426,6 +452,23 @@ public:
 	void DoBranch( u32 jumptarg );
 	void DoBranch();
 
+	// ------------------------------------------------------------------------
+
+	int RegField( RegField_t field ) const 
+	{
+		switch( field )
+		{
+			case RF_Rd: return _Rd_;
+			case RF_Rt: return _Rt_;
+			case RF_Rs: return _Rs_;
+			case RF_Hi: return 32;
+			case RF_Lo: return 33;
+			jNO_DEFAULT
+		}
+		return -1;
+	}
+
+
 	INSTRUCTION_API()
 
 protected:
@@ -529,6 +572,9 @@ public:
 	}
 
 public:
+	int ReadsField( RegField_t field ) const;
+	RegField_t WritesReg( int gpridx ) const;
+
 	bool ReadsRd() const { return m_ReadsGPR.Rd; }
 	bool ReadsRt() const { return m_ReadsGPR.Rt; }
 	bool ReadsRs() const { return m_ReadsGPR.Rs; }
@@ -586,6 +632,7 @@ protected:
 	virtual void MemoryWrite32( u32 addr, u32 val );
 
 	virtual void SetSideEffects() { m_HasSideEffects = true; }
+
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -593,7 +640,7 @@ protected:
 class InstructionConstOpt : public InstructionOptimizer
 {
 public:
-	GprStatus SignExtendOnWrite;		// flags for each GPR, describing if it's sign-extended on write (or not)
+	bool SignExtendOnWrite;		// flag describing if instruction is sign-extended on write (or not)
 
 	// Const values of registers on input:
 
@@ -611,7 +658,7 @@ public:
 	InstructionConstOpt( const Opcode& opcode ) :
 		InstructionOptimizer( opcode )
 	{
-		SignExtendOnWrite.Value = false;
+		SignExtendOnWrite = false;
 		IsConstInput.Value = false;
 	}
 
@@ -621,23 +668,24 @@ public:
 	__releaseinline void Process()
 	{
 		Instruction::Process( *this );
+		jASSUME( !ReadsRd() );		// Rd should always be a target register.
 	}
 
 protected:
-	void SetRd_SL( s32 src ) { if(!_Rd_) return; m_WritesGPR.Rd = true; SignExtendOnWrite.Rd = true; iopRegs.GPR.r[_Rd_].SL = src; }
-	void SetRt_SL( s32 src ) { if(!_Rt_) return; m_WritesGPR.Rt = true; SignExtendOnWrite.Rt = true; iopRegs.GPR.r[_Rt_].SL = src; }
-	void SetRs_SL( s32 src ) { if(!_Rs_) return; m_WritesGPR.Rs = true; SignExtendOnWrite.Rs = true; iopRegs.GPR.r[_Rs_].SL = src; }
-	void SetHi_SL( s32 src ) { m_WritesGPR.Hi = true; SignExtendOnWrite.Hi = true; iopRegs.GPR.n.hi.SL = src; }
-	void SetLo_SL( s32 src ) { m_WritesGPR.Lo = true; SignExtendOnWrite.Lo = true; iopRegs.GPR.n.lo.SL = src; }
-	void SetFs_SL( s32 src ) { m_WritesGPR.Fs = true; SignExtendOnWrite.Fs = true; iopRegs.CP0.r[_Rd_].SL = src; }
+	void SetRd_SL( s32 src ) { if(!_Rd_) return; m_WritesGPR.Rd = true; SignExtendOnWrite = true; iopRegs.GPR.r[_Rd_].SL = src; }
+	void SetRt_SL( s32 src ) { if(!_Rt_) return; m_WritesGPR.Rt = true; SignExtendOnWrite = true; iopRegs.GPR.r[_Rt_].SL = src; }
+	void SetRs_SL( s32 src ) { if(!_Rs_) return; m_WritesGPR.Rs = true; SignExtendOnWrite = true; iopRegs.GPR.r[_Rs_].SL = src; }
+	void SetHi_SL( s32 src ) { m_WritesGPR.Hi = true; SignExtendOnWrite = true; iopRegs.GPR.n.hi.SL = src; }
+	void SetLo_SL( s32 src ) { m_WritesGPR.Lo = true; SignExtendOnWrite = true; iopRegs.GPR.n.lo.SL = src; }
+	void SetFs_SL( s32 src ) { m_WritesGPR.Fs = true; SignExtendOnWrite = true; iopRegs.CP0.r[_Rd_].SL = src; }
 	void SetLink( u32 addr ) { m_WritesGPR.Link = true; iopRegs.GPR.n.ra.UL = addr; }
 
-	void SetRd_UL( u32 src ) { if(!_Rd_) return; m_WritesGPR.Rd = true; SignExtendOnWrite.Rd = false; iopRegs.GPR.r[_Rd_].UL = src; }
-	void SetRt_UL( u32 src ) { if(!_Rt_) return; m_WritesGPR.Rt = true; SignExtendOnWrite.Rt = false; iopRegs.GPR.r[_Rt_].UL = src; }
-	void SetRs_UL( u32 src ) { if(!_Rs_) return; m_WritesGPR.Rs = true; SignExtendOnWrite.Rs = false; iopRegs.GPR.r[_Rs_].UL = src; }
-	void SetHi_UL( u32 src ) { m_WritesGPR.Hi = true; SignExtendOnWrite.Hi = false; iopRegs.GPR.n.hi.UL = src; }
-	void SetLo_UL( u32 src ) { m_WritesGPR.Lo = true; SignExtendOnWrite.Lo = false; iopRegs.GPR.n.lo.UL = src; }
-	void SetFs_UL( u32 src ) { m_WritesGPR.Fs = true; SignExtendOnWrite.Fs = false; iopRegs.CP0.r[_Rd_].UL = src; }
+	void SetRd_UL( u32 src ) { if(!_Rd_) return; m_WritesGPR.Rd = true; SignExtendOnWrite = false; iopRegs.GPR.r[_Rd_].UL = src; }
+	void SetRt_UL( u32 src ) { if(!_Rt_) return; m_WritesGPR.Rt = true; SignExtendOnWrite = false; iopRegs.GPR.r[_Rt_].UL = src; }
+	void SetRs_UL( u32 src ) { if(!_Rs_) return; m_WritesGPR.Rs = true; SignExtendOnWrite = false; iopRegs.GPR.r[_Rs_].UL = src; }
+	void SetHi_UL( u32 src ) { m_WritesGPR.Hi = true; SignExtendOnWrite = false; iopRegs.GPR.n.hi.UL = src; }
+	void SetLo_UL( u32 src ) { m_WritesGPR.Lo = true; SignExtendOnWrite = false; iopRegs.GPR.n.lo.UL = src; }
+	void SetFs_UL( u32 src ) { m_WritesGPR.Fs = true; SignExtendOnWrite = false; iopRegs.CP0.r[_Rd_].UL = src; }
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////

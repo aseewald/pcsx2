@@ -90,7 +90,7 @@ public:
 class xDirectOrIndirect
 {
 	xRegister32 m_RegDirect;
-	ModSibBase m_MemIndirect;
+	xAddressInfo m_MemIndirect;
 
 public:
 	xDirectOrIndirect() :
@@ -99,11 +99,12 @@ public:
 	xDirectOrIndirect( const xRegister32& srcreg ) :
 		m_RegDirect( srcreg ), m_MemIndirect( 0 ) {}
 
-	xDirectOrIndirect( const ModSibBase& srcmem ) :
+	xDirectOrIndirect( const xAddressInfo& srcmem ) :
 		m_RegDirect(), m_MemIndirect( srcmem ) {}
 	
 	const xRegister32& GetReg() const { return m_RegDirect; }
-	const ModSibBase& GetMem() const { return m_MemIndirect; }
+	ModSibBase GetMem() const { return ptr[m_MemIndirect]; }
+	ModSibStrict<u32> GetMem32() const { return ptr32[m_MemIndirect]; }
 	bool IsReg() const { return !m_RegDirect.IsEmpty(); }
 };
 
@@ -115,7 +116,7 @@ public:
 struct xAnyOperand
 {
 	xRegister32 RegDirect;
-	ModSibStrict<u32> MemIndirect;
+	xAddressInfo MemIndirect;
 	u32 Imm;
 	bool IsConst;
 	
@@ -127,13 +128,24 @@ struct xAnyOperand
 	{
 	}
 
-	xAnyOperand( const ModSibStrict<u32>& indirect ) :
+	xAnyOperand( const xRegister32& direct ) :
+		RegDirect( direct ),
+		MemIndirect( 0 ),
+		Imm( 0 ),
+		IsConst( false )
+	{
+	}
+
+	xAnyOperand( const xAddressInfo& indirect ) :
 		RegDirect(),
 		MemIndirect( indirect ),
 		Imm( 0 ),
 		IsConst( false )
 	{
 	}
+
+	ModSibBase GetMem() const { return ptr[MemIndirect]; }
+	ModSibStrict<u32> GetMem32() const { return ptr32[MemIndirect]; }
 };
 
 namespace R3000A
@@ -150,22 +162,10 @@ public:
 	// or memory operand allocated to them (at least one but never both).  Even if
 	// a register is const, it may be allocated an x86 register for performance
 	// reasons [in the case of a const that is reused many times, for example]
+	xAnyOperand Src[RF_Count];
 
-	xAnyOperand SrcRs;
-	xAnyOperand SrcRt;
-	xAnyOperand SrcRd;
-
-	xAnyOperand SrcHi;
-	xAnyOperand SrcLo;
-
-	// Dest operands can either be register or memory.
-
-	xDirectOrIndirect DestRs;
-	xDirectOrIndirect DestRt;
-	xDirectOrIndirect DestRd;
-
-	xDirectOrIndirect DestHi;
-	xDirectOrIndirect DestLo;
+	// Dest operand can either be register or memory.
+	xDirectOrIndirect Dest[RF_Count];
 
 	xImmOrReg ixImm;
 	InstructionConstOpt Inst;		// raw instruction information.
@@ -181,6 +181,8 @@ public:
 	bool IsConstRt() const { return Inst.IsConstInput.Rt; }
 	bool IsConstRd() const { return Inst.IsConstInput.Rd; }
 
+	bool SignExtendsResult() const { return Inst.SignExtendOnWrite; }
+
 	void AddImmTo( const xRegister32& dest ) const 
 	{
 		if( !ixImm.IsReg() )
@@ -192,173 +194,138 @@ public:
 	// ------------------------------------------------------------------------
 	void MoveRsTo( const xRegister32& dest ) const 
 	{
-		if( SrcRs.IsConst )
-			xMOV( dest, SrcRs.Imm );
+		if( !Src[RF_Rs].RegDirect.IsEmpty() )
+			xMOV( dest, Src[RF_Rs].RegDirect );
 
-		else if( !SrcRs.RegDirect.IsEmpty() )
-			xMOV( dest, SrcRs.RegDirect );
+		else if( Src[RF_Rs].IsConst )
+			xMOV( dest, Src[RF_Rs].Imm );
 
 		else
-			xMOV( dest, SrcRs.MemIndirect );
+			xMOV( dest, Src[RF_Rs].GetMem() );
 	}
 
 	void MoveRtTo( const xRegister32& dest ) const 
 	{
-		if( SrcRt.IsConst )
-			xMOV( dest, SrcRt.Imm );
+		if( !Src[RF_Rt].RegDirect.IsEmpty() )
+			xMOV( dest, Src[RF_Rt].RegDirect );
 
-		else if( !SrcRt.RegDirect.IsEmpty() )
-			xMOV( dest, SrcRt.RegDirect );
+		else if( Src[RF_Rt].IsConst )
+			xMOV( dest, Src[RF_Rt].Imm );
 
 		else
-			xMOV( dest, SrcRt.MemIndirect );
+			xMOV( dest, Src[RF_Rt].GetMem() );
 	}
 
+	/*
 	// ------------------------------------------------------------------------
 	void MoveRsTo( const ModSibStrict<u32>& dest, const xRegister32 tempreg=eax ) const 
 	{
-		if( SrcRs.IsConst )
-			xMOV( dest, SrcRs.Imm );
+		if( Src[RF_Rs].IsConst )
+			xMOV( dest, Src[RF_Rs].Imm );
 
-		else if( !SrcRs.RegDirect.IsEmpty() )
-			xMOV( dest, SrcRs.RegDirect );
+		else if( !Src[RF_Rs].RegDirect.IsEmpty() )
+			xMOV( dest, Src[RF_Rs].RegDirect );
 
 		else
 		{
 			// pooh.. gotta move the 'hard' way :(
-			xMOV( tempreg, SrcRs.MemIndirect );
+			xMOV( tempreg, Src[RF_Rs].MemIndirect );
 			xMOV( dest, tempreg );
 		}
 	}
 
 	void MoveRtTo( const ModSibStrict<u32>& dest, const xRegister32 tempreg=eax ) const 
 	{
-		if( SrcRt.IsConst )
-			xMOV( dest, SrcRt.Imm );
+		if( Src[RF_Rt].IsConst )
+			xMOV( dest, Src[RF_Rt].Imm );
 
-		else if( !SrcRt.RegDirect.IsEmpty() )
-			xMOV( dest, SrcRt.RegDirect );
+		else if( !Src[RF_Rt].RegDirect.IsEmpty() )
+			xMOV( dest, Src[RF_Rt].RegDirect );
 
 		else
 		{
 			// pooh.. gotta move the 'hard' way :(
-			xMOV( tempreg, SrcRs.MemIndirect );
+			xMOV( tempreg, Src[RF_Rs].MemIndirect );
 			xMOV( dest, tempreg );
 		}
-	}
-
+	}*/
+	
+	
 	// ------------------------------------------------------------------------
 	template< typename T >
-	void MoveToRt( const xRegister<T>& src, const xRegister32& tempreg ) const
+	void SignExtendedMove( const xRegister32& dest, const ModSibStrict<T>& src ) const
 	{
-		if( DestRt.IsReg() )
-		{
-			if( Inst.SignExtendOnWrite.Rt )
-				xMOVSX( DestRt.GetReg(), src );
-			else
-				xMOVZX( DestRt.GetReg(), src );
-		}
+		if( Inst.SignExtendOnWrite )
+			xMOVSX( Dest[RF_Rt].GetReg(), src );
 		else
-		{
-			// pooh.. gotta move the 'hard' way :(
-			// (src->temp->dest)
-
-			if( Inst.SignExtendOnWrite.Rt )
-				xMOVSX( tempreg, src );
-			else
-				xMOVZX( tempreg, src );
-
-			xMOV( DestRt.GetMem(), src );
-		}
+			xMOVZX( Dest[RF_Rt].GetReg(), src );
 	}
 
 	template<>
-	void MoveToRt<u32>( const xRegister<u32>& src, __unused const xRegister32& tempreg ) const
+	void SignExtendedMove<u32>( const xRegister32& dest, const ModSibStrict<u32>& src ) const
 	{
-		if( DestRt.IsReg() )
-			xMOV( DestRt.GetReg(), src );
-		else
-			xMOV( DestRt.GetMem(), src );
+		xMOV( dest, src );
 	}
 
 	template< typename T >
-	void MoveToRt( const ModSibStrict<T>& src, const xRegister32& tempreg ) const
+	void SignExtendEax() const
 	{
-		if( DestRt.IsReg() )
+		if( Inst.SignExtendOnWrite )
 		{
-			if( Inst.SignExtendOnWrite.Rt )
-				xMOVSX( DestRt.GetReg(), src );
+			if( sizeof(T) == 1 )
+				xMOVSX( eax, al );
 			else
-				xMOVZX( DestRt.GetReg(), src );
+				xCWDE();
 		}
 		else
 		{
-			// pooh.. gotta move the 'hard' way :(
-			// (src->temp->dest)
-
-			if( Inst.SignExtendOnWrite.Rt )
-				xMOVSX( tempreg, src );
+			if( sizeof(T) == 1 )
+				xMOVZX( eax, al );
 			else
-				xMOVZX( tempreg, src );
-
-			xMOV( DestRt.GetMem(), tempreg );
+				xMOVZX( eax, ax );
 		}
 	}
+	
+	// Do nothing for 32-bit sign extension.
+	template<> void SignExtendEax<u32>() const { }
 
-	template<>
-	void MoveToRt<u32>( const ModSibStrict<u32>& src, const xRegister32& tempreg ) const
+	void MoveToRt( const xRegister32& src ) const
 	{
-		if( DestRt.IsReg() )
-			xMOV( DestRt.GetReg(), src );
-		else
-		{
-			// pooh.. gotta move the 'hard' way :(
-			// (src->temp->dest)
+		if( Inst._Rt_ == 0 ) return;
 
-			xMOV( tempreg, src );
-			xMOV( DestRt.GetMem(), tempreg );
-		}
+		if( Dest[RF_Rt].IsReg() )
+			xMOV( Dest[RF_Rt].GetReg(), src );
+		else
+			xMOV( Dest[RF_Rt].GetMem(), src );
 	}
 	
 	// ------------------------------------------------------------------------
 	void MoveToHiLo( const xRegister32& hireg, const xRegister32& loreg ) const
 	{
-		if( DestHi.IsReg() )
-			xMOV( DestHi.GetReg(), hireg );
+		if( Dest[RF_Hi].IsReg() )
+			xMOV( Dest[RF_Hi].GetReg(), hireg );
 		else
-			xMOV( DestHi.GetMem(), hireg );
+			xMOV( Dest[RF_Hi].GetMem(), hireg );
 
-		if( DestLo.IsReg() )
-			xMOV( DestLo.GetReg(), loreg );
+		if( Dest[RF_Lo].IsReg() )
+			xMOV( Dest[RF_Lo].GetReg(), loreg );
 		else
-			xMOV( DestLo.GetMem(), loreg );
+			xMOV( Dest[RF_Lo].GetMem(), loreg );
 	}
 
-	// Hi, I clobber ECX (maybe), so watch it how you use me! :)
-	void MoveToHiLo( u32 immhi, u32 immlo ) const
+	// loads lo with a register, and loads hi with zero.
+	void MoveToHiLo( const xRegister32& loreg ) const
 	{
-		if( DestHi.IsReg() )
-			xMOV( DestHi.GetReg(), immhi );
+		if( Dest[RF_Hi].IsReg() )
+			xXOR( Dest[RF_Hi].GetReg(), Dest[RF_Hi].GetReg() );
 		else
-		{
-			xMOV( ecx, immhi );
-			xMOV( DestHi.GetMem(), ecx );
-		}
+			xMOV( Dest[RF_Hi].GetMem32(), 0 );
 
-		if( DestLo.IsReg() )
-			xMOV( DestLo.GetReg(), immlo );
+		if( Dest[RF_Lo].IsReg() )
+			xMOV( Dest[RF_Lo].GetReg(), loreg );
 		else
-		{
-			xMOV( ecx, immlo );
-			xMOV( DestLo.GetMem(), ecx );
-		}
+			xMOV( Dest[RF_Lo].GetMem(), loreg );
 	}
-
-	template< typename T > void MoveToRt( const xRegister<T>& src ) const		{ MoveToRt( src, edx ); }
-	template< typename T > void MoveToRt( const ModSibStrict<T>& src ) const	{ MoveToRt( src, edx ); }
-
-	template<> void MoveToRt<u32>( const xRegister<u32>& src ) const			{ MoveToRt( src, edx ); }
-	template<> void MoveToRt<u32>( const ModSibStrict<u32>& src ) const			{ MoveToRt( src, edx ); }
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -443,6 +410,45 @@ struct recBlockItem : public NoncopyableObject
 	void Assign( const recBlockItemTemp& src );
 };
 
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+
+struct RegisterMappings
+{
+	xRegister32 Rd, Rt, Rs, Hi, Lo;
+};
+
+class InstructionEmitter
+{
+public:
+	InstructionEmitter() {}
+
+	virtual void MapRegisters( const IntermediateInstruction& info, RegisterMappings& inmaps, RegisterMappings& outmaps ) const {}
+	virtual void Emit( const IntermediateInstruction& info ) const {}
+};
+
+class InstructionRecompiler
+{
+public:
+	InstructionRecompiler() {}
+
+	// fully non-const emitter.
+	virtual const InstructionEmitter& ConstNone() const=0;
+
+	// const status on Rt, Rs is non-const
+	virtual const InstructionEmitter& ConstRt() const=0;
+
+	// const status on Rs, Rt is non-const
+	virtual const InstructionEmitter& ConstRs() const=0;
+
+	// fully const (provided for Memory Write ops only, all others should optimize away)
+	virtual const InstructionEmitter& ConstRsRt() const;
+};
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+
+
 extern recBlockItemTemp m_blockspace;
 
 // ------------------------------------------------------------------------
@@ -452,19 +458,9 @@ extern void recIL_Block();
 // ------------------------------------------------------------------------
 // Memory Operations Instructions
 //
-extern void recLB( const IntermediateInstruction& info );
-extern void recLH( const IntermediateInstruction& info );
-extern void recLW( const IntermediateInstruction& info );
-extern void recLBU( const IntermediateInstruction& info );
-extern void recLHU( const IntermediateInstruction& info );
-extern void recLWL( const IntermediateInstruction& info );
-extern void recLWR( const IntermediateInstruction& info );
-
-extern void recSB( const IntermediateInstruction& info );
-extern void recSH( const IntermediateInstruction& info );
-extern void recSW( const IntermediateInstruction& info );
-extern void recSWL( const IntermediateInstruction& info );
-extern void recSWR( const IntermediateInstruction& info );
+extern const InstructionRecompiler
+	&recLB, &recLH, &recLW, &recLWL, &recLWR,
+	&recSB, &recSH, &recSW, &recSWL, &recSWR;
 
 // ------------------------------------------------------------------------
 // Jump / Branch instructions
@@ -475,7 +471,8 @@ extern void recJR( const IntermediateInstruction& info );
 // ------------------------------------------------------------------------
 // Arithmetic Instructions
 //
-extern void recDIV( const IntermediateInstruction& info );
-extern void recDIVU( const IntermediateInstruction& info );
+
+extern const InstructionRecompiler& recDIV;
+extern const InstructionRecompiler& recDIVU;
 
 }

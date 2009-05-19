@@ -258,6 +258,8 @@ static u32 EventHandler()
 //    the same speed or faster anyway.
 // 
 
+extern void recIL_Pass2( const SafeArray<InstructionConstOpt>& iList );
+
 static void recRecompile()
 {
 	// Look up the block...
@@ -316,7 +318,7 @@ static void recRecompile()
 
 			// Integrity Verified... Generate X86.
 
-			//recIL_Pass2();
+			recIL_Pass2( mess.IL );
 			mess.IL.Dispose();
 		}
 		recIL_Block();

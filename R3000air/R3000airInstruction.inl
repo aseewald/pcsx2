@@ -78,11 +78,43 @@ namespace R3000A {
 		m_NextPC = iopRegs.VectorPC+4;
 		SetSideEffects();
 	}
+
+	// returns the index of the GPR for the given field, or -1 if the field is not read
+	// by this instruction.
+	__instinline int InstructionOptimizer::ReadsField( RegField_t field ) const
+	{
+		switch( field )
+		{
+			case RF_Rd: return !ReadsRd() ? -1 : _Rd_;
+			case RF_Rt: return !ReadsRt() ? -1 : _Rt_;
+			case RF_Rs: return !ReadsRs() ? -1 : _Rs_;
+
+			case RF_Hi: return !ReadsHi() ? -1 : 32;
+			case RF_Lo: return !ReadsLo() ? -1 : 33;
+			
+			jNO_DEFAULT
+		}
+	}
+
+	// gpridx - index of a MIPS general purpose register (0 thru 33) [32/33 are hi/lo]
+	// Returns the field the GPR is mapped to, or RF_Unused if the given register is
+	// not written to by this opcode.
+	__instinline RegField_t InstructionOptimizer::WritesReg( int gpridx ) const
+	{
+		if( gpridx == _Rd_ && WritesRd() ) return RF_Rd;
+		if( gpridx == _Rt_ && WritesRt() ) return RF_Rt;
+		if( gpridx == _Rs_ && WritesRs() ) return RF_Rs;
+		
+		if( gpridx == 32 && WritesHi() ) return RF_Hi;
+		if( gpridx == 33 && WritesLo() ) return RF_Lo;
+		
+		return RF_Unused;
+	}
 	
 	__instinline void InstructionConstOpt::Assign( const Opcode& opcode, bool constStatus[34] )
 	{
 		InstructionOptimizer::Assign( opcode );
-		SignExtendOnWrite.Value = false;
+		SignExtendOnWrite = false;
 		
 		IsConstInput.Value = false;
 		IsConstInput.Rd = constStatus[_Rd_];

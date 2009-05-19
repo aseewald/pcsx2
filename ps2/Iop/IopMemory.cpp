@@ -260,5 +260,5 @@ void psxMemReset()
 
 	memzero_ptr<sizeof(IopMemoryAlloc)>( iopMem );
 	tbl_Translation.Initialize();
-	recInitialize();
+	iopInitRecMem();
 }

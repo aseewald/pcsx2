@@ -82,6 +82,8 @@ extern void iopMemWrite8 (u32 mem, mem8_t value);
 extern void iopMemWrite16(u32 mem, mem16_t value);
 extern void iopMemWrite32(u32 mem, mem32_t value);
 
+extern void iopInitRecMem();
+
 
 namespace IopMemory
 {
@@ -178,6 +180,4 @@ namespace IopMemory
 	extern void __fastcall iopHwWrite32_Page1( u32 iopaddr, mem32_t data );
 	extern void __fastcall iopHwWrite32_Page3( u32 iopaddr, mem32_t data );
 	extern void __fastcall iopHwWrite32_Page8( u32 iopaddr, mem32_t data );
-
-	extern void recInitialize();
 }
