@@ -55,43 +55,51 @@ namespace x86Emitter
 	//
 	__forceinline xAddressInfo xAddressReg::operator+( const xAddressReg& right ) const
 	{
+		jASSUME( Id != -1 );
 		return xAddressInfo( *this, right );
 	}
 
 	__forceinline xAddressInfo xAddressReg::operator+( const xAddressInfo& right ) const
 	{
+		jASSUME( Id != -1 );
 		return right + *this;
 	}
 
 	__forceinline xAddressInfo xAddressReg::operator+( s32 right ) const
 	{
+		jASSUME( Id != -1 );
 		return xAddressInfo( *this, right );
 	}
 
 	__forceinline xAddressInfo xAddressReg::operator+( const void* right ) const
 	{
+		jASSUME( Id != -1 );
 		return xAddressInfo( *this, (s32)right );
 	}
 
 	// ------------------------------------------------------------------------
 	__forceinline xAddressInfo xAddressReg::operator-( s32 right ) const
 	{
+		jASSUME( Id != -1 );
 		return xAddressInfo( *this, -right );
 	}
 
 	__forceinline xAddressInfo xAddressReg::operator-( const void* right ) const
 	{
+		jASSUME( Id != -1 );
 		return xAddressInfo( *this, -(s32)right );
 	}
 
 	// ------------------------------------------------------------------------
 	__forceinline xAddressInfo xAddressReg::operator*( u32 right ) const
 	{
+		jASSUME( Id != -1 );
 		return xAddressInfo( Empty, *this, right );
 	}
 
 	__forceinline xAddressInfo xAddressReg::operator<<( u32 shift ) const
 	{
+		jASSUME( Id != -1 );
 		return xAddressInfo( Empty, *this, 1<<shift );
 	}
 
@@ -125,6 +133,16 @@ namespace x86Emitter
 		Index(),
 		Scale(0),
 		Displacement( displacement )
+	{
+		// no reduction necessary :D
+	}
+
+	// ------------------------------------------------------------------------
+	__forceinline ModSibBase::ModSibBase( const void* target ) :
+		Base(),
+		Index(),
+		Scale(0),
+		Displacement( (s32)target )
 	{
 		// no reduction necessary :D
 	}

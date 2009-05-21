@@ -145,14 +145,10 @@ __instinline void Inst::ADDI()
 }
 
 // Rt = Rs + Im (no exception)
-// This is exactly like ADDI but does not perform an overflow exception check.
+// This is exactly like ADDI (yes, its signed! not unsigned) but does not perform an
+// overflow exception check.
 __instinline void Inst::ADDIU()
 {
-	/*if( !_Rt_ )
-	{
-		zeroEx();
-		return;
-	}*/
 	SetRt_SL( GetRs().SL + Imm() );
 }
 

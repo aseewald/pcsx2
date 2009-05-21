@@ -48,22 +48,6 @@ public:
 	}
 
 	// ------------------------------------------------------------------------
-	template< typename T > __forceinline void operator()( const xRegister<T>& to, const void* src ) const
-	{
-		prefix16<T>();
-		xWrite8( (Is8BitOp<T>() ? 2 : 3) | (InstType<<3) );
-		EmitSibMagic( to, src );
-	}
-	
-	// ------------------------------------------------------------------------
-	template< typename T > __forceinline void operator()( void* dest, const xRegister<T>& from ) const
-	{
-		prefix16<T>();
-		xWrite8( (Is8BitOp<T>() ? 0 : 1) | (InstType<<3) ); 
-		EmitSibMagic( from, dest );
-	}
-
-	// ------------------------------------------------------------------------
 	template< typename T > __noinline void operator()( const ModSibBase& sibdest, const xRegister<T>& from ) const
 	{
 		prefix16<T>();
@@ -126,6 +110,37 @@ public:
 			xWrite<T>( imm );
 		}
 	}
+	
+	// ------------------------------------------------------------------------
+	template< typename T > __noinline void operator()( const ModSibBase& to, const xImmReg<T>& immOrReg ) const
+	{
+		_DoI_helpermess( *this, to, immOrReg );
+	}
+
+	template< typename T > __noinline void operator()( const xDirectOrIndirect<T>& to, const xImmReg<T>& immOrReg ) const
+	{
+		_DoI_helpermess( *this, to, immOrReg );
+	}
+
+	template< typename T > __noinline void operator()( const xDirectOrIndirect<T>& to, int imm ) const
+	{
+		_DoI_helpermess( *this, to, imm );
+	}
+
+	template< typename T > __noinline void operator()( const xDirectOrIndirect<T>& to, const xDirectOrIndirect<T>& from ) const
+	{
+		_DoI_helpermess( *this, to, from );
+	}
+
+	template< typename T > __noinline void operator()( const xRegister<T>& to, const xDirectOrIndirect<T>& from ) const
+	{
+		_DoI_helpermess( *this, xDirectOrIndirect<T>( to ), from );
+	}
+
+	template< typename T > __noinline void operator()( const xDirectOrIndirect<T>& to, const xRegister<T>& from ) const
+	{
+		_DoI_helpermess( *this, to, xDirectOrIndirect<T>( from ) );
+	}
 
 	xImpl_Group1() {}		// Why does GCC need these?
 };
@@ -168,7 +183,6 @@ protected:
 	template< u8 Prefix > struct Woot
 	{
 		__forceinline void operator()( const xRegisterSSE& to, const xRegisterSSE& from, SSE2_ComparisonType cmptype ) const{ xOpWrite0F( Prefix, 0xc2, to, from, (u8)cmptype ); }
-		__forceinline void operator()( const xRegisterSSE& to, const void* from, SSE2_ComparisonType cmptype ) const		{ xOpWrite0F( Prefix, 0xc2, to, from, (u8)cmptype ); }
 		__forceinline void operator()( const xRegisterSSE& to, const ModSibBase& from, SSE2_ComparisonType cmptype ) const	{ xOpWrite0F( Prefix, 0xc2, to, from, (u8)cmptype ); }
 		Woot() {}
 	};

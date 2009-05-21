@@ -23,26 +23,77 @@
 namespace R3000A
 {
 
-class EmitConstError_t : public InstructionEmitter
+typedef InstructionRecMess InstAPI;
+
+IMPL_RecPlacebo( MULT );
+IMPL_RecPlacebo( MULTU );
+IMPL_RecPlacebo( DIVU );
+
+IMPL_RecPlacebo( SUB );
+IMPL_RecPlacebo( SUBU );
+
+
+
+// ------------------------------------------------------------------------
+namespace recADDI_ConstNone
 {
-public:
-	EmitConstError_t() {}
-
-	virtual void MapRegisters( const IntermediateInstruction& info, RegisterMappings& dest, RegisterMappings& outmaps ) const
+	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
 	{
-		assert( false );
-		throw Exception::LogicError( "R3000A Recompiler Logic Error: Const Rs/Rt form is not valid for this instruction." );
+		opts.xModifiesReg.None();
+	}
+	
+	static void Emit( const IntermediateInstruction& info )
+	{
+		if( info.GetImm() != 0 )
+			xADD( info.Src[RF_Rs], info.GetImm() );
+		info.MoveToRt( info.Src[RF_Rs] );
+	}
+	
+	IMPL_GetInterface()
+}
+
+IMPL_RecInstAPI( ADDI );
+
+// Map to ADDI until such time we implement exception handling/checking for ADDI.
+void InstAPI::ADDIU()
+{
+	API.ConstNone	= recADDI_ConstNone::GetInterface;
+	API.ConstRt		= recADDI_ConstNone::GetInterface;
+	API.ConstRs		= recADDI_ConstNone::GetInterface;
+}
+
+// ------------------------------------------------------------------------
+namespace recADD_ConstNone
+{
+	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	{
+		opts.xModifiesReg.None();
+
+		// Rs and Rt can be swapped freely:
+		opts.CommutativeSources	= true;
+		// Force Rs to register to prevent Add Rs+Rt from being 2-way indirect.
+		opts.ForceDirectRs		= true;
 	}
 
-	virtual void Emit( const IntermediateInstruction& info ) const
+	static void Emit( const IntermediateInstruction& info )
 	{
-		assert( false );
-		throw Exception::LogicError( "R3000A Recompiler Logic Error: Const Rs/Rt form is not valid for this instruction." );
+		xADD( info.Src[RF_Rs], info.Src[RF_Rt] );
+		info.MoveToRd( info.Src[RF_Rs] );
 	}
-};
 
-static const EmitConstError_t EmitConstError;
-const InstructionEmitter& InstructionRecompiler::ConstRsRt() const { return EmitConstError; }
+	IMPL_GetInterface()
+}
+
+IMPL_RecInstAPI( ADD );
+
+// Map to ADD until such time we implement exception handling/checking for ADD.
+void InstAPI::ADDU()
+{
+	API.ConstNone	= recADD_ConstNone::GetInterface;
+	API.ConstRt		= recADD_ConstNone::GetInterface;
+	API.ConstRs		= recADD_ConstNone::GetInterface;
+}
+
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -58,24 +109,26 @@ const InstructionEmitter& InstructionRecompiler::ConstRsRt() const { return Emit
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-class recDIV_ConstNone : public InstructionEmitter
+namespace recDIV_ConstNone
 {
-public:
-	recDIV_ConstNone() {}
-
-	void MapRegisters( const IntermediateInstruction& info, RegisterMappings& inmaps, RegisterMappings& outmaps ) const
+	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
 	{
-		inmaps.Rt = eax;
-		inmaps.Rs = ecx;
+		opts.MapInput.Rs = ecx;
+		opts.MapInput.Rt = eax;
 
-		outmaps.Rs = ecx;	// untouched!
-
-		outmaps.Hi = edx;
-		outmaps.Lo = eax;
+		opts.MapOutput.Rs = ecx;
+		opts.MapOutput.Lo = eax;
+		
+		opts.xModifiesReg[ecx] = false;
+		opts.xModifiesReg[ebx] = false;
 	}
 
-	void Emit( const IntermediateInstruction& info ) const
+	static void Emit( const IntermediateInstruction& info )
 	{
+		// Make sure recompiler did it's job:
+		jASSUME( info.Src[RF_Rs].GetReg() == ecx );
+		jASSUME( info.Src[RF_Rt].GetReg() == eax );
+
 		xCMP( eax, 0 );
 		xForwardJE8 skipOverflowRt;
 
@@ -98,50 +151,53 @@ public:
 		// Then Perform full-on div!
 		skipOverflowRtNeg.SetTarget();
 		skipOverflowRtNeg2.SetTarget();
-		xDIV( edx );
+		xDIV( ecx );
 
 		// writeback for Rt-overflow case.
 		writeBack.SetTarget();
-		info.MoveToHiLo( edx, eax );	// eax == 0x80000000
+		info.MoveToHiLo( edx, eax );
 
 		skipAll.SetTarget();
 	}
+	
+	IMPL_GetInterface()
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-class recDIV_ConstRt : public InstructionEmitter
+namespace recDIV_ConstRt
 {
-public:
-	void MapRegisters( const IntermediateInstruction& info, RegisterMappings& inmaps, RegisterMappings& outmaps ) const
+	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
 	{
-		if( info.Src[RF_Rt].Imm == 0 )
+		if( info.GetConstRt() == 0 )
 		{
-			inmaps.Rs = edx;
-			outmaps.Rs = edx;		// unmodified.
+			opts.MapInput.Rs = edx;
+			opts.MapOutput.Rs = edx;		// unmodified.
+			opts.MapOutput.Hi = edx;
+			opts.MapOutput.Lo = eax;
+			opts.xModifiesReg[edx] = false;
+			opts.xModifiesReg[ebx] = false;
 		}
-		else if( info.Src[RF_Rt].Imm == -1 )
+		else if( info.GetConstRt() == -1 )
 		{
-			inmaps.Rs = ecx;
-			outmaps.Rs = ecx;		// unmodified.
+			opts.xModifiesReg[ecx] = false;
+			opts.xModifiesReg[ebx] = false;
+			opts.MapOutput.Hi = edx;
+			opts.MapOutput.Lo = eax;
 		}
 		else
 		{
-			inmaps.Rt = eax;
-			inmaps.Rs = edx;
+			recDIV_ConstNone::Optimizations( info, opts );
 		}
-
-		outmaps.Hi = edx;
-		outmaps.Lo = eax;
 	}
 
-	void Emit( const IntermediateInstruction& info ) const
+	static void Emit( const IntermediateInstruction& info )
 	{
 		// If both Rt and Rs are const, then this instruction shouldn't even be recompiled
 		// since the result is known at IL time.
 		jASSUME( !info.IsConstRs() );
 
-		if( info.Src[RF_Rt].Imm == 0 )
+		if( info.GetConstRt() == 0 )
 		{
 			// Rs is loaded into edx.
 			
@@ -150,69 +206,74 @@ public:
 			xCMP( edx, 0 );
 			xCMOVGE( eax, ecx );
 			// edx == Hi, eax == Lo
-			info.MoveToHiLo( edx, eax );
+			//info.MoveToHiLo( edx, eax );
 		}
-		else if( info.Src[RF_Rt].Imm == -1 )
+		else if( info.GetConstRt() == -1 )
 		{
-			// Rs is loaded into ecx.
-
 			xMOV( eax, 0x80000000 );
-			if( info.Src[RF_Rs].RegDirect.IsEmpty() )
-				xCMP( info.Src[RF_Rs].GetMem(), eax );
-			else
-				xCMP( info.Src[RF_Rs].RegDirect, eax );
+			xCMP( info.Src[RF_Rs], eax );
 
 			xForwardJNE8 doFullDiv;
 			info.MoveToHiLo( eax );
 			xForwardJump8 skipAll;
 
 			doFullDiv.SetTarget();
-			xDIV( ecx );
-			info.MoveToHiLo( edx, eax );
+			xMOV( eax, info.GetConstRs() );
+			xDIV( info.Src[RF_Rs] );
+			//info.MoveToHiLo( edx, eax );
 
 			skipAll.SetTarget();
 		}
 		else
 		{
-			recDIV_ConstNone().Emit( info );
+			recDIV_ConstNone::Emit( info );
 		}
 	}
+	
+	IMPL_GetInterface()
 };
 
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-class recDIV_ConstRs : public InstructionEmitter
+namespace recDIV_ConstRs
 {
-public:
-	void MapRegisters( const IntermediateInstruction& info, RegisterMappings& inmaps, RegisterMappings& outmaps ) const
+	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
 	{
-		inmaps.Rt = eax;
-		
-		// DIV doesn't have an imm form, so we need to have the immediate value
-		// loaded into ecx anyway:
-		inmaps.Rs = ecx;
-		outmaps.Rs = ecx;		// and it's unmodified!
+		opts.MapInput.Rt = eax;
+		opts.MapInput.Rs = ecx;		// DIV lacks Imm forms, so force-load const Rs into ecx
+		opts.MapOutput.Rs = ecx;	// and it's unmodified!
 
-		outmaps.Hi = edx;
-		outmaps.Lo = eax;
+		// When Const Rs == 0x80000000, the mappings of Hi/Lo are indeterminate.
+		if( info.GetConstRs() != 0x80000000 )
+		{
+			opts.MapOutput.Hi = edx;
+			opts.MapOutput.Lo = eax;
+		}
+
+		opts.xModifiesReg[ecx] = false;
+		opts.xModifiesReg[ebx] = false;
 	}
 	
-	void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateInstruction& info )
 	{
 		// If both Rt and Rs are const, then this instruction shouldn't even be recompiled
 		// since the result is known at IL time.
 		jASSUME( !info.IsConstRt() );
 
+		// Make sure recompiler did it's job:
+		jASSUME( info.Src[RF_Rt].GetReg() == eax );
+		jASSUME( info.Src[RF_Rs].GetReg() == ecx );
+
 		xCMP( eax, 0 );
 		xForwardJZ8 skipOverflowRt;
 
-		xMOV( eax, (info.Src[RF_Rs].Imm >= 0) ? -1 : 1 );
+		xMOV( eax, (info.GetConstRs() >= 0) ? -1 : 1 );
 		info.MoveToHiLo( ecx, eax );
 		xForwardJump8 skipAll;
 
 		skipOverflowRt.SetTarget();
-		if( info.Src[RF_Rs].Imm == 0x80000000 )
+		if( info.GetConstRs() == 0x80000000 )
 		{
 			// If Rs is 0x80000000 then we need to check Rt for -1.
 
@@ -236,29 +297,17 @@ public:
 		}
 		skipAll.SetTarget();
 	}
-};
-
-class recInst_DIV : public InstructionRecompiler
-{
-protected:
-	static const recDIV_ConstNone m_ConstNone;
-	static const recDIV_ConstRt m_ConstRt;
-	static const recDIV_ConstRs m_ConstRs;
-
-public:
-	recInst_DIV() {}
 	
-	const InstructionEmitter& ConstNone() const	{ return m_ConstNone; }
-	const InstructionEmitter& ConstRt() const	{ return m_ConstRt; }
-	const InstructionEmitter& ConstRs() const	{ return m_ConstRs; }
+	IMPL_GetInterface()
 };
 
-const recInst_DIV __recDIV;
+typedef InstructionRecMess InstAPI;
 
-const recDIV_ConstNone recInst_DIV::m_ConstNone;
-const recDIV_ConstRt recInst_DIV::m_ConstRt;
-const recDIV_ConstRs recInst_DIV::m_ConstRs;
-
-const InstructionRecompiler& recDIV = __recDIV;
+void InstAPI::DIV()
+{
+	API.ConstNone	= recDIV_ConstNone::GetInterface;
+	API.ConstRt		= recDIV_ConstRt::GetInterface;
+	API.ConstRs		= recDIV_ConstRs::GetInterface;
+}
 
 }

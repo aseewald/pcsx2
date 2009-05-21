@@ -1674,23 +1674,23 @@
 				Name="Iop"
 				>
 				<File
-					RelativePath="..\..\CdRom.cpp"
+					RelativePath="..\..\CDVD\CdRom.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\CdRom.h"
+					RelativePath="..\..\CDVD\CdRom.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\CDVD.cpp"
+					RelativePath="..\..\CDVD\CDVD.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\CDVD.h"
+					RelativePath="..\..\CDVD\CDVD.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\CDVD_internal.h"
+					RelativePath="..\..\CDVD\CDVD_internal.h"
 					>
 				</File>
 				<File
@@ -1964,7 +1964,15 @@
 							>
 						</File>
 						<File
+							RelativePath="..\..\R3000air\dynarec\iR3000airLogic.cpp"
+							>
+						</File>
+						<File
 							RelativePath="..\..\R3000air\dynarec\iR3000airMemory.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\dynarec\iR3000airMisc.cpp"
 							>
 						</File>
 					</Filter>
@@ -2823,19 +2831,19 @@
 				Name="FileSystems"
 				>
 				<File
-					RelativePath="..\..\CDVDiso.cpp"
+					RelativePath="..\..\CDVD\CDVDiso.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\CDVDiso.h"
+					RelativePath="..\..\CDVD\CDVDiso.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\CDVDisodrv.cpp"
+					RelativePath="..\..\CDVD\CDVDisodrv.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\CDVDisodrv.h"
+					RelativePath="..\..\CDVD\CDVDisodrv.h"
 					>
 				</File>
 				<File
@@ -3503,6 +3511,10 @@
 					</File>
 					<File
 						RelativePath="..\..\x86\ix86\implement\group3.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\x86\ix86\implement\helpers.h"
 						>
 					</File>
 					<File

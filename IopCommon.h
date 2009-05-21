@@ -29,8 +29,8 @@
 #include "R3000A.h"
 #include "DebugTools/Debug.h"
 
-#include "CdRom.h"
-#include "CDVD.h"
+#include "CDVD/CdRom.h"
+#include "CDVD/CDVD.h"
 #include "Sio.h"
 
 #include "IopDma.h"

@@ -30,7 +30,6 @@ class SimdImpl_DestRegSSE
 {
 public:
 	__forceinline void operator()( const xRegisterSSE& to, const xRegisterSSE& from ) const	{ xOpWrite0F( Prefix, Opcode, to, from ); }
-	__forceinline void operator()( const xRegisterSSE& to, const void* from ) const			{ xOpWrite0F( Prefix, Opcode, to, from ); }
 	__forceinline void operator()( const xRegisterSSE& to, const ModSibBase& from ) const	{ xOpWrite0F( Prefix, Opcode, to, from ); }
 
 	SimdImpl_DestRegSSE() {} //GCWho?
@@ -45,7 +44,6 @@ class SimdImpl_DestRegImmSSE
 {
 public:
 	__forceinline void operator()( const xRegisterSSE& to, const xRegisterSSE& from, u8 imm ) const	{ xOpWrite0F( Prefix, Opcode, to, from, imm ); }
-	__forceinline void operator()( const xRegisterSSE& to, const void* from, u8 imm ) const			{ xOpWrite0F( Prefix, Opcode, to, from, imm ); }
 	__forceinline void operator()( const xRegisterSSE& to, const ModSibBase& from, u8 imm ) const	{ xOpWrite0F( Prefix, Opcode, to, from, imm ); }
 
 	SimdImpl_DestRegImmSSE() {} //GCWho?
@@ -56,7 +54,6 @@ class SimdImpl_DestRegImmMMX
 {
 public:
 	__forceinline void operator()( const xRegisterMMX& to, const xRegisterMMX& from, u8 imm ) const	{ xOpWrite0F( Opcode, to, from, imm ); }
-	__forceinline void operator()( const xRegisterMMX& to, const void* from, u8 imm ) const			{ xOpWrite0F( Opcode, to, from, imm ); }
 	__forceinline void operator()( const xRegisterMMX& to, const ModSibBase& from, u8 imm ) const	{ xOpWrite0F( Opcode, to, from, imm ); }
 
 	SimdImpl_DestRegImmMMX() {} //GCWho?
@@ -71,11 +68,9 @@ class SimdImpl_DestRegEither
 {
 public:
 	__forceinline void operator()( const xRegisterSSE& to, const xRegisterSSE& from ) const	{ xOpWrite0F( Prefix, Opcode, to, from ); }
-	__forceinline void operator()( const xRegisterSSE& to, const void* from ) const			{ xOpWrite0F( Prefix, Opcode, to, from ); }
 	__forceinline void operator()( const xRegisterSSE& to, const ModSibBase& from ) const	{ xOpWrite0F( Prefix, Opcode, to, from ); }
 
 	__forceinline void operator()( const xRegisterMMX& to, const xRegisterMMX& from ) const	{ xOpWrite0F( Opcode, to, from ); }
-	__forceinline void operator()( const xRegisterMMX& to, const void* from ) const			{ xOpWrite0F( Opcode, to, from ); }
 	__forceinline void operator()( const xRegisterMMX& to, const ModSibBase& from ) const	{ xOpWrite0F( Opcode, to, from ); }
 
 	SimdImpl_DestRegEither() {} //GCWho?
@@ -95,7 +90,6 @@ class SimdImpl_DestRegStrict
 {
 public:
 	__forceinline void operator()( const DestRegType& to, const SrcRegType& from ) const					{ xOpWrite0F( Prefix, Opcode, to, from ); }
-	__forceinline void operator()( const DestRegType& to, const SrcOperandType* from ) const				{ xOpWrite0F( Prefix, Opcode, to, from ); }
 	__forceinline void operator()( const DestRegType& to, const ModSibStrict<SrcOperandType>& from ) const	{ xOpWrite0F( Prefix, Opcode, to, from ); }
 
 	SimdImpl_DestRegStrict() {} //GCWho?

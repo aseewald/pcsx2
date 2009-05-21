@@ -202,11 +202,6 @@ namespace Internal
 		xOpWrite0F( 0, opcode, instId, sib );
 	}
 
-	__emitinline void xOpWrite0F( u16 opcode, int instId, const void* data )
-	{
-		xOpWrite0F( 0, opcode, instId, data );
-	}
-
 
 	//////////////////////////////////////////////////////////////////////////////////////////
 	// returns TRUE if this instruction requires SIB to be encoded, or FALSE if the
@@ -675,11 +670,9 @@ __emitinline void xPUSH( const ModSibBase& from )
 }
 
 __forceinline void xPOP( xRegister32 from )		{ xWrite8( 0x58 | from.Id ); }
-__forceinline void xPOP( void* from )			{ xPOP( ptr[from] ); }
 
 __forceinline void xPUSH( u32 imm )				{ xWrite8( 0x68 ); xWrite32( imm ); }
 __forceinline void xPUSH( xRegister32 from )	{ xWrite8( 0x50 | from.Id ); }
-__forceinline void xPUSH( void* from )			{ xPUSH( ptr[from] ); }
 
 // pushes the EFLAGS register onto the stack
 __forceinline void xPUSHFD()					{ xWrite8( 0x9C ); }

@@ -644,11 +644,11 @@ public:
 
 	// Const values of registers on input:
 
-	IntSign32 ConstVal_Rd;
-	IntSign32 ConstVal_Rt;
-	IntSign32 ConstVal_Rs;
-	IntSign32 ConstVal_Hi;
-	IntSign32 ConstVal_Lo;
+	s32 ConstVal_Rd;
+	s32 ConstVal_Rt;
+	s32 ConstVal_Rs;
+	s32 ConstVal_Hi;
+	s32 ConstVal_Lo;
 	
 	GprStatus IsConstInput;
 

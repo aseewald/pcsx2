@@ -123,11 +123,11 @@ namespace R3000A {
 		IsConstInput.Hi = constStatus[32];
 		IsConstInput.Lo = constStatus[33];
 
-		ConstVal_Rd = iopRegs.GPR.r[_Rd_];
-		ConstVal_Rt = iopRegs.GPR.r[_Rt_];
-		ConstVal_Rs = iopRegs.GPR.r[_Rs_];
+		ConstVal_Rd = iopRegs.GPR.r[_Rd_].SL;
+		ConstVal_Rt = iopRegs.GPR.r[_Rt_].SL;
+		ConstVal_Rs = iopRegs.GPR.r[_Rs_].SL;
 
-		ConstVal_Hi = iopRegs.GPR.r[32];
-		ConstVal_Lo = iopRegs.GPR.r[33];
+		ConstVal_Hi = iopRegs.GPR.r[32].SL;
+		ConstVal_Lo = iopRegs.GPR.r[33].SL;
 	}
 }

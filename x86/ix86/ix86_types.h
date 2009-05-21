@@ -399,6 +399,33 @@ __forceinline void xWrite( T val )
 	extern const xRegisterCL cl;		// I'm special!
 
 	//////////////////////////////////////////////////////////////////////////////////////////
+	// xImmReg - used to represent an immediate value which can also be optimized to a register.
+	// Note that the immediate value represented by this structure is *always* legal.  The
+	// register assignment is an optional optimization which can be implemented in cases where
+	// an immediate is used enough times to merit allocating it to a register.
+	//
+	// Note: not all instructions support this operand type (yet).  You can always implement it
+	// manually by checking the status of IsReg() and generating the xOP conditionally.
+	//
+	template< typename OperandType >
+	class xImmReg
+	{
+		xRegister<OperandType> m_reg;
+		int m_imm;
+		
+	public:
+		xImmReg() :
+			m_reg(), m_imm( 0 ) { }
+
+		xImmReg( int imm, const xRegister<OperandType>& reg=xRegister<OperandType>() ) :
+			m_reg( reg ), m_imm( imm ) { }
+			
+		const xRegister<OperandType>& GetReg() const { return m_reg; }
+		const int GetImm() const { return m_imm; }
+		bool IsReg() const { return !m_reg.IsEmpty(); }
+	};
+	
+	//////////////////////////////////////////////////////////////////////////////////////////
 	// ModSib - Internal low-level representation of the ModRM/SIB information.
 	//
 	// This class serves two purposes:  It houses 'reduced' ModRM/SIB info only, which means
@@ -422,6 +449,7 @@ __forceinline void xWrite( T val )
 		explicit ModSibBase( const xAddressInfo& src );
 		explicit ModSibBase( s32 disp );
 		ModSibBase( xAddressReg base, xAddressReg index, int scale=0, s32 displacement=0 );
+		ModSibBase( const void* target );
 		
 		bool IsByteSizeDisp() const { return is_s8( Displacement ); }
 
@@ -448,8 +476,10 @@ __forceinline void xWrite( T val )
 	public:
 		static const uint OperandSize = sizeof( OperandType );
 
+		__forceinline explicit ModSibStrict( const ModSibBase& src ) : ModSibBase( src ) {}
 		__forceinline explicit ModSibStrict( const xAddressInfo& src ) : ModSibBase( src ) {}
 		__forceinline explicit ModSibStrict( s32 disp ) : ModSibBase( disp ) {}
+		__forceinline ModSibStrict( const OperandType* target ) : ModSibBase( target ) {}
 		__forceinline ModSibStrict( xAddressReg base, xAddressReg index, int scale=0, s32 displacement=0 ) :
 			ModSibBase( base, index, scale, displacement ) {}
 		
@@ -533,12 +563,52 @@ __forceinline void xWrite( T val )
 
 	// ptr[] - use this form for instructions which can resolve the address operand size from
 	// the other register operand sizes.
-	extern const xAddressIndexerBase ptr;
-	extern const xAddressIndexer<u128> ptr128;
-	extern const xAddressIndexer<u64> ptr64;
-	extern const xAddressIndexer<u32> ptr32;	// explicitly typed addressing, usually needed for '[dest],imm' instruction forms
-	extern const xAddressIndexer<u16> ptr16;	// explicitly typed addressing, usually needed for '[dest],imm' instruction forms
-	extern const xAddressIndexer<u8> ptr8;		// explicitly typed addressing, usually needed for '[dest],imm' instruction forms
+	extern const xAddressIndexerBase	ptr;
+	extern const xAddressIndexer<u128>	ptr128;
+	extern const xAddressIndexer<u64>	ptr64;
+	extern const xAddressIndexer<u32>	ptr32;	// explicitly typed addressing, usually needed for '[dest],imm' instruction forms
+	extern const xAddressIndexer<u16>	ptr16;	// explicitly typed addressing, usually needed for '[dest],imm' instruction forms
+	extern const xAddressIndexer<u8>	ptr8;	// explicitly typed addressing, usually needed for '[dest],imm' instruction forms
+
+	//////////////////////////////////////////////////////////////////////////////////////////
+	//
+	// [TODO] - make SSE version of thise, perhaps?
+	//
+	template< typename OperandType >
+	class xDirectOrIndirect
+	{
+		xRegister<OperandType> m_RegDirect;
+		ModSibStrict<OperandType> m_MemIndirect;
+
+	public:
+		xDirectOrIndirect() :
+			m_RegDirect(), m_MemIndirect( 0 ) {}
+
+		xDirectOrIndirect( const xRegister<OperandType>& srcreg ) :
+			m_RegDirect( srcreg ), m_MemIndirect( 0 ) {}
+
+		xDirectOrIndirect( const ModSibBase& srcmem ) :
+			m_RegDirect(), m_MemIndirect( srcmem ) {}
+
+		xDirectOrIndirect( const ModSibStrict<OperandType>& srcmem ) :
+			m_RegDirect(), m_MemIndirect( srcmem ) {}
+		
+		const xRegister<OperandType>& GetReg() const { return m_RegDirect; }
+		const ModSibStrict<OperandType>& GetMem() const { return m_MemIndirect; }
+		bool IsDirect() const { return !m_RegDirect.IsEmpty(); }
+		bool IsIndirect() const { return m_RegDirect.IsEmpty(); }
+		
+		bool operator==( const xRegister<OperandType>& src ) const	{ return (m_RegDirect == src); }
+		bool operator!=( const xRegister<OperandType>& src ) const	{ return (m_RegDirect == src); }
+	};
+
+	typedef xImmReg<u8>		xImmOrReg8;
+	typedef xImmReg<u16>	xImmOrReg16;
+	typedef xImmReg<u32>	xImmOrReg32;
+
+	typedef xDirectOrIndirect<u8>	xDirectOrIndirect8;
+	typedef xDirectOrIndirect<u16>	xDirectOrIndirect16;
+	typedef xDirectOrIndirect<u32>	xDirectOrIndirect32;
 
 	//////////////////////////////////////////////////////////////////////////////////////////
 	// JccComparisonType - enumerated possibilities for inspired code branching!
@@ -679,70 +749,7 @@ __forceinline void xWrite( T val )
 	//	
 	namespace Internal
 	{
-		extern void SimdPrefix( u8 prefix, u16 opcode );
-		extern void EmitSibMagic( uint regfield, const void* address );
-		extern void EmitSibMagic( uint regfield, const ModSibBase& info );
-		extern void xJccKnownTarget( JccComparisonType comparison, const void* target, bool slideForward );
-
-
-		// Writes a ModRM byte for "Direct" register access forms, which is used for all
-		// instructions taking a form of [reg,reg].
-		template< typename T > __emitinline
-		void EmitSibMagic( uint reg1, const xRegisterBase<T>& reg2 )
-		{
-			xWrite8( (Mod_Direct << 6) | (reg1 << 3) | reg2.Id );
-		}
-
-		template< typename T1, typename T2 > __emitinline
-		void EmitSibMagic( const xRegisterBase<T1> reg1, const xRegisterBase<T2>& reg2 )
-		{
-			xWrite8( (Mod_Direct << 6) | (reg1.Id << 3) | reg2.Id );
-		}
-
-		template< typename T1 > __emitinline
-		void EmitSibMagic( const xRegisterBase<T1> reg1, const void* src )			{ EmitSibMagic( reg1.Id, src ); }
-
-		template< typename T1 > __emitinline
-		void EmitSibMagic( const xRegisterBase<T1> reg1, const ModSibBase& sib )	{ EmitSibMagic( reg1.Id, sib ); }
-
-		// ------------------------------------------------------------------------
-		template< typename T1, typename T2 > __emitinline
-		void xOpWrite( u8 prefix, u8 opcode, const T1& param1, const T2& param2 )
-		{
-			if( prefix != 0 )
-				xWrite16( (opcode<<8) | prefix );
-			else
-				xWrite8( opcode );
-
-			EmitSibMagic( param1, param2 );
-		}
-
-		// ------------------------------------------------------------------------
-		template< typename T1, typename T2 > __emitinline
-		void xOpWrite0F( u8 prefix, u16 opcode, const T1& param1, const T2& param2 )
-		{
-			SimdPrefix( prefix, opcode );
-			EmitSibMagic( param1, param2 );
-		}
-
-		template< typename T1, typename T2 > __emitinline
-		void xOpWrite0F( u8 prefix, u16 opcode, const T1& param1, const T2& param2, u8 imm8 )
-		{
-			xOpWrite0F( prefix, opcode, param1, param2 );
-			xWrite8( imm8 );
-		}
-
-		template< typename T1, typename T2 > __emitinline
-		void xOpWrite0F( u16 opcode, const T1& param1, const T2& param2 )			{ xOpWrite0F( 0, opcode, param1, param2 ); }
-
-		template< typename T1, typename T2 > __emitinline
-		void xOpWrite0F( u16 opcode, const T1& param1, const T2& param2, u8 imm8 )	{ xOpWrite0F( 0, opcode, param1, param2, imm8 ); }
-
-		// ------------------------------------------------------------------------
-
-		template< typename T > bool Is8BitOp() { return sizeof(T) == 1; }
-		template< typename T > void prefix16() { if( sizeof(T) == 2 ) xWrite8( 0x66 ); }
-
+		#include "implement/helpers.h"
 		#include "implement/xmm/basehelpers.h"
 		#include "implement/xmm/moremovs.h"
 		#include "implement/xmm/arithmetic.h"

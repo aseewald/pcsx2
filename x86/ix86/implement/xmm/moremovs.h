@@ -30,8 +30,6 @@ protected:
 	struct Woot
 	{
 		Woot() {}
-		__forceinline void operator()( const xRegisterSSE& to, const void* from ) const			{ xOpWrite0F( Prefix, Opcode, to, from ); }
-		__forceinline void operator()( const void* to, const xRegisterSSE& from ) const			{ xOpWrite0F( Prefix, Opcode+1, from, to ); }
 		__forceinline void operator()( const xRegisterSSE& to, const ModSibBase& from ) const	{ xOpWrite0F( Prefix, Opcode, to, from ); }
 		__forceinline void operator()( const ModSibBase& to, const xRegisterSSE& from ) const	{ xOpWrite0F( Prefix, Opcode+1, from, to ); }
 	};
@@ -79,24 +77,6 @@ public:
 		if( to != from ) xOpWrite0F( Prefix, OpcodeA, to, from );
 	}
 
-	__forceinline void operator()( const xRegisterSSE& to, void* from ) const	
-	{
-		u16 opcode;
-		
-		// @$@$@!$#@! GCC & Debug builds.
-		if (isAligned || ((uptr)from & 0x0f) == 0) 
-			opcode = OpcodeA;
-		else 
-			opcode = OpcodeU;
-		
-		xOpWrite0F( Prefix, opcode, to, from );
-	}
-
-	__forceinline void operator()( void* to, const xRegisterSSE& from ) const
-	{
-		xOpWrite0F( Prefix, (isAligned || ((uptr)to & 0x0f) == 0) ? OpcodeA+1 : OpcodeU+1, from, to );
-	}
-
 	__forceinline void operator()( const xRegisterSSE& to, const ModSibBase& from ) const
 	{
 		// ModSib form is aligned if it's displacement-only and the displacement is aligned:
@@ -140,16 +120,6 @@ public:
 		if( to != from ) xOpWrite0F( PrefixA, Opcode, to, from );
 	}
 
-	__forceinline void operator()( const xRegisterSSE& to, const void* from ) const	
-	{
-		xOpWrite0F( (isAligned || ((uptr)from & 0x0f) == 0) ? PrefixA : PrefixU, Opcode, to, from );
-	}
-
-	__forceinline void operator()( const void* to, const xRegisterSSE& from ) const
-	{
-		xOpWrite0F( (isAligned || ((uptr)from & 0x0f) == 0) ? PrefixA : PrefixU, Opcode_Alt, to, from );
-	}
-
 	__forceinline void operator()( const xRegisterSSE& to, const ModSibBase& from ) const
 	{
 		// ModSib form is aligned if it's displacement-only and the displacement is aligned:
@@ -163,18 +133,6 @@ public:
 		bool isReallyAligned = isAligned || ( (to.Displacement & 0x0f) == 0 && to.Index.IsEmpty() && to.Base.IsEmpty() );
 		xOpWrite0F( isReallyAligned ? PrefixA : PrefixU, Opcode_Alt, from, to );
 	}
-};
-
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
-template< u8 AltPrefix, u16 OpcodeSSE >
-class SimdImpl_UcomI
-{
-public:
-	const SimdImpl_DestRegSSE<0x00,OpcodeSSE> SS;
-	const SimdImpl_DestRegSSE<AltPrefix,OpcodeSSE> SD;
-	SimdImpl_UcomI() {}
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////

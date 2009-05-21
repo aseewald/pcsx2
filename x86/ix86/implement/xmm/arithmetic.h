@@ -29,11 +29,9 @@ public:
 	_SimdShiftHelper() {}
 
 	__forceinline void operator()( const xRegisterSSE& to, const xRegisterSSE& from ) const { xOpWrite0F( 0x66, Opcode1, to, from ); }
-	__forceinline void operator()( const xRegisterSSE& to, const void* from ) const			{ xOpWrite0F( 0x66, Opcode1, to, from ); }
 	__forceinline void operator()( const xRegisterSSE& to, const ModSibBase& from ) const	{ xOpWrite0F( 0x66, Opcode1, to, from ); }
 
 	__forceinline void operator()( const xRegisterMMX& to, const xRegisterMMX& from ) const { xOpWrite0F( Opcode1, to, from ); }
-	__forceinline void operator()( const xRegisterMMX& to, const void* from ) const			{ xOpWrite0F( Opcode1, to, from ); }
 	__forceinline void operator()( const xRegisterMMX& to, const ModSibBase& from ) const	{ xOpWrite0F( Opcode1, to, from ); }
 
 

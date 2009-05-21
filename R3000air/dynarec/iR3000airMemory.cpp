@@ -77,7 +77,7 @@ namespace Internal
 	// the vtlb Indirect Dispatcher.
 	//
 	template< typename T >
-	static void DynGen_IndirectDispatchJump( int mode, bool signExtend )
+	static void DynGen_IndirectDispatchJump( int mode, bool signExtend=false )
 	{
 		xCMP( eax, HandlerId_Maximum );
 		xJB( GetIndirectDispatcherPtr( mode, GetOperandIndex<T>(), signExtend ) );
@@ -121,7 +121,7 @@ struct ConstLoadOpInfo
 	const sptr xlated;
 	
 	ConstLoadOpInfo( const IntermediateInstruction& info ) :
-		addr( info.Src[RF_Rs].Imm + info.GetImm() ),
+		addr( info.GetConstRs() + info.GetImm() ),
 		masked( addr & AddressMask ),
 		xlated( tbl_Translation.Contents[masked / PageSize] )
 	{
@@ -142,23 +142,21 @@ static void DynGen_DirectWrite( const IntermediateInstruction& info, const ModSi
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-template< typename T >
-class recLoad_ConstNone : public InstructionEmitter
+namespace recLoad_ConstNone
 {
-public:
-	recLoad_ConstNone() {}
-	
-	void MapRegisters( const IntermediateInstruction& info, RegisterMappings& inmaps, RegisterMappings& outmaps ) const
+	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
 	{
-		inmaps.Rs = ecx;
-		outmaps.Rt = eax;
+		opts.MapInput.Rs = ecx;
+		opts.MapOutput.Rt = eax;
 	}
 
-	void Emit( const IntermediateInstruction& info ) const
+	template< typename T >
+	static void Emit( const IntermediateInstruction& info )
 	{
-		info.AddImmTo( ecx );
+		// Make sure recompiler did it's job:
+		jASSUME( info.Src[RF_Rs].GetReg() == ecx );
 
-		xMOV( eax, ecx );
+		xMOV( eax, info.Src[RF_Rs] );
 		xAND( eax, AddressMask );
 		xSHR( eax, PageBitShift );
 
@@ -169,37 +167,36 @@ public:
 		DynGen_IndirectDispatchJump<T>( 0, info.SignExtendsResult() );
 
 		// Direct Access on Load Operation:
-		xAND( ecx, PageMask );
-		info.SignExtendedMove( eax, ptrT[ecx+eax] );
+		xAND( info.Src[RF_Rs], PageMask );
+		info.SignExtendedMove( eax, ptrT[xAddressReg(info.Src[RF_Rs].GetReg())+eax] );
 
 		*writeback = (uptr)xGetPtr();		// return target for indirect's call/ret
-		info.MoveToRt( eax );
+		//info.MoveToRt( eax );				// recompiler handles it for us
 	}
+	
+	IMPL_GetInterfaceTee( typename )
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-template< typename T >
-class recLoad_ConstRs : public InstructionEmitter
+namespace recLoad_ConstRs
 {
-public:
-	recLoad_ConstRs() {}
-
-	void MapRegisters( const IntermediateInstruction& info, RegisterMappings& inmaps, RegisterMappings& outmaps ) const
+	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
 	{
 		const ConstLoadOpInfo constinfo( info );
 
-		inmaps.Rs = ecx;
-		outmaps.Rt = eax;
-		
-		// ecx gets clobbered by the indirect handler, but is preserved on direct memOps:
-		// (ebx and edx are also preserved, but I haven't coded a mechanism to account
-		//  for that yet)
+		// ecx/edx get clobbered by the indirect handler, but are preserved on direct memOps:
 		if( constinfo.xlated > HandlerId_Maximum )
-			outmaps.Rs = ecx;
+		{
+			opts.xModifiesReg[ecx] = false;
+			opts.xModifiesReg[edx] = false;
+		}
+		
+		opts.MapOutput.Rt = eax;
 	}
 
-	void Emit( const IntermediateInstruction& info ) const
+	template< typename T >
+	static void Emit( const IntermediateInstruction& info )
 	{
 		const ConstLoadOpInfo constinfo( info );
 
@@ -213,30 +210,31 @@ public:
 			CallIndirectDispatcher<T>( 0, info.SignExtendsResult() );
 			info.SignExtendEax<T>();
 		}
-		info.MoveToRt( eax );
+		//info.MoveToRt( eax );
 	}
+
+	IMPL_GetInterfaceTee( typename )
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-template< bool IsLoadRight >
-class recLoadWord_LorR_ConstNone : public InstructionEmitter
+namespace recLoadWord_LorR_ConstNone
 {
-public:
-	recLoadWord_LorR_ConstNone() {}
-
-	void MapRegisters( const IntermediateInstruction& info, RegisterMappings& inmaps, RegisterMappings& outmaps ) const
+	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
 	{
-		// Rt is unmapped here because Rt is used only after we've already clobbered all
-		// the regular regs (due to LWL / LWR needing to enact a memory operation).
-		
-		inmaps.Rs = ecx;
-		outmaps.Rt = eax;
+		// Rt is unmapped/flushed here because Rt is used only after we've already clobbered
+		// all the regular regs (due to LWL / LWR needing to enact a memory operation), so
+		// might as well force the rec to flush it, and then reload it when ready.
+
+		opts.ForceIndirectRt = true;
+		opts.MapInput.Rs	= ecx;
+		opts.MapOutput.Rt	= eax;
 	}
 
-	void Emit( const IntermediateInstruction& info ) const
+	template< bool IsLoadRight >
+	static void Emit( const IntermediateInstruction& info )
 	{
-		info.AddImmTo( ecx );
+		xADD( ecx, info.ixImm );
 		xMOV( eax, ecx );
 
 		xAND( eax, AddressMask & ~3 );	// mask off bottom bits as well as top!
@@ -262,7 +260,7 @@ public:
 		xSHL( ecx, 3 );		// ecx == shift
 
 		info.MoveRtTo( ebx );
-		
+				
 		if( IsLoadRight )
 		{
 			xSHR( eax, cl );	// ecx == shift/memshift
@@ -290,31 +288,37 @@ public:
 			xSHL( eax, cl );
 			xOR( eax, ebx );
 		}
-
-		info.MoveToRt( eax );
+		
+		// Recompiler reads eax into Rt for us.
 	}
+
+	IMPL_GetInterfaceTee( bool )
 };
 
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-template< bool IsLoadRight >
-class recLoadWord_LorR_ConstRs : public InstructionEmitter
+namespace recLoadWord_LorR_ConstRs
 {
-public:
-	recLoadWord_LorR_ConstRs() {}
-
-	void MapRegisters( const IntermediateInstruction& info, RegisterMappings& inmaps, RegisterMappings& outmaps ) const
+	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
 	{
-		inmaps.Rt = ebx;
-		outmaps.Rt = eax;
-		
-		// Note: edx is preserved if (constinfo.xlated > HandlerId_Maximum)
-		// but I don't have a method for specifying register preservation yet.
+		opts.MapInput.Rt	= ebx;		// use ebx since it's preserved across indirect handlers.
+		opts.MapOutput.Rt	= eax;
+
+		// Note: ecx/edx are preserved for direct ops:
+		const ConstLoadOpInfo constinfo( info );
+		if( constinfo.xlated > HandlerId_Maximum )
+		{
+			opts.xModifiesReg[edx] = false;
+			opts.xModifiesReg[ecx] = false;
+		}
 	}
 	
-	void Emit( const IntermediateInstruction& info ) const
+	template< bool IsLoadRight >
+	static void Emit( const IntermediateInstruction& info )
 	{
+		jASSUME( info.Src[RF_Rt] == ebx );
+
 		const ConstLoadOpInfo constinfo( info );
 		const uint shift		= (constinfo.addr & 3) << 3;
 		const uint aligned_addr	= constinfo.addr & ~3;
@@ -339,27 +343,30 @@ public:
 
 		xAND( ebx, rtmask );
 		xOR( eax, ebx );
-		info.MoveToRt( eax );
+		xMOV( info.Dest[RF_Rt], eax );
 	}
+
+	IMPL_GetInterfaceTee( bool )
 };
 	
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-template< typename T >
-class recStore_ConstNone : public InstructionEmitter
+namespace recStore_ConstNone
 {
-public:
-	recStore_ConstNone() {}
-
-	void MapRegisters( const IntermediateInstruction& info, RegisterMappings& inmaps, RegisterMappings& outmaps ) const
+	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
 	{
-		inmaps.Rs = ecx;
-		inmaps.Rt = edx;
+		opts.MapInput.Rs = ecx;
+		opts.MapInput.Rt = edx;
 	}
 
-	void Emit( const IntermediateInstruction& info ) const
+	template< typename T >
+	static void Emit( const IntermediateInstruction& info )
 	{
-		info.AddImmTo( ecx );
+		// Make sure recompiler did it's job:
+		jASSUME( info.Src[RF_Rs].GetReg() == ecx );
+		jASSUME( info.Src[RF_Rt].GetReg() == edx );
+
+		xADD( ecx, info.ixImm );
 
 		xMOV( eax, ecx );
 		xAND( eax, AddressMask );
@@ -378,30 +385,31 @@ public:
 
 		*writeback = (uptr)xGetPtr();		// return target for indirect's call/ret
 	}
+
+	IMPL_GetInterfaceTee( typename )
 };
 
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-template< typename T >
-class recStore_ConstRs : public InstructionEmitter
+namespace recStore_ConstRs
 {
-public:
-	recStore_ConstRs() {}
-
-	void MapRegisters( const IntermediateInstruction& info, RegisterMappings& inmaps, RegisterMappings& outmaps ) const
+	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
 	{
-		const ConstLoadOpInfo constinfo( info );
+		opts.MapInput.Rt = edx;
 
-		inmaps.Rt = edx;
+		const ConstLoadOpInfo constinfo( info );
 		if( constinfo.xlated > HandlerId_Maximum )
 		{
-			// all registers are preserved (for when we implement that optimization)
-			outmaps.Rt = edx;
+			opts.xModifiesReg.None();
+			opts.MapOutput.Rt = edx;
 		}
+		else
+			opts.xModifiesReg[ebx] = false;
 	}
 
-	void Emit( const IntermediateInstruction& info ) const
+	template< typename T >
+	static void Emit( const IntermediateInstruction& info )
 	{
 		const ConstLoadOpInfo constinfo( info );
 
@@ -414,23 +422,28 @@ public:
 			CallIndirectDispatcher<T>( 1 );
 		}
 	}
+
+	IMPL_GetInterfaceTee( typename )
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-template< bool IsStoreRight >
-class recStoreWord_LorR_ConstNone : public InstructionEmitter
+namespace recStoreWord_LorR_ConstNone
 {
-public:
-	recStoreWord_LorR_ConstNone() {}
-
-	void MapRegisters( const IntermediateInstruction& info, RegisterMappings& inmaps, RegisterMappings& outmaps ) const
+	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
 	{
+		// Yay most inefficient function ever -- no regs preserved and we need to
+		// flush Rt as well.
+
+		opts.ForceIndirectRt = true;
+		opts.MapInput.Rs = ecx;
 	}
 
-	void Emit( const IntermediateInstruction& info ) const
+	template< bool IsStoreRight >
+	static void Emit( const IntermediateInstruction& info )
 	{
-		info.AddImmTo( ecx );
+		jASSUME( info.Src[RF_Rs].GetReg() == ecx );
+		xADD( ecx, info.ixImm );
 
 		xMOV( eax, ecx );
 
@@ -500,23 +513,29 @@ public:
 
 		*writeback = (uptr)xGetPtr();		// return target for indirect's call/ret
 	}
+
+	IMPL_GetInterfaceTee( bool )
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-template< bool IsStoreRight >
-class recStoreWord_LorR_ConstRs : public InstructionEmitter
+namespace recStoreWord_LorR_ConstRs
 {
-public:
-	recStoreWord_LorR_ConstRs() {}
-
-	void MapRegisters( const IntermediateInstruction& info, RegisterMappings& inmaps, RegisterMappings& outmaps ) const
+	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
 	{
-		inmaps.Rt = ebx;
-		outmaps.Rt = eax;
+		opts.MapInput.Rt = ebx;
+		
+		// Direct memory preserves ecx/edx
+		const ConstLoadOpInfo constinfo( info );
+		if( constinfo.xlated > HandlerId_Maximum )
+		{
+			opts.xModifiesReg[ecx] = false;
+			opts.xModifiesReg[ebx] = false;
+		}
 	}
 
-	void Emit( const IntermediateInstruction& info ) const
+	template< bool IsStoreRight >
+	static void Emit( const IntermediateInstruction& info )
 	{
 		const ConstLoadOpInfo constinfo( info );
 		const uint shift		= (constinfo.addr & 3) << 3;
@@ -556,50 +575,38 @@ public:
 			CallIndirectDispatcher<u32>( 1 );
 		}
 	}
+
+	IMPL_GetInterfaceTee( bool )
 };
 
-template< typename T >
-class recInst_Load : public InstructionRecompiler
-{
-protected:
-	static const recLoad_ConstNone<T> m_ConstNone;
-	static const recLoad_ConstRs<T> m_ConstRs;
+//////////////////////////////////////////////////////////////////////////////////////////
+//
 
-public:
-	recInst_Load() {}
+typedef InstructionRecMess InstAPI;
 
-	const InstructionEmitter& ConstNone() const	{ return m_ConstNone; }
-	const InstructionEmitter& ConstRt() const	{ return m_ConstNone; }
-	const InstructionEmitter& ConstRs() const	{ return m_ConstRs; }
-};
+#define DefineAPI( mess, name, opsize ) \
+	void InstAPI::name() \
+	{ \
+		API.ConstNone	= rec##mess##_ConstNone::GetInterface<opsize>; \
+		API.ConstRt		= rec##mess##_ConstNone::GetInterface<opsize>; \
+		API.ConstRs		= rec##mess##_ConstRs::GetInterface<opsize>; \
+		API.ConstRsRt	= rec##mess##_ConstRs::GetInterface<opsize>; \
+	}
 
-template< typename T >
-class recInst_Store : public InstructionRecompiler
-{
-protected:
-	static const recStore_ConstNone<T> m_ConstNone;
-	static const recStore_ConstRs<T> m_ConstRs;
+DefineAPI( Load, LB, u8 )
+DefineAPI( Load, LH, u16 )
+DefineAPI( Load, LBU, u8 )
+DefineAPI( Load, LHU, u16 )
+DefineAPI( Load, LW, u32 )
 
-public:
-	recInst_Store() {}
+DefineAPI( Store, SB, u8 )
+DefineAPI( Store, SH, u16 )
+DefineAPI( Store, SW, u32 )
 
-	const InstructionEmitter& ConstNone() const	{ return m_ConstNone; }
-	const InstructionEmitter& ConstRt() const	{ return m_ConstNone; }
-	const InstructionEmitter& ConstRs() const	{ return m_ConstRs; }
-};
-
-const recInst_Load<u8> __recLB;
-const recInst_Load<u16> __recLH;
-const recInst_Load<u32> __recLW;
-
-const recInst_Store<u8> __recSB;
-const recInst_Store<u16> __recSH;
-const recInst_Store<u32> __recSW;
-
-template< typename T > const typename recLoad_ConstNone<T> recInst_Load<T>::m_ConstNone;
-template< typename T > const typename recLoad_ConstRs<T> recInst_Load<T>::m_ConstRs;
-template< typename T > const typename recStore_ConstNone<T> recInst_Store<T>::m_ConstNone;
-template< typename T > const typename recStore_ConstRs<T> recInst_Store<T>::m_ConstRs;
+DefineAPI( LoadWord_LorR, LWL, false )
+DefineAPI( LoadWord_LorR, LWR, true )
+DefineAPI( StoreWord_LorR, SWL, false )
+DefineAPI( StoreWord_LorR, SWR, true )
 
 }
 

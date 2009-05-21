@@ -17,8 +17,8 @@
  */
 
 #pragma once
-//#define mVUdebug	// Prints Extra Info to Console
-//#define mVUlogProg	// Dumps MicroPrograms into microVU0.txt/microVU1.txt
+//#define mVUdebug		// Prints Extra Info to Console
+//#define mVUlogProg	// Dumps MicroPrograms to \logs\*.html
 
 #include "Common.h"
 #include "VU.h"
@@ -32,19 +32,21 @@ class microBlockManager {
 private:
 	static const int MaxBlocks = mMaxBlocks - 1;
 	int listSize; // Total Items - 1
+	int listI;	  // Index to Add new block
 	microBlock blockList[mMaxBlocks];
 
 public:
 	microBlockManager()	 { reset(); }
 	~microBlockManager() {}
-	void reset()  { listSize = -1; };
+	void reset()  { listSize = -1; listI = -1; };
 	microBlock* add(microBlock* pBlock) {
 		microBlock* thisBlock = search(&pBlock->pState);
 		if (!thisBlock) {
-			listSize++;
-			if (listSize > MaxBlocks) { Console::Error("microVU Warning: Block List Overflow"); listSize &= MaxBlocks; }
-			memcpy_fast(&blockList[listSize], pBlock, sizeof(microBlock));
-			thisBlock = &blockList[listSize];
+			listI++;
+			if (listSize < MaxBlocks) { listSize++; }
+			if (listI    > MaxBlocks) { Console::Error("microVU Warning: Block List Overflow"); listI = 0; }
+			memcpy_fast(&blockList[listI], pBlock, sizeof(microBlock));
+			thisBlock = &blockList[listI];
 		}
 		return thisBlock;
 	}
@@ -57,8 +59,10 @@ public:
 		}
 		else { // Can do Simple Search (Only Matches the Important Pipeline Stuff)
 			for (int i = 0; i <= listSize; i++) {
-				if ((blockList[i].pState.q == pState->q) && (blockList[i].pState.p == pState->p) 
-				&&  (blockList[i].pState.flags == pState->flags)) { return &blockList[i]; }
+				if ((blockList[i].pState.q == pState->q) 
+				&&  (blockList[i].pState.p == pState->p) 
+				&&  (blockList[i].pState.flags == pState->flags)
+				&& !(blockList[i].pState.needExactMatch & 0xf0f)) { return &blockList[i]; }
 			}
 		}
 		return NULL;
@@ -69,8 +73,9 @@ template<u32 progSize> // progSize = VU program memory size / 4
 struct microProgram {
 	u32 data[progSize];
 	u32 used;		// Number of times its been used
-	u32 last_used;	// counters # of frames since last use (starts at 3 and counts backwards to 0 for each 30fps vsync)
+	u32 last_used;	// Counters # of frames since last use (starts at 3 and counts backwards to 0 for each 30fps vSync)
 	u32 sFlagHack;	// Optimize out Status Flag Updates if Program doesn't use Status Flags
+	s32 range[2];	// The range of microMemory that has already been recompiled for the current program
 	u8* x86ptr;		// Pointer to program's recompilation code
 	u8* x86start;	// Start of program's rec-cache
 	u8* x86end;		// Limit of program's rec-cache
@@ -85,8 +90,8 @@ struct microProgManager {
 	static const int	max = mMaxProg - 1; 
 	int					cur;			// Index to Current MicroProgram thats running (-1 = uncached)
 	int					total;			// Total Number of valid MicroPrograms minus 1
+	int					isSame;			// Current cached microProgram is Exact Same program as mVU->regs->Micro (-1 = unknown, 0 = No, 1 = Yes)
 	int					cleared;		// Micro Program is Indeterminate so must be searched for (and if no matches are found then recompile a new one)
-	int					finished;		// Completed MicroProgram by E-bit Termination
 	microRegInfo		lpState;		// Pipeline state from where program left off (useful for continuing execution)
 };
 
@@ -110,7 +115,6 @@ struct microVU {
 	u8*		startFunct;	 // Ptr Function to the Start code for recompiled programs
 	u8*		exitFunct;	 // Ptr Function to the Exit code for recompiled programs
 	u32		code;		 // Contains the current Instruction
-	u32		iReg;		 // iReg (only used in recompilation, not execution)
 	u32		divFlag;	 // 1 instance of I/D flags
 	u32		VIbackup[2]; // Holds a backup of a VI reg if modified before a branch
 	u32		branch;		 // Holds branch compare result (IBxx) OR Holds address to Jump to (JALR/JR)
@@ -130,7 +134,7 @@ extern void (*mVU_LOWER_OPCODE[128])( VURegs* VU, s32 info );
 
 // Main Functions
 microVUt(void) mVUinit(VURegs*);
-microVUt(void) mVUreset();
+microVUx(void) mVUreset();
 microVUt(void) mVUclose();
 microVUt(void) mVUclear(u32, u32);
 
@@ -146,7 +150,7 @@ microVUf(void) mVUopL();
 microVUt(void)		mVUclearProg(microVU* mVU, int progIndex);
 microVUt(int)		mVUfindLeastUsedProg(microVU* mVU);
 microVUt(int)		mVUsearchProg();
-microVUt(void)		mVUcacheProg(microVU* mVU, int progIndex);
+microVUt(void)		mVUcacheProg(int progIndex);
 void* __fastcall	mVUexecuteVU0(u32 startPC, u32 cycles);
 void* __fastcall	mVUexecuteVU1(u32 startPC, u32 cycles);
 

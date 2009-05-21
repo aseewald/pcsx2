@@ -20,6 +20,10 @@
 #include "IopCommon.h"
 #include "iR3000air.h"
 
+namespace R3000A
+{
+typedef InstructionRecMess InstAPI;
+
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Branch Recompilers
@@ -36,11 +40,28 @@
 // Delay slots:
 //  The branch delay slot is handled by the IL, so we don't have to worry with it here.
 
-void R3000A::recJ( const IntermediateInstruction& info )
+IMPL_RecPlacebo( JAL );
+IMPL_RecPlacebo( J );
+IMPL_RecPlacebo( JALR );
+IMPL_RecPlacebo( JR );
+
+IMPL_RecPlacebo( BNE );
+IMPL_RecPlacebo( BEQ );
+
+IMPL_RecPlacebo( BLTZ );
+IMPL_RecPlacebo( BLEZ );
+IMPL_RecPlacebo( BGEZ );
+IMPL_RecPlacebo( BGTZ );
+IMPL_RecPlacebo( BLTZAL );
+IMPL_RecPlacebo( BGEZAL );
+
+}
+
+/*void R3000A::recJ( const IntermediateInstruction& info )
 {
 
 }
 
 void R3000A::recJR( const IntermediateInstruction& info )
 {
-}
+}*/

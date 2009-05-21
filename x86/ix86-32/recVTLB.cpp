@@ -291,7 +291,7 @@ void vtlb_dynarec_init()
 	HostSys::MemProtect( m_IndirectDispatchers, 0x1000, Protect_ReadWrite, false );
 
 	// clear the buffer to 0xcc (easier debugging).
-	memset_8<0xcc,0x1000>( m_IndirectDispatchers );
+	memset8_obj<0xcc>( m_IndirectDispatchers );
 
 	//u8* baseptr = m_IndirectDispatchers;
 

@@ -94,5 +94,17 @@ public:
 		}
 	}
 
+	// ------------------------------------------------------------------------
+	template< typename T > __noinline void operator()( const xDirectOrIndirect<T>& to, u8 imm ) const
+	{
+		_DoI_helpermess( *this, to, imm );
+	}
+
+	template< typename T > __noinline void operator()( const xDirectOrIndirect<T>& to, const xRegisterCL& from ) const
+	{
+		_DoI_helpermess( *this, to, from );
+	}
+
+
 	Group2ImplAll() {}		// I am a class with no members, so I need an explicit constructor!  Sense abounds.
 };

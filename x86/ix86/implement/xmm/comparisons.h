@@ -42,7 +42,6 @@ protected:
 	template< u8 Prefix > struct Woot
 	{
 		__forceinline void operator()( const xRegisterSSE& to, const xRegisterSSE& from ) const	{ xOpWrite0F( Prefix, 0xc2, to, from ); xWrite8( CType ); }
-		__forceinline void operator()( const xRegisterSSE& to, const void* from ) const			{ xOpWrite0F( Prefix, 0xc2, to, from ); xWrite8( CType ); }
 		__forceinline void operator()( const xRegisterSSE& to, const ModSibBase& from ) const	{ xOpWrite0F( Prefix, 0xc2, to, from ); xWrite8( CType ); }
 		Woot() {}
 	};
@@ -53,6 +52,22 @@ public:
 	const Woot<0xf3> SS;
 	const Woot<0xf2> SD;
 	SimdImpl_Compare() {} //GCWhat?
+};
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// Compare scalar floating point values and set EFLAGS (Ordered or Unordered)
+//
+template< bool Ordered >
+class SimdImpl_COMI
+{
+protected:
+	static const u16 OpcodeSSE = Ordered ? 0x2f : 0x2e;
+
+public:
+	const SimdImpl_DestRegSSE<0x00,OpcodeSSE> SS;
+	const SimdImpl_DestRegSSE<0x66,OpcodeSSE> SD;
+	
+	SimdImpl_COMI() {}
 };
 
 

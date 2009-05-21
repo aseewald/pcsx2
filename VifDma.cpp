@@ -2019,8 +2019,7 @@ static void Vif1CMDMskPath3()  // MSKPATH3
 #ifdef GSPATH3FIX
 	if ((vif1Regs->code >> 15) & 0x1)
 	{
-		psHu32(GIF_STAT) |= 0x2;
-		psHu32(GIF_MODE) |= 0x1;
+		
 		while ((gif->chcr & 0x100)) //Can be done 2 different ways, depends on the game/company
 		{
 			if (!path3hack && !Path3transfer && (gif->qwc == 0)) break;
@@ -2030,14 +2029,13 @@ static void Vif1CMDMskPath3()  // MSKPATH3
 			if (path3hack && (gif->qwc == 0)) break; //add games not working with it to elfheader.c to enable this instead
 
 		}
-		
+		psHu32(GIF_STAT) |= 0x2;
 	}
 	else
 	{
 		// fixme: This is the *only* reason 'transferred' is global. Otherwise it'd be local to Vif1Transfer.
 		if (gif->chcr & 0x100) CPU_INT(2, (transferred >> 2) * BIAS);	// Restart Path3 on its own, time it right!
 		psHu32(GIF_STAT) &= ~0x2;
-		psHu32(GIF_MODE) &= ~0x1;
 	}
 #else
 	if (vif1Regs->mskpath3)
@@ -2073,10 +2071,8 @@ static void Vif1CMDFlush()  // FLUSH/E/A
 		while ((gif->chcr & 0x100))
 		{
 			if (!Path3transfer && gif->qwc == 0) break;
-			vif1Regs->stat |= 0x4;
-			break;
-			
-		}
+			gsInterrupt();
+	}
 	}
 
 	vif1.cmd &= ~0x7f;
@@ -2131,7 +2127,7 @@ static void Vif1CMDDirectHL()  // DIRECT/HL
 	{
 		//if(vif1Regs->mskpath3)CPU_INT(2, vif1ch->qwc - (vif1.vifpacketsize >> 2) * BIAS);
 		 //DirectHL flushes the lot
-		vif1Regs->stat |= 0x4;
+		vif1Regs->stat |= VIF1_STAT_VGW;
 		
 	}
 	
@@ -2219,7 +2215,7 @@ int VIF1transfer(u32 *data, int size, int istag)
 		if (vif1.tag.size != 0) DevCon::Error("no vif1 cmd but tag size is left last cmd read %x", params vif1Regs->code);
 
 		if (vif1.irq) break;
-		if(vif1Regs->stat & 0x4) break;
+		if(vif1Regs->stat & VIF1_STAT_VGW) break;
 
 		vif1.cmd = (data[0] >> 24);
 		vif1Regs->code = data[0];
@@ -2264,7 +2260,7 @@ int VIF1transfer(u32 *data, int size, int istag)
 				if (vif1.tag.size == 0) break;
 			}
 		}
-	if(vif1Regs->stat & 0x4) break;
+	if(vif1Regs->stat & VIF1_STAT_VGW) break;
 	} // End of Transfer loop
 
 	transferred += size - vif1.vifpacketsize;
@@ -2302,7 +2298,7 @@ int VIF1transfer(u32 *data, int size, int istag)
 		vif1ch->qwc -= transferred;		
 	}
 	
-	if(vif1Regs->stat & 0x4)
+	if(vif1Regs->stat & VIF1_STAT_VGW)
 	{
 		vif1.vifstalled = true;
 		return -1;
@@ -2489,22 +2485,21 @@ __forceinline void vif1Interrupt()
 	VIF_LOG("vif1Interrupt: %8.8x", cpuRegs.cycle);
 
 	g_vifCycles = 0;
-	if((vif1Regs->stat & 0x4) && 
-		((psHu32(GIF_MODE) & 0x1) ? (Path3transfer == true || gif->qwc > 0) : (gif->chcr & 0x100)))
+	if((vif1Regs->stat & VIF1_STAT_VGW) && 
+		(gif->chcr & 0x100))
 	{
 		int delay = 0;
-			
+
 		if ((psHu32(GIF_MODE) & 0x1))
 			delay = min( 8, (int)gif->qwc );
 		else
 			delay = gif->qwc * BIAS;
 
-		if((psHu32(GIF_MODE) & 0x1)) gsInterrupt();
 		//else CPU_INT(2, min( 64, (int)gif->qwc ) * BIAS);
 		CPU_INT(1, delay);
 		return;
 	}
-	vif1Regs->stat &= ~0x4;
+	vif1Regs->stat &= ~VIF1_STAT_VGW;
 	
 
 	if ((vif1ch->chcr & 0x100) == 0) Console::WriteLn("Vif1 running when CHCR == %x", params vif1ch->chcr);

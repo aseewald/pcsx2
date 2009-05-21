@@ -90,26 +90,26 @@ const SimdImpl_MoveSSE<0x66,true> xMOVAPD;
 const SimdImpl_MoveSSE<0x66,false> xMOVUPD;
 #endif
 
-const MovhlImplAll<0x16> xMOVH;
-const MovhlImplAll<0x12> xMOVL;
-const MovhlImpl_RtoR<0x16> xMOVLH;
-const MovhlImpl_RtoR<0x12> xMOVHL;
+const MovhlImplAll<0x16>		xMOVH;
+const MovhlImplAll<0x12>		xMOVL;
+const MovhlImpl_RtoR<0x16>		xMOVLH;
+const MovhlImpl_RtoR<0x12>		xMOVHL;
+
+const SimdImpl_AndNot			xANDN;
+const SimdImpl_COMI<true>		xCOMI;
+const SimdImpl_COMI<false>		xUCOMI;
+const SimdImpl_rSqrt<0x53>		xRCP;
+const SimdImpl_rSqrt<0x52>		xRSQRT;
+const SimdImpl_Sqrt<0x51>		xSQRT;
+
+const SimdImpl_MinMax<0x5f>		xMAX;
+const SimdImpl_MinMax<0x5d>		xMIN;
+const SimdImpl_Shuffle<0xc6>	xSHUF;
 
 const SimdImpl_DestRegEither<0x66,0xdb> xPAND;
 const SimdImpl_DestRegEither<0x66,0xdf> xPANDN;
 const SimdImpl_DestRegEither<0x66,0xeb> xPOR;
 const SimdImpl_DestRegEither<0x66,0xef> xPXOR;
-
-const SimdImpl_AndNot xANDN;
-
-const SimdImpl_UcomI<0x66,0x2e> xUCOMI;
-const SimdImpl_rSqrt<0x53> xRCP;
-const SimdImpl_rSqrt<0x52> xRSQRT;
-const SimdImpl_Sqrt<0x51> xSQRT;
-
-const SimdImpl_MinMax<0x5f> xMAX;
-const SimdImpl_MinMax<0x5d> xMIN;
-const SimdImpl_Shuffle<0xc6> xSHUF;
 
 // ------------------------------------------------------------------------
 
@@ -238,19 +238,15 @@ __emitinline void xLDMXCSR( const u32* src )
 //
 
 __forceinline void xMOVDZX( const xRegisterSSE& to, const xRegister32& from )	{ xOpWrite0F( 0x66, 0x6e, to, from ); }
-__forceinline void xMOVDZX( const xRegisterSSE& to, const void* src )			{ xOpWrite0F( 0x66, 0x6e, to, src ); }
 __forceinline void xMOVDZX( const xRegisterSSE& to, const ModSibBase& src )		{ xOpWrite0F( 0x66, 0x6e, to, src ); }
 
 __forceinline void xMOVDZX( const xRegisterMMX& to, const xRegister32& from )	{ xOpWrite0F( 0x6e, to, from ); }
-__forceinline void xMOVDZX( const xRegisterMMX& to, const void* src )			{ xOpWrite0F( 0x6e, to, src ); }
 __forceinline void xMOVDZX( const xRegisterMMX& to, const ModSibBase& src )		{ xOpWrite0F( 0x6e, to, src ); }
 
 __forceinline void xMOVD( const xRegister32& to, const xRegisterSSE& from )		{ xOpWrite0F( 0x66, 0x7e, from, to ); }
-__forceinline void xMOVD( void* dest, const xRegisterSSE& from )				{ xOpWrite0F( 0x66, 0x7e, from, dest ); }
 __forceinline void xMOVD( const ModSibBase& dest, const xRegisterSSE& from )	{ xOpWrite0F( 0x66, 0x7e, from, dest ); }
 
 __forceinline void xMOVD( const xRegister32& to, const xRegisterMMX& from )		{ xOpWrite0F( 0x7e, from, to ); }
-__forceinline void xMOVD( void* dest, const xRegisterMMX& from )				{ xOpWrite0F( 0x7e, from, dest ); }
 __forceinline void xMOVD( const ModSibBase& dest, const xRegisterMMX& from )	{ xOpWrite0F( 0x7e, from, dest ); }
 
 
@@ -268,14 +264,10 @@ __forceinline void xMOVQZX( const xRegisterSSE& to, const void* src )			{ xOpWri
 
 // Moves lower quad of XMM to ptr64 (no bits are cleared)
 __forceinline void xMOVQ( const ModSibBase& dest, const xRegisterSSE& from )	{ xOpWrite0F( 0x66, 0xd6, from, dest ); }
-// Moves lower quad of XMM to ptr64 (no bits are cleared)
-__forceinline void xMOVQ( void* dest, const xRegisterSSE& from )				{ xOpWrite0F( 0x66, 0xd6, from, dest ); }
 
 __forceinline void xMOVQ( const xRegisterMMX& to, const xRegisterMMX& from )	{ if( to != from ) xOpWrite0F( 0x6f, to, from ); }
 __forceinline void xMOVQ( const xRegisterMMX& to, const ModSibBase& src )		{ xOpWrite0F( 0x6f, to, src ); }
-__forceinline void xMOVQ( const xRegisterMMX& to, const void* src )				{ xOpWrite0F( 0x6f, to, src ); }
 __forceinline void xMOVQ( const ModSibBase& dest, const xRegisterMMX& from )	{ xOpWrite0F( 0x7f, from, dest ); }
-__forceinline void xMOVQ( void* dest, const xRegisterMMX& from )				{ xOpWrite0F( 0x7f, from, dest ); }
 
 // This form of xMOVQ is Intel's adeptly named 'MOVQ2DQ'
 __forceinline void xMOVQ( const xRegisterSSE& to, const xRegisterMMX& from )	{ xOpWrite0F( 0xf3, 0xd6, to, from ); }
@@ -295,9 +287,7 @@ __forceinline void xMOVQ( const xRegisterMMX& to, const xRegisterSSE& from )
 
 #define IMPLEMENT_xMOVS( ssd, prefix ) \
 	__forceinline void xMOV##ssd( const xRegisterSSE& to, const xRegisterSSE& from )	{ if( to != from ) xOpWrite0F( prefix, 0x10, to, from ); } \
-	__forceinline void xMOV##ssd##ZX( const xRegisterSSE& to, const void* from )		{ xOpWrite0F( prefix, 0x10, to, from ); } \
 	__forceinline void xMOV##ssd##ZX( const xRegisterSSE& to, const ModSibBase& from )	{ xOpWrite0F( prefix, 0x10, to, from ); } \
-	__forceinline void xMOV##ssd( const void* to, const xRegisterSSE& from )			{ xOpWrite0F( prefix, 0x11, from, to ); } \
 	__forceinline void xMOV##ssd( const ModSibBase& to, const xRegisterSSE& from )		{ xOpWrite0F( prefix, 0x11, from, to ); }
 
 IMPLEMENT_xMOVS( SS, 0xf3 )
@@ -307,27 +297,17 @@ IMPLEMENT_xMOVS( SD, 0xf2 )
 // Non-temporal movs only support a register as a target (ie, load form only, no stores)
 //
 
-__forceinline void xMOVNTDQA( const xRegisterSSE& to, const void* from )
-{
-	xWrite32( 0x2A380f66 );
-	EmitSibMagic( to.Id, from );
-}
-
 __forceinline void xMOVNTDQA( const xRegisterSSE& to, const ModSibBase& from )
 {
 	xWrite32( 0x2A380f66 );
 	EmitSibMagic( to.Id, from );
 }
 
-__forceinline void xMOVNTDQ( void* to, const xRegisterSSE& from )				{ xOpWrite0F( 0x66, 0xe7, from, to ); }
 __forceinline void xMOVNTDQA( const ModSibBase& to, const xRegisterSSE& from )	{ xOpWrite0F( 0x66, 0xe7, from, to ); }
 
-__forceinline void xMOVNTPD( void* to, const xRegisterSSE& from )				{ xOpWrite0F( 0x66, 0x2b, from, to ); }
 __forceinline void xMOVNTPD( const ModSibBase& to, const xRegisterSSE& from )	{ xOpWrite0F( 0x66, 0x2b, from, to ); }
-__forceinline void xMOVNTPS( void* to, const xRegisterSSE& from )				{ xOpWrite0F( 0x2b, from, to ); }
 __forceinline void xMOVNTPS( const ModSibBase& to, const xRegisterSSE& from )	{ xOpWrite0F( 0x2b, from, to ); }
 
-__forceinline void xMOVNTQ( void* to, const xRegisterMMX& from )				{ xOpWrite0F( 0xe7, from, to ); }
 __forceinline void xMOVNTQ( const ModSibBase& to, const xRegisterMMX& from )	{ xOpWrite0F( 0xe7, from, to ); }
 
 // ------------------------------------------------------------------------
@@ -382,7 +362,6 @@ __forceinline void xPALIGNR( const xRegisterMMX& to, const xRegisterMMX& from, u
 //    with 0.0 if set to 1.
 //
 __emitinline void xINSERTPS( const xRegisterSSE& to, const xRegisterSSE& from, u8 imm8 )		{ xOpWrite0F( 0x66, 0x213a, to, from, imm8 ); }
-__emitinline void xINSERTPS( const xRegisterSSE& to, const u32* from, u8 imm8 )					{ xOpWrite0F( 0x66, 0x213a, to, from, imm8 ); }
 __emitinline void xINSERTPS( const xRegisterSSE& to, const ModSibStrict<u32>& from, u8 imm8 )	{ xOpWrite0F( 0x66, 0x213a, to, from, imm8 ); }
 
 // [SSE-4.1] Extract a single-precision floating-point value from src at an offset
@@ -390,7 +369,6 @@ __emitinline void xINSERTPS( const xRegisterSSE& to, const ModSibStrict<u32>& fr
 // is stored into the low 32-bits of dest (or at a 32-bit memory pointer).
 //
 __emitinline void xEXTRACTPS( const xRegister32& to, const xRegisterSSE& from, u8 imm8 )		{ xOpWrite0F( 0x66, 0x173a, to, from, imm8 ); }
-__emitinline void xEXTRACTPS( u32* dest, const xRegisterSSE& from, u8 imm8 )					{ xOpWrite0F( 0x66, 0x173a, from, dest, imm8 ); }
 __emitinline void xEXTRACTPS( const ModSibStrict<u32>& dest, const xRegisterSSE& from, u8 imm8 ){ xOpWrite0F( 0x66, 0x173a, from, dest, imm8 ); }
 
 }

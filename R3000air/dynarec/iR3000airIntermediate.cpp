@@ -206,21 +206,19 @@ namespace Analytics
 }
 
 static void MapSourceField( RegField_t field, int valid_uses[34],
-	const InstructionConstOpt& iListCur,
-	const InstructionConstOpt& iListPrev,
 	IntermediateInstruction& curIL,
 	IntermediateInstruction& prevIL )
 {
-	int gpr_read = iListCur.ReadsField( field );
+	int gpr_read = curIL.Inst.ReadsField( field );
 	if( gpr_read >= 0 )
 	{
-		RegField_t prevfield = iListPrev.WritesReg( iListCur.RegField( field ) );
+		RegField_t prevfield = prevIL.Inst.WritesReg( curIL.Inst.RegField( field ) );
 		if( prevfield != RF_Unused )
 		{
 			// Success!  Map it:
 
-			curIL.Src[field]		= ( field == RF_Hi ) ? edx : eax;
-			prevIL.Dest[prevfield]	= ( field == RF_Hi ) ? edx : eax;
+			//curIL.Src[field]		= ( field == RF_Hi ) ? edx : eax;
+			prevIL.Dest[prevfield]	= curIL.InMaps[field];
 
 			Analytics::RegMapped_TypeA++;
 			Console::Status( "IOP Register Mapped : %s -> %s (total: %d)", params RegField_ToString(prevfield), RegField_ToString(field), Analytics::RegMapped_TypeA );
@@ -230,11 +228,11 @@ static void MapSourceField( RegField_t field, int valid_uses[34],
 			bool constStatus;
 			switch( field )
 			{
-				case RF_Rd:	constStatus = iListCur.IsConstInput.Rd; break;
-				case RF_Rt:	constStatus = iListCur.IsConstInput.Rt; break;
-				case RF_Rs:	constStatus = iListCur.IsConstInput.Rs; break;
-				case RF_Hi:	constStatus = iListCur.IsConstInput.Hi; break;
-				case RF_Lo:	constStatus = iListCur.IsConstInput.Lo; break;
+				case RF_Rd:	constStatus = curIL.Inst.IsConstInput.Rd; break;
+				case RF_Rt:	constStatus = curIL.Inst.IsConstInput.Rt; break;
+				case RF_Rs:	constStatus = curIL.Inst.IsConstInput.Rs; break;
+				case RF_Hi:	constStatus = curIL.Inst.IsConstInput.Hi; break;
+				case RF_Lo:	constStatus = curIL.Inst.IsConstInput.Lo; break;
 				jNO_DEFAULT
 			}
 
@@ -243,35 +241,77 @@ static void MapSourceField( RegField_t field, int valid_uses[34],
 	}
 }
 
+// TODO: Add the Const type to the parameters here, but I'm waiting for the wxWidgets merge.
+void InstructionRecAPI::_const_error()
+{
+	assert( false );
+	throw Exception::LogicError( "R3000A Recompiler Logic Error: invalid const form for this instruction." );
+}
+
+void InstructionRecAPI::Error_ConstNone( InstructionEmitterAPI& api )		{ _const_error(); }
+void InstructionRecAPI::Error_ConstRs( InstructionEmitterAPI& api )		{ _const_error(); }
+void InstructionRecAPI::Error_ConstRt( InstructionEmitterAPI& api )		{ _const_error(); }
+void InstructionRecAPI::Error_ConstRsRt( InstructionEmitterAPI& api )	{ _const_error(); }
+
+void InstructionRecMess::GetRecInfo()
+{
+	API.Reset();
+	Instruction::Process( *this );
+}
+
+void IntermediateInstruction::Assign( const InstructionConstOpt& src )
+{
+	Inst = src;
+	Inst.GetRecInfo();
+	
+	InMaps = RegisterMappings();
+	OutMaps = RegisterMappings();
+
+	if( Inst.IsConstInput.Rt && Inst.IsConstInput.Rs )
+	{
+		Inst.API.ConstRsRt( Emitface );
+	}
+	else if( Inst.IsConstInput.Rt )
+	{
+		Inst.API.ConstRt( Emitface );
+	}
+	else if( Inst.IsConstInput.Rs )
+	{
+		Inst.API.ConstRs( Emitface );
+	}
+	else
+	{
+		Inst.API.ConstNone( Emitface );
+	}
+}
+
 // ------------------------------------------------------------------------
 // Intermediate Pass 2 -- Assigns regalloc prior to the x86 codegen.
 //
 void recIL_Pass2( const SafeArray<InstructionConstOpt>& iList )
 {
-	// First instruction starts out as a blank slate:
-	const InstructionConstOpt& first( iList[0] );
-	const Opcode& effop( first._Opcode_ );
-
 	const int numinsts = iList.GetLength();
 
 	for( int i=0; i<numinsts; i++ )
 	{
 		IntermediateInstruction& fnew( m_intermediates[i] );
-		
-		fnew.Src[RF_Rs] = GPR_GetMemIndexer( effop.Rs() );
-		fnew.Src[RF_Rt] = GPR_GetMemIndexer( effop.Rt() );
-		fnew.Src[RF_Rd] = GPR_GetMemIndexer( effop.Rd() );
-		fnew.Src[RF_Hi] = GPR_GetMemIndexer( 32 );		// Hi
-		fnew.Src[RF_Lo] = GPR_GetMemIndexer( 33 );		// Lo
+		fnew.Assign( iList[0] );
+
+		fnew.Src[RF_Rd] = ptr32[GPR_GetMemIndexer( fnew.Inst._Rd_ )];
+		fnew.Src[RF_Rt] = ptr32[GPR_GetMemIndexer( fnew.Inst._Rt_ )];
+		fnew.Src[RF_Rs] = ptr32[GPR_GetMemIndexer( fnew.Inst._Rs_ )];
+		fnew.Src[RF_Hi] = ptr32[GPR_GetMemIndexer( 32 )];		// Hi
+		fnew.Src[RF_Lo] = ptr32[GPR_GetMemIndexer( 33 )];		// Lo
 
 		// Assign destination registers
 
-		fnew.Dest[RF_Rs] = GPR_GetMemIndexer( effop.Rs() );
-		fnew.Dest[RF_Rt] = GPR_GetMemIndexer( effop.Rt() );
-		fnew.Dest[RF_Rd] = GPR_GetMemIndexer( effop.Rd() );
-		fnew.Dest[RF_Hi] = GPR_GetMemIndexer( 32 );		// Hi
-		fnew.Dest[RF_Lo] = GPR_GetMemIndexer( 33 );		// Lo
+		fnew.Dest[RF_Rd] = ptr32[GPR_GetMemIndexer( fnew.Inst._Rd_ )];
+		fnew.Dest[RF_Rt] = ptr32[GPR_GetMemIndexer( fnew.Inst._Rt_ )];
+		fnew.Dest[RF_Rs] = ptr32[GPR_GetMemIndexer( fnew.Inst._Rs_ )];
+		fnew.Dest[RF_Hi] = ptr32[GPR_GetMemIndexer( 32 )];		// Hi
+		fnew.Dest[RF_Lo] = ptr32[GPR_GetMemIndexer( 33 )];		// Lo
 	}
+
 
 	// ------------------------------------------------------------------------
 	// Simple Single-Step Reg mapping:
@@ -285,7 +325,7 @@ void recIL_Pass2( const SafeArray<InstructionConstOpt>& iList )
 	for( int i=1; i<numinsts; ++i )
 	{
 		for( int rf=0; rf<RF_Count; ++rf )
-			MapSourceField( (RegField_t)rf, valid_uses, iList[i], iList[i-1], m_intermediates[i], m_intermediates[i-1] );
+			MapSourceField( (RegField_t)rf, valid_uses, m_intermediates[i], m_intermediates[i-1] );
 	}
 
 	// ------------------------------------------------------------------------

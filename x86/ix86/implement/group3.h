@@ -52,7 +52,11 @@ public:
 		xWrite8( Is8BitOp<T>() ? 0xf6 : 0xf7 );
 		EmitSibMagic( InstType, from );
 	}
-	
+
+	template< typename T > __emitinline void operator()( const xDirectOrIndirect<T>& from ) const
+	{
+		_DoI_helpermess( *this, from );
+	}
 	xImpl_Group3() {}
 };
 
@@ -97,13 +101,11 @@ public:
 	using ImplMulDivBase<G3Type_iMUL,0x59>::operator();
 	
 	__forceinline void operator()( const xRegister32& to,	const xRegister32& from ) const			{ xOpWrite0F( 0xaf, to, from ); }
-	__forceinline void operator()( const xRegister32& to,	const void* src ) const					{ xOpWrite0F( 0xaf, to, src ); }
 	__forceinline void operator()( const xRegister32& to,	const ModSibBase& src ) const			{ xOpWrite0F( 0xaf, to, src ); }
 	__forceinline void operator()( const xRegister32& to,	const xRegister32& from, s32 imm ) const{ ImmStyle( to, from, imm ); }
 	__forceinline void operator()( const xRegister32& to,	const ModSibBase& from, s32 imm ) const	{ ImmStyle( to, from, imm ); }
 
 	__forceinline void operator()( const xRegister16& to,	const xRegister16& from ) const			{ xOpWrite0F( 0x66, 0xaf, to, from ); }
-	__forceinline void operator()( const xRegister16& to,	const void* src ) const					{ xOpWrite0F( 0x66, 0xaf, to, src ); }
 	__forceinline void operator()( const xRegister16& to,	const ModSibBase& src ) const			{ xOpWrite0F( 0x66, 0xaf, to, src ); }
 	__forceinline void operator()( const xRegister16& to,	const xRegister16& from, s16 imm ) const{ ImmStyle( to, from, imm ); }
 	__forceinline void operator()( const xRegister16& to,	const ModSibBase& from, s16 imm ) const	{ ImmStyle( to, from, imm ); }

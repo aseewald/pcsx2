@@ -318,7 +318,7 @@ static void recRecompile()
 
 			// Integrity Verified... Generate X86.
 
-			recIL_Pass2( mess.IL );
+			//recIL_Pass2( mess.IL );
 			mess.IL.Dispose();
 		}
 		recIL_Block();

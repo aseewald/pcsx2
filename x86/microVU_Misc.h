@@ -150,6 +150,7 @@ declareAllVariables
 #define pass4 if (recPass == 3)
 
 // Misc Macros...
+#define mVUprogI	 mVU->prog.prog[progIndex]
 #define mVUcurProg	 mVU->prog.prog[mVU->prog.cur]
 #define mVUblocks	 mVU->prog.prog[mVU->prog.cur].block
 #define mVUallocInfo mVU->prog.prog[mVU->prog.cur].allocInfo
@@ -161,13 +162,14 @@ declareAllVariables
 #define mVUregs		 mVUallocInfo.block.pState
 #define mVUregsTemp	 mVUallocInfo.regsTemp
 #define iPC			 mVUallocInfo.curPC
-#define mVUflagInfo	 mVUregs.needExactMatch
 #define mVUsFlagHack mVUallocInfo.sFlagHack
 #define mVUinfo		 mVUallocInfo.info[iPC / 2]
 #define mVUstall	 mVUallocInfo.stall[iPC / 2]
 #define mVUstartPC	 mVUallocInfo.startPC
+#define mVUflagInfo	 mVUregs.needExactMatch
+#define mVUflagHack  (mVUcurProg.sFlagHack)
 #define xPC			 ((iPC / 2) * 8)
-#define curI		 mVUcurProg.data[iPC]
+#define curI		 ((u32*)mVU->regs->Micro)[iPC] //mVUcurProg.data[iPC]
 #define setCode()	 { mVU->code = curI; }
 #define incPC(x)	 { iPC = ((iPC + x) & (mVU->progSize-1)); setCode(); }
 #define incPC2(x)	 { iPC = ((iPC + x) & (mVU->progSize-1)); }
@@ -175,7 +177,11 @@ declareAllVariables
 #define bSaveAddr	 (((xPC + (2 * 8)) & ((vuIndex) ? 0x3ff8:0xff8)) / 8)
 #define branchAddr	 ((xPC + 8 + (_Imm11_ * 8)) & ((vuIndex) ? 0x3ff8:0xff8))
 #define shufflePQ	 (((mVU->p) ? 0xb0 : 0xe0) | ((mVU->q) ? 0x01 : 0x04))
-#define mVUflagHack  (mVUcurProg.sFlagHack)
+
+// Flag Info
+#define __Status	 (mVUflagInfo & (0xf<<0))
+#define __Mac		 (mVUflagInfo & (0xf<<4))
+#define __Clip		 (mVUflagInfo & (0xf<<8))
 
 // Pass 1 uses these to set mVUinfo
 #define _isNOP		 (1<<0) // Skip Lower Instruction
@@ -216,7 +222,7 @@ declareAllVariables
 #define isSflag		 (mVUinfo & (1<<4))
 #define writeQ		((mVUinfo >> 5) & 1)
 #define readQ		((mVUinfo >> 6) & 1)
-#define writeP		((mVUinfo >> 7) & 1)
+#define writeP		(((mVUinfo >> 7) + 1) & 1)
 #define readP		((mVUinfo >> 7) & 1) // same as writeP
 #define doFlags		 (mVUinfo & (3<<8))
 #define doMac		 (mVUinfo & (1<<8))
@@ -254,13 +260,6 @@ declareAllVariables
 #define mVUlogQ()	 { mVUlog(", Q"); }
 #define mVUlogCLIP() { mVUlog("w.xyz vf%02d, vf%02dw", _Fs_, _Ft_); }
 
-// Flag Info
-//#define __NeedExact	 (1<<12)
-//#define __ExactMatch (mVUregs.needExactMatch & (1<<12))
-#define __Status	 (mVUflagInfo & (0xf<<0))
-#define __Mac		 (mVUflagInfo & (0xf<<4))
-#define __Clip		 (mVUflagInfo & (0xf<<8))
-
 // Store VI regs in mmx regs?
 #define isMMX(_VIreg_)	0 //(_VIreg_ >= 1 && _VIreg_ <=8)
 #define mmVI(_VIreg_)	(_VIreg_ - 1)
@@ -294,7 +293,10 @@ declareAllVariables
 #define CHECK_VU_MINMAXHACK	0 // Min/Max Speed Hack
 
 // Cache Limit Check
-#define mVUcacheCheck(ptr, start, limit) {  \
-	uptr diff = ptr - start; \
-	if (diff >= limit) { Console::Error("microVU Error: Program went over its cache limit. Size = 0x%x", params diff); } \
+#define mVUcacheCheck(ptr, start, limit) {																\
+	uptr diff = ptr - start;																			\
+	if (diff >= limit) {																				\
+		Console::Error("microVU Error: Program went over its cache limit. Size = 0x%x", params diff);	\
+		mVUreset<vuIndex>();																			\
+	}																									\
 }

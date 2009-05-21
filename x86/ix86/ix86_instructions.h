@@ -179,11 +179,9 @@ namespace x86Emitter
 	extern void xPUSH( const ModSibBase& from );
 
 	extern void xPOP( xRegister32 from );
-	extern void xPOP( void* from );
 
 	extern void xPUSH( u32 imm );
 	extern void xPUSH( xRegister32 from );
-	extern void xPUSH( void* from );
 
 	// pushes the EFLAGS register onto the stack
 	extern void xPUSHFD();
@@ -346,58 +344,41 @@ namespace x86Emitter
 	extern void xLDMXCSR( const u32* src );
 
 	extern void xMOVDZX( const xRegisterSSE& to, const xRegister32& from );
-	extern void xMOVDZX( const xRegisterSSE& to, const void* src );
 	extern void xMOVDZX( const xRegisterSSE& to, const ModSibBase& src );
 
 	extern void xMOVDZX( const xRegisterMMX& to, const xRegister32& from );
-	extern void xMOVDZX( const xRegisterMMX& to, const void* src );
 	extern void xMOVDZX( const xRegisterMMX& to, const ModSibBase& src );
 
 	extern void xMOVD( const xRegister32& to, const xRegisterSSE& from );
-	extern void xMOVD( void* dest, const xRegisterSSE& from );
 	extern void xMOVD( const ModSibBase& dest, const xRegisterSSE& from );
 
 	extern void xMOVD( const xRegister32& to, const xRegisterMMX& from );
-	extern void xMOVD( void* dest, const xRegisterMMX& from );
 	extern void xMOVD( const ModSibBase& dest, const xRegisterMMX& from );
 
 	extern void xMOVQ( const xRegisterMMX& to, const xRegisterMMX& from );
 	extern void xMOVQ( const xRegisterMMX& to, const xRegisterSSE& from );
 	extern void xMOVQ( const xRegisterSSE& to, const xRegisterMMX& from );
 
-	extern void xMOVQ( void* dest, const xRegisterSSE& from );
 	extern void xMOVQ( const ModSibBase& dest, const xRegisterSSE& from );
-	extern void xMOVQ( void* dest, const xRegisterMMX& from );
 	extern void xMOVQ( const ModSibBase& dest, const xRegisterMMX& from );
-	extern void xMOVQ( const xRegisterMMX& to, const void* src );
 	extern void xMOVQ( const xRegisterMMX& to, const ModSibBase& src );
 
-	extern void xMOVQZX( const xRegisterSSE& to, const void* src );
 	extern void xMOVQZX( const xRegisterSSE& to, const ModSibBase& src );
 	extern void xMOVQZX( const xRegisterSSE& to, const xRegisterSSE& from );
 	
 	extern void xMOVSS( const xRegisterSSE& to, const xRegisterSSE& from );
-	extern void xMOVSS( const void* to, const xRegisterSSE& from );
 	extern void xMOVSS( const ModSibBase& to, const xRegisterSSE& from );
 	extern void xMOVSD( const xRegisterSSE& to, const xRegisterSSE& from );
-	extern void xMOVSD( const void* to, const xRegisterSSE& from );
 	extern void xMOVSD( const ModSibBase& to, const xRegisterSSE& from );
 
-	extern void xMOVSSZX( const xRegisterSSE& to, const void* from );
 	extern void xMOVSSZX( const xRegisterSSE& to, const ModSibBase& from );
-	extern void xMOVSDZX( const xRegisterSSE& to, const void* from );
 	extern void xMOVSDZX( const xRegisterSSE& to, const ModSibBase& from );
 
-	extern void xMOVNTDQA( const xRegisterSSE& to, const void* from );
 	extern void xMOVNTDQA( const xRegisterSSE& to, const ModSibBase& from );
-	extern void xMOVNTDQ( void* to, const xRegisterSSE& from );
 	extern void xMOVNTDQA( const ModSibBase& to, const xRegisterSSE& from );
 
-	extern void xMOVNTPD( void* to, const xRegisterSSE& from );
 	extern void xMOVNTPD( const ModSibBase& to, const xRegisterSSE& from );
-	extern void xMOVNTPS( void* to, const xRegisterSSE& from );
 	extern void xMOVNTPS( const ModSibBase& to, const xRegisterSSE& from );
-	extern void xMOVNTQ( void* to, const xRegisterMMX& from );
 	extern void xMOVNTQ( const ModSibBase& to, const xRegisterMMX& from );
 
 	extern void xMOVMSKPS( const xRegister32& to, const xRegisterSSE& from );
@@ -437,11 +418,9 @@ namespace x86Emitter
 	extern const Internal::SimdImpl_DestRegSSE<0xf3,0x16> xMOVSHDUP;
 
 	extern void xINSERTPS( const xRegisterSSE& to, const xRegisterSSE& from, u8 imm8 );
-	extern void xINSERTPS( const xRegisterSSE& to, const u32* from, u8 imm8 );
 	extern void xINSERTPS( const xRegisterSSE& to, const ModSibStrict<u32>& from, u8 imm8 );
 
 	extern void xEXTRACTPS( const xRegister32& to, const xRegisterSSE& from, u8 imm8 );
-	extern void xEXTRACTPS( u32* dest, const xRegisterSSE& from, u8 imm8 );
 	extern void xEXTRACTPS( const ModSibStrict<u32>& dest, const xRegisterSSE& from, u8 imm8 );
 
 	// ------------------------------------------------------------------------
@@ -451,16 +430,17 @@ namespace x86Emitter
 	extern const Internal::SimdImpl_DestRegEither<0x66,0xeb> xPOR;
 	extern const Internal::SimdImpl_DestRegEither<0x66,0xef> xPXOR;
 	
-	extern const Internal::SimdImpl_AndNot xANDN;
+	extern const Internal::SimdImpl_AndNot			xANDN;
 
-	extern const Internal::SimdImpl_UcomI<0x66,0x2e> xUCOMI;
-	extern const Internal::SimdImpl_rSqrt<0x53> xRCP;
-	extern const Internal::SimdImpl_rSqrt<0x52> xRSQRT;
-	extern const Internal::SimdImpl_Sqrt<0x51> xSQRT;
+	extern const Internal::SimdImpl_COMI<true>		xCOMI;
+	extern const Internal::SimdImpl_COMI<false>		xUCOMI;
+	extern const Internal::SimdImpl_rSqrt<0x53>		xRCP;
+	extern const Internal::SimdImpl_rSqrt<0x52>		xRSQRT;
+	extern const Internal::SimdImpl_Sqrt<0x51>		xSQRT;
 	
-	extern const Internal::SimdImpl_MinMax<0x5f> xMAX;
-	extern const Internal::SimdImpl_MinMax<0x5d> xMIN;
-	extern const Internal::SimdImpl_Shuffle<0xc6> xSHUF;
+	extern const Internal::SimdImpl_MinMax<0x5f>	xMAX;
+	extern const Internal::SimdImpl_MinMax<0x5d>	xMIN;
+	extern const Internal::SimdImpl_Shuffle<0xc6>	xSHUF;
 
 	// ------------------------------------------------------------------------
 
@@ -510,35 +490,35 @@ namespace x86Emitter
 	
 	// ------------------------------------------------------------------------
 	
-	extern const Internal::SimdImpl_Shift<0xf0, 6> xPSLL;
-	extern const Internal::SimdImpl_Shift<0xd0, 2> xPSRL;
+	extern const Internal::SimdImpl_Shift<0xf0, 6>		xPSLL;
+	extern const Internal::SimdImpl_Shift<0xd0, 2>		xPSRL;
 	extern const Internal::SimdImpl_ShiftWithoutQ<0xe0, 4> xPSRA;
 
-	extern const Internal::SimdImpl_AddSub<0xdc, 0xd4> xPADD;
-	extern const Internal::SimdImpl_AddSub<0xd8, 0xfb> xPSUB;
-	extern const Internal::SimdImpl_PMinMax<0xde,0x3c> xPMAX;
-	extern const Internal::SimdImpl_PMinMax<0xda,0x38> xPMIN;
+	extern const Internal::SimdImpl_AddSub<0xdc, 0xd4>	xPADD;
+	extern const Internal::SimdImpl_AddSub<0xd8, 0xfb>	xPSUB;
+	extern const Internal::SimdImpl_PMinMax<0xde,0x3c>	xPMAX;
+	extern const Internal::SimdImpl_PMinMax<0xda,0x38>	xPMIN;
 
-	extern const Internal::SimdImpl_PMul xPMUL;
-	extern const Internal::SimdImpl_PCompare xPCMP;
-	extern const Internal::SimdImpl_PShuffle xPSHUF;
-	extern const Internal::SimdImpl_PUnpack xPUNPCK;
-	extern const Internal::SimdImpl_Unpack xUNPCK;
-	extern const Internal::SimdImpl_Pack xPACK;
+	extern const Internal::SimdImpl_PMul				xPMUL;
+	extern const Internal::SimdImpl_PCompare			xPCMP;
+	extern const Internal::SimdImpl_PShuffle			xPSHUF;
+	extern const Internal::SimdImpl_PUnpack				xPUNPCK;
+	extern const Internal::SimdImpl_Unpack				xUNPCK;
+	extern const Internal::SimdImpl_Pack				xPACK;
 	
-	extern const Internal::SimdImpl_PAbsolute xPABS;
-	extern const Internal::SimdImpl_PSign xPSIGN;
-	extern const Internal::SimdImpl_PInsert xPINSR;
-	extern const Internal::SimdImpl_PExtract xPEXTR;
-	extern const Internal::SimdImpl_PMultAdd xPMADD;
-	extern const Internal::SimdImpl_HorizAdd xHADD;
+	extern const Internal::SimdImpl_PAbsolute			xPABS;
+	extern const Internal::SimdImpl_PSign				xPSIGN;
+	extern const Internal::SimdImpl_PInsert				xPINSR;
+	extern const Internal::SimdImpl_PExtract			xPEXTR;
+	extern const Internal::SimdImpl_PMultAdd			xPMADD;
+	extern const Internal::SimdImpl_HorizAdd			xHADD;
 
-	extern const Internal::SimdImpl_Blend xBLEND;
-	extern const Internal::SimdImpl_DotProduct xDP;
-	extern const Internal::SimdImpl_Round xROUND;
+	extern const Internal::SimdImpl_Blend				xBLEND;
+	extern const Internal::SimdImpl_DotProduct			xDP;
+	extern const Internal::SimdImpl_Round				xROUND;
 	
-	extern const Internal::SimdImpl_PMove<true> xPMOVSX;
-	extern const Internal::SimdImpl_PMove<false> xPMOVZX;
+	extern const Internal::SimdImpl_PMove<true>			xPMOVSX;
+	extern const Internal::SimdImpl_PMove<false>		xPMOVZX;
 
 }
 
