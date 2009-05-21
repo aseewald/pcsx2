@@ -202,6 +202,7 @@ microVUt(void) mVUpass4(int startPC) {
 		if		(mVUbranch)		{ branch = 3; mVUbranch = 0; }
 		incPC(1);
 	}
+	//if (mVUcount == 4) { mVUflagInfo |= 0xfff; } // Is this Too Slow? 99% of games probably don't need this.
 	iPC		  = oldPC;
 	mVUcount  = oldCount;
 	mVUbranch = oldBranch;
@@ -215,7 +216,7 @@ microVUt(void) mVUpass4(int startPC) {
 microVUt(void) mVUsetFlagInfo() {
 	microVU* mVU = mVUx;
 	branchType1 { incPC(-1); mVUpass4<vuIndex>(branchAddr); incPC(1); }
-	branchType2 { mVUflagInfo |= 0xffffffff; }
+	branchType2 { mVUflagInfo |= 0xfff; }
 	branchType3 {
 		incPC(-1); 
 		mVUpass4<vuIndex>(branchAddr);

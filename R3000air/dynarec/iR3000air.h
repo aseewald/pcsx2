@@ -414,6 +414,7 @@ public:
 			xMOV( destreg, Src[RF_Rt] );	
 	}
 
+	// ------------------------------------------------------------------------
 	template< typename T >
 	void SignExtendedMove( const xRegister32& dest, const ModSibStrict<T>& src ) const
 	{
@@ -451,8 +452,8 @@ public:
 	// Do nothing for 32-bit sign extension.
 	template<> void SignExtendEax<u32>() const { }
 
-	// Important!  You should always use this instead of the expanded Dest, as you must
-	// be careful to check for instances of the zero register.
+	// Important!  You should generally use this instead of the expanded Dest, as you
+	// must be careful to check for instances of the zero register.
 	void MoveToRt( const xDirectOrIndirect32& src ) const
 	{
 		if( Inst._Rt_ == 0 ) return;

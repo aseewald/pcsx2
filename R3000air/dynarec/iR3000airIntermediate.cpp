@@ -54,7 +54,7 @@ static string m_comment;
 //
 void recIL_Block()
 {
-	bool delaySlot = false;
+	bool termBlock = false;
 
 	m_blockspace.ramlen = 0;
 	m_blockspace.instlen = 0;
@@ -95,35 +95,8 @@ void recIL_Block()
 			inst.Assign( opcode, gpr_IsConst );
 			inst.Process();
 
-			// Update const status for registers.  The const status of all written registers is
-			// based on the const status of the read registers.  If the operation reads from
-			// memory or from an Fs register, then const status is always false.
-			
-			bool constStatus;
-			
-			if( inst.ReadsMemory() || inst.ReadsFs() )
-				constStatus = false;
-			else
-			{
-				constStatus = 
-					//(inst.ReadsRd() ? gpr_IsConst[inst._Rd_] : true) &&
-					(inst.ReadsRt() ? gpr_IsConst[inst._Rt_] : true) &&
-					(inst.ReadsRs() ? gpr_IsConst[inst._Rs_] : true) &&
-					(inst.ReadsHi() ? gpr_IsConst[32] : true) &&
-					(inst.ReadsLo() ? gpr_IsConst[33] : true);
-			}
-
-			if( inst.WritesRd() ) gpr_IsConst[inst._Rd_] = constStatus;
-			if( inst.WritesRt() ) gpr_IsConst[inst._Rt_] = constStatus;
-			if( inst.WritesRs() ) gpr_IsConst[inst._Rs_] = constStatus;
-
-			jASSUME( gpr_IsConst[0] == true );		// GPR 0 should *always* be const
-
-			if( inst.WritesLink() ) gpr_IsConst[31] = constStatus;
-			if( inst.WritesHi() ) gpr_IsConst[32] = constStatus;
-			if( inst.WritesLo() ) gpr_IsConst[33] = constStatus;
-
-			if( !constStatus || inst.WritesMemory() || inst.IsBranchType() || inst.HasSideEffects() )
+			bool isConstWrite = inst.UpdateConstStatus( gpr_IsConst );
+			if( !isConstWrite || inst.WritesMemory() || inst.IsBranchType() || inst.HasSideEffects() )
 				m_blockspace.instlen++;
 
 			// prep the iopRegs for the next instruction fetch -->
@@ -151,12 +124,12 @@ void recIL_Block()
 
 			// RFE, SYSCALL and BREAK cause exceptions, which should terminate block recompilation:
 			if( inst.HasSideEffects() )
-				delaySlot = true;
+				termBlock = true;
 		}
 
 		m_RecState.IncCycleAccum();
-		if( delaySlot ) break;
-		delaySlot = iopRegs.IsDelaySlot;
+		if( termBlock ) break;
+		termBlock = iopRegs.IsDelaySlot;	// terminate block on next instruction if it's a DelaySlot.
 
 	} while( m_RecState.BlockCycleAccum < MaxCyclesPerBlock );
 
@@ -286,11 +259,15 @@ void IntermediateInstruction::Assign( const InstructionConstOpt& src )
 }
 
 // ------------------------------------------------------------------------
-// Intermediate Pass 2 -- Assigns regalloc prior to the x86 codegen.
+// Intermediate Pass 2 -- Maps GPRs to x86 registers prior to the x86 codegen.
 //
 void recIL_Pass2( const SafeArray<InstructionConstOpt>& iList )
 {
 	const int numinsts = iList.GetLength();
+
+	// Pass 2 officially consists of a multiple-pass IL stage, which first initializes
+	// a flat unoptimized register mapping, and then goes back through and re-maps
+	// registers in a second pass in a more optimized fashion.
 
 	for( int i=0; i<numinsts; i++ )
 	{
