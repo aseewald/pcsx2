@@ -27,13 +27,12 @@
 
 using namespace x86Emitter;
 
-namespace R3000A
-{
+namespace R3000A {
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Builds the intermediate const and regalloc resolutions.
 //
-void recIL_Expand( IntermediateInstruction& iInst )
+void recIR_Expand( IntermediateRepresentation& iInst )
 {
 	const InstructionConstOpt& dudley = iInst.Inst;
 	
@@ -50,9 +49,9 @@ static string m_comment;
 #endif
 
 //////////////////////////////////////////////////////////////////////////////////////////
-// Generates IL for an entire block of code.
+// Generates IR for an entire block of code.
 //
-void recIL_Block()
+void recIR_Block()
 {
 	bool termBlock = false;
 
@@ -138,82 +137,6 @@ void recIL_Block()
 	iopRegs.cycle += m_RecState.BlockCycleAccum;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-
-
-static const xAddressReg GPR_xIndexReg( esi );
-
-// ------------------------------------------------------------------------
-// returns an indirect x86 memory operand referencing the requested register.
-//
-xAddressInfo GPR_GetMemIndexer( uint gpridx )
-{
-	// There are 34 GPRs counting HI/LO, so the GPR indexer (ESI) points to
-	// the HI/LO pair and uses negative addressing for the regular 32 GPRs.
-
-	return GPR_xIndexReg - ((32-gpridx)*4);
-}
-
-// buffer used to process intermediate instructions.
-static IntermediateInstruction m_intermediates[MaxCyclesPerBlock];
-
-
-static const char* RegField_ToString( RegField_t field )
-{
-	switch( field )
-	{
-		case RF_Rd: return "Rd";
-		case RF_Rt: return "Rt";
-		case RF_Rs: return "Rs";
-		case RF_Hi: return "Hi";
-		case RF_Lo: return "Lo";
-		
-		jNO_DEFAULT
-	}
-}
-
-namespace Analytics
-{
-	int RegMapped_TypeA = 0;
-	int RegMapped_TypeB = 0;
-}
-
-static void MapSourceField( RegField_t field, int valid_uses[34],
-	IntermediateInstruction& curIL,
-	IntermediateInstruction& prevIL )
-{
-	int gpr_read = curIL.Inst.ReadsField( field );
-	if( gpr_read >= 0 )
-	{
-		RegField_t prevfield = prevIL.Inst.WritesReg( curIL.Inst.RegField( field ) );
-		if( prevfield != RF_Unused )
-		{
-			// Success!  Map it:
-
-			//curIL.Src[field]		= ( field == RF_Hi ) ? edx : eax;
-			prevIL.Dest[prevfield]	= curIL.InMaps[field];
-
-			Analytics::RegMapped_TypeA++;
-			Console::Status( "IOP Register Mapped : %s -> %s (total: %d)", params RegField_ToString(prevfield), RegField_ToString(field), Analytics::RegMapped_TypeA );
-		}
-		else
-		{
-			bool constStatus;
-			switch( field )
-			{
-				case RF_Rd:	constStatus = curIL.Inst.IsConstInput.Rd; break;
-				case RF_Rt:	constStatus = curIL.Inst.IsConstInput.Rt; break;
-				case RF_Rs:	constStatus = curIL.Inst.IsConstInput.Rs; break;
-				case RF_Hi:	constStatus = curIL.Inst.IsConstInput.Hi; break;
-				case RF_Lo:	constStatus = curIL.Inst.IsConstInput.Lo; break;
-				jNO_DEFAULT
-			}
-
-			valid_uses[gpr_read] += constStatus ? 3 : 4;
-		}
-	}
-}
-
 // TODO: Add the Const type to the parameters here, but I'm waiting for the wxWidgets merge.
 void InstructionRecAPI::_const_error()
 {
@@ -230,151 +153,6 @@ void InstructionRecMess::GetRecInfo()
 {
 	API.Reset();
 	Instruction::Process( *this );
-}
-
-void IntermediateInstruction::Assign( const InstructionConstOpt& src )
-{
-	Inst = src;
-	Inst.GetRecInfo();
-	
-	InMaps = RegisterMappings();
-	OutMaps = RegisterMappings();
-
-	if( Inst.IsConstInput.Rt && Inst.IsConstInput.Rs )
-	{
-		Inst.API.ConstRsRt( Emitface );
-	}
-	else if( Inst.IsConstInput.Rt )
-	{
-		Inst.API.ConstRt( Emitface );
-	}
-	else if( Inst.IsConstInput.Rs )
-	{
-		Inst.API.ConstRs( Emitface );
-	}
-	else
-	{
-		Inst.API.ConstNone( Emitface );
-	}
-}
-
-// ------------------------------------------------------------------------
-// Intermediate Pass 2 -- Maps GPRs to x86 registers prior to the x86 codegen.
-//
-void recIL_Pass2( const SafeArray<InstructionConstOpt>& iList )
-{
-	const int numinsts = iList.GetLength();
-
-	// Pass 2 officially consists of a multiple-pass IL stage, which first initializes
-	// a flat unoptimized register mapping, and then goes back through and re-maps
-	// registers in a second pass in a more optimized fashion.
-
-	for( int i=0; i<numinsts; i++ )
-	{
-		IntermediateInstruction& fnew( m_intermediates[i] );
-		fnew.Assign( iList[0] );
-
-		fnew.Src[RF_Rd] = ptr32[GPR_GetMemIndexer( fnew.Inst._Rd_ )];
-		fnew.Src[RF_Rt] = ptr32[GPR_GetMemIndexer( fnew.Inst._Rt_ )];
-		fnew.Src[RF_Rs] = ptr32[GPR_GetMemIndexer( fnew.Inst._Rs_ )];
-		fnew.Src[RF_Hi] = ptr32[GPR_GetMemIndexer( 32 )];		// Hi
-		fnew.Src[RF_Lo] = ptr32[GPR_GetMemIndexer( 33 )];		// Lo
-
-		// Assign destination registers
-
-		fnew.Dest[RF_Rd] = ptr32[GPR_GetMemIndexer( fnew.Inst._Rd_ )];
-		fnew.Dest[RF_Rt] = ptr32[GPR_GetMemIndexer( fnew.Inst._Rt_ )];
-		fnew.Dest[RF_Rs] = ptr32[GPR_GetMemIndexer( fnew.Inst._Rs_ )];
-		fnew.Dest[RF_Hi] = ptr32[GPR_GetMemIndexer( 32 )];		// Hi
-		fnew.Dest[RF_Lo] = ptr32[GPR_GetMemIndexer( 33 )];		// Lo
-	}
-
-
-	// ------------------------------------------------------------------------
-	// Simple Single-Step Reg mapping:
-	// If the next instruction uses a dest register from the previous instruction,
-	// then set the dest of prev instruction to eax, and the source of the next to eax.
-
-	// Note: hi has special case logic that maps to edx when possible.
-
-	int valid_uses[34] = {0};
-
-	for( int i=1; i<numinsts; ++i )
-	{
-		for( int rf=0; rf<RF_Count; ++rf )
-			MapSourceField( (RegField_t)rf, valid_uses, m_intermediates[i], m_intermediates[i-1] );
-	}
-
-	// ------------------------------------------------------------------------
-	// Extended Reg mapping into EDI / EBP:
-	// Primary goal of this form of reg mapping is to optimize memory/stack operations,
-	// which typically load a register with a source address and then re-use that register
-	// as a base register across several memory operations.
-	
-	// Typically blocks are short and fairly specialized in function, and I bank on this
-	// assumption to keep reg mapping simple.  I make the assumption that whichever reg(s)
-	// have the most valid reads across the span of a full block is the reg(s) we want to
-	// map to our Extended Reg(s).
-	
-	// Valid uses include anything not already optimized using the first-pass single-step
-	// register mapping above.
-
-	int high_count	= 0;
-	int high_idx	= 0;
-
-	for( int i=1; i<34; i++ )
-	{
-		if( high_count < valid_uses[i] )
-		{
-			high_count = valid_uses[i];
-			high_idx = i;
-		}
-	}
-
-	high_count /= 4;
-	if( high_idx != 0 && high_count > 2 )
-	{
-		Console::WriteLn( "Best Register Found @ %d [%d uses]", params high_idx, high_count );
-
-		// traverse back through the register map and set all srcs and dests that match high_idx
-		// to use EDI.
-
-		for( int i=0; i<numinsts-1; ++i )
-		{
-			IntermediateInstruction& cur( m_intermediates[i] );
-
-			if( high_idx == 32 )
-			{
-				cur.Src[RF_Hi] = edi;
-				cur.Dest[RF_Hi] = edi;
-			}
-			else if( high_idx == 33 )
-			{
-				cur.Src[RF_Lo] = edi;
-				cur.Dest[RF_Lo] = edi;
-			}
-			else
-			{
-				if( cur.Inst._Rd_ == high_idx )
-				{
-					cur.Src[RF_Rd] = edi;
-					cur.Dest[RF_Rd] = edi;
-				}
-
-				if( cur.Inst._Rt_ == high_idx )
-				{
-					cur.Src[RF_Rt] = edi;
-					cur.Dest[RF_Rt] = edi;
-				}
-
-				if( cur.Inst._Rs_ == high_idx )
-				{
-					cur.Src[RF_Rs] = edi;
-					cur.Dest[RF_Rs] = edi;
-				}
-			}
-		}
-	}
 }
 
 }

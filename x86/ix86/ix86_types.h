@@ -207,7 +207,7 @@ __forceinline void xWrite( T val )
 		int Id;
 
 		xRegisterBase(): Id( -1 ) {}
-		explicit xRegisterBase( int regId ) : Id( regId ) { jASSUME( Id >= -1 && Id < 8 ); }
+		explicit xRegisterBase( int regId ) : Id( regId ) { jASSUME( Id >= -2 && Id < 8 ); }	// allow -2 for user-custom identifiers.
 
 		bool IsEmpty() const { return Id < 0; }
 

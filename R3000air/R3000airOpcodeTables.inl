@@ -28,15 +28,25 @@ namespace R3000A
 // Opcodes are dispatched through a switch statement to the instructions the represent.
 // I chose to use a switch over tables, because the class-based nature of the interpreter
 // would have required member-style dispatchers, which are slow and bulky and have ugly
-// syntax.  Additionally, a switch() ends up generating much faster code in this situation.
+// syntax.  Additionally, a switch() ends up generating much faster code in this case,
+// thanks to the compiler's optimizations reducing it to a call-less quick sort (all
+// inlines are much faster than nested void (*func)() dispatchers).
 //
 // R3000A Instruction Support Notes:
-//  * MIPSI Architecture.
+//  * MIPS-I Architecture.
 //  * No Traps or Branch Likelys.
 //  * Load instructions have a delay slot (ie, instruction immediately following a load
 //    will still have the old value for the register being loaded).
 //
+// Performance / Optimization Notes:
+//  * I tested various combinations of virtual and non-virtual functions, and uses of
+//    templates and settled on this implementation of using static templated dispatchers,
+//    non-virtual instructions, and virtual operators (Read/Set).  Using static templates
+//    with non-virtual operators yielded slightly better speed, but also complicates the
+//    process of extending the functionality of the Instruction class.  Speed increase
+//    was only about 3%.
 
+// -----------------------------------------------------------------------
 // Notes on the macro use:  __COUNTER__ increments every time it's used, which allows me
 // to compound the table indexes into the macros below.  I then record the value of
 // __COUNTER__ prior to each use of switch statements.

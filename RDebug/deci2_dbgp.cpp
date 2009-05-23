@@ -136,11 +136,11 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 				for (i=0; i<in->count; i++)
 					switch (iregs[i].kind){
 					case 1:switch (iregs[i].number){
-							case 0:iregs[i].value=iopRegs.GPR.n.lo.UL;break;
-							case 1:iregs[i].value=iopRegs.GPR.n.hi.UL;break;
+							case 0:iregs[i].value=iopRegs[GPR_lo].UL;break;
+							case 1:iregs[i].value=iopRegs[GPR_hi].UL;break;
 						   }
 						   break;
-					case 2:iregs[i].value=iopRegs.GPR.r[iregs[i].number].UL; break;
+					case 2:iregs[i].value=iopRegs.GPR[iregs[i].number].UL; break;
 					case 3:
 						if (iregs[i].number==14) iopRegs.CP0.n.EPC=iopRegs.pc;
 						iregs[i].value=iopRegs.CP0.r[iregs[i].number].UL;
@@ -185,11 +185,11 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 				for (i=0; i<in->count; i++)
 					switch (iregs[i].kind){
 					case 1:switch (iregs[i].number){
-							case 0:iopRegs.GPR.n.lo.UL=iregs[i].value;break;
-							case 1:iopRegs.GPR.n.hi.UL=iregs[i].value;break;
+							case 0:iopRegs[GPR_lo].UL=iregs[i].value;break;
+							case 1:iopRegs[GPR_hi].UL=iregs[i].value;break;
 						   }
 						   break;
-					case 2:iopRegs.GPR.r[iregs[i].number].UL=iregs[i].value; break;
+					case 2:iopRegs.GPR[iregs[i].number].UL=iregs[i].value; break;
 					case 3:
 						iopRegs.CP0.r[iregs[i].number].UL=iregs[i].value;
 						if (iregs[i].number==14) iopRegs.pc=iopRegs.CP0.n.EPC;

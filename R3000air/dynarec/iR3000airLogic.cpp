@@ -22,8 +22,9 @@
 #include "IopCommon.h"
 #include "iR3000air.h"
 
-namespace R3000A
-{
+namespace R3000A {
+
+using namespace x86Emitter;
 
 typedef InstructionRecMess InstAPI;
 
@@ -40,11 +41,11 @@ IMPL_RecPlacebo( ANDI );
 // ------------------------------------------------------------------------
 namespace recORI_ConstNone
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
 	}
 
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 	}
 
@@ -56,11 +57,11 @@ IMPL_RecInstAPI( ORI );
 // ------------------------------------------------------------------------
 namespace recXORI_ConstNone
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
 	}
 
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 	}
 
@@ -72,11 +73,11 @@ IMPL_RecInstAPI( XORI );
 // ------------------------------------------------------------------------
 namespace recAND_ConstNone
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
 	}
 
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 	}
 
@@ -88,11 +89,11 @@ IMPL_RecInstAPI( AND );
 // ------------------------------------------------------------------------
 namespace recOR_ConstNone
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
 	}
 
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 	}
 
@@ -104,11 +105,11 @@ IMPL_RecInstAPI( OR );
 // ------------------------------------------------------------------------
 namespace recXOR_ConstNone
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
 	}
 
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 	}
 
@@ -120,12 +121,12 @@ IMPL_RecInstAPI( XOR );
 // ------------------------------------------------------------------------
 namespace recSLTI_ConstNone
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
 	}
 
 	template< bool IsSigned >
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 	}
 
@@ -146,41 +147,38 @@ void InstAPI::SLTIU()
 	API.ConstRs		= recSLTI_ConstNone::GetInterface<false>;
 }
 
-
 // ------------------------------------------------------------------------
 namespace recSLT_ConstNone
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
-		opts.xModifiesReg.None();
-		opts.xModifiesReg( eax );
+		RegMapInfo_Dynamic& rd( info.RegOpts.UseDynMode() );
+		
+		info.RegOpts.CommutativeSources = true;
+		rd.AllocTemp[0] = true;
+		rd[RF_Rd].ExitMap = DynEM_Temp0;
+	}
 
-		opts.ForceDirectRs = true;
+	static JccComparisonType CompareRsRt( bool isSwapped, bool isSigned )
+	{
+		if( isSwapped )
+			return isSigned ? Jcc_GreaterOrEqual : Jcc_AboveOrEqual;
+		else
+			return isSigned ? Jcc_Less : Jcc_Below;
 	}
 
 	template< bool IsSigned >
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
-		if( info.Dest[RF_Rd].IsDirect() )
-		{
-			xCMP( info.Src[RF_Rs], info.Src[RF_Rt] );
-			if( IsSigned )
-				xSETL( al );
-			else
-				xSETB( al );
+		xCMP( RegRs, RegRt );
+		xSET( CompareRsRt( info.IsSwappedSources, IsSigned ), tmp0reg8 );
 
-			xMOVZX( info.Dest[RF_Rd].GetReg(), al );
-		}
+		if( DestRegRd.IsDirect() )
+			xMOVZX( DestRegRd.GetReg(), tmp0reg8 );
 		else
 		{
-			xXOR( eax, eax );
-			xCMP( info.Src[RF_Rs], info.Src[RF_Rt] );
-			if( IsSigned )
-				xSETL( al );
-			else
-				xSETB( al );
-
-			xMOV( info.Dest[RF_Rd], eax );
+			xMOVZX( tmp0reg, tmp0reg8 );
+			xMOV( DestRegRd, tmp0reg );
 		}
 	}
 
@@ -205,18 +203,19 @@ void InstAPI::SLTU()
 // ------------------------------------------------------------------------
 namespace recNOR_ConstNone
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
-		opts.xModifiesReg.None();
-		opts.CommutativeSources = true;
-		opts.ForceDirectRs = true;
+		RegMapInfo_Dynamic& rd( info.RegOpts.UseDynMode() );
+
+		info.RegOpts.CommutativeSources = true;
+		rd[RF_Rs].ForceDirect = true;
 	}
 
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
-		xOR( info.Src[RF_Rs], info.Src[RF_Rt] );
-		xNOT( info.Src[RF_Rs] );
-		xMOV( info.Dest[RF_Rd], info.Src[RF_Rs] );
+		xOR( RegRs, RegRt );
+		xNOT( RegRs );
+		xMOV( DestRegRd, RegRs );
 	}
 
 	IMPL_GetInterface()

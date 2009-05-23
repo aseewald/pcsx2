@@ -57,7 +57,7 @@ u32 _x86GetAddr(int type, int reg)
 		case X86TYPE_VUPREAD: return (type&X86TYPE_VU1)?(u32)&VU1.VI[REG_P]:(u32)&VU0.VI[REG_P];
 		case X86TYPE_VUQWRITE: return (type&X86TYPE_VU1)?(u32)&VU1.q:(u32)&VU0.q;
 		case X86TYPE_VUPWRITE: return (type&X86TYPE_VU1)?(u32)&VU1.p:(u32)&VU0.p;
-		case X86TYPE_PSX: return (u32)&iopRegs.GPR.r[reg];
+		case X86TYPE_PSX: return (u32)&iopRegs.GPR[reg];
 		case X86TYPE_PCWRITEBACK:
 			return (u32)&g_recWriteback;
 		case X86TYPE_VUJUMP:

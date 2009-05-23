@@ -1975,6 +1975,10 @@
 							RelativePath="..\..\R3000air\dynarec\iR3000airMisc.cpp"
 							>
 						</File>
+						<File
+							RelativePath="..\..\R3000air\dynarec\iR3000airRegMapping.cpp"
+							>
+						</File>
 					</Filter>
 				</Filter>
 			</Filter>

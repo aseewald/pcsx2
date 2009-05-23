@@ -22,10 +22,9 @@
 
 using namespace x86Emitter;
 
-iopRecState m_RecState;
+namespace R3000A {
 
-namespace R3000A
-{
+iopRecState m_RecState;
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -258,7 +257,7 @@ static u32 EventHandler()
 //    the same speed or faster anyway.
 // 
 
-extern void recIL_Pass2( const SafeArray<InstructionConstOpt>& iList );
+extern void recIR_Pass2( const SafeArray<InstructionConstOpt>& iList );
 
 static void recRecompile()
 {
@@ -278,7 +277,7 @@ static void recRecompile()
 	if( blowme == m_xBlockMap.Map.end() )
 	{
 		//Console::WriteLn( "IOP First-pass block at PC: 0x%08x  (total blocks=%d)", params masked_pc, m_xBlockMap.Blocks.GetLength() );
-		recIL_Block();
+		recIR_Block();
 
 		if( !IsIopRamPage( masked_pc ) )	// disable block checking for non-ram (rom, rom1, etc)
 			m_blockspace.ramlen = 0;
@@ -308,7 +307,7 @@ static void recRecompile()
 				{
 					Console::WriteLn( "-/- IOP Clearing block at PC: 0x%08x", params masked_pc );
 
-					recIL_Block();
+					recIR_Block();
 					mess.Assign( m_blockspace );
 					return;
 				}
@@ -318,10 +317,10 @@ static void recRecompile()
 
 			// Integrity Verified... Generate X86.
 
-			//recIL_Pass2( mess.IL );
+			recIR_Pass2( mess.IL );
 			mess.IL.Dispose();
 		}
-		recIL_Block();
+		recIR_Block();
 	}
 }
 
@@ -416,7 +415,7 @@ static void DynGen_Functions()
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-void DynGen_BeginBranch( const IntermediateInstruction& il, recBlockItem& block )
+void DynGen_BeginBranch( const IntermediateRepresentation& il, recBlockItem& block )
 {
 	xMOV( ptr32[iopRegs.pc], il.Inst._Pc_ );
 	xMOV( eax, &iopRegs.cycle );

@@ -28,7 +28,7 @@ using namespace x86Emitter;
 #define IMPL_GetInterface() \
 	static void GetInterface( InstructionEmitterAPI& api ) \
 	{ \
-		api.Optimizations = Optimizations; \
+		api.RegMapInfo = RegMapInfo; \
 		api.Emit = Emit; \
 	}
 	
@@ -37,7 +37,7 @@ using namespace x86Emitter;
 	template< mess T > \
 	static void GetInterface( InstructionEmitterAPI& api ) \
 	{ \
-		api.Optimizations = Optimizations; \
+		api.RegMapInfo = RegMapInfo; \
 		api.Emit = Emit<T>; \
 	}
 
@@ -54,52 +54,11 @@ using namespace x86Emitter;
 #define IMPL_RecPlacebo( name ) \
 	namespace rec##name##_ConstNone \
 	{ \
-		static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts ) {	} \
-		static void Emit( const IntermediateInstruction& info ) { } \
+		static void RegMapInfo( IntermediateRepresentation& info ) {	} \
+		static void Emit( const IntermediateRepresentation& info ) { } \
 		IMPL_GetInterface() \
 	} \
 	IMPL_RecInstAPI( name );
-
-
-namespace R3000A
-{
-	extern void __fastcall DivStallUpdater( uint cycleAcc, int newstall );
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////
-// iopRecState - contains data representing the current known state of the emu during the
-// process of block recompilation.  Information in this struct
-//
-struct iopRecState
-{
-	int BlockCycleAccum;
-	int DivCycleAccum;
-	u32 pc;		// pc for the currently recompiling/emitting instruction
-
-	int GetScaledBlockCycles() const
-	{
-		return BlockCycleAccum * 1;
-	}
-
-	int GetScaledDivCycles() const
-	{
-		return DivCycleAccum * 1;
-	}
-	
-	__releaseinline void DivCycleInc()
-	{
-		if( DivCycleAccum < 0x7f )		// cap it at 0x7f (anything over 35 is ignored anyway)
-			DivCycleAccum++;
-	}
-	
-	__releaseinline void IncCycleAccum()
-	{
-		BlockCycleAccum++;
-		DivCycleInc();
-	}
-};
-
-extern iopRecState m_RecState;
 
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -142,11 +101,47 @@ struct xAnyOperand
 namespace R3000A
 {
 
-class IntermediateInstruction;
+class IntermediateRepresentation;
+
+extern void __fastcall DivStallUpdater( uint cycleAcc, int newstall );
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// iopRecState - contains data representing the current known state of the emu during the
+// process of block recompilation.  Information in this struct
+//
+struct iopRecState
+{
+	int BlockCycleAccum;
+	int DivCycleAccum;
+	u32 pc;		// pc for the currently recompiling/emitting instruction
+
+	int GetScaledBlockCycles() const
+	{
+		return BlockCycleAccum * 1;
+	}
+
+	int GetScaledDivCycles() const
+	{
+		return DivCycleAccum * 1;
+	}
+	
+	__releaseinline void DivCycleInc()
+	{
+		if( DivCycleAccum < 0x7f )		// cap it at 0x7f (anything over 35 is ignored anyway)
+			DivCycleAccum++;
+	}
+	
+	__releaseinline void IncCycleAccum()
+	{
+		BlockCycleAccum++;
+		DivCycleInc();
+	}
+};
+
 
 // ------------------------------------------------------------------------
 template< typename ContentType >
-class xRegister32Array
+class xRegisterArray32
 {
 public:
 	ContentType Info[7];
@@ -163,10 +158,10 @@ public:
 };
 
 // ------------------------------------------------------------------------
-class xRegUseFlags : xRegister32Array<bool>
+class xRegUseFlags : xRegisterArray32<bool>
 {
 public:
-	using xRegister32Array<bool>::operator[];
+	using xRegisterArray32<bool>::operator[];
 
 	void operator()( const xRegister32& src )
 	{
@@ -188,92 +183,248 @@ public:
 		Info[ebx.Id] = true;
 	}
 
+	// Default constructor: clobber all four basic registers (eax, edx, ecx, ebx).
+	xRegUseFlags()
+	{
+		Basic4();
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 
-struct xRegMess
+template< typename T >
+struct RegFieldArray
 {
-	xRegister32 Reg;
-	
+	T Rd, Rt, Rs, Hi, Lo;
+
+	__forceinline T& operator[]( RegField_t idx )
+	{
+		jASSUME( ((uint)idx) < RF_Count );
+		switch( idx )
+		{
+			case RF_Rd: return Rd;
+			case RF_Rt: return Rt;
+			case RF_Rs: return Rs;
+			case RF_Hi: return Hi;
+			case RF_Lo: return Lo;
+			jNO_DEFAULT
+		}
+	}
+
+	__forceinline const T& operator[]( RegField_t idx ) const
+	{
+		jASSUME( ((uint)idx) < RF_Count );
+		switch( idx )
+		{
+			case RF_Rd: return Rd;
+			case RF_Rt: return Rt;
+			case RF_Rs: return Rs;
+			case RF_Hi: return Hi;
+			case RF_Lo: return Lo;
+			jNO_DEFAULT
+		}
+	}
+
+	__forceinline T& operator[]( uint idx )
+	{
+		jASSUME( idx < RF_Count );
+		return operator[]( (RegField_t)idx );
+	}
+
+	__forceinline const T& operator[]( int idx ) const
+	{
+		jASSUME( idx < RF_Count );
+		return operator[]( (RegField_t)idx );
+	}
 };
 
-struct RegisterMappings
-{
-	xRegister32 Rd, Rt, Rs, Hi, Lo;
-	
-	xRegister32& operator[]( RegField_t idx )
-	{
-		switch( idx )
-		{
-			case RF_Rd: return Rd;
-			case RF_Rt: return Rt;
-			case RF_Rs: return Rs;
-			case RF_Hi: return Hi;
-			case RF_Lo: return Lo;
-			jNO_DEFAULT
-		}
-	}
+static const int MappableRegCount = 5;
+static const int TempRegCount = 5;
 
-	const xRegister32& operator[]( RegField_t idx ) const
-	{
-		switch( idx )
-		{
-			case RF_Rd: return Rd;
-			case RF_Rt: return Rt;
-			case RF_Rs: return Rs;
-			case RF_Hi: return Hi;
-			case RF_Lo: return Lo;
-			jNO_DEFAULT
-		}
-	}
+enum DynExitMap_t
+{
+	DynEM_Temp0 = 0,
+	DynEM_Temp1,
+	DynEM_Temp2,
+	DynEM_Temp3,
+	
+	DynEM_Rs,
+	DynEM_Rt,
+	DynEM_Hi,
+	DynEM_Lo,
+	
+	// Rd not included since it's never mapped on entry/source.	
 };
 
 // ------------------------------------------------------------------------
-struct OptimizationModeFlags
+// Describes register mapping information, on a per-gpr or per-field (Rs Rd Rt) basis.
+//
+struct DynRegMapInfo_Entry
+{
+	// Tells the recompiler that the reg must be force-loaded into an x86 register on entry.
+	// (recompiler will flush another reg if needed, and load this field in preparation for
+	// Emit entry).  The x86 register will be picked by the recompiler.
+	// Note: ForceDirect and ForceIndirect are mutually exclusive.  Setting both to true
+	// is an error, and will cause an assertion/exception.
+	bool ForceDirect;
+
+	// Tells recompiler the given instruction register field must be forced to Memory
+	// (flushed).  This is commonly used as an optimization guide for cases where all x86
+	// registers are modified by the instruction prior to the instruction using Rs [LWL/SWL
+	// type memory ops, namely].
+	// Note: ForceDirect and ForceIndirect are mutually exclusive.  Setting both to true
+	// is an error, and will cause an assertion/exception.
+	bool ForceIndirect;
+
+	// Specifies known "valid" mappings on exit from the instruction emitter.  The recompiler
+	// will use this to map registers more efficiently and avoid unnecessary register swapping.
+	// Notes:
+	//   * this is a suggestion only, and the recompiler reserves the right to map destinations
+	//     however it sees fit.
+	//
+	//   * By default the recompiler will assume (prefer) the register used for Rs as matching
+	//     Rt/Rd on exit, which is what most instructions do.
+	//
+	DynExitMap_t ExitMap;
+
+	// ach entry corresponds to the register in the m_tempRegs array.
+	bool xTempInUse[TempRegCount];
+
+	DynRegMapInfo_Entry() :
+		ForceDirect( false ),
+		ForceIndirect( false )
+	{
+		memzero_obj( xTempInUse );
+	}
+};
+
+static const xRegister32 xRegAny( -2 );
+
+struct StrictRegMapInfo_Entry
+{
+	// Maps a GPR into to the specific x86 register on entry to the instruction's emitter.
+	// If a GPR is mapped to Empty here, it will be flushed to memory, and the Instruction
+	// recompiler will be provisioned with an indirect register mapping.
+	// If a GPR is mapped to xRegAny, the recompiler will select the best (most ideal) register
+	// for the GPR that isn't a register already explicitly mapped to another field.
+	xRegister32 EntryMap;
+
+	// Specifies known "valid" mappings on exit from the instruction emitter.  The recompiler
+	// will use this to map registers more efficiently and avoid unnecessary register swapping.
+	// Note: this is a suggestion only, and the recompiler reserves the right to map destinations
+	// however it sees fit.
+	xRegister32 ExitMap;
+	
+	StrictRegMapInfo_Entry() :
+		EntryMap(), ExitMap()
+	{
+	}
+};
+
+
+struct RegMapInfo_Dynamic
+{
+	// Array contents cover: Forced Direct or Indirect booleans for each GPR field, and
+	// output register mappings for the dest fields.
+	RegFieldArray<DynRegMapInfo_Entry> GprFields;
+	
+	// Set any of these true to allocate a temporary register to that slot.  Allocated
+	// registers are always from the pool of eax, edx, ecx, ebx -- so it's assured your
+	// allocated register will have low and high forms (al, bl, cl, dl, etc).
+	//
+	// Note: Setting all four of these true will only work if you are *not* using other
+	// forms of register mapping, since you can't map eax (for example) and expect to
+	// get four temp regs as well.  The recompiler will assert/exception.
+	bool AllocTemp[4];
+
+	__forceinline DynRegMapInfo_Entry& operator[]( RegField_t idx )
+	{
+		return GprFields[idx];
+	}
+
+	__forceinline const DynRegMapInfo_Entry& operator[]( RegField_t idx ) const
+	{
+		return GprFields[idx];
+	}
+
+	RegMapInfo_Dynamic()
+	{
+		memzero_obj( AllocTemp );
+	}
+};
+
+struct RegMapInfo_Strict
 {
 	// Specifies which x86 registers are modified by instruction code.  By default this
 	// array is assigned all 'true', meaning it assumes full outwardly modification of
 	// x86 registers.
-	//
-	// Notice: If the Optimization() function is NULL for the particular instruction
-	// then the assumption is to mark all registers as *modified* (this assuption can be
-	// used for Interpreter-handler callbacks for example).
-	xRegUseFlags xModifiesReg;
+	xRegUseFlags ClobbersReg;
+
+	// Entry and exit map specifications for each GPR field.
+	RegFieldArray<StrictRegMapInfo_Entry> GprFields;
+
+	__forceinline StrictRegMapInfo_Entry& operator[]( RegField_t idx )
+	{
+		return GprFields[idx];
+	}
+
+	__forceinline const StrictRegMapInfo_Entry& operator[]( RegField_t idx ) const
+	{
+		return GprFields[idx];
+	}
+	
+	void EntryMapHiLo( const xRegister32& srchi, const xRegister32& srclo )
+	{
+		GprFields.Hi.EntryMap = srchi;
+		GprFields.Lo.EntryMap = srclo;
+	}
+
+	void ExitMapHiLo( const xRegister32& srchi, const xRegister32& srclo )
+	{
+		GprFields.Hi.ExitMap = srchi;
+		GprFields.Lo.ExitMap = srclo;
+	}
+
+};
+
+// ------------------------------------------------------------------------
+// Register mapping options for each instruction emitter implementation
+//
+struct RegisterMappingOptions
+{
+	bool IsStrictMode;
+
+	RegMapInfo_Dynamic DynMap;
+	RegMapInfo_Strict StatMap;
 
 	// Set to true to inform the recompiler that it can swap Rs and Rt freely.  This option
 	// takes effect even if Rs or Rt have been forced to registers, or mapped to specific
 	// registers.
 	bool CommutativeSources;
-	
-	// Tells the recompiler that the Rs reg must be force-loaded into an x86 register.
-	// (recompiler will flush another reg if needed, and load Rs in preparation for Emit
-	// entry).  The register will be picked by the recompiler.
-	// Note: ForceDirectRs and ForceIndirectRs are mututally exclusive.  Setting both to true
-	// is an error, and will cause an assertion/exception.
-	bool ForceDirectRs;
-	bool ForceDirectRt;
 
-	// Tells recompiler Rs register must be forced to Memory (flushed).  This is commonly
-	// used as an optimization guide for cases where all x86 registers are modified by the
-	// instruction prior tot he instruction using Rs [LWL/SWL type memory ops, namely].
-	// Note: ForceDirectRs and ForceIndirectRs are mututally exclusive.  Setting both to true
-	// is an error, and will cause an assertion/exception.
-	bool ForceIndirectRs;
-	bool ForceIndirectRt;
+	RegisterMappingOptions() :
+		IsStrictMode( false ),
+		CommutativeSources( false )
+	{
+	}
 
-	// Forces Rs to the specific x86 register on entry.
-	// Note: This setting overrides ForceDirectRs, and is mutually exclusive with ForceIndirectRs.
-	// Setting this value to anything other than an empty register while ForceIndirecrRs is
-	// true is an error, and will cause an assertion/exception at recompilation time.
-	RegisterMappings MapInput;
+	RegMapInfo_Dynamic& UseDynMode()		{ IsStrictMode = false; return DynMap; }
+	RegMapInfo_Strict& UseStrictMode()		{ IsStrictMode = true; return StatMap; }
 
-	// Informs recompiler that Rs is preserved in the specified x86 register.  This allows the
-	// recompiler to reuse Rs in subsequent instructions (when possible).
-	RegisterMappings MapOutput;
+	/*bool IsRequiredRegOnEntry( const xRegister32& reg ) const
+	{
+		for( int i=0; i<RF_Count; ++i )
+		{
+			if( GprFields[i].EntryMap == reg ) return true;
+		}
+
+		return false;
+	}*/
 };
 
+// ------------------------------------------------------------------------
+//
 struct InstructionEmitterAPI
 {
 	// Optimizations - Optional implementation -
@@ -287,17 +438,19 @@ struct InstructionEmitterAPI
 	//   info.MoveRsTo( reg ).  The recompiler will flush the reg to memory and then re-
 	//   load it when requested.
 	//
-	//void (*MapRegisters)( const IntermediateInstruction& info, RegisterMappings& inmaps, RegisterMappings& outmaps );
-	void (*Optimizations)( const IntermediateInstruction& info, OptimizationModeFlags& opts );
+	void (*RegMapInfo)( IntermediateRepresentation& info );
 	
 	// Emits code for an instruction.
 	// The instruction should assume that the register mappings specified in MapRegisters.inmaps
 	// are assigned on function entry.  Results should be written back to GPRs using functions
 	// info.MoveToRt(), info.MoveToRd(), or info.MoveToHiLo() -- and need not match the opti-
 	// mization hints given in MapRegister.outmaps.
-	void (*Emit)( const IntermediateInstruction& info );
+	void (*Emit)( const IntermediateRepresentation& info );
 };
 
+
+// ------------------------------------------------------------------------
+//
 struct InstructionRecAPI
 {
 	// fully non-const emitter.
@@ -352,33 +505,123 @@ public:
 	INSTRUCTION_API()
 };
 
+// Temporary register from slot zero (32-bit variety)
+#define tmp0reg info.TempReg(0)
+#define tmp1reg info.TempReg(1)		// temp 32-bit register from slot 1
+#define tmp2reg info.TempReg(2)		// temp 32-bit register from slot 2
+#define tmp3reg info.TempReg(3)		// temp 32-bit register from slot 3
+
+// Temporary register from slot zero (8-bit variety)
+// Note: this is the *lo* register, such as AL, BL, etc.
+#define tmp0reg8 info.TempReg8(0)
+#define tmp1reg8 info.TempReg8(1)		// temp 8-bit register from slot 1
+#define tmp2reg8 info.TempReg8(2)		// temp 8-bit register from slot 2
+#define tmp3reg8 info.TempReg8(3)		// temp 8-bit register from slot 3
+
+#define RegRs info.Src[RF_Rs]
+#define RegRt info.Src[RF_Rt]
+
+#define DestRegRd info.Dest[RF_Rd]
+#define DestRegRt info.Dest[RF_Rd]
+
+// Rt is ambiguous -- it can be Src or Dest style:
+
 //////////////////////////////////////////////////////////////////////////////////////////
 // Contains information about each instruction of the original MIPS code in a sort of
 // "halfway house" status -- with partial x86 register mapping.
 //
-class IntermediateInstruction
+class IntermediateRepresentation
 {
 public:
+	// Mapping State of the GPRs upon entry to the recompiled instruction code generator.
+	// The recompiler will do necessary "busywork" needed to move registers from the
+	// dest mapping of the previous instruction to the src mapping of this instruction.
 	// source operand can either be register or memory.
-	xDirectOrIndirect32 Src[RF_Count];
+	xDirectOrIndirect32 Src[34];
 
+	// Mapping state of the GPRs upon exit of the recompiled instruction code generator.
+	// The recompiler will do necessary "busywork" needed to move registers from the
+	// dest mapping here to the src mapping of the next instruction.
 	// Dest operand can either be register or memory.
-	xDirectOrIndirect32 Dest[RF_Count];
+	xDirectOrIndirect32 Dest[34];
 
 	s32 ixImm;
 	InstructionRecMess Inst;		// raw instruction information.
-	RegisterMappings InMaps;
-	RegisterMappings OutMaps;
 	InstructionEmitterAPI Emitface;
+	RegisterMappingOptions RegOpts;
+	
+	// Set true by the recompiler if the CommunativeSources flag is true and the recompiler
+	// found it advantageous to swap them.  Typically code needn't check this flag, however
+	// it can be useful for instructions that use conditionals (xCMP, etc) and need to swap
+	// the conditional accordingly.
+	bool IsSwappedSources;
+
+	bool m_do_not_touch[34];
+
+protected:
+	xRegister32 m_TempReg[4];
+	xRegister8 m_TempReg8[4];
 
 public:
-	IntermediateInstruction() {}
+	IntermediateRepresentation() {}
 
-	void Assign( const InstructionConstOpt& src );
+	IntermediateRepresentation( const InstructionConstOpt& src ) :
+		Inst( src ),
+		IsSwappedSources( false )
+	{
+		memzero_obj( m_do_not_touch );
+		Inst.GetRecInfo();
+
+		if( Inst.IsConstInput.Rt && Inst.IsConstInput.Rs )
+		{
+			Inst.API.ConstRsRt( Emitface );
+		}
+		else if( Inst.IsConstInput.Rt )
+		{
+			Inst.API.ConstRt( Emitface );
+		}
+		else if( Inst.IsConstInput.Rs )
+		{
+			Inst.API.ConstRs( Emitface );
+		}
+		else
+		{
+			Inst.API.ConstNone( Emitface );
+		}
+
+		Emitface.RegMapInfo( *this );
+	}
+	
+	xRegister32 DynRegs_FindUnmappable( const xDirectOrIndirect32 maparray[34] ) const;
+	void		DynRegs_UnmapForcedIndirects( const RegMapInfo_Dynamic& dyno );
+
+	void StrictRegs_UnmapClobbers( const RegMapInfo_Strict& stro );
+
+
+	void MapTemporaryRegs();
+	void UnmapTemporaryRegs();
+
+	void UnmapReg( xDirectOrIndirect32 maparray[34], const xRegister32& reg );
+	bool IsMappedReg( const xDirectOrIndirect32 maparray[34], const xRegister32& reg ) const;
+	xRegister32 FindFreeTempReg( xDirectOrIndirect32 maparray[34] ) const;
+
+	const xRegister32& TempReg( uint tempslot ) const
+	{
+		jASSUME( tempslot < 4 );
+		jASSUME( !m_TempReg[tempslot].IsEmpty() );	// make sure register was allocated properly!
+		return m_TempReg[tempslot];
+	}
+
+	const xRegister8& TempReg8( uint tempslot ) const
+	{
+		jASSUME( tempslot < 4 );
+		jASSUME( !m_TempReg8[tempslot].IsEmpty() );	// make sure register was allocated properly!
+		return m_TempReg8[tempslot];
+	}
 
 public:
 	s32 GetImm() const { return ixImm; }
-	
+
 	bool IsConstRs() const { return Inst.IsConstInput.Rs; }
 	bool IsConstRt() const { return Inst.IsConstInput.Rt; }
 	bool IsConstRd() const { return Inst.IsConstInput.Rd; }
@@ -481,6 +724,8 @@ public:
 	}
 };
 
+
+
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 class IntermediateBlock
@@ -568,6 +813,8 @@ struct recBlockItem : public NoncopyableObject
 
 
 extern recBlockItemTemp m_blockspace;
-extern void recIL_Block();
+extern iopRecState m_RecState;
+
+extern void recIR_Block();
 
 }

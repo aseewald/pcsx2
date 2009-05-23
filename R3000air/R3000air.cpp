@@ -90,13 +90,13 @@ void iopException(u32 code, u32 bd)
 
 	if (Config.PsxOut && !CHECK_EEREC)
 	{
-		u32 call = iopRegs.GPR.n.t1.UL & 0xff;
+		u32 call = iopRegs[GPR_t1].UL & 0xff;
 		switch (iopRegs.pc & 0x1fffff)
 		{
 			case 0xa0:
 
 				if (call != 0x28 && call != 0xe)
-					PSXBIOS_LOG("Bios call a0: %s (%x) %x,%x,%x,%x\n", biosA0n[call], call, iopRegs.GPR.n.a0.UL, iopRegs.GPR.n.a1.UL, iopRegs.GPR.n.a2.UL, iopRegs.GPR.n.a3.UL);
+					PSXBIOS_LOG("Bios call a0: %s (%x) %x,%x,%x,%x\n", biosA0n[call], call, iopRegs[GPR_a0].UL, iopRegs[GPR_a1].UL, iopRegs[GPR_a2].UL, iopRegs[GPR_a3].UL);
 
 				if (biosA0[call])
 			   		biosA0[call]();
@@ -104,14 +104,14 @@ void iopException(u32 code, u32 bd)
 
 			case 0xb0:
 				if (call != 0x17 && call != 0xb)
-					PSXBIOS_LOG("Bios call b0: %s (%x) %x,%x,%x,%x\n", biosB0n[call], call, iopRegs.GPR.n.a0.UL, iopRegs.GPR.n.a1.UL, iopRegs.GPR.n.a2.UL, iopRegs.GPR.n.a3.UL);
+					PSXBIOS_LOG("Bios call b0: %s (%x) %x,%x,%x,%x\n", biosB0n[call], call, iopRegs[GPR_a0].UL, iopRegs[GPR_a1].UL, iopRegs[GPR_a2].UL, iopRegs[GPR_a3].UL);
 
 				if (biosB0[call])
 			   		biosB0[call]();
 				break;
 
 			case 0xc0:
-				PSXBIOS_LOG("Bios call c0: %s (%x) %x,%x,%x,%x\n", biosC0n[call], call, iopRegs.GPR.n.a0.UL, iopRegs.GPR.n.a1.UL, iopRegs.GPR.n.a2.UL, iopRegs.GPR.n.a3.UL);
+				PSXBIOS_LOG("Bios call c0: %s (%x) %x,%x,%x,%x\n", biosC0n[call], call, iopRegs[GPR_a0].UL, iopRegs[GPR_a1].UL, iopRegs[GPR_a2].UL, iopRegs[GPR_a3].UL);
 			
 				if (biosC0[call])
 			   		biosC0[call]();

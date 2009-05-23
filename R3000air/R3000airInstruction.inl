@@ -96,6 +96,23 @@ namespace R3000A {
 		}
 	}
 
+	// returns the index of the GPR for the given field, or -1 if the field is not written
+	// by this instruction.
+	__instinline int InstructionOptimizer::WritesField( RegField_t field ) const
+	{
+		switch( field )
+		{
+			case RF_Rd: return !WritesRd() ? -1 : _Rd_;
+			case RF_Rt: return !WritesRt() ? -1 : _Rt_;
+			case RF_Rs: return !WritesRs() ? -1 : _Rs_;
+
+			case RF_Hi: return !WritesHi() ? -1 : 32;
+			case RF_Lo: return !WritesLo() ? -1 : 33;
+			
+			jNO_DEFAULT
+		}
+	}
+
 	// gpridx - index of a MIPS general purpose register (0 thru 33) [32/33 are hi/lo]
 	// Returns the field the GPR is mapped to, or RF_Unused if the given register is
 	// not written to by this opcode.
@@ -123,11 +140,11 @@ namespace R3000A {
 		IsConstInput.Hi = constStatus[32];
 		IsConstInput.Lo = constStatus[33];
 
-		ConstVal_Rd = iopRegs.GPR.r[_Rd_].SL;
-		ConstVal_Rt = iopRegs.GPR.r[_Rt_].SL;
-		ConstVal_Rs = iopRegs.GPR.r[_Rs_].SL;
+		ConstVal_Rd = iopRegs.GPR[_Rd_].SL;
+		ConstVal_Rt = iopRegs.GPR[_Rt_].SL;
+		ConstVal_Rs = iopRegs.GPR[_Rs_].SL;
 
-		ConstVal_Hi = iopRegs.GPR.r[32].SL;
-		ConstVal_Lo = iopRegs.GPR.r[33].SL;
+		ConstVal_Hi = iopRegs.GPR[32].SL;
+		ConstVal_Lo = iopRegs.GPR[33].SL;
 	}
 }

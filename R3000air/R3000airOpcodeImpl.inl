@@ -49,25 +49,25 @@ static __forceinline void _OverflowCheck( const Instruction& inst, u64 result )
 __instinline void Inst::BGEZ()	// Branch if Rs >= 0
 {
 	SetBranchInst();
-	if( GetRs().SL >= 0 ) DoBranch();
+	if( GetRs_SL() >= 0 ) DoBranch();
 }
 
 __instinline void Inst::BGTZ()	// Branch if Rs >  0
 {
 	SetBranchInst();
-	if( GetRs().SL > 0 ) DoBranch();
+	if( GetRs_SL() > 0 ) DoBranch();
 }
 
 __instinline void Inst::BLEZ()	// Branch if Rs <= 0
 {
 	SetBranchInst();
-	if( GetRs().SL <= 0 ) DoBranch();
+	if( GetRs_SL() <= 0 ) DoBranch();
 }
 
 __instinline void Inst::BLTZ()	// Branch if Rs <  0
 {
 	SetBranchInst();
-	if( GetRs().SL < 0 ) DoBranch();
+	if( GetRs_SL() < 0 ) DoBranch();
 }
 
 __instinline void Inst::BGEZAL()	// Branch if Rs >= 0 and link
@@ -90,13 +90,13 @@ __instinline void Inst::BLTZAL()	// Branch if Rs <  0 and link
 __instinline void Inst::BEQ()		// Branch if Rs == Rt
 {
 	SetBranchInst();
-	if( GetRs().SL == GetRt().SL ) DoBranch();
+	if( GetRs_SL() == GetRt_SL() ) DoBranch();
 }
 
 __instinline void Inst::BNE()		// Branch if Rs != Rt
 {
 	SetBranchInst();
-	if( GetRs().SL != GetRt().SL ) DoBranch();
+	if( GetRs_SL() != GetRt_SL() ) DoBranch();
 }
 
 
@@ -122,7 +122,7 @@ __instinline void Inst::JAL()
 __instinline void Inst::JR()
 {
 	SetBranchInst();
-	DoBranch( GetRs().UL );
+	DoBranch( GetRs_UL() );
 }
 
 __instinline void Inst::JALR()
@@ -139,7 +139,7 @@ __instinline void Inst::JALR()
 // Rt = Rs + Im 	(Exception on Integer Overflow)
 __instinline void Inst::ADDI()
 {
-	s64 result = (s64)GetRs().SL + Imm();
+	s64 result = (s64)GetRs_SL() + Imm();
 	_OverflowCheck( *this, result );
 	SetRt_SL( (s32)result );
 }
@@ -149,35 +149,35 @@ __instinline void Inst::ADDI()
 // overflow exception check.
 __instinline void Inst::ADDIU()
 {
-	SetRt_SL( GetRs().SL + Imm() );
+	SetRt_SL( GetRs_SL() + Imm() );
 }
 
 __instinline void Inst::ANDI()	// Rt = Rs And Im
 {
-	SetRt_UL( GetRs().UL & ImmU() );
+	SetRt_UL( GetRs_UL() & ImmU() );
 }
 
 __instinline void Inst::ORI()		// Rt = Rs Or  Im
 {
-	SetRt_UL( GetRs().UL | ImmU() );
+	SetRt_UL( GetRs_UL() | ImmU() );
 }
 
 __instinline void Inst::XORI()	// Rt = Rs Xor Im
 {
-	SetRt_UL( GetRs().UL ^ ImmU() );
+	SetRt_UL( GetRs_UL() ^ ImmU() );
 }
 
 __instinline void Inst::SLTI()	// Rt = Rs < Im		(Signed)
 {
 	// Note: C standard guarantees conditionals resolve to 0 or 1 when cast to int.
-	SetRt_SL( GetRs().SL < Imm() );
+	SetRt_SL( GetRs_SL() < Imm() );
 }
 
 __instinline void Inst::SLTIU()	// Rt = Rs < Im		(Unsigned)
 {
 	// Note: Imm is the 16 bit value SIGN EXTENDED into 32 bits, which is why we
 	// cannot use ImmU() here!!
-	SetRt_UL( GetRs().UL < (u32)Imm() ); 
+	SetRt_UL( GetRs_UL() < (u32)Imm() ); 
 }
 
 /*********************************************************
@@ -187,7 +187,7 @@ __instinline void Inst::SLTIU()	// Rt = Rs < Im		(Unsigned)
 // Rd = Rs + Rt		(Exception on Integer Overflow)
 __instinline void Inst::ADD()
 {
-	s64 result = (s64)GetRs().SL + GetRt().SL;
+	s64 result = (s64)GetRs_SL() + GetRt_SL();
 	
 	_OverflowCheck( *this, result );
 	SetRd_SL( (s32)result );
@@ -196,7 +196,7 @@ __instinline void Inst::ADD()
 // Rd = Rs - Rt		(Exception on Integer Overflow)
 __instinline void Inst::SUB()
 {
-	s64 result = (s64)GetRs().SL - GetRt().SL;
+	s64 result = (s64)GetRs_SL() - GetRt_SL();
 
 	_OverflowCheck( *this, result );
 	SetRd_SL( (s32)result );
@@ -204,42 +204,42 @@ __instinline void Inst::SUB()
 
 __instinline void Inst::ADDU()	// Rd = Rs + Rt
 {
-	SetRd_SL( GetRs().SL + GetRt().SL );
+	SetRd_SL( GetRs_SL() + GetRt_SL() );
 }
 
 __instinline void Inst::SUBU()	// Rd = Rs - Rt
 {
-	SetRd_SL( GetRs().SL - GetRt().SL );
+	SetRd_SL( GetRs_SL() - GetRt_SL() );
 }
 
 __instinline void Inst::AND()		// Rd = Rs And Rt
 {
-	SetRd_UL( GetRs().UL & GetRt().UL );
+	SetRd_UL( GetRs_UL() & GetRt_UL() );
 }
 
 __instinline void Inst::OR()		// Rd = Rs Or  Rt
 {
-	SetRd_UL( GetRs().UL | GetRt().UL );
+	SetRd_UL( GetRs_UL() | GetRt_UL() );
 }
 
 __instinline void Inst::XOR()		// Rd = Rs Xor Rt
 {
-	SetRd_UL( GetRs().UL ^ GetRt().UL );
+	SetRd_UL( GetRs_UL() ^ GetRt_UL() );
 }
 
 __instinline void Inst::NOR()		// Rd = Rs Nor Rt
 {
-	SetRd_UL( ~(GetRs().UL | GetRt().UL) );
+	SetRd_UL( ~(GetRs_UL() | GetRt_UL()) );
 }
 
 __instinline void Inst::SLT()		// Rd = Rs < Rt		(Signed)
 {
-	SetRd_UL( GetRs().SL < GetRt().SL );
+	SetRd_UL( GetRs_SL() < GetRt_SL() );
 }
 
 __instinline void Inst::SLTU()	// Rd = Rs < Rt		(Unsigned)
 {
-	SetRd_UL( GetRs().UL < GetRt().UL );
+	SetRd_UL( GetRs_UL() < GetRt_UL() );
 }
 
 
@@ -269,12 +269,12 @@ __instinline void Inst::DIV()
 	
 	// [TODO] : This could be handled with an exception or signal handler instead of conditionals.
 
-	const s32 Rt = GetRt().SL;
-	const s32 Rs = GetRs().SL;
+	const s32 Rt = GetRt_SL();
+	const s32 Rs = GetRs_SL();
 
 	if( Rt == 0 )
 	{
-		const s32 Rs = GetRs().SL;
+		const s32 Rs = GetRs_SL();
 		SetHiLo( Rs, (Rs >= 0) ? -1 : 1 );
 		return;
 	}
@@ -294,8 +294,8 @@ __instinline void Inst::DIVU()
 {
 	m_DivStall = 35;
 
-	const u32 Rt = GetRt().UL;
-	const u32 Rs = GetRs().UL;
+	const u32 Rt = GetRt_UL();
+	const u32 Rs = GetRs_UL();
 
 	if( Rt == 0 )
 		SetHiLo( Rs, (u32)(-1) );		// unsigned div by zero always returns Rs, 0xffffffff
@@ -305,12 +305,12 @@ __instinline void Inst::DIVU()
 
 __instinline void Inst::MULT()
 {
-	MultHelper( (s64)GetRs().SL * GetRt().SL );
+	MultHelper( (s64)GetRs_SL() * GetRt_SL() );
 }
 
 __instinline void Inst::MULTU()
 {
-	MultHelper( (u64)GetRs().UL * GetRt().UL );
+	MultHelper( (u64)GetRs_UL() * GetRt_UL() );
 }
 
 /*********************************************************
@@ -319,17 +319,17 @@ __instinline void Inst::MULTU()
 *********************************************************/
 __instinline void Inst::SLL()		// Rd = Rt << sa
 {
-	SetRd_UL( GetRt().UL << Sa() );
+	SetRd_UL( GetRt_UL() << Sa() );
 }
 
 __instinline void Inst::SRA()		// Rd = Rt >> sa (arithmetic) [signed]
 {
-	SetRd_SL( GetRt().SL >> Sa() );
+	SetRd_SL( GetRt_SL() >> Sa() );
 }
 
 __instinline void Inst::SRL()		// Rd = Rt >> sa (logical) [unsigned]
 {
-	SetRd_UL( GetRt().UL >> Sa() );
+	SetRd_UL( GetRt_UL() >> Sa() );
 }
 
 /*********************************************************
@@ -344,17 +344,17 @@ __instinline void Inst::SRL()		// Rd = Rt >> sa (logical) [unsigned]
 
 __instinline void Inst::SLLV()	// Rd = Rt << rs
 {
-	SetRd_UL( GetRt().UL << (GetRs().UL & 0x1f) );
+	SetRd_UL( GetRt_UL() << (GetRs_UL() & 0x1f) );
 } 
 
 __instinline void Inst::SRAV()	// Rd = Rt >> rs (arithmetic)
 {
-	SetRd_SL( GetRt().SL >> (GetRs().UL & 0x1f) );
+	SetRd_SL( GetRt_SL() >> (GetRs_UL() & 0x1f) );
 }
 
 __instinline void Inst::SRLV()	// Rd = Rt >> rs (logical)
 {
-	SetRd_UL( GetRt().UL >> (GetRs().UL & 0x1f) );
+	SetRd_UL( GetRt_UL() >> (GetRs_UL() & 0x1f) );
 }
 
 /*********************************************************
@@ -372,13 +372,13 @@ __instinline void Inst::LUI()	// Rt = Im << 16  (lower 16 bits zeroed)
 *********************************************************/
 __instinline void Inst::MFHI()	// Rd = Hi
 {
-	SetRd_UL( GetHi().UL );
+	SetRd_UL( GetHi_UL() );
 	m_DivStall = 1;
 }
 
 __instinline void Inst::MFLO()	 // Rd = Lo
 {
-	SetRd_UL( GetLo().UL );
+	SetRd_UL( GetLo_UL() );
 	m_DivStall = 1;
 }
 
@@ -388,11 +388,11 @@ __instinline void Inst::MFLO()	 // Rd = Lo
 *********************************************************/
 __instinline void Inst::MTHI()	// Hi = Rs
 {
-	SetHi_UL( GetRs().UL );
+	SetHi_UL( GetRs_UL() );
 }
 __instinline void Inst::MTLO()	// Lo = Rs
 {
-	SetLo_UL( GetRs().UL );
+	SetLo_UL( GetRs_UL() );
 }
 
 /*********************************************************
@@ -484,7 +484,7 @@ __instinline void Inst::LWL()
 	const u32 shift = (addr & 3) << 3;
 	const u32 mem = MemoryRead32( addr & 0xfffffffc );
 
-	SetRt_UL( (GetRt().UL & (0x00ffffff >> shift)) | (mem << (24 - shift)) );
+	SetRt_UL( (GetRt_UL() & (0x00ffffff >> shift)) | (mem << (24 - shift)) );
 
 	/*
 	Mem = 1234.  Reg = abcd
@@ -505,7 +505,7 @@ __instinline void Inst::LWR()
 	const u32 shift = (addr & 3) << 3;
 	const u32 mem = MemoryRead32( addr & 0xfffffffc );
 
-	SetRt_UL( (GetRt().UL & (0xffffff00 << (24-shift))) | (mem >> shift) );
+	SetRt_UL( (GetRt_UL() & (0xffffff00 << (24-shift))) | (mem >> shift) );
 
 	/*
 	Mem = 1234.  Reg = abcd
@@ -520,7 +520,7 @@ __instinline void Inst::LWR()
 
 __instinline void Inst::SB()
 {
-	MemoryWrite8( AddrImm(), GetRt().UB[0] );
+	MemoryWrite8( AddrImm(), GetRt_UB() );
 }
 
 __instinline void Inst::SH()
@@ -530,7 +530,7 @@ __instinline void Inst::SH()
 	if( addr & 1 )
 		throw R3000Exception::AddressError( *this, addr, true );
 
-	MemoryWrite16( addr, GetRt().US[0] );
+	MemoryWrite16( addr, GetRt_US() );
 }
 
 __instinline void Inst::SW()
@@ -540,7 +540,7 @@ __instinline void Inst::SW()
 	if( addr & 3 )
 		throw R3000Exception::AddressError( *this, addr, true );
 
-	MemoryWrite32( addr, GetRt().UL );
+	MemoryWrite32( addr, GetRt_UL() );
 }
 
 // Store Word Left
@@ -552,7 +552,7 @@ __instinline void Inst::SWL()
 	const u32 mem = MemoryRead32(addr & 0xfffffffc);
 
 	MemoryWrite32( (addr & 0xfffffffc),
-		(( GetRt().UL >> (24 - shift) )) | (mem & (0xffffff00 << shift))
+		(( GetRt_UL() >> (24 - shift) )) | (mem & (0xffffff00 << shift))
 	);
 
 	/*
@@ -573,7 +573,7 @@ __instinline void Inst::SWR()
 	const u32 mem = MemoryRead32(addr & 0xfffffffc);
 
 	MemoryWrite32( (addr & 0xfffffffc),
-		( (GetRt().UL << shift) | (mem & (0x00ffffff >> (24 - shift))) )
+		( (GetRt_UL() << shift) | (mem & (0x00ffffff >> (24 - shift))) )
 	);
 
 	/*
@@ -594,17 +594,17 @@ __instinline void Inst::SWR()
 
 __instinline void Inst::MFC0()
 {
-	SetRt_UL( GetFs().UL );
+	SetRt_UL( GetFs_UL() );
 }
 
 __instinline void Inst::CFC0()
 {
-	SetRt_UL( GetFs().UL );
+	SetRt_UL( GetFs_UL() );
 }
 
 __instinline void Inst::MTC0()
 {
-	SetFs_UL( GetRt().UL );
+	SetFs_UL( GetRt_UL() );
 	
 	// Writes to the CP0.Status register qualifies for having side effects.
 	if( _Rd_ == 12 )
@@ -613,7 +613,7 @@ __instinline void Inst::MTC0()
 
 __instinline void Inst::CTC0()
 {
-	SetFs_UL( GetRt().UL );
+	SetFs_UL( GetRt_UL() );
 
 	// Writes to the CP0.Status register qualifies for having side effects.
 	if( _Rd_ == 12 )

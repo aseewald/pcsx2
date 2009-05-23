@@ -120,7 +120,7 @@ struct ConstLoadOpInfo
 	const u32 masked;
 	const sptr xlated;
 	
-	ConstLoadOpInfo( const IntermediateInstruction& info ) :
+	ConstLoadOpInfo( const IntermediateRepresentation& info ) :
 		addr( info.GetConstRs() + info.GetImm() ),
 		masked( addr & AddressMask ),
 		xlated( tbl_Translation.Contents[masked / PageSize] )
@@ -131,7 +131,7 @@ struct ConstLoadOpInfo
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 template< typename T>
-static void DynGen_DirectWrite( const IntermediateInstruction& info, const ModSibStrict<T>& dest )
+static void DynGen_DirectWrite( const IntermediateRepresentation& info, const ModSibStrict<T>& dest )
 {
 	xTEST( ptr32[&iopRegs.CP0.n.Status], 0x10000 );
 	xForwardJNZ8 skipWrite;
@@ -144,14 +144,15 @@ static void DynGen_DirectWrite( const IntermediateInstruction& info, const ModSi
 //
 namespace recLoad_ConstNone
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
-		opts.MapInput.Rs = ecx;
-		opts.MapOutput.Rt = eax;
+		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
+		rs[RF_Rs].EntryMap = ecx;
+		rs[RF_Rt].ExitMap = eax;
 	}
 
 	template< typename T >
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 		// Make sure recompiler did it's job:
 		jASSUME( info.Src[RF_Rs].GetReg() == ecx );
@@ -181,22 +182,23 @@ namespace recLoad_ConstNone
 //
 namespace recLoad_ConstRs
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
+		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
 		const ConstLoadOpInfo constinfo( info );
 
 		// ecx/edx get clobbered by the indirect handler, but are preserved on direct memOps:
 		if( constinfo.xlated > HandlerId_Maximum )
 		{
-			opts.xModifiesReg[ecx] = false;
-			opts.xModifiesReg[edx] = false;
+			rs.ClobbersReg[ecx] = false;
+			rs.ClobbersReg[edx] = false;
 		}
-		
-		opts.MapOutput.Rt = eax;
+
+		rs[RF_Rt].ExitMap = eax;
 	}
 
 	template< typename T >
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 		const ConstLoadOpInfo constinfo( info );
 
@@ -220,19 +222,20 @@ namespace recLoad_ConstRs
 //
 namespace recLoadWord_LorR_ConstNone
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
+		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
+
 		// Rt is unmapped/flushed here because Rt is used only after we've already clobbered
 		// all the regular regs (due to LWL / LWR needing to enact a memory operation), so
 		// might as well force the rec to flush it, and then reload it when ready.
 
-		opts.ForceIndirectRt = true;
-		opts.MapInput.Rs	= ecx;
-		opts.MapOutput.Rt	= eax;
+		rs[RF_Rs].EntryMap		= ecx;
+		rs[RF_Rt].ExitMap		= eax;
 	}
 
 	template< bool IsLoadRight >
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 		xADD( ecx, info.ixImm );
 		xMOV( eax, ecx );
@@ -300,22 +303,24 @@ namespace recLoadWord_LorR_ConstNone
 //
 namespace recLoadWord_LorR_ConstRs
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
-		opts.MapInput.Rt	= ebx;		// use ebx since it's preserved across indirect handlers.
-		opts.MapOutput.Rt	= eax;
+		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
+
+		rs[RF_Rt].EntryMap = ebx;		// use ebx since it's preserved across indirect handlers.
+		rs[RF_Rt].ExitMap = eax;
 
 		// Note: ecx/edx are preserved for direct ops:
 		const ConstLoadOpInfo constinfo( info );
 		if( constinfo.xlated > HandlerId_Maximum )
 		{
-			opts.xModifiesReg[edx] = false;
-			opts.xModifiesReg[ecx] = false;
+			rs.ClobbersReg[edx] = false;
+			rs.ClobbersReg[ecx] = false;
 		}
 	}
 	
 	template< bool IsLoadRight >
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 		jASSUME( info.Src[RF_Rt] == ebx );
 
@@ -353,14 +358,15 @@ namespace recLoadWord_LorR_ConstRs
 //
 namespace recStore_ConstNone
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
-		opts.MapInput.Rs = ecx;
-		opts.MapInput.Rt = edx;
+		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
+		rs[RF_Rs].EntryMap = ecx;
+		rs[RF_Rt].EntryMap = edx;
 	}
 
 	template< typename T >
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 		// Make sure recompiler did it's job:
 		jASSUME( info.Src[RF_Rs].GetReg() == ecx );
@@ -394,22 +400,23 @@ namespace recStore_ConstNone
 //
 namespace recStore_ConstRs
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
-		opts.MapInput.Rt = edx;
+		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
+		rs[RF_Rt].EntryMap = edx;
 
 		const ConstLoadOpInfo constinfo( info );
 		if( constinfo.xlated > HandlerId_Maximum )
 		{
-			opts.xModifiesReg.None();
-			opts.MapOutput.Rt = edx;
+			rs.ClobbersReg.None();
+			rs[RF_Rt].ExitMap  = edx;
 		}
 		else
-			opts.xModifiesReg[ebx] = false;
+			rs.ClobbersReg[ebx] = false;
 	}
 
 	template< typename T >
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 		const ConstLoadOpInfo constinfo( info );
 
@@ -430,17 +437,18 @@ namespace recStore_ConstRs
 //
 namespace recStoreWord_LorR_ConstNone
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
-		// Yay most inefficient function ever -- no regs preserved and we need to
-		// flush Rt as well.
+		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
 
-		opts.ForceIndirectRt = true;
-		opts.MapInput.Rs = ecx;
+		// Yay most inefficient function ever -- no regs preserved and we need to
+		// flush Rt as well on entry (so map only Rs)
+
+		rs[RF_Rs].EntryMap = ecx;
 	}
 
 	template< bool IsStoreRight >
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 		jASSUME( info.Src[RF_Rs].GetReg() == ecx );
 		xADD( ecx, info.ixImm );
@@ -521,21 +529,23 @@ namespace recStoreWord_LorR_ConstNone
 //
 namespace recStoreWord_LorR_ConstRs
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
-		opts.MapInput.Rt = ebx;
+		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
+
+		rs[RF_Rt].EntryMap = ebx;
 		
 		// Direct memory preserves ecx/edx
 		const ConstLoadOpInfo constinfo( info );
 		if( constinfo.xlated > HandlerId_Maximum )
 		{
-			opts.xModifiesReg[ecx] = false;
-			opts.xModifiesReg[ebx] = false;
+			rs.ClobbersReg[ecx] = false;
+			rs.ClobbersReg[ebx] = false;
 		}
 	}
 
 	template< bool IsStoreRight >
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 		const ConstLoadOpInfo constinfo( info );
 		const uint shift		= (constinfo.addr & 3) << 3;

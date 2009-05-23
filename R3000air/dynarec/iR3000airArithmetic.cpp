@@ -37,16 +37,16 @@ IMPL_RecPlacebo( SUBU );
 // ------------------------------------------------------------------------
 namespace recADDI_ConstNone
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
-		opts.xModifiesReg.None();
+		RegMapInfo_Dynamic& rd( info.RegOpts.UseDynMode() );
 	}
 	
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 		if( info.GetImm() != 0 )
-			xADD( info.Src[RF_Rs], info.GetImm() );
-		info.MoveToRt( info.Src[RF_Rs] );
+			xADD( RegRs, info.GetImm() );
+		info.MoveToRt( RegRs );
 	}
 	
 	IMPL_GetInterface()
@@ -65,20 +65,21 @@ void InstAPI::ADDIU()
 // ------------------------------------------------------------------------
 namespace recADD_ConstNone
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
-		opts.xModifiesReg.None();
+		RegMapInfo_Dynamic& rd( info.RegOpts.UseDynMode() );
 
 		// Rs and Rt can be swapped freely:
-		opts.CommutativeSources	= true;
+		info.RegOpts.CommutativeSources	= true;
+
 		// Force Rs to register to prevent Add Rs+Rt from being 2-way indirect.
-		opts.ForceDirectRs		= true;
+		rd[RF_Rs].ForceDirect	= true;
 	}
 
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
-		xADD( info.Src[RF_Rs], info.Src[RF_Rt] );
-		info.MoveToRd( info.Src[RF_Rs] );
+		xADD( RegRs, RegRt );
+		info.MoveToRd( RegRs );
 	}
 
 	IMPL_GetInterface()
@@ -111,19 +112,20 @@ void InstAPI::ADDU()
 //
 namespace recDIV_ConstNone
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
-		opts.MapInput.Rs = ecx;
-		opts.MapInput.Rt = eax;
-
-		opts.MapOutput.Rs = ecx;
-		opts.MapOutput.Lo = eax;
+		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
 		
-		opts.xModifiesReg[ecx] = false;
-		opts.xModifiesReg[ebx] = false;
+		rs[RF_Rs].EntryMap = ecx;
+		rs[RF_Rt].EntryMap = eax;
+
+		rs[RF_Lo].ExitMap = eax;
+		
+		rs.ClobbersReg[ecx] = false;
+		rs.ClobbersReg[ebx] = false;
 	}
 
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 		// Make sure recompiler did it's job:
 		jASSUME( info.Src[RF_Rs].GetReg() == ecx );
@@ -167,31 +169,31 @@ namespace recDIV_ConstNone
 //
 namespace recDIV_ConstRt
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
+		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
+
 		if( info.GetConstRt() == 0 )
 		{
-			opts.MapInput.Rs = edx;
-			opts.MapOutput.Rs = edx;		// unmodified.
-			opts.MapOutput.Hi = edx;
-			opts.MapOutput.Lo = eax;
-			opts.xModifiesReg[edx] = false;
-			opts.xModifiesReg[ebx] = false;
+			rs[RF_Rs].EntryMap = edx;
+			rs.ExitMapHiLo( edx, eax );
+
+			rs.ClobbersReg[edx] = false;
+			rs.ClobbersReg[ebx] = false;
 		}
 		else if( info.GetConstRt() == -1 )
 		{
-			opts.xModifiesReg[ecx] = false;
-			opts.xModifiesReg[ebx] = false;
-			opts.MapOutput.Hi = edx;
-			opts.MapOutput.Lo = eax;
+			rs.ClobbersReg[ecx] = false;
+			rs.ClobbersReg[ebx] = false;
+			rs.ExitMapHiLo( edx, eax );
 		}
 		else
 		{
-			recDIV_ConstNone::Optimizations( info, opts );
+			recDIV_ConstNone::RegMapInfo( info );
 		}
 	}
 
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 		// If both Rt and Rs are const, then this instruction shouldn't even be recompiled
 		// since the result is known at IL time.
@@ -238,24 +240,24 @@ namespace recDIV_ConstRt
 //
 namespace recDIV_ConstRs
 {
-	static void Optimizations( const IntermediateInstruction& info, OptimizationModeFlags& opts )
+	static void RegMapInfo( IntermediateRepresentation& info )
 	{
-		opts.MapInput.Rt = eax;
-		opts.MapInput.Rs = ecx;		// DIV lacks Imm forms, so force-load const Rs into ecx
-		opts.MapOutput.Rs = ecx;	// and it's unmodified!
+		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
+
+		rs[RF_Rt].EntryMap = eax;
+		rs[RF_Rs].EntryMap = ecx;		// DIV lacks Imm forms, so force-load const Rs into ecx
 
 		// When Const Rs == 0x80000000, the mappings of Hi/Lo are indeterminate.
 		if( info.GetConstRs() != 0x80000000 )
 		{
-			opts.MapOutput.Hi = edx;
-			opts.MapOutput.Lo = eax;
+			rs.ExitMapHiLo( edx, eax );
 		}
 
-		opts.xModifiesReg[ecx] = false;
-		opts.xModifiesReg[ebx] = false;
+		rs.ClobbersReg[ecx] = false;
+		rs.ClobbersReg[ebx] = false;
 	}
 	
-	static void Emit( const IntermediateInstruction& info )
+	static void Emit( const IntermediateRepresentation& info )
 	{
 		// If both Rt and Rs are const, then this instruction shouldn't even be recompiled
 		// since the result is known at IL time.
