@@ -55,7 +55,7 @@ namespace R3000A
 #undef ex
 #undef null
 
-#define ex(func) case (__COUNTER__-baseval): inst.func(); return;
+#define ex(func) case (__COUNTER__-baseval): inst.SetName(#func); inst.func(); return;
 #define su(func) case (__COUNTER__-baseval): Instruction::_dispatch_##func(inst); return;
 #define null() case (__COUNTER__-baseval): break;
 
@@ -99,11 +99,11 @@ void Instruction::_dispatch_COP0( T& inst )
 
 	switch( inst._Rs_ )
 	{
-		case 0x00: inst.MFC0(); return;
-		case 0x02: inst.CFC0(); return;
-		case 0x04: inst.MTC0(); return;
-		case 0x06: inst.CTC0(); return;
-		case 0x10: inst.RFE(); return;
+		case 0x00: inst.SetName("MFC0"); inst.MFC0(); return;
+		case 0x02: inst.SetName("CFC0"); inst.CFC0(); return;
+		case 0x04: inst.SetName("MTC0"); inst.MTC0(); return;
+		case 0x06: inst.SetName("CTC0"); inst.CTC0(); return;
+		case 0x10: inst.SetName("RFE"); inst.RFE(); return;
 	}
 	inst.Unknown();
 }

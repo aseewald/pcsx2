@@ -81,16 +81,16 @@ namespace R3000A {
 
 	// returns the index of the GPR for the given field, or -1 if the field is not read
 	// by this instruction.
-	__instinline int InstructionOptimizer::ReadsField( RegField_t field ) const
+	__instinline MipsGPRs_t InstructionOptimizer::ReadsField( RegField_t field ) const
 	{
 		switch( field )
 		{
-			case RF_Rd: return !ReadsRd() ? -1 : _Rd_;
-			case RF_Rt: return !ReadsRt() ? -1 : _Rt_;
-			case RF_Rs: return !ReadsRs() ? -1 : _Rs_;
+			case RF_Rd: return !ReadsRd() ? GPR_Invalid : _Rd_;
+			case RF_Rt: return !ReadsRt() ? GPR_Invalid : _Rt_;
+			case RF_Rs: return !ReadsRs() ? GPR_Invalid : _Rs_;
 
-			case RF_Hi: return !ReadsHi() ? -1 : 32;
-			case RF_Lo: return !ReadsLo() ? -1 : 33;
+			case RF_Hi: return !ReadsHi() ? GPR_Invalid : GPR_hi;
+			case RF_Lo: return !ReadsLo() ? GPR_Invalid : GPR_lo;
 			
 			jNO_DEFAULT
 		}
@@ -98,16 +98,16 @@ namespace R3000A {
 
 	// returns the index of the GPR for the given field, or -1 if the field is not written
 	// by this instruction.
-	__instinline int InstructionOptimizer::WritesField( RegField_t field ) const
+	__instinline MipsGPRs_t InstructionOptimizer::WritesField( RegField_t field ) const
 	{
 		switch( field )
 		{
-			case RF_Rd: return !WritesRd() ? -1 : _Rd_;
-			case RF_Rt: return !WritesRt() ? -1 : _Rt_;
-			case RF_Rs: return !WritesRs() ? -1 : _Rs_;
+			case RF_Rd: return !WritesRd() ? GPR_Invalid : _Rd_;
+			case RF_Rt: return !WritesRt() ? GPR_Invalid : _Rt_;
+			case RF_Rs: return !WritesRs() ? GPR_Invalid : _Rs_;
 
-			case RF_Hi: return !WritesHi() ? -1 : 32;
-			case RF_Lo: return !WritesLo() ? -1 : 33;
+			case RF_Hi: return !WritesHi() ? GPR_Invalid : GPR_hi;
+			case RF_Lo: return !WritesLo() ? GPR_Invalid : GPR_lo;
 			
 			jNO_DEFAULT
 		}
@@ -131,20 +131,19 @@ namespace R3000A {
 	__instinline void InstructionConstOpt::Assign( const Opcode& opcode, bool constStatus[34] )
 	{
 		InstructionOptimizer::Assign( opcode );
-		SignExtendOnWrite = false;
 		
-		IsConstInput.Value = false;
-		IsConstInput.Rd = constStatus[_Rd_];
-		IsConstInput.Rt = constStatus[_Rt_];
-		IsConstInput.Rs = constStatus[_Rs_];
-		IsConstInput.Hi = constStatus[32];
-		IsConstInput.Lo = constStatus[33];
+		m_IsConst.Value = false;
+		m_IsConst.Rd = constStatus[_Rd_];
+		m_IsConst.Rt = constStatus[_Rt_];
+		m_IsConst.Rs = constStatus[_Rs_];
+		m_IsConst.Hi = constStatus[GPR_hi];
+		m_IsConst.Lo = constStatus[GPR_lo];
 
 		ConstVal_Rd = iopRegs.GPR[_Rd_].SL;
 		ConstVal_Rt = iopRegs.GPR[_Rt_].SL;
 		ConstVal_Rs = iopRegs.GPR[_Rs_].SL;
 
-		ConstVal_Hi = iopRegs.GPR[32].SL;
-		ConstVal_Lo = iopRegs.GPR[33].SL;
+		ConstVal_Hi = iopRegs.GPR[GPR_hi].SL;
+		ConstVal_Lo = iopRegs.GPR[GPR_lo].SL;
 	}
 }

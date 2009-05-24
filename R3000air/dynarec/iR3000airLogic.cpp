@@ -206,16 +206,15 @@ namespace recNOR_ConstNone
 	static void RegMapInfo( IntermediateRepresentation& info )
 	{
 		RegMapInfo_Dynamic& rd( info.RegOpts.UseDynMode() );
-
 		info.RegOpts.CommutativeSources = true;
 		rd[RF_Rs].ForceDirect = true;
+		//rd[RF_Rs].ExitMap = DynEM_Rd;
 	}
 
 	static void Emit( const IntermediateRepresentation& info )
 	{
 		xOR( RegRs, RegRt );
 		xNOT( RegRs );
-		xMOV( DestRegRd, RegRs );
 	}
 
 	IMPL_GetInterface()

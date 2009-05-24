@@ -122,23 +122,26 @@ static __releaseinline void intStep()
 	if( woot <= 0 )
 		intEventTest();
 
-	#ifdef PCSX2_DEVBUILD
+#ifdef PCSX2_DEVBUILD
+	InstructionOptimizer dudley( opcode );
+#else
+	Instruction dudley( opcode );
+#endif
+
+	Instruction::Process( dudley );
+	
+#ifdef PCSX2_DEVBUILD
 	if( varLog & 0x00100000 )
 	{
-		InstructionDiagnostic diag( opcode );
-		diag.Process();
-		diag.GetDisasm( m_disasm );
-		diag.GetValuesComment( m_comment );
-		
+		dudley.GetDisasm( m_disasm );
+		dudley.GetValuesComment( m_comment );
+
 		if( m_comment.empty() )
 			PSXCPU_LOG( "%s%s", m_disasm.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
 		else
 			PSXCPU_LOG( "%-34s ; %s%s", m_disasm.c_str(), m_comment.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
 	}
-	#endif
-
-	Instruction dudley( opcode );
-	Instruction::Process( dudley );
+#endif
 
 	// prep the iopRegs for the next instruction fetch -->
 	// 
@@ -190,6 +193,7 @@ static void intExecute()
 	}
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////
 // For efficiency sake, the Iop Interpreter has been designed to take an eeCycles
 // parameter, which instructs it on the number of cycles needed to run to get it
 // caught up with the EE's instruction status.  The actual number of cycles will

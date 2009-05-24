@@ -119,14 +119,29 @@ __instinline void Inst::JAL()
 * Register jump                                          *
 * Format:  OP rs, rd                                     *
 *********************************************************/
+// Exception Note: JR and JALR raise Invalid Address exceptions if the target address
+// of the register is not naturally aligned to a 32-bit boundary.
+
 __instinline void Inst::JR()
 {
 	SetBranchInst();
-	DoBranch( GetRs_UL() );
+	u32 target = GetRs_UL();
+
+	if( target & 3 )
+		throw R3000Exception::AddressError( *this, target, false );
+
+	DoBranch( target );
 }
 
 __instinline void Inst::JALR()
 {
+	// Testing needed: MIPS documents Rs==Rd cases as "undefined".  However that's typically just a spec-
+	// ification and the actual R3000A chip implementation may have its own defined behavior.  Needs to
+	// be investigated on PSX/PS2 hardware. -- air
+
+	if( _Rs_ == _Rd_ )
+		Console::Error( "Bad JALR (Rs == Rd) @ IOP/0x%08x", params iopRegs.pc );
+
 	SetLinkRd(); JR();
 }
 
@@ -604,20 +619,34 @@ __instinline void Inst::CFC0()
 
 __instinline void Inst::MTC0()
 {
+	u32 oldfs = FsValue().UL;
 	SetFs_UL( GetRt_UL() );
 	
 	// Writes to the CP0.Status register qualifies for having side effects.
 	if( _Rd_ == 12 )
+	{
 		SetSideEffects();
+		if( (oldfs & 0x10000) && !(FsValue().UL & 0x10000) )
+			Console::Status( "**** MTC0 >> IOP Write-Protect Cleared!  Bouyaahh!!" );
+		else if( !(oldfs & 0x10000) && (FsValue().UL & 0x10000) )
+			Console::Status( "**** MTC0 >> IOP Write-Protect Set!" );
+	}
 }
 
 __instinline void Inst::CTC0()
 {
+	u32 oldfs = FsValue().UL;
 	SetFs_UL( GetRt_UL() );
 
 	// Writes to the CP0.Status register qualifies for having side effects.
 	if( _Rd_ == 12 )
+	{
 		SetSideEffects();
+		if( (oldfs & 0x10000) && !(FsValue().UL & 0x10000) )
+			Console::Status( "**** CTC0 >> IOP Write-Protect Cleared!  Bouyaahh!!" );
+		else if( !(oldfs & 0x10000) && (FsValue().UL & 0x10000) )
+			Console::Status( "**** CTC0 >> IOP Write-Protect Set!" );
+	}
 }
 
 /*********************************************************
@@ -626,6 +655,7 @@ __instinline void Inst::CTC0()
 *********************************************************/
 __instinline void Inst::Unknown()
 {
+	SetName( "Unknown" ); 
 	Console::Error("R3000A: Unimplemented op, code=0x%x\n", params _Opcode_ );
 }
 

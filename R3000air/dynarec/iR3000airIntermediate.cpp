@@ -54,6 +54,7 @@ static string m_comment;
 void recIR_Block()
 {
 	bool termBlock = false;
+	bool skipTerm = false;		// used to skip termination of const branches
 
 	m_blockspace.ramlen = 0;
 	m_blockspace.instlen = 0;
@@ -62,6 +63,8 @@ void recIR_Block()
 
 	do 
 	{
+		termBlock = iopRegs.IsDelaySlot;		// terminate blocks after delay slots
+		
 		Opcode opcode( iopMemDirectRead32( iopRegs.pc ) );
 		m_blockspace.ramcopy[m_blockspace.ramlen++] = opcode.U32;
 
@@ -75,27 +78,23 @@ void recIR_Block()
 		}
 		else
 		{
-			#ifdef PCSX2_DEVBUILD
-			if( (varLog & 0x00100000) && iopRegs.cycle > 0x40000 )
+			InstructionConstOpt& inst( m_blockspace.inst[m_blockspace.instlen] );
+			inst.Assign( opcode, gpr_IsConst );
+			inst.Process();
+
+			if( varLog & 0x00100000 )
 			{
-				InstructionDiagnostic diag( opcode );
-				diag.Process();
-				diag.GetDisasm( m_disasm );
-				diag.GetValuesComment( m_comment );
+				inst.GetDisasm( m_disasm );
+				inst.GetValuesComment( m_comment );
 
 				if( m_comment.empty() )
 					PSXCPU_LOG( "%s%s", m_disasm.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
 				else
 					PSXCPU_LOG( "%-34s ; %s%s", m_disasm.c_str(), m_comment.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
 			}
-			#endif
-
-			InstructionConstOpt& inst( m_blockspace.inst[m_blockspace.instlen] );
-			inst.Assign( opcode, gpr_IsConst );
-			inst.Process();
 
 			bool isConstWrite = inst.UpdateConstStatus( gpr_IsConst );
-			if( !isConstWrite || inst.WritesMemory() || inst.IsBranchType() || inst.HasSideEffects() )
+			if( !isConstWrite || inst.WritesMemory() || (inst.IsBranchType() && !inst.IsConstBranch()) || inst.HasSideEffects() )
 				m_blockspace.instlen++;
 
 			// prep the iopRegs for the next instruction fetch -->
@@ -124,13 +123,19 @@ void recIR_Block()
 			// RFE, SYSCALL and BREAK cause exceptions, which should terminate block recompilation:
 			if( inst.HasSideEffects() )
 				termBlock = true;
+			else if( inst.IsUnconditionalBranchType() )
+				termBlock = false;
 		}
 
 		m_RecState.IncCycleAccum();
-		if( termBlock ) break;
-		termBlock = iopRegs.IsDelaySlot;	// terminate block on next instruction if it's a DelaySlot.
 
-	} while( m_RecState.BlockCycleAccum < MaxCyclesPerBlock );
+		if( m_blockspace.instlen > 0 )
+		{
+			if( termBlock ) break;
+			if( m_RecState.BlockCycleAccum >= MaxCyclesPerBlock ) break;
+		}
+
+	} while( true );
 
 	jASSUME( m_blockspace.instlen != 0 );
 
@@ -144,7 +149,7 @@ void InstructionRecAPI::_const_error()
 	throw Exception::LogicError( "R3000A Recompiler Logic Error: invalid const form for this instruction." );
 }
 
-void InstructionRecAPI::Error_ConstNone( InstructionEmitterAPI& api )		{ _const_error(); }
+void InstructionRecAPI::Error_ConstNone( InstructionEmitterAPI& api )	{ _const_error(); }
 void InstructionRecAPI::Error_ConstRs( InstructionEmitterAPI& api )		{ _const_error(); }
 void InstructionRecAPI::Error_ConstRt( InstructionEmitterAPI& api )		{ _const_error(); }
 void InstructionRecAPI::Error_ConstRsRt( InstructionEmitterAPI& api )	{ _const_error(); }

@@ -24,17 +24,21 @@
 #include "R3000Exceptions.h"
 #include "IopMem.h"
 
+#include "R3000airInstruction.inl"
+
+
 namespace R3000A
 {
-typedef InstructionDiagnostic InstDiag;		// makes life easier on the verboseness front.
-typedef InstDiagInfo RetType;				// makes life even more easier on the verboseness front.
+typedef InstructionOptimizer InstDiag;		// makes life easier on the verboseness front.
 
-static const char *tbl_regname_gpr[32] =
+static const char *tbl_regname_gpr[34] =
 {
 	"zero",	"at", "v0", "v1", "a0", "a1", "a2", "a3",
 	"t0",	"t1", "t2", "t3", "t4", "t5", "t6", "t7",
 	"s0",	"s1", "s2", "s3", "s4", "s5", "s6", "s7",
-	"t8",	"t9", "k0", "k1", "gp", "sp", "fp", "ra"
+	"t8",	"t9", "k0", "k1", "gp", "sp", "fp", "ra",
+	
+	"hi",	"lo"
 };
 
 static const char *tbl_regname_cop0[32] =
@@ -46,21 +50,9 @@ static const char *tbl_regname_cop0[32] =
 };
 
 
-InstDiagInfo InstDiag::MakeInfoS( const char *name, ParamType one, ParamType two, ParamType three ) const
+bool InstDiag::ParamIsRead( const InstParamType ptype ) const
 {
-	InstDiagInfo info = { name, one, two, three, false };
-	return info;
-}
-
-InstDiagInfo InstDiag::MakeInfoU( const char *name, ParamType one, ParamType two, ParamType three ) const
-{
-	InstDiagInfo info = { name, one, two, three, true };
-	return info;
-}
-
-bool InstDiag::ParamIsRead( const uint pidx ) const
-{
-	switch( m_Syntax->Param[pidx] )
+	switch( ptype )
 	{
 		case Param_None: return false;
 
@@ -91,11 +83,11 @@ bool InstDiag::ParamIsRead( const uint pidx ) const
 	}
 }
 
-void InstDiag::GetParamName( const uint pidx, string& dest ) const
+void InstDiag::GetParamName( const InstParamType ptype, string& dest ) const
 {
 	const char* pname = NULL;
 
-	switch( m_Syntax->Param[pidx] )
+	switch( ptype )
 	{
 		case Param_None: break;
 
@@ -138,7 +130,7 @@ void InstDiag::GetParamName( const uint pidx, string& dest ) const
 		case Param_AddrImm:		// Address Immediate (Rs + Imm()), used by load/store
 			// TODO : Calculate label.
 			//AddrImm()
-			ssprintf( dest, "0x%4.4x(%s)", (s32)Imm(), tbl_regname_gpr[_Rs_] );
+			ssprintf( dest, "0x%4.4x(%s)", (s32)_Opcode_.Imm(), tbl_regname_gpr[_Rs_] );
 		return;
 
 		case Param_BranchOffset:
@@ -157,14 +149,14 @@ void InstDiag::GetParamName( const uint pidx, string& dest ) const
 	dest = (pname != NULL) ? pname : "";
 }
 
-void InstDiag::GetParamValue( const uint pidx, string& dest ) const
+void InstDiag::GetParamValue( const InstParamType ptype, string& dest ) const
 {
 	// First parameter is always "target" form, so it never has a value.
-	if( m_Syntax->Param[pidx] == Param_None ) { dest.clear(); return; }
+	if( ptype == Param_None ) { dest.clear(); return; }
 
 	s32 pvalue = 0;
 
-	switch( m_Syntax->Param[pidx] )
+	switch( ptype )
 	{
 		case Param_HiLo:		// 64 bit operand (allowed as destination [param0] only)
 			jASSUME( 0 );
@@ -199,15 +191,15 @@ void InstDiag::GetParamValue( const uint pidx, string& dest ) const
 		break;
 			
 		case Param_Imm:
-			pvalue = m_Syntax->IsUnsigned ? ImmU() : Imm();
+			pvalue = m_SignExtImm ? _Opcode_.Imm() : _Opcode_.ImmU();
 		break;
 
 		case Param_Imm16:		// Immediate, shifted up by 16. [used by LUI]
-			pvalue = ImmU()<<16;
+			pvalue = _Opcode_.ImmU()<<16;
 		break;
 
 		case Param_AddrImm:		// Address Immediate (Rs + Imm()), used by load/store
-			pvalue = RsValue().UL + Imm();
+			pvalue = RsValue().UL + _Opcode_.Imm();
 		break;
 
 		case Param_BranchOffset:
@@ -224,20 +216,104 @@ void InstDiag::GetParamValue( const uint pidx, string& dest ) const
 	ssprintf( dest, "0x%8.8x", pvalue );
 }
 
+// ------------------------------------------------------------------------
+//
+template< RegField_t field >
+InstParamType InstructionOptimizer::AssignFieldParam() const
+{
+	if( (ReadsField( field ) == GPR_Invalid) && (WritesField( field ) == GPR_Invalid) ) return Param_None;
+
+	if( field == RF_Rs )
+	{
+		if( ReadsMemory() || WritesMemory() )
+		{
+			// Rs is rendered in a special format.
+			return Param_AddrImm;
+		}
+		else if( ReadsFs() || WritesFs() )
+		{
+			return Param_Fs;
+		}
+	}
+	
+	switch( field )
+	{
+		case RF_Rd: return Param_Rd;
+		case RF_Rt: return Param_Rt;
+		case RF_Rs: return Param_Rs;
+
+		case RF_Hi: return Param_Hi;
+		case RF_Lo: return Param_Lo;
+	}
+	
+	return Param_None;		// should never get here anyway
+}
+
+// ------------------------------------------------------------------------
+//
+void InstDiag::GetParamLayout( InstParamType iparam[3] ) const
+{
+	// MIPS lays all instructions out in the same basic pattern:
+	//   InstName  [Rd],[Rt],[Rs]
+	// .. where Rd, Rt, and Rs are all fairly optional, but always listed in that order
+	// such that Rd is always before Rs or Rt (if present, and Rs is always after Rd and
+	// Rt (if present).
+	//
+	// Complication: Handling of address instructions, since the address parameters must
+	// be handled in a special way.
+
+	if( IsBranchType() && !ReadsRs() )
+	{
+		// Branch address parameter required
+
+		if( strcmp( m_Name, "J" ) == 0 )
+			iparam[0] = Param_JumpTarget;
+		else
+			iparam[0] = Param_BranchOffset;
+	}
+	else
+	{
+		int cur = 0;	// current 'active' parameter
+
+		iparam[cur] = AssignFieldParam<RF_Rd>(); cur += (int)!!iparam[cur];
+		iparam[cur] = AssignFieldParam<RF_Rt>(); cur += (int)!!iparam[cur];
+		iparam[cur] = AssignFieldParam<RF_Rs>(); cur += (int)!!iparam[cur];
+
+		if( WritesHi() && WritesLo() )
+		{
+			iparam[cur++] = Param_HiLo;		// Used DIV / MULT instructions
+		}
+		else
+		{
+			iparam[cur] = AssignFieldParam<RF_Hi>(); cur += (int)!!iparam[cur];
+			iparam[cur] = AssignFieldParam<RF_Lo>(); cur += (int)!!iparam[cur];
+		}
+
+		jASSUME( cur <= 3 );
+	}
+}
+
+// ------------------------------------------------------------------------
 // Creates a string representation of the given instruction status.
+//
 void InstDiag::GetDisasm( string& dest ) const
-{	
-	ssprintf( dest, "%-8s", m_Syntax->Name );
+{
+	// Note: Allocate one extra here on purpose.  Code in GetParamLayout will write
+	// to it (but only param_none values).
+	InstParamType iparam[4] = { Param_None, Param_None, Param_None };
+	GetParamLayout( iparam );
+
+	ssprintf( dest, "%-8s", m_Name );
 
 	bool needComma = false;
 	string paramName;
 
 	for( uint i=0; i<3; ++i )
 	{
-		GetParamName( i, paramName );
+		GetParamName( iparam[i], paramName );
 
 		if( paramName.empty() )
-			GetParamValue( i, paramName );
+			GetParamValue( iparam[i], paramName );
 			
 		if( !paramName.empty() )
 		{
@@ -250,22 +326,29 @@ void InstDiag::GetDisasm( string& dest ) const
 	}
 }
 
+// ------------------------------------------------------------------------
 // Returns the values of the given string as comma delimited.
+//
 void InstDiag::GetValuesComment( string& dest ) const
 {
 	bool needComma = false;
 	dest.clear();
 
+	// Note: Allocate one extra here on purpose.  Code in GetParamLayout will write
+	// to it (but only param_none values).
+	InstParamType iparam[4] = { Param_None, Param_None, Param_None };
+	GetParamLayout( iparam );
+
 	string paramName;
 	for( uint i=0; i<3; ++i )
 	{
-		if( !ParamIsRead( i ) ) continue;
+		if( !ParamIsRead( iparam[i] ) ) continue;
 
-		GetParamName( i, paramName );
+		GetParamName( iparam[i], paramName );
 		if( paramName == "zero" ) continue;
 
 		string paramValue;
-		GetParamValue( i, paramValue );
+		GetParamValue( iparam[i], paramValue );
 
 		if( !paramName.empty() && !paramValue.empty() )
 		{
@@ -274,228 +357,5 @@ void InstDiag::GetValuesComment( string& dest ) const
 		}
 	}
 }
-
-
-#define Form_RtRsImm		Param_Rt, Param_Rs, Param_Imm
-#define Form_RdRsRt			Param_Rd, Param_Rs, Param_Rt
-#define Form_RsRt			Param_Rs, Param_Rt, Param_None
-#define Form_RdRtSa			Param_Rd, Param_Rt, Param_Sa
-#define Form_RdRtRs			Param_Rd, Param_Rt, Param_Rs
-#define Form_Rs				Param_Rs, Param_None, Param_None
-#define Form_RsRd			Param_Rs, Param_Rd, Param_None
-
-#define Form_RsOffset		Param_None, Param_Rs, Param_BranchOffset
-#define Form_RsRtOffset		Param_Rs, Param_Rt, Param_BranchOffset
-#define Form_JumpTarget		Param_None, Param_JumpTarget, Param_None
-
-#define Form_RtImm16		Param_Rt, Param_Imm16, Param_None
-#define Form_RtAddrImm		Param_Rt, Param_AddrImm, Param_None
-
-#define Form_Cop0Load_RtRd		Param_Rt, Param_Fs, Param_None
-#define Form_Cop0Store_RtRd		Param_None, Param_Rt, Param_Fs
-
-#define Form_HiRd			Param_Hi, Param_Rd, Param_None
-#define Form_LoRd			Param_Lo, Param_Rd, Param_None
-#define Form_RdHi			Param_Rd, Param_Hi, Param_None
-#define Form_RdLo			Param_Rd, Param_Lo, Param_None
-
-#define Form_None			Param_None, Param_None, Param_None
-
-
-#define MakeDiagS( name, form ) \
-static const InstDiagInfo secret_signed_stuff_##name = { #name, form, false }; \
-void InstDiag::name() \
-{	m_Syntax = &secret_signed_stuff_##name; }
-
-#define MakeDiagU( name, form ) \
-static const InstDiagInfo secret_unsigned_stuff_##name = { #name, form, true }; \
-void InstDiag::name() \
-{	m_Syntax = &secret_unsigned_stuff_##name; }
-
-/*********************************************************
-* Register branch logic                                  *
-* Format:  OP rs, offset                                 *
-*********************************************************/
-MakeDiagS( BGEZ,	Form_RsOffset )
-MakeDiagS( BGEZAL,	Form_RsOffset )
-MakeDiagS( BGTZ,	Form_RsOffset )
-MakeDiagS( BLEZ,	Form_RsOffset )
-MakeDiagS( BLTZ,	Form_RsOffset )
-MakeDiagS( BLTZAL,	Form_RsOffset )
-
-/*********************************************************
-* Register branch logic                                  *
-* Format:  OP rs, rt, offset                             *
-*********************************************************/
-MakeDiagS( BEQ,		Form_RsRtOffset )
-MakeDiagS( BNE,		Form_RsRtOffset )
-
-/*********************************************************
-* Jump to target                                         *
-* Format:  OP target                                     *
-*********************************************************/
-MakeDiagS( J,	Form_JumpTarget )
-MakeDiagS( JAL,	Form_JumpTarget )
-
-/*********************************************************
-* Register jump                                          *
-* Format:  OP rs, rd                                     *
-*********************************************************/
-MakeDiagU( JR,		Form_Rs )
-MakeDiagU( JALR,	Form_RsRd )
-
-/*********************************************************
-* Arithmetic with immediate operand                      *
-* Format:  OP rt, rs, immediate                          *
-*********************************************************/
-MakeDiagS( ADDI,	Form_RtRsImm )
-MakeDiagS( ADDIU,	Form_RtRsImm )	// Note: Yes, ADDIU is *signed*
-MakeDiagU( ANDI,	Form_RtRsImm )
-MakeDiagU( ORI,		Form_RtRsImm )
-MakeDiagU( XORI,	Form_RtRsImm )
-MakeDiagS( SLTI,	Form_RtRsImm )
-MakeDiagU( SLTIU,	Form_RtRsImm )
-
-
-/*********************************************************
-* Register arithmetic                                    *
-* Format:  OP rd, rs, rt                                 *
-*********************************************************/
-MakeDiagS( ADD,		Form_RdRsRt )
-MakeDiagS( SUB,		Form_RdRsRt )
-MakeDiagS( ADDU,	Form_RdRsRt )	// Note: Yes, ADDU is *signed*
-MakeDiagS( SUBU,	Form_RdRsRt )	// Note: Yes, SUBU is *signed*
-
-MakeDiagU( AND,		Form_RdRsRt )
-MakeDiagU( NOR,		Form_RdRsRt )
-MakeDiagU( OR,		Form_RdRsRt )
-MakeDiagU( XOR,		Form_RdRsRt )
-
-MakeDiagS( SLT,		Form_RdRsRt )
-MakeDiagU( SLTU,	Form_RdRsRt )	// tricky!  sign-extended immediate, unsigned comparison
-
-
-/*********************************************************
-* Register arithmetic & Register trap logic              *
-* Format:  OP rs, rt                                     *
-*********************************************************/
-MakeDiagS( DIV,		Form_RsRt )
-MakeDiagU( DIVU,	Form_RsRt )
-MakeDiagS( MULT,	Form_RsRt )
-MakeDiagU( MULTU,	Form_RsRt )
-
-/*********************************************************
-* Shift arithmetic with constant shift                   *
-* Format:  OP rd, rt, sa                                 *
-*********************************************************/
-MakeDiagU( SLL,		Form_RdRtSa )
-MakeDiagS( SRA,		Form_RdRtSa )
-MakeDiagU( SRL,		Form_RdRtSa )
-
-/*********************************************************
-* Shift arithmetic with variant register shift           *
-* Format:  OP rd, rt, rs                                 *
-*********************************************************/
-MakeDiagU( SLLV,	Form_RdRtRs )
-MakeDiagS( SRAV,	Form_RdRtRs )
-MakeDiagU( SRLV,	Form_RdRtRs )
-
-/*********************************************************
-* Load higher 16 bits of the first word in GPR with imm  *
-* Format:  OP rt, immediate                              *
-*********************************************************/
-MakeDiagS( LUI,		Form_RtImm16 )
-
-/*********************************************************
-* Move from HI/LO to GPR                                 *
-* Format:  OP rd                                         *
-*********************************************************/
-MakeDiagS( MFHI,	Form_RdHi )
-MakeDiagS( MFLO,	Form_RdLo )
-
-/*********************************************************
-* Move from GPR to HI/LO                                 *
-* Format:  OP rd                                         *
-*********************************************************/
-MakeDiagS( MTHI,	Form_HiRd )
-MakeDiagS( MTLO,	Form_LoRd )
-
-/*********************************************************
-* Special purpose instructions                           *
-* Format:  OP                                            *
-*********************************************************/
-MakeDiagS( BREAK,	Form_None )
-MakeDiagS( RFE,		Form_None )
-MakeDiagS( SYSCALL,	Form_None )
-
-/*********************************************************
-* Load and store for GPR                                 *
-* Format:  OP rt, offset(base)                           *
-*********************************************************/
-MakeDiagS( LB,		Form_RtAddrImm )
-MakeDiagS( LBU,		Form_RtAddrImm )
-MakeDiagS( LH,		Form_RtAddrImm )
-MakeDiagS( LHU,		Form_RtAddrImm )
-MakeDiagS( LW,		Form_RtAddrImm )
-MakeDiagS( LWL,		Form_RtAddrImm )
-MakeDiagS( LWR,		Form_RtAddrImm )
-MakeDiagS( SB,		Form_RtAddrImm )
-MakeDiagS( SH,		Form_RtAddrImm )
-MakeDiagS( SW,		Form_RtAddrImm )
-MakeDiagS( SWL,		Form_RtAddrImm )
-MakeDiagS( SWR,		Form_RtAddrImm )
-
-/*********************************************************
-* Moves between GPR and COPx                             *
-* Format:  OP rt, fs                                     *
-*********************************************************/
-MakeDiagS( MFC0,	Form_Cop0Load_RtRd )
-MakeDiagS( MTC0,	Form_Cop0Store_RtRd )
-MakeDiagS( CFC0,	Form_Cop0Load_RtRd )
-MakeDiagS( CTC0,	Form_Cop0Store_RtRd )
-
-/*********************************************************
-* Unknown instruction (would generate an exception)      *
-* Format:  ?                                             *
-*********************************************************/
-void InstDiag::Unknown() { static const InstDiagInfo omg = { "*** Bad OP ***", Param_None, Param_None, Param_None, false }; m_Syntax = &omg; }
-
-
-/*********************************************************
-* COP2 Instructions (PS1 GPU)                            *
-* Format:  ?                                             *
-*********************************************************/
-/*
-MakeDiagS( LWC2,	Form_RtAddrImm )
-MakeDiagS( SWC2,	Form_RtAddrImm )
-
-MakeDisF(disRTPS,		dName("RTPS"))
-MakeDisF(disOP  ,		dName("OP"))
-MakeDisF(disNCLIP,		dName("NCLIP"))
-MakeDisF(disDPCS,		dName("DPCS"))
-MakeDisF(disINTPL,		dName("INTPL"))
-MakeDisF(disMVMVA,		dName("MVMVA"))
-MakeDisF(disNCDS ,		dName("NCDS"))
-MakeDisF(disCDP ,		dName("CDP"))
-MakeDisF(disNCDT ,		dName("NCDT"))
-MakeDisF(disNCCS ,		dName("NCCS"))
-MakeDisF(disCC  ,		dName("CC"))
-MakeDisF(disNCS ,		dName("NCS"))
-MakeDisF(disNCT  ,		dName("NCT"))
-MakeDisF(disSQR  ,		dName("SQR"))
-MakeDisF(disDCPL ,		dName("DCPL"))
-MakeDisF(disDPCT ,		dName("DPCT"))
-MakeDisF(disAVSZ3,		dName("AVSZ3"))
-MakeDisF(disAVSZ4,		dName("AVSZ4"))
-MakeDisF(disRTPT ,		dName("RTPT"))
-MakeDisF(disGPF  ,		dName("GPF"))
-MakeDisF(disGPL  ,		dName("GPL"))
-MakeDisF(disNCCT ,		dName("NCCT"))
-
-MakeDisF(disMFC2,		dName("MFC2"); dGPR(_Rt_);)
-MakeDisF(disCFC2,		dName("CFC2"); dGPR(_Rt_);)
-MakeDisF(disMTC2,		dName("MTC2"))
-MakeDisF(disCTC2,		dName("CTC2"))
-*/
 
 }

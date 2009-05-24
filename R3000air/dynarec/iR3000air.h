@@ -239,11 +239,12 @@ struct RegFieldArray
 	}
 };
 
-static const int MappableRegCount = 5;
-static const int TempRegCount = 5;
+static const int RegCount_Mappable = 5;
+static const int RegCount_Temps = 5;
 
 enum DynExitMap_t
 {
+	DynEM_Unmapped = -1,
 	DynEM_Temp0 = 0,
 	DynEM_Temp1,
 	DynEM_Temp2,
@@ -288,14 +289,11 @@ struct DynRegMapInfo_Entry
 	//
 	DynExitMap_t ExitMap;
 
-	// ach entry corresponds to the register in the m_tempRegs array.
-	bool xTempInUse[TempRegCount];
-
 	DynRegMapInfo_Entry() :
 		ForceDirect( false ),
-		ForceIndirect( false )
+		ForceIndirect( false ),
+		ExitMap( DynEM_Unmapped )
 	{
-		memzero_obj( xTempInUse );
 	}
 };
 
@@ -322,9 +320,39 @@ struct StrictRegMapInfo_Entry
 	}
 };
 
-
-struct RegMapInfo_Dynamic
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+class RegMapInfo_Dynamic
 {
+public:
+	class xRegInUse_t
+	{
+	protected:
+		bool m_values[RegCount_Mappable];
+
+	public:
+		xRegInUse_t()
+		{
+			memzero_obj( m_values );
+		}
+
+		bool& operator[]( const xRegister32& reg );
+		const bool& operator[]( const xRegister32& reg ) const;
+
+		bool& operator[]( uint idx )
+		{
+			jASSUME( idx < RegCount_Mappable );
+			return m_values[idx];
+		}
+
+		const bool& operator[]( uint idx ) const
+		{
+			jASSUME( idx < RegCount_Mappable );
+			return m_values[idx];
+		}
+	};
+
+public:
 	// Array contents cover: Forced Direct or Indirect booleans for each GPR field, and
 	// output register mappings for the dest fields.
 	RegFieldArray<DynRegMapInfo_Entry> GprFields;
@@ -338,6 +366,10 @@ struct RegMapInfo_Dynamic
 	// get four temp regs as well.  The recompiler will assert/exception.
 	bool AllocTemp[4];
 
+	// Each entry corresponds to the register in the m_tempRegs array.
+	xRegInUse_t xRegInUse;
+
+public:
 	__forceinline DynRegMapInfo_Entry& operator[]( RegField_t idx )
 	{
 		return GprFields[idx];
@@ -354,6 +386,8 @@ struct RegMapInfo_Dynamic
 	}
 };
 
+//////////////////////////////////////////////////////////////////////////////////////////
+//
 struct RegMapInfo_Strict
 {
 	// Specifies which x86 registers are modified by instruction code.  By default this
@@ -391,8 +425,9 @@ struct RegMapInfo_Strict
 // ------------------------------------------------------------------------
 // Register mapping options for each instruction emitter implementation
 //
-struct RegisterMappingOptions
+class RegisterMappingOptions
 {
+public:
 	bool IsStrictMode;
 
 	RegMapInfo_Dynamic DynMap;
@@ -567,20 +602,21 @@ public:
 
 	IntermediateRepresentation( const InstructionConstOpt& src ) :
 		Inst( src ),
+		ixImm( Inst.SignExtendsImm() ? Inst._Opcode_.Imm() : Inst._Opcode_.ImmU() ),
 		IsSwappedSources( false )
 	{
 		memzero_obj( m_do_not_touch );
 		Inst.GetRecInfo();
 
-		if( Inst.IsConstInput.Rt && Inst.IsConstInput.Rs )
+		if( Inst.IsConstRt() && Inst.IsConstRs() )
 		{
 			Inst.API.ConstRsRt( Emitface );
 		}
-		else if( Inst.IsConstInput.Rt )
+		else if( Inst.IsConstRt() )
 		{
 			Inst.API.ConstRt( Emitface );
 		}
-		else if( Inst.IsConstInput.Rs )
+		else if( Inst.IsConstRs() )
 		{
 			Inst.API.ConstRs( Emitface );
 		}
@@ -594,6 +630,7 @@ public:
 	
 	xRegister32 DynRegs_FindUnmappable( const xDirectOrIndirect32 maparray[34] ) const;
 	void		DynRegs_UnmapForcedIndirects( const RegMapInfo_Dynamic& dyno );
+	void		DynRegs_AssignTempReg( int tempslot, int regslot );
 
 	void StrictRegs_UnmapClobbers( const RegMapInfo_Strict& stro );
 
@@ -622,21 +659,20 @@ public:
 public:
 	s32 GetImm() const { return ixImm; }
 
-	bool IsConstRs() const { return Inst.IsConstInput.Rs; }
-	bool IsConstRt() const { return Inst.IsConstInput.Rt; }
-	bool IsConstRd() const { return Inst.IsConstInput.Rd; }
+	bool SignExtendsResult() const { return Inst.SignExtendResult(); }
 
-	bool SignExtendsResult() const { return Inst.SignExtendOnWrite; }
+	bool IsConstRs() const { return Inst.IsConstRs(); }
+	bool IsConstRt() const { return Inst.IsConstRt(); }
 
 	int GetConstRs() const
 	{
-		jASSUME( Inst.IsConstInput.Rs );
+		jASSUME( Inst.IsConstRs() );
 		return Inst.ConstVal_Rs;
 	}
 
 	int GetConstRt() const
 	{
-		jASSUME( Inst.IsConstInput.Rt );
+		jASSUME( Inst.IsConstRt() );
 		return Inst.ConstVal_Rt;
 	}
 
@@ -661,7 +697,7 @@ public:
 	template< typename T >
 	void SignExtendedMove( const xRegister32& dest, const ModSibStrict<T>& src ) const
 	{
-		if( Inst.SignExtendOnWrite )
+		if( Inst.SignExtendResult() )
 			xMOVSX( Dest[RF_Rt].GetReg(), src );
 		else
 			xMOVZX( Dest[RF_Rt].GetReg(), src );
@@ -676,7 +712,7 @@ public:
 	template< typename T >
 	void SignExtendEax() const
 	{
-		if( Inst.SignExtendOnWrite )
+		if( SignExtendsResult() )
 		{
 			if( sizeof(T) == 1 )
 				xMOVSX( eax, al );

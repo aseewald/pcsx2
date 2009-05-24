@@ -303,14 +303,14 @@ static void recRecompile()
 				const u32* maskptr = (u32*)IopMemory::iopGetPhysPtr( masked_pc );
 				const u32* validptr = (u32*)mess.ValidationCopy.GetPtr();
 
-				if(	(memcmp( validptr, maskptr, mess.ValidationCopy.GetSizeInBytes()) != 0) )
+				/*if(	(memcmp( validptr, maskptr, mess.ValidationCopy.GetSizeInBytes()) != 0) )
 				{
 					Console::WriteLn( "-/- IOP Clearing block at PC: 0x%08x", params masked_pc );
 
 					recIR_Block();
 					mess.Assign( m_blockspace );
 					return;
-				}
+				}*/
 			}
 
 			//Console::WriteLn( "IOP Second-pass block at PC: 0x%08x  (total blocks=%d)", params masked_pc, m_xBlockMap.Blocks.GetLength() );
