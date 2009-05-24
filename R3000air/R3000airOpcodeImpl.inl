@@ -48,25 +48,25 @@ static __forceinline void _OverflowCheck( const Instruction& inst, u64 result )
 
 __instinline void Inst::BGEZ()	// Branch if Rs >= 0
 {
-	SetBranchInst();
+	SetBranchInst(); Imm();
 	if( GetRs_SL() >= 0 ) DoBranch();
 }
 
 __instinline void Inst::BGTZ()	// Branch if Rs >  0
 {
-	SetBranchInst();
+	SetBranchInst(); Imm();
 	if( GetRs_SL() > 0 ) DoBranch();
 }
 
 __instinline void Inst::BLEZ()	// Branch if Rs <= 0
 {
-	SetBranchInst();
+	SetBranchInst(); Imm();
 	if( GetRs_SL() <= 0 ) DoBranch();
 }
 
 __instinline void Inst::BLTZ()	// Branch if Rs <  0
 {
-	SetBranchInst();
+	SetBranchInst(); Imm();
 	if( GetRs_SL() < 0 ) DoBranch();
 }
 
@@ -89,13 +89,13 @@ __instinline void Inst::BLTZAL()	// Branch if Rs <  0 and link
 *********************************************************/
 __instinline void Inst::BEQ()		// Branch if Rs == Rt
 {
-	SetBranchInst();
+	SetBranchInst(); Imm();
 	if( GetRs_SL() == GetRt_SL() ) DoBranch();
 }
 
 __instinline void Inst::BNE()		// Branch if Rs != Rt
 {
-	SetBranchInst();
+	SetBranchInst(); Imm();
 	if( GetRs_SL() != GetRt_SL() ) DoBranch();
 }
 
@@ -140,7 +140,7 @@ __instinline void Inst::JALR()
 	// be investigated on PSX/PS2 hardware. -- air
 
 	if( _Rs_ == _Rd_ )
-		Console::Error( "Bad JALR (Rs == Rd) @ IOP/0x%08x", params iopRegs.pc );
+		Console::Error( "Bad JALR? (Rs == Rd) @ IOP/0x%08x", params iopRegs.pc );
 
 	SetLinkRd(); JR();
 }

@@ -295,7 +295,6 @@ enum InstParamType
 	Param_HiLo,			// 64 bit operand (allowed as destination only)
 
 	Param_Imm,
-	Param_Imm16,		// Immediate, shifted up by 16. [used by LUI]
 
 	Param_AddrImm,		// Address Immediate (Rs + Imm()), used by load/store
 	Param_BranchOffset,
@@ -519,10 +518,10 @@ protected:
 	// Begin Virtual API
 
 	// Sign-extended immediate
-	virtual s32 Imm() const		{ return _Opcode_.Imm(); }
+	virtual s32 Imm()		{ return _Opcode_.Imm(); }
 
 	// Zero-extended immediate
-	virtual u32 ImmU() const	{ return _Opcode_.ImmU(); }
+	virtual u32 ImmU()		{ return _Opcode_.ImmU(); }
 	
 	virtual s32 GetRt_SL() { return iopRegs[_Rt_].SL; }
 	virtual s32 GetRs_SL() { return iopRegs[_Rs_].SL; }
@@ -551,13 +550,6 @@ protected:
 	virtual void SetHi_UL( u32 src ) { iopRegs[GPR_hi].UL = src; }
 	virtual void SetLo_UL( u32 src ) { iopRegs[GPR_lo].UL = src; }
 	virtual void SetFs_UL( u32 src ) { iopRegs.CP0.r[_Rd_].UL = src; }
-
-	// no valid MIPS instruction writes to Rs
-	//virtual void SetRs_SL( s32 src ) { jASSUME( false ); if(!_Rs_) return; iopRegs[_Rs_].SL = src; }
-	//virtual void SetRs_UL( u32 src ) { jASSUME( false ); if(!_Rs_) return; iopRegs[_Rs_].UL = src; }
-	// no valid MIPS instruction reads from Rd
-	//virtual const IntSign32 GetRd() { jASSUME( false ); return iopRegs[_Rd_]; }
-
 
 	virtual u8  MemoryRead8( u32 addr );
 	virtual u16 MemoryRead16( u32 addr );
@@ -597,6 +589,7 @@ protected:
 	bool m_SignExtImm;
 	bool m_SignExtRead;		// set TRUE if instruction sign extends on read from GPRs
 	bool m_SignExtWrite;		// set TRUE if instruction sign extends on write to GPRs
+	bool m_ReadsImm;
 
 	GprStatus m_ReadsGPR;
 	GprStatus m_WritesGPR;
@@ -610,6 +603,7 @@ public:
 	,	m_SignExtImm( true )
 	,	m_SignExtRead( false )
 	,	m_SignExtWrite( false )
+	,	m_ReadsImm( false )
 	{
 		m_ReadsGPR.Value = false;
 		m_WritesGPR.Value = false;
@@ -622,6 +616,7 @@ public:
 		m_SignExtImm = true;
 		m_SignExtRead = false;
 		m_SignExtWrite = false;
+		m_ReadsImm = false;
 		m_ReadsGPR.Value = false;
 		m_WritesGPR.Value = false;
 	}
@@ -667,8 +662,12 @@ protected:
 	// interpreter won't have to do more work than is needed.  To enable the extended optimization
 	// information, use an InstructionOptimizer instead.
 
-	virtual s32 Imm()	{ m_SignExtImm = false; return _Opcode_.Imm(); }
-	virtual u32 ImmU()	{ m_SignExtImm = true;  return _Opcode_.ImmU(); }
+	virtual s32 Imm()
+	{
+	m_ReadsImm = true; m_SignExtImm = false; return _Opcode_.Imm(); }
+	virtual u32 ImmU()
+	{
+	m_ReadsImm = true; m_SignExtImm = true;  return _Opcode_.ImmU(); }
 
 	virtual s32 GetRt_SL() { m_ReadsGPR.Rt = true; m_SignExtRead = true; return iopRegs[_Rt_].SL; }
 	virtual s32 GetRs_SL() { m_ReadsGPR.Rs = true; m_SignExtRead = true; return iopRegs[_Rs_].SL; }

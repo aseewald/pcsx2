@@ -67,7 +67,6 @@ bool InstDiag::ParamIsRead( const InstParamType ptype ) const
 		case Param_HiLo: return false;		// 64 bit operand (allowed as destination only)
 
 		case Param_Imm:
-		case Param_Imm16:		// Immediate, shifted up by 16. [used by LUI]
 			return false;
 
 		case Param_AddrImm:		// Address Immediate (Rs + Imm()), used by load/store
@@ -124,7 +123,6 @@ void InstDiag::GetParamName( const InstParamType ptype, string& dest ) const
 		break;
 
 		case Param_Imm:
-		case Param_Imm16:		// Immediate, shifted up by 16. [used by LUI]
 		break;
 
 		case Param_AddrImm:		// Address Immediate (Rs + Imm()), used by load/store
@@ -191,12 +189,8 @@ void InstDiag::GetParamValue( const InstParamType ptype, string& dest ) const
 		break;
 			
 		case Param_Imm:
-			pvalue = m_SignExtImm ? _Opcode_.Imm() : _Opcode_.ImmU();
-		break;
-
-		case Param_Imm16:		// Immediate, shifted up by 16. [used by LUI]
-			pvalue = _Opcode_.ImmU()<<16;
-		break;
+			ssprintf( dest, "0x%04x", m_SignExtImm ? _Opcode_.Imm() : _Opcode_.ImmU() );
+		return;
 
 		case Param_AddrImm:		// Address Immediate (Rs + Imm()), used by load/store
 			pvalue = RsValue().UL + _Opcode_.Imm();
@@ -275,9 +269,9 @@ void InstDiag::GetParamLayout( InstParamType iparam[3] ) const
 	{
 		int cur = 0;	// current 'active' parameter
 
-		iparam[cur] = AssignFieldParam<RF_Rd>(); cur += (int)!!iparam[cur];
-		iparam[cur] = AssignFieldParam<RF_Rt>(); cur += (int)!!iparam[cur];
-		iparam[cur] = AssignFieldParam<RF_Rs>(); cur += (int)!!iparam[cur];
+		iparam[cur] = AssignFieldParam<RF_Rd>(); if( iparam[cur] != Param_None ) cur++;
+		iparam[cur] = AssignFieldParam<RF_Rt>(); if( iparam[cur] != Param_None ) cur++;
+		iparam[cur] = AssignFieldParam<RF_Rs>(); if( iparam[cur] != Param_None ) cur++;
 
 		if( WritesHi() && WritesLo() )
 		{
@@ -285,8 +279,16 @@ void InstDiag::GetParamLayout( InstParamType iparam[3] ) const
 		}
 		else
 		{
-			iparam[cur] = AssignFieldParam<RF_Hi>(); cur += (int)!!iparam[cur];
-			iparam[cur] = AssignFieldParam<RF_Lo>(); cur += (int)!!iparam[cur];
+			iparam[cur] = AssignFieldParam<RF_Hi>(); if( iparam[cur] != Param_None ) cur++;
+			iparam[cur] = AssignFieldParam<RF_Lo>(); if( iparam[cur] != Param_None ) cur++;
+		}
+
+		// BranchType part checks for conditional branches (Which always have an Imm but don't 
+		// currently set the ReadsImm flag)
+		if( m_ReadsImm ) //|| (IsBranchType() && ReadsRs() && ReadsRt()) )
+		{
+			jASSUME( cur < 3 );
+			iparam[cur++] = IsBranchType() ? Param_BranchOffset : Param_Imm;
 		}
 
 		jASSUME( cur <= 3 );
