@@ -347,6 +347,8 @@ void recIR_PerformStrictRegisterMapping_Exit( int instidx, IntermediateRepresent
 	}
 }
 
+static string m_disasm;
+
 //////////////////////////////////////////////////////////////////////////////////////////
 // Intermediate Pass 2 -- Maps GPRs to x86 registers prior to the x86 codegen.
 //
@@ -398,6 +400,29 @@ void recIR_Pass2( const SafeArray<InstructionConstOpt>& iList )
 		else
 			recIR_PerformDynamicRegisterMapping_Exit( i, m_intermediates[i] );	
 	}
+
+	// ------------------------------------------------------------------------
+	// Perform Full-on Block Dump
+	// ------------------------------------------------------------------------
+	
+	char sbuf[512];
+	
+	for( int i=0; i<numinsts; ++i )
+	{
+		IntermediateRepresentation& rdump( m_intermediates[i] );
+
+		rdump.Inst.GetDisasm( m_disasm );
+
+		for( int reg=0; reg<32; reg+=8 )
+		{
+			sprintf( sbuf, "\t%s[%-5s]",
+				Diag_GetGprName( (MipsGPRs_t)reg ), rdump.Src[reg].IsDirect() ? xGetRegName( rdump.Src[reg].GetReg() ) : "unmap" );
+		}
+	}	
+	
+	// ------------------------------------------------------------------------
+	//         W-T-Crap?  Time to generate x86 code?!  *scrreeech*
+	// ------------------------------------------------------------------------
 }
 
 

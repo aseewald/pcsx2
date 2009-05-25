@@ -31,6 +31,15 @@
 
 R3000Exception::BaseExcept::~BaseExcept() throw() {}
 
+R3000Exception::BaseExcept::BaseExcept( const std::string& msg ) :
+	Exception::Ps2Generic( "(IOP) " + msg ),
+	cpuState( iopRegs ),
+	Inst( iopMemDirectRead32( iopRegs.pc ) ),
+	m_IsDelaySlot( iopRegs.IsDelaySlot )
+{
+}
+
+
 namespace R3000A {
 
 //////////////////////////////////////////////////////////////////////////////////////////

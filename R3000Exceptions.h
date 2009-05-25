@@ -47,7 +47,9 @@ namespace R3000Exception
 			m_IsDelaySlot( iopRegs.IsDelaySlot )
 		{
 		}
-		
+
+		explicit BaseExcept( const std::string& msg );
+
 		u32 GetPc() const { return cpuState.pc; }
 		bool IsDelaySlot() const { return m_IsDelaySlot; }
 	};
@@ -63,10 +65,10 @@ namespace R3000Exception
 	public:
 		virtual ~AddressError() throw() {}
 
-		explicit AddressError( const R3000A::Instruction& inst, u32 ps2addr, bool onWrite ) :
-			BaseExcept( inst, fmt_string( "Address error, addr=0x%x [%s]", ps2addr, onWrite ? "store" : "load" ) ),
+		explicit AddressError( const R3000A::Instruction& inst, u32 iopaddr, bool onWrite ) :
+			BaseExcept( inst, fmt_string( "Address error, addr=0x%x [%s]", iopaddr, onWrite ? "store" : "load" ) ),
 			OnWrite( onWrite ),
-			Address( ps2addr )
+			Address( iopaddr )
 		{}
 	};
 	
@@ -81,10 +83,10 @@ namespace R3000Exception
 	public:
 		virtual ~TLBMiss() throw() {}
 
-		explicit TLBMiss( const R3000A::Instruction& inst, u32 ps2addr, bool onWrite ) :
-			BaseExcept( inst, fmt_string( "Tlb Miss, addr=0x%x [%s]", ps2addr, onWrite ? "store" : "load" ) ),
+		explicit TLBMiss( const R3000A::Instruction& inst, u32 iopaddr, bool onWrite ) :
+			BaseExcept( inst, fmt_string( "Tlb Miss, addr=0x%x [%s]", iopaddr, onWrite ? "store" : "load" ) ),
 			OnWrite( onWrite ),
-			Address( ps2addr )
+			Address( iopaddr )
 		{}
 	};
 
@@ -100,10 +102,16 @@ namespace R3000Exception
 		virtual ~BusError() throw() {}
 
 		//
-		explicit BusError( const R3000A::Instruction& inst, u32 ps2addr, bool onWrite ) :
-			BaseExcept( inst, fmt_string( "Bus Error, addr=0x%x [%s]", ps2addr, onWrite ? "store" : "load" ) ),
+		explicit BusError( const R3000A::Instruction& inst, u32 iopaddr, bool onWrite ) :
+			BaseExcept( inst, fmt_string( "Bus Error, addr=0x%x [%s]", iopaddr, onWrite ? "store" : "load" ) ),
 			OnWrite( onWrite ),
-			Address( ps2addr )
+			Address( iopaddr )
+		{}
+
+		explicit BusError( u32 iopaddr, bool onWrite ) :
+			BaseExcept( fmt_string( "Bus Error, addr=0x%x [%s]", iopaddr, onWrite ? "store" : "load" ) ),
+			OnWrite( onWrite ),
+			Address( iopaddr )
 		{}
 	};
 	

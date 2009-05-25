@@ -624,13 +624,7 @@ __instinline void Inst::MTC0()
 	
 	// Writes to the CP0.Status register qualifies for having side effects.
 	if( _Rd_ == 12 )
-	{
 		SetSideEffects();
-		if( (oldfs & 0x10000) && !(FsValue().UL & 0x10000) )
-			Console::Status( "**** MTC0 >> IOP Write-Protect Cleared!  Bouyaahh!!" );
-		else if( !(oldfs & 0x10000) && (FsValue().UL & 0x10000) )
-			Console::Status( "**** MTC0 >> IOP Write-Protect Set!" );
-	}
 }
 
 __instinline void Inst::CTC0()
@@ -640,13 +634,7 @@ __instinline void Inst::CTC0()
 
 	// Writes to the CP0.Status register qualifies for having side effects.
 	if( _Rd_ == 12 )
-	{
 		SetSideEffects();
-		if( (oldfs & 0x10000) && !(FsValue().UL & 0x10000) )
-			Console::Status( "**** CTC0 >> IOP Write-Protect Cleared!  Bouyaahh!!" );
-		else if( !(oldfs & 0x10000) && (FsValue().UL & 0x10000) )
-			Console::Status( "**** CTC0 >> IOP Write-Protect Set!" );
-	}
 }
 
 /*********************************************************

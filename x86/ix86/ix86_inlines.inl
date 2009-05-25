@@ -50,6 +50,49 @@
 
 namespace x86Emitter
 {
+	extern const char *const x86_regnames_gpr8[8];
+	extern const char *const x86_regnames_gpr16[8];
+	extern const char *const x86_regnames_gpr32[8];
+
+	extern const char *const x86_regnames_sse[8];
+	extern const char *const x86_regnames_mmx[8];
+
+	//////////////////////////////////////////////////////////////////////////////////////////
+	// Diagnostic -- returns a string representation of this register.
+	//
+	template< typename T >
+	const char* xGetRegName( const xRegister<T>& src )
+	{
+		if( src.IsEmpty() ) return "empty";
+		
+		if( src.Id > 0 )
+		{
+			switch( sizeof(T) )
+			{
+				case 1: return x86_regnames_gpr8[ src.Id ];
+				case 2: return x86_regnames_gpr16[ src.Id ];
+				case 4: return x86_regnames_gpr32[ src.Id ];
+			}
+		}
+		return "unknown gpr";
+	}
+
+	template< typename T >
+	const char* xGetRegName( const xRegisterSIMD<T>& src )
+	{
+		if( src.IsEmpty() ) return "empty";
+		
+		if( src.Id >= 0 )
+		{
+			switch( sizeof(T) )
+			{
+				case 8: return x86_regnames_mmx[ src.Id ];
+				case 16: return x86_regnames_sse[ src.Id ];
+			}
+		}
+		return "unknown simd";
+	}
+
 	//////////////////////////////////////////////////////////////////////////////////////////
 	// x86Register Method Implementations
 	//

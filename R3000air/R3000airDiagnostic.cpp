@@ -41,6 +41,12 @@ static const char *tbl_regname_gpr[34] =
 	"hi",	"lo"
 };
 
+const char* Diag_GetGprName( MipsGPRs_t gpr )
+{
+	jASSUME( ((uint)gpr) < 34 );
+	return tbl_regname_gpr[gpr];
+}
+
 static const char *tbl_regname_cop0[32] =
 {
 	"Index",	"Random",	"EntryLo0",	"EntryLo1",	"Context",	"PageMask", "Wired",	"C0r7",
@@ -48,6 +54,12 @@ static const char *tbl_regname_cop0[32] =
 	"Config",	"C0r17",	"C0r18",	"C0r19",	"C0r20",	"C0r21",	"C0r22",	"C0r23",
 	"Debug",	"Perf",		"C0r26",	"C0r27",	"TagLo",	"TagHi",	"ErrorPC",	"C0r31"
 };
+
+const char* Diag_GetCP0Name( uint cp0reg )
+{
+	jASSUME( ((uint)cp0reg) < 32 );
+	return tbl_regname_cop0[cp0reg];
+}
 
 
 bool InstDiag::ParamIsRead( const InstParamType ptype ) const

@@ -96,15 +96,16 @@ namespace IopMemory
 	enum HandlerIdentifier
 	{
 		HandlerId_Unmapped = 0,
+		HandlerId_Null,					// ignores reads and writes (no error)
 		HandlerId_SIFregs,
 		HandlerId_Hardware_Page1,
 		HandlerId_Hardware_Page3,
 		HandlerId_Hardware_Page8,
 		HandlerId_Dev9,
-		//HandlerId_LegacyAPI,
 
 		HandlerId_Hardware4,
 		HandlerId_SPU2,
+		HandlerId_BIUCtrl,		// terribly mysterious!?
 
 		HandlerId_Maximum,
 	};
@@ -134,13 +135,16 @@ namespace IopMemory
 		// standard constructor initializes the static IOP translation table.
 		void Initialize();
 
+	public:
+		void RemapScratchpad( u32 newFlags );
+
 	protected:
 		void AssignLookup( uint startaddr, u8* dest, uint bytesize=1 );
 		void AssignHandler( uint startaddr, HandlerIdentifier handidx, uint bytesize=1 );
 	};
 
 	PCSX2_ALIGNED_EXTERN( 64, TranslationTable tbl_Translation );		// 512k table via 4k pages
-	PCSX2_ALIGNED_EXTERN( 64, void* const tbl_IndirectHandlers[2][3][ HandlerId_Maximum ] );
+	PCSX2_ALIGNED_EXTERN( 64, const void* const tbl_IndirectHandlers[2][3][ HandlerId_Maximum ] );
 	
 	extern u8* __fastcall iopGetPhysPtr( u32 iopaddr );
 

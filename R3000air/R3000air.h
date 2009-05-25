@@ -100,6 +100,10 @@ struct Registers
 {
 	GPRRegs32 GPR;			// General Purpose Registers
 	CP0Regs CP0;			// Coprocessor0 Registers
+	
+	u32 BIU_Cache_Ctrl;		// Bus Interface Unit / Cache Controller [mapped to 0xfffe0130]
+	u32 MysteryRegAt_FFFE0140;
+	u32 MysteryRegAt_FFFE0144;
 
 	// Indexer for the IOP's GPRs, using the MipsGPRs_t enumeration.
 	__forceinline IntSign32& operator[]( MipsGPRs_t gpr )				{ return GPR[(uint)gpr]; }
@@ -809,5 +813,13 @@ public:
 		return IsConstRt() && IsConstRs();
 	}
 };
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// Diagnostic Functions
+
+extern const char* Diag_GetGprName( MipsGPRs_t gpr );
+
+
 
 }

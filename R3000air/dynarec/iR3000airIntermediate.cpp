@@ -43,10 +43,8 @@ void recIR_Expand( IntermediateRepresentation& iInst )
 
 recBlockItemTemp m_blockspace;
 
-#ifdef PCSX2_DEVBUILD
 static string m_disasm;
 static string m_comment;
-#endif
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Generates IR for an entire block of code.

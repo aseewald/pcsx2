@@ -131,10 +131,53 @@ const xRegister8
 	
 const xRegisterCL cl;
 
+const char *const x86_regnames_gpr8[8] =
+{
+	"al", "cl", "dl", "bl",
+	"ah", "ch", "dh", "bh"
+};
+
+const char *const x86_regnames_gpr16[8] =
+{
+	"ax", "cx", "dx", "bx",
+	"sp", "bp", "si", "di"
+};
+
+const char *const x86_regnames_gpr32[8] =
+{
+	"eax", "ecx", "edx", "ebx",
+	"esp", "ebp", "esi", "edi"
+};
+
+const char *const x86_regnames_sse[8] =
+{
+	"xmm0", "xmm1", "xmm2", "xmm3",
+	"xmm4", "xmm5", "xmm6", "xmm7"
+};
+
+const char *const x86_regnames_mmx[8] =
+{
+	"mm0", "mm1", "mm2", "mm3",
+	"mm4", "mm5", "mm6", "mm7"
+};
+
 //////////////////////////////////////////////////////////////////////////////////////////
 
 namespace Internal
 {
+
+	template< typename T >
+	const char* xGetRegName( const xRegister<T>& src )
+	{
+		if( src.IsEmpty() ) return "empty";
+		switch( sizeof(T) )
+		{
+		case 1: return tbl_regnames_gpr8[ src.Id ];
+		case 2: return tbl_regnames_gpr16[ src.Id ];
+		case 4: return tbl_regnames_gpr32[ src.Id ];
+		}
+	}
+
 	//////////////////////////////////////////////////////////////////////////////////////////
 	// Performance note: VC++ wants to use byte/word register form for the following
 	// ModRM/SibSB constructors when we use xWrite<u8>, and furthermore unrolls the
