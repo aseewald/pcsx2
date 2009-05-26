@@ -109,9 +109,11 @@ void recBlockItem::Assign( const recBlockItemTemp& src )
 
 	// Instruction / IL cache (which should never be zero)
 
-	jASSUME( src.instlen != 0 );
-	IL.ExactAlloc( src.instlen );
-	memcpy( IL.GetPtr(), src.inst, src.instlen*sizeof(InstructionConstOpt) );
+	if( src.instlen != 0 )
+	{
+		IL.ExactAlloc( src.instlen );
+		memcpy( IL.GetPtr(), src.inst, src.instlen*sizeof(InstructionConstOpt) );
+	}
 	clears++;
 }
 

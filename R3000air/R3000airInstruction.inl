@@ -41,19 +41,29 @@ namespace R3000A {
 		SetRd_UL( _Pc_ + 8 );
 	}
 
-	__instinline void Instruction::SetBranchInst()
+	__instinline void Instruction::DoConditionalBranch( bool cond )
 	{
-		m_IsBranchType = true;
+		Imm(); m_IsBranchType = true;
+		if( cond )
+			m_NextPC = BranchTarget();
 	}
 
-	__instinline void Instruction::DoBranch( u32 jumptarg )
+	__instinline void Instruction::RaiseException( uint code )
 	{
-		m_NextPC = jumptarg;
+		iopException( code, iopRegs.IsDelaySlot );
+		m_NextPC = iopRegs.VectorPC+4;
+		SetSideEffects();
 	}
 
-	__instinline void Instruction::DoBranch()
+	__instinline bool Instruction::ConditionalException( uint code, bool cond )
 	{
-		DoBranch( BranchTarget() );
+		if( cond )
+		{
+			iopException( code, iopRegs.IsDelaySlot );
+			m_NextPC = iopRegs.VectorPC+4;
+		}
+
+		return cond;
 	}
 	
 	__instinline u8  Instruction::MemoryRead8( u32 addr )  { return iopMemRead8( addr ); }
@@ -72,11 +82,14 @@ namespace R3000A {
 	__instinline void InstructionOptimizer::MemoryWrite16( u32 addr, u16 val ) { m_WritesGPR.Memory = true; iopMemWrite16( addr, val ); }
 	__instinline void InstructionOptimizer::MemoryWrite32( u32 addr, u32 val ) { m_WritesGPR.Memory = true; iopMemWrite32( addr, val ); }
 
-	__instinline void Instruction::RaiseException( uint code )
+	
+	//////////////////////////////////////////////////////////////////////////////////////////
+	// -- InstructionOptimizer -- Method Implementations
+
+	__instinline bool InstructionOptimizer::ConditionalException( uint code, bool cond )
 	{
-		iopException( code, iopRegs.IsDelaySlot );
-		m_NextPC = iopRegs.VectorPC+4;
-		SetSideEffects();
+		m_CanCauseExceptions = true;
+		return Instruction::ConditionalException( code, cond );
 	}
 
 	// returns the index of the GPR for the given field, or -1 if the field is not read
@@ -128,22 +141,103 @@ namespace R3000A {
 		return RF_Unused;
 	}
 	
+	//////////////////////////////////////////////////////////////////////////////////////////
+	// -- InstructionConstOpt -- Method Implementations
+
+	__instinline void InstructionConstOpt::DoConditionalBranch( bool cond )
+	{
+		m_IsConstBranch = (!ReadsRt() || m_IsConst.Rt) && (!ReadsRs() || m_IsConst.Rs);
+		Instruction::DoConditionalBranch( cond );
+	}
+
+	__instinline void InstructionConstOpt::RaiseException( uint code )
+	{
+		m_IsConstException = true;
+		iopException( code, iopRegs.IsDelaySlot );
+		m_NextPC = iopRegs.VectorPC+4;
+		SetSideEffects();
+	}
+
+	__instinline bool InstructionConstOpt::ConditionalException( uint code, bool cond )
+	{
+		// Only handle the exception if it *is* const.  Otherwise pretend like it didn't
+		// happen -- the recompiler will check for and handle it in recompiled code.
+		m_IsConstException = cond && (!ReadsRt() || m_IsConst.Rt) && (!ReadsRs() || m_IsConst.Rs);
+		return InstructionOptimizer::ConditionalException( code, m_IsConstException );
+	}
+
 	__instinline void InstructionConstOpt::Assign( const Opcode& opcode, bool constStatus[34] )
 	{
 		InstructionOptimizer::Assign( opcode );
 		
-		m_IsConst.Value = false;
+		ConstVal_Rd = iopRegs[_Rd_].SL;
+		ConstVal_Rt = iopRegs[_Rt_].SL;
+		ConstVal_Rs = iopRegs[_Rs_].SL;
+		ConstVal_Hi = iopRegs[GPR_hi].SL;
+		ConstVal_Lo = iopRegs[GPR_lo].SL;
+
+		m_IsConst.Value = 0;
 		m_IsConst.Rd = constStatus[_Rd_];
 		m_IsConst.Rt = constStatus[_Rt_];
 		m_IsConst.Rs = constStatus[_Rs_];
 		m_IsConst.Hi = constStatus[GPR_hi];
 		m_IsConst.Lo = constStatus[GPR_lo];
 
-		ConstVal_Rd = iopRegs.GPR[_Rd_].SL;
-		ConstVal_Rt = iopRegs.GPR[_Rt_].SL;
-		ConstVal_Rs = iopRegs.GPR[_Rs_].SL;
+		m_IsConstBranch		= false;
+		m_IsConstException	= false;
+	}
+	
+	// Updates the const status flags in the given array as according to the register
+	// modifications performed by this instruction.
+	__instinline bool InstructionConstOpt::UpdateConstStatus( bool gpr_IsConst[34] )
+	{
+		// if no regs are written then const status will be unchanged
+		if( !m_WritesGPR.Value )
+			return true;
 
-		ConstVal_Hi = iopRegs.GPR[GPR_hi].SL;
-		ConstVal_Lo = iopRegs.GPR[GPR_lo].SL;
+		// Update const status for registers.  The const status of all written registers is
+		// based on the const status of the read registers.  If the operation reads from
+		// memory or from an Fs register, then const status is always false.
+
+		bool constStatus;
+
+		if( ReadsMemory() || ReadsFs() )
+			constStatus = false;
+		else
+		{
+			constStatus = 
+				//(ReadsRd() ? gpr_IsConst[_Rd_] : true) &&		// Rd should never be read.
+				(ReadsRt() ? gpr_IsConst[_Rt_] : true) &&
+				(ReadsRs() ? gpr_IsConst[_Rs_] : true) &&
+				(ReadsHi() ? gpr_IsConst[GPR_hi] : true) &&
+				(ReadsLo() ? gpr_IsConst[GPR_lo] : true);
+		}
+
+		if( WritesRd() ) gpr_IsConst[_Rd_] = constStatus;
+		if( WritesRt() ) gpr_IsConst[_Rt_] = constStatus;
+		//if( WritesRs() ) gpr_IsConst[_Rs_] = constStatus;	// Rs should never be written
+
+		jASSUME( gpr_IsConst[0] == true );		// GPR 0 should *always* be const
+
+		if( WritesLink() ) gpr_IsConst[GPR_ra] = constStatus;
+		if( WritesHi() ) gpr_IsConst[GPR_hi] = constStatus;
+		if( WritesLo() ) gpr_IsConst[GPR_lo] = constStatus;
+
+		return constStatus;
+	}
+
+	__instinline bool InstructionConstOpt::IsConstField( RegField_t field ) const
+	{
+		switch( field )
+		{
+			case RF_Rd: return false;
+			case RF_Rt: return IsConstRt();
+			case RF_Rs: return IsConstRs();
+
+			case RF_Hi: return m_IsConst.Hi;
+			case RF_Lo: return m_IsConst.Lo;
+
+			jNO_DEFAULT
+		}
 	}
 }

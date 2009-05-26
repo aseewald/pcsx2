@@ -315,8 +315,7 @@ struct InstDiagInfo
 enum RegField_t
 {
 	RF_Unused = -1,
-	RF_First = 0,
-	RF_Rd = RF_First,
+	RF_Rd = 0,
 	RF_Rt,
 	RF_Rs,
 	RF_Hi,
@@ -468,18 +467,11 @@ public:
 	// Sets the link to the next instruction into the Rd register
 	void SetLinkRd();
 	
-	// Used internally by branching instructions to signal that the following instruction
-	// should be treated as a delay slot. (assigns psxRegs.IsDelaySlot)
-	void SetBranchInst();
-
 	// Sets the name of the instruction.
 	void SetName( const char* name )
 	{
 		m_Name = name;
 	}
-
-	void DoBranch( u32 jumptarg );
-	void DoBranch();
 
 	// ------------------------------------------------------------------------
 
@@ -501,6 +493,7 @@ public:
 
 protected:
 	void MultHelper( u64 result );
+	bool _OverflowCheck( u64 result );
 
 	// ------------------------------------------------------------------------
 	// Register value retrieval methods.  Use these to read/write the registers
@@ -563,7 +556,10 @@ protected:
 	virtual void MemoryWrite16( u32 addr, u16 val );
 	virtual void MemoryWrite32( u32 addr, u32 val );
 
+	virtual void DoConditionalBranch( bool cond );
+
 	virtual void RaiseException( uint code );
+	virtual bool ConditionalException( uint code, bool cond );
 	virtual void _RFE();	// virtual implementation of RFE
 	
 	// used to flag instructions which have a "critical" side effect elsewhere in emulation-
@@ -589,11 +585,12 @@ protected:
 class InstructionOptimizer : public Instruction
 {
 protected:
-	bool m_HasSideEffects;
-	bool m_SignExtImm;
-	bool m_SignExtRead;		// set TRUE if instruction sign extends on read from GPRs
-	bool m_SignExtWrite;		// set TRUE if instruction sign extends on write to GPRs
-	bool m_ReadsImm;
+	bool m_HasSideEffects:1;
+	bool m_CanCauseExceptions:1;
+	bool m_SignExtImm:1;
+	bool m_SignExtRead:1;		// set TRUE if instruction sign extends on read from GPRs
+	bool m_SignExtWrite:1;		// set TRUE if instruction sign extends on write to GPRs
+	bool m_ReadsImm:1;
 
 	GprStatus m_ReadsGPR;
 	GprStatus m_WritesGPR;
@@ -604,25 +601,27 @@ public:
 	InstructionOptimizer( const Opcode& opcode ) :
 		Instruction( opcode )
 	,	m_HasSideEffects( false )
+	,	m_CanCauseExceptions( false )
 	,	m_SignExtImm( true )
 	,	m_SignExtRead( false )
 	,	m_SignExtWrite( false )
 	,	m_ReadsImm( false )
 	{
-		m_ReadsGPR.Value = false;
-		m_WritesGPR.Value = false;
+		m_ReadsGPR.Value	= 0;
+		m_WritesGPR.Value	= 0;
 	}
 	
 	__releaseinline void Assign( const Opcode& opcode )
 	{
 		Instruction::Assign( opcode );
 		m_HasSideEffects = false;
+		m_CanCauseExceptions = false;
 		m_SignExtImm = true;
 		m_SignExtRead = false;
 		m_SignExtWrite = false;
 		m_ReadsImm = false;
-		m_ReadsGPR.Value = false;
-		m_WritesGPR.Value = false;
+		m_ReadsGPR.Value	= 0;
+		m_WritesGPR.Value	= 0;
 	}
 
 public:
@@ -636,9 +635,11 @@ public:
 
 	const bool IsUnconditionalBranchType() const
 	{
-		return IsBranchType() && (_Rs_ == GPR_r0) && (_Rt_ == GPR_r0) && ReadsRs() && ReadsRt();
+		// branches that don't read Imm are J's, which are always unconditional
+		if( !IsBranchType() || !m_ReadsImm ) return false;
+		if( !m_ReadsGPR.Rt ) return false;
+		return _Rs_ == _Rt_;						// Branches with the same reg for both inputs are unconditional too!
 	}
-
 
 	bool ReadsRd() const { return m_ReadsGPR.Rd; }
 	bool ReadsRt() const { return m_ReadsGPR.Rt; }
@@ -666,12 +667,8 @@ protected:
 	// interpreter won't have to do more work than is needed.  To enable the extended optimization
 	// information, use an InstructionOptimizer instead.
 
-	virtual s32 Imm()
-	{
-	m_ReadsImm = true; m_SignExtImm = false; return _Opcode_.Imm(); }
-	virtual u32 ImmU()
-	{
-	m_ReadsImm = true; m_SignExtImm = true;  return _Opcode_.ImmU(); }
+	virtual s32 Imm()	{ m_ReadsImm = true; m_SignExtImm = false; return _Opcode_.Imm(); }
+	virtual u32 ImmU()	{ m_ReadsImm = true; m_SignExtImm = true;  return _Opcode_.ImmU(); }
 
 	virtual s32 GetRt_SL() { m_ReadsGPR.Rt = true; m_SignExtRead = true; return iopRegs[_Rt_].SL; }
 	virtual s32 GetRs_SL() { m_ReadsGPR.Rs = true; m_SignExtRead = true; return iopRegs[_Rs_].SL; }
@@ -711,6 +708,7 @@ protected:
 	virtual void MemoryWrite32( u32 addr, u32 val );
 
 	virtual void SetSideEffects() { m_HasSideEffects = true; }
+	virtual bool ConditionalException( uint code, bool cond );
 
 protected:
 	// ------------------------------------------------------------------------
@@ -735,9 +733,7 @@ public:
 class InstructionConstOpt : public InstructionOptimizer
 {
 public:
-
-	// Const values of registers on input:
-
+	// Actual const values of registers on input:
 	s32 ConstVal_Rd;
 	s32 ConstVal_Rt;
 	s32 ConstVal_Rs;
@@ -745,13 +741,17 @@ public:
 	s32 ConstVal_Lo;
 	
 protected:
-	GprStatus m_IsConst;
+	GprStatus m_IsConst;		// Const status of registers on input
+	bool m_IsConstException;	// flagged TRUE for instructions that cause exceptions with certainty.
+	bool m_IsConstBranch;		// flagged TRUE for instructions that branch unconditionally.
 
 public:
 	InstructionConstOpt() {}
 
 	InstructionConstOpt( const Opcode& opcode ) :
 		InstructionOptimizer( opcode )
+	,	m_IsConstException( false )
+	,	m_IsConstBranch( false )
 	{
 		m_IsConst.Value = 0;
 	}
@@ -765,53 +765,19 @@ public:
 		jASSUME( !ReadsRd() );		// Rd should always be a target register.
 	}
 
-	// Updates the const status flags in the given array as according to the register
-	// modifications performed by this instruction.
-	__releaseinline bool UpdateConstStatus( bool gpr_IsConst[34] )
-	{
-		// if no regs are written then const status will be unchanged
-		if( !m_WritesGPR.Value )
-			return true;
-
-		// Update const status for registers.  The const status of all written registers is
-		// based on the const status of the read registers.  If the operation reads from
-		// memory or from an Fs register, then const status is always false.
-
-		bool constStatus;
-
-		if( ReadsMemory() || ReadsFs() )
-			constStatus = false;
-		else
-		{
-			constStatus = 
-				//(ReadsRd() ? gpr_IsConst[_Rd_] : true) &&		// Rd should never be read.
-				(ReadsRt() ? gpr_IsConst[_Rt_] : true) &&
-				(ReadsRs() ? gpr_IsConst[_Rs_] : true) &&
-				(ReadsHi() ? gpr_IsConst[GPR_hi] : true) &&
-				(ReadsLo() ? gpr_IsConst[GPR_lo] : true);
-		}
-
-		if( WritesRd() ) gpr_IsConst[_Rd_] = constStatus;
-		if( WritesRt() ) gpr_IsConst[_Rt_] = constStatus;
-		//if( WritesRs() ) gpr_IsConst[_Rs_] = constStatus;	// Rs should never be written
-
-		jASSUME( gpr_IsConst[0] == true );		// GPR 0 should *always* be const
-
-		if( WritesLink() ) gpr_IsConst[GPR_ra] = constStatus;
-		if( WritesHi() ) gpr_IsConst[GPR_hi] = constStatus;
-		if( WritesLo() ) gpr_IsConst[GPR_lo] = constStatus;
-
-		return constStatus;
-	}
+	__releaseinline bool UpdateConstStatus( bool gpr_IsConst[34] );
 	
 	bool IsConstRs() const { return ReadsRs() && m_IsConst.Rs; }
 	bool IsConstRt() const { return ReadsRt() && m_IsConst.Rt; }
+	bool IsConstField( RegField_t field ) const;
+	bool IsConstBranch() const { return m_IsConstBranch; }
 	
-	bool IsConstBranch() const
-	{
-		// Conditional branches are const if both inputs are const.
-		return IsConstRt() && IsConstRs();
-	}
+	bool CausesConstException() const { return m_IsConstException; }
+	
+protected:
+	void DoConditionalBranch( bool cond );
+	void RaiseException( uint code );
+	bool ConditionalException( uint code, bool cond );
 };
 
 

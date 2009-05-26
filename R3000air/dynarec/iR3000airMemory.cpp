@@ -147,8 +147,8 @@ namespace recLoad_ConstNone
 	static void RegMapInfo( IntermediateRepresentation& info )
 	{
 		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
-		rs[RF_Rs].EntryMap = ecx;
-		rs[RF_Rt].ExitMap = eax;
+		rs.EntryMap.Rs = ecx;
+		rs.ExitMap.eax = eMap_Rt;
 	}
 
 	template< typename T >
@@ -190,11 +190,11 @@ namespace recLoad_ConstRs
 		// ecx/edx get clobbered by the indirect handler, but are preserved on direct memOps:
 		if( constinfo.xlated > HandlerId_Maximum )
 		{
-			rs.ClobbersReg[ecx] = false;
-			rs.ClobbersReg[edx] = false;
+			rs.ExitMap.ecx = eMap_Untouched;
+			rs.ExitMap.edx = eMap_Untouched;
 		}
 
-		rs[RF_Rt].ExitMap = eax;
+		rs.ExitMap.eax = eMap_Rt;
 	}
 
 	template< typename T >
@@ -230,8 +230,8 @@ namespace recLoadWord_LorR_ConstNone
 		// all the regular regs (due to LWL / LWR needing to enact a memory operation), so
 		// might as well force the rec to flush it, and then reload it when ready.
 
-		rs[RF_Rs].EntryMap		= ecx;
-		rs[RF_Rt].ExitMap		= eax;
+		rs.EntryMap.Rs = ecx;
+		rs.ExitMap.eax = eMap_Rt;
 	}
 
 	template< bool IsLoadRight >
@@ -307,15 +307,15 @@ namespace recLoadWord_LorR_ConstRs
 	{
 		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
 
-		rs[RF_Rt].EntryMap = ebx;		// use ebx since it's preserved across indirect handlers.
-		rs[RF_Rt].ExitMap = eax;
+		rs.EntryMap.Rt = ebx;		// use ebx since it's preserved across indirect handlers.
+		rs.ExitMap.eax = eMap_Rt;
 
 		// Note: ecx/edx are preserved for direct ops:
 		const ConstLoadOpInfo constinfo( info );
 		if( constinfo.xlated > HandlerId_Maximum )
 		{
-			rs.ClobbersReg[edx] = false;
-			rs.ClobbersReg[ecx] = false;
+			rs.ExitMap.edx = eMap_Untouched;
+			rs.ExitMap.ecx = eMap_Untouched;
 		}
 	}
 	
@@ -361,8 +361,8 @@ namespace recStore_ConstNone
 	static void RegMapInfo( IntermediateRepresentation& info )
 	{
 		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
-		rs[RF_Rs].EntryMap = ecx;
-		rs[RF_Rt].EntryMap = edx;
+		rs.EntryMap.Rs = ecx;
+		rs.EntryMap.Rt = edx;
 	}
 
 	template< typename T >
@@ -403,16 +403,15 @@ namespace recStore_ConstRs
 	static void RegMapInfo( IntermediateRepresentation& info )
 	{
 		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
-		rs[RF_Rt].EntryMap = edx;
+		rs.EntryMap.Rt = edx;
 
 		const ConstLoadOpInfo constinfo( info );
 		if( constinfo.xlated > HandlerId_Maximum )
 		{
-			rs.ClobbersReg.None();
-			rs[RF_Rt].ExitMap  = edx;
+			rs.ClobbersNothing();
 		}
 		else
-			rs.ClobbersReg[ebx] = false;
+			rs.ExitMap.ebx = eMap_Untouched;
 	}
 
 	template< typename T >
@@ -444,7 +443,7 @@ namespace recStoreWord_LorR_ConstNone
 		// Yay most inefficient function ever -- no regs preserved and we need to
 		// flush Rt as well on entry (so map only Rs)
 
-		rs[RF_Rs].EntryMap = ecx;
+		rs.EntryMap.Rs = ecx;
 	}
 
 	template< bool IsStoreRight >
@@ -533,14 +532,14 @@ namespace recStoreWord_LorR_ConstRs
 	{
 		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
 
-		rs[RF_Rt].EntryMap = ebx;
+		rs.EntryMap.Rt = ebx;
 		
 		// Direct memory preserves ecx/edx
 		const ConstLoadOpInfo constinfo( info );
 		if( constinfo.xlated > HandlerId_Maximum )
 		{
-			rs.ClobbersReg[ecx] = false;
-			rs.ClobbersReg[ebx] = false;
+			rs.ExitMap.ecx = eMap_Untouched;
+			rs.ExitMap.ebx = eMap_Untouched;
 		}
 	}
 

@@ -36,6 +36,7 @@
 #define jNO_DEFAULT \
 { \
 default: \
+	assert( false ); \
 	throw Exception::LogicError( "Incorrect usage of jNO_DEFAULT detected (default case is not unreachable!)" ); \
 	break; \
 }

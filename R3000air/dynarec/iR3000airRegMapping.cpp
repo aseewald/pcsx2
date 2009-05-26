@@ -33,7 +33,7 @@ namespace Analytics
 }
 
 // buffer used to process intermediate instructions.
-static IntermediateRepresentation m_intermediates[MaxCyclesPerBlock];
+static IntermediateRepresentation m_intermediates[MaxCyclesPerBlock+1];
 static const xAddressReg GPR_xIndexReg( esi );
 
 // Important!  the following two vars must have matching contents for the first four registers.
@@ -145,29 +145,9 @@ void IntermediateRepresentation::DynRegs_UnmapForcedIndirects( const RegMapInfo_
 	}
 }
 
-void IntermediateRepresentation::DynRegs_AssignTempReg( int tempslot, int regslot )
+void IntermediateRepresentation::DynRegs_AssignTempReg( int tempslot, const xRegister32& reg )
 {
-	m_TempReg[tempslot] = m_tempRegs[regslot];
-}
-
-
-// ------------------------------------------------------------------------
-bool& RegMapInfo_Dynamic::xRegInUse_t::operator[]( const xRegister32& reg )
-{
-	for( int i=0; i<RegCount_Mappable; ++i )
-		if( m_mappableRegs[i] == reg ) return m_values[i];
-
-	assert( false );	// what the crap!  not a legal register from the m_mappableRegs[] list?
-	throw Exception::LogicError( "Register mapping logic error: parameter is not a valid mappable register." );
-}
-
-const bool& RegMapInfo_Dynamic::xRegInUse_t::operator[]( const xRegister32& reg ) const
-{
-	for( int i=0; i<RegCount_Mappable; ++i )
-		if( m_mappableRegs[i] == reg ) return m_values[i];
-
-	assert( false );	// what the crap!  not a legal register from the m_mappableRegs[] list?
-	throw Exception::LogicError( "Register mapping logic error: parameter is not a valid mappable register." );
+	m_TempReg[tempslot] = reg;
 }
 
 
@@ -189,79 +169,101 @@ void recIR_PerformDynamicRegisterMapping( int instidx, IntermediateRepresentatio
 
 	cir.DynRegs_UnmapForcedIndirects( dyno );
 
-	// Mark Forced Directs which are already nicely mapped from the prev instruction.
-
 	for( int cf=0; cf<RF_Count; ++cf )
 	{
 		RegField_t curfield = (RegField_t)cf;
 		int f_gpr = cir.Inst.ReadsField( curfield );
 		if( f_gpr == -1 ) continue;
+		if( !dyno[curfield].ForceDirect ) continue;
 
-		if( dyno[curfield].ForceDirect )
+		// ForceDirect and ForceIndirect are mutually exclusive:
+		jASSUME( !dyno[curfield].ForceIndirect );
+
+		if( cir.Src[f_gpr].IsDirect() )
 		{
-			jASSUME( !dyno[curfield].ForceIndirect );
-
-			if( cir.Src[f_gpr].IsDirect() )
-			{
-				// Forced direct mapping is already mapped nicely.  Retaining this
-				// existing map will save us some register swapping:
-
-				dyno.xRegInUse[cir.Src[f_gpr].GetReg()] = true;
-			}
+			// Already mapped -- retain it.
+			dyno.xRegInUse[cir.Src[f_gpr].GetReg()] = true;
+			continue;
 		}
-	}
-
-	// Map Forced Directs which are still indirects:
-
-	for( int cf=0; cf<RF_Count; ++cf )
-	{
-		RegField_t curfield = (RegField_t)cf;
-		int f_gpr = cir.Inst.ReadsField( curfield );
-		if( f_gpr == -1 ) continue;
-
-		if( !cir.Src[f_gpr].IsIndirect() ) continue;		// already mapped, ignore.
-
+		
 		// find an available register in xRegInUse;
 		// Another 2-pass system.  First pass looks for a register that is completely unmapped/unused.
 		// Second pass will just pick one that's not needed by this instruction and unmap it.
-		
-		int freeidx;
-		for( freeidx=0; freeidx<RegCount_Mappable; ++freeidx )
-			if( !dyno.xRegInUse[freeidx] && !cir.IsMappedReg( cir.Src, m_mappableRegs[freeidx] ) ) break;
 
-		if( freeidx == RegCount_Mappable )
+		const xRegister32* freereg		= m_mappableRegs;
+		const xRegister32* const endreg	= &freereg[RegCount_Mappable];
+		for( ; freereg!=endreg; ++freereg )
+			if( !dyno.xRegInUse[*freereg] && !cir.IsMappedReg( cir.Src, *freereg ) ) break;
+
+		if( freereg == endreg )
 		{
-			for( freeidx=0; freeidx<RegCount_Mappable; ++freeidx )
-				if( !dyno.xRegInUse[freeidx] ) break;
+			// Second Pass:
+			for( freereg=m_mappableRegs; freereg!=endreg; ++freereg )
+				if( !dyno.xRegInUse[*freereg] ) break;
 
-			// there should always be a free register, unless the regalloc descriptor is malformed,
-			// such as an instruction which incorrectly tries to allocate too many regs.
-			jASSUME( freeidx != RegCount_Mappable );
+			// assert: there should always be a free register, unless the regalloc descriptor is
+			// malformed, such as an instruction which incorrectly tries to allocate too many regs.
+			jASSUME( freereg != endreg );
 		}
 
-		cir.UnmapReg( cir.Src, m_mappableRegs[freeidx] );
-		cir.Src[f_gpr] = m_mappableRegs[freeidx];
-		dyno.xRegInUse[freeidx] = true;
+		cir.UnmapReg( cir.Src, *freereg );
+		cir.Src[f_gpr] = *freereg;
+		dyno.xRegInUse[*freereg] = true;
 	}
 	
-	// Final Step: Map temp registers
-	
+	// Reserve/Map temp registers
+
 	for( int tc=0; tc<4; ++tc )
 	{
 		if( !dyno.AllocTemp[tc] ) continue;
 
-		int freeidx;		
-		for( freeidx=0; freeidx<RegCount_Temps; ++freeidx )
-			if( !dyno.xRegInUse[freeidx] ) break;
+		const xRegister32* freereg		= m_tempRegs;
+		const xRegister32* const endreg	= &freereg[RegCount_Temps];
+		for( ; freereg!=endreg; ++freereg )
+			if( !dyno.xRegInUse[*freereg] ) break;
 
 		// there should always be a free register, unless the regalloc descriptor is malformed,
 		// such as an instruction which incorrectly tries to allocate too many regs.
-		jASSUME( freeidx != RegCount_Temps );
+		jASSUME( freereg != endreg );
 
-		cir.DynRegs_AssignTempReg( tc, freeidx );
-	}	
+		cir.DynRegs_AssignTempReg( tc, *freereg );
+		dyno.xRegInUse[*freereg] = true;
+	}
+	
+	// Map non-ForceDirect SourceFields to any remaining unmapped registers:
+	
+	for( int reg=0; reg<RegCount_Mappable; reg++ )
+	{
+		if( dyno.xRegInUse[m_mappableRegs[reg]] ) continue;
+
+		for( int cf=0; cf<RF_Count; ++cf )
+		{
+			RegField_t curfield = (RegField_t)cf;
+			int f_gpr = cir.Inst.ReadsField( curfield );
+			if( f_gpr == -1 ) continue;
+			
+			if( cir.Inst.IsConstField( curfield ) ) continue;	// don't map consts
+			if( dyno[curfield].ForceIndirect ) continue;		// don't map indirects to registers.
+			if( cir.Src[f_gpr].IsDirect() ) continue;			// already mapped, so leave it alone...
+
+			const xRegister32* freereg		= m_mappableRegs;
+			const xRegister32* const endreg	= &freereg[RegCount_Mappable];
+			for( ; freereg!=endreg; ++freereg )
+				if( !cir.IsMappedReg( cir.Src, *freereg ) ) break;
+
+			// no free regs?  Make one:
+			// [TODO] : This code should pick an optimal register to unmap based on some first
+			// pass register usage analysis, which unconveniently doesn't exist yet.
+			if( freereg == endreg )
+			{
+				cir.UnmapReg( cir.Src, m_mappableRegs[reg] );
+				freereg = &m_mappableRegs[reg];
+			}
+
+			cir.Src[f_gpr] = *freereg;
+		}
+	}
 }
-
 
 void recIR_PerformDynamicRegisterMapping_Exit( int instidx, IntermediateRepresentation& cir )
 {
@@ -311,39 +313,47 @@ void recIR_PerformStrictRegisterMapping( int instidx, IntermediateRepresentation
 		int f_gpr = cir.Inst.ReadsField( curfield );
 		if( f_gpr == -1 ) continue;
 
-		if( !stro[curfield].EntryMap.IsEmpty() )
+		// EntryMaps are treated as  unquestionable "laws" in the world of strict mapping,
+		// since none of the instructions that require strict mapping would benefit from
+		// fuzzy mapping alternatives.
+
+		if( !stro.EntryMap[curfield].IsEmpty() )
 		{
-			cir.UnmapReg( cir.Src, stro[curfield].EntryMap );
-			cir.Src[f_gpr] = stro[curfield].EntryMap;
+			cir.UnmapReg( cir.Src, stro.EntryMap[curfield] );
+			cir.Src[f_gpr] = stro.EntryMap[curfield];
 			cir.m_do_not_touch[f_gpr] = true;
 		}
 	}
-
-	// Unmap any registers clobbered by the instruction here, so that they get flushed.
-
-	for( int ridx=0; ridx<RegCount_Mappable; ++ridx )
-		if( stro.ClobbersReg[m_mappableRegs[ridx]] )
-			cir.UnmapReg( cir.Dest, m_mappableRegs[ridx] );
 }
 
+RegField_t ToRegField( const ExitMapType& src )
+{
+	return (RegField_t)src;
+}
 
 void recIR_PerformStrictRegisterMapping_Exit( int instidx, IntermediateRepresentation& cir )
 {
 	const RegMapInfo_Strict& stro( cir.RegOpts.StatMap );
 
-	// map registers defined on exit.
+	// ExitMaps are hints used to assign the Dest[] mappings as efficiently as possible.
 
-	for( int cf=0; cf<RF_Count; ++cf )
+	for( int ridx=0; ridx<RegCount_Temps; ++ridx )
 	{
-		RegField_t curfield = (RegField_t)cf;
-		int f_gpr = cir.Inst.ReadsField( curfield );
-		if( f_gpr == -1 ) continue;
+		ExitMapType exitmap = stro.ExitMap[m_tempRegs[ridx]];
 
-		if( !stro[curfield].ExitMap.IsEmpty() )
-		{
-			cir.UnmapReg( cir.Dest, stro[curfield].ExitMap );
-			cir.Dest[f_gpr] = stro[curfield].ExitMap;
-		}
+		if( exitmap == eMap_Untouched ) continue;		// retains src[] mapping
+
+		// flush all src mappings and replace with user-specified mappings.
+		cir.UnmapReg( cir.Dest, m_tempRegs[ridx] );
+		if( exitmap == eMap_Invalid ) continue;		// unmapped / clobbered
+
+		// Got this far?  Valid register mapping specified:
+		// exit-mapped register must be a valid Written Field (assertion failure indicates ints/recs mismatch)
+		int f_gpr = cir.Inst.WritesField( ToRegField( exitmap ) );
+		jASSUME( f_gpr != -1 );
+
+		cir.UnmapReg( cir.Dest, m_tempRegs[ridx] );
+		cir.Dest[f_gpr] = m_tempRegs[ridx];
 	}
 }
 
@@ -367,7 +377,7 @@ void recIR_Pass2( const SafeArray<InstructionConstOpt>& iList )
 	// Using placement-new syntax to initialize the Intermediate Representation, because
 	// it spares us the agony of the failure that is the C++ copy constructor.
 	for( int i=0; i<numinsts; ++i )
-		new (&m_intermediates[i]) IntermediateRepresentation( iList[i] );
+		new (&m_intermediates[i]) IntermediateRepresentation( iList[i], m_intermediates[i+1].Src );
 
 	for( int i=0; i<numinsts; ++i )
 	{
@@ -375,9 +385,7 @@ void recIR_Pass2( const SafeArray<InstructionConstOpt>& iList )
 
 		// this instruction's source mappings start with the previous instruction's dest mappings.
 		// We'll modify relevant entries (this instruction's rs/rt/rd and requests for temp regs).
-		if( i != 0 )
-			memcpy_fast( fnew.Src, m_intermediates[i-1].Dest, sizeof( fnew.Src ) );
-		else
+		if( i == 0 )
 		{
 			// Start with a clean slate.  Everything's loaded from memory:
 			for( int gpr=0; gpr<34; ++gpr )
@@ -405,18 +413,31 @@ void recIR_Pass2( const SafeArray<InstructionConstOpt>& iList )
 	// Perform Full-on Block Dump
 	// ------------------------------------------------------------------------
 	
+	return;
 	char sbuf[512];
-	
+
 	for( int i=0; i<numinsts; ++i )
 	{
 		IntermediateRepresentation& rdump( m_intermediates[i] );
 
 		rdump.Inst.GetDisasm( m_disasm );
 
+		//Console::WriteLn( "\n%s\n", params m_disasm.c_str() );
+
 		for( int reg=0; reg<32; reg+=8 )
 		{
-			sprintf( sbuf, "\t%s[%-5s]",
-				Diag_GetGprName( (MipsGPRs_t)reg ), rdump.Src[reg].IsDirect() ? xGetRegName( rdump.Src[reg].GetReg() ) : "unmap" );
+			sprintf( sbuf, "    %s[%-5s]  %s[%-5s]  %s[%-5s]  %s[%-5s]  %s[%-5s]  %s[%-5s]  %s[%-5s]  %s[%-5s]",
+				Diag_GetGprName( (MipsGPRs_t)(reg+0) ), rdump.Src[reg+0].IsDirect() ? xGetRegName( rdump.Src[reg+0].GetReg() ) : "unmap",
+				Diag_GetGprName( (MipsGPRs_t)(reg+1) ), rdump.Src[reg+1].IsDirect() ? xGetRegName( rdump.Src[reg+1].GetReg() ) : "unmap",
+				Diag_GetGprName( (MipsGPRs_t)(reg+2) ), rdump.Src[reg+2].IsDirect() ? xGetRegName( rdump.Src[reg+2].GetReg() ) : "unmap",
+				Diag_GetGprName( (MipsGPRs_t)(reg+3) ), rdump.Src[reg+3].IsDirect() ? xGetRegName( rdump.Src[reg+3].GetReg() ) : "unmap",
+				Diag_GetGprName( (MipsGPRs_t)(reg+4) ), rdump.Src[reg+4].IsDirect() ? xGetRegName( rdump.Src[reg+4].GetReg() ) : "unmap",
+				Diag_GetGprName( (MipsGPRs_t)(reg+5) ), rdump.Src[reg+5].IsDirect() ? xGetRegName( rdump.Src[reg+5].GetReg() ) : "unmap",
+				Diag_GetGprName( (MipsGPRs_t)(reg+6) ), rdump.Src[reg+6].IsDirect() ? xGetRegName( rdump.Src[reg+6].GetReg() ) : "unmap",
+				Diag_GetGprName( (MipsGPRs_t)(reg+7) ), rdump.Src[reg+7].IsDirect() ? xGetRegName( rdump.Src[reg+7].GetReg() ) : "unmap"
+			);
+				
+			//Console::WriteLn( sbuf );
 		}
 	}	
 	

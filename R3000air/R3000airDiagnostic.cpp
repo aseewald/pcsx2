@@ -33,7 +33,7 @@ typedef InstructionOptimizer InstDiag;		// makes life easier on the verboseness 
 
 static const char *tbl_regname_gpr[34] =
 {
-	"zero",	"at", "v0", "v1", "a0", "a1", "a2", "a3",
+	"r0",	"at", "v0", "v1", "a0", "a1", "a2", "a3",
 	"t0",	"t1", "t2", "t3", "t4", "t5", "t6", "t7",
 	"s0",	"s1", "s2", "s3", "s4", "s5", "s6", "s7",
 	"t8",	"t9", "k0", "k1", "gp", "sp", "fp", "ra",
@@ -61,6 +61,11 @@ const char* Diag_GetCP0Name( uint cp0reg )
 	return tbl_regname_cop0[cp0reg];
 }
 
+// Same as Diag_GetGprName, but returns r0 as "zero" for visual convenience.
+static const char* _get_GprName( MipsGPRs_t gpr )
+{
+	return ( gpr == GPR_r0 ) ? "zero" : tbl_regname_gpr[gpr];
+}
 
 bool InstDiag::ParamIsRead( const InstParamType ptype ) const
 {
@@ -103,15 +108,15 @@ void InstDiag::GetParamName( const InstParamType ptype, string& dest ) const
 		case Param_None: break;
 
 		case Param_Rt:
-			pname  = tbl_regname_gpr[_Rt_];
+			pname  = _get_GprName(_Rt_);
 		break;
 
 		case Param_Rs:
-			pname  = tbl_regname_gpr[_Rs_];
+			pname  = _get_GprName(_Rs_);
 		break;
 		
 		case Param_Rd:
-			pname  = tbl_regname_gpr[_Rd_];
+			pname  = _get_GprName(_Rd_);
 		break;
 
 		case Param_Sa:
@@ -140,7 +145,7 @@ void InstDiag::GetParamName( const InstParamType ptype, string& dest ) const
 		case Param_AddrImm:		// Address Immediate (Rs + Imm()), used by load/store
 			// TODO : Calculate label.
 			//AddrImm()
-			ssprintf( dest, "0x%4.4x(%s)", (s32)_Opcode_.Imm(), tbl_regname_gpr[_Rs_] );
+			ssprintf( dest, "0x%4.4x(%s)", (s32)_Opcode_.Imm(), _get_GprName(_Rs_) );
 		return;
 
 		case Param_BranchOffset:

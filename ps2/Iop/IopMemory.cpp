@@ -35,9 +35,9 @@ namespace IopMemory
 // ** NOPAD  : 14       : No padding of waitstates between transactions
 // ** RDPRI  : 13       : Loads have priority over stores
 // ** INTP   : 12       : Interrupts are active high
-// ** IS1    : 11       : Enable I-Cache (certain values me cause bus error?)
+// ** IS1    : 11       : Enable I-Cache
 // ** IS0    : 10       : Hardwired to zero
-// ** IBLKSZ :  9 ->  8 : I-Cache refill size = 8 words
+// ** IBLKSZ :  9 ->  8 : I-Cache refill size = 8 words (certain values may cause bus error?)
 // ** DS     :  7       : Enable D-Cache / Scratchpad
 // ** RES    :  6       : Hardwired to zero
 // ** DBLKSZ :  5 ->  4 : D-Cache refill block size 8 words
@@ -415,15 +415,15 @@ __forceinline bool IsIopRamPage( u32 iopaddr )
 	return iopaddr < 0x800000;
 }
 
-__forceinline u8   iopMemRead8 (u32 mem) { return ReadType<mem8_t>( mem ); }
+__forceinline u8   iopMemRead8 (u32 mem) { return ReadType<mem8_t> ( mem ); }
 __forceinline u16  iopMemRead16(u32 mem) { return ReadType<mem16_t>( mem ); }
 __forceinline u32  iopMemRead32(u32 mem) { return ReadType<mem32_t>( mem ); }
 
-__forceinline u8   iopMemDirectRead8 (u32 mem) { return DirectReadType<mem8_t>( mem ); }
+__forceinline u8   iopMemDirectRead8 (u32 mem) { return DirectReadType<mem8_t> ( mem ); }
 __forceinline u16  iopMemDirectRead16(u32 mem) { return DirectReadType<mem16_t>( mem ); }
 __forceinline u32  iopMemDirectRead32(u32 mem) { return DirectReadType<mem32_t>( mem ); }
 
-__forceinline void iopMemWrite8 (u32 mem, mem8_t value) { WriteType<mem8_t>( mem, value ); }
+__forceinline void iopMemWrite8 (u32 mem, mem8_t  value) { WriteType<mem8_t> ( mem, value ); }
 __forceinline void iopMemWrite16(u32 mem, mem16_t value) { WriteType<mem16_t>( mem, value ); }
 __forceinline void iopMemWrite32(u32 mem, mem32_t value) { WriteType<mem32_t>( mem, value ); }
 

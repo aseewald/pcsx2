@@ -68,7 +68,8 @@ void recIR_Block()
 
 		if( opcode.U32 == 0 )	// Iggy on the NOP please!  (Iggy Nop!)
 		{
-			PSXCPU_LOG( "NOP%s", iopRegs.IsDelaySlot ? "\n" : "" );
+			if( iopRegs.cycle > 0x470000 )
+				PSXCPU_LOG( "NOP%s", iopRegs.IsDelaySlot ? "\n" : "" );
 
 			iopRegs.pc			 = iopRegs.VectorPC;
 			iopRegs.VectorPC	+= 4;
@@ -80,7 +81,7 @@ void recIR_Block()
 			inst.Assign( opcode, gpr_IsConst );
 			inst.Process();
 
-			if( varLog & 0x00100000 )
+			if( (varLog & 0x00100000) && (iopRegs.cycle > 0x470000) )
 			{
 				inst.GetDisasm( m_disasm );
 				inst.GetValuesComment( m_comment );
@@ -91,9 +92,15 @@ void recIR_Block()
 					PSXCPU_LOG( "%-34s ; %s%s", m_disasm.c_str(), m_comment.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
 			}
 
-			bool isConstWrite = inst.UpdateConstStatus( gpr_IsConst );
-			if( !isConstWrite || inst.WritesMemory() || (inst.IsBranchType() && !inst.IsConstBranch()) || inst.HasSideEffects() )
-				m_blockspace.instlen++;
+			// Add this instruction to the IntRep list -- but *only* if it's non-const.
+			// If the inputs and result are const then we can just skip the little bugger altogether.
+			
+			if( !inst.IsConstBranch() )
+			{
+				bool isConstWrite = inst.UpdateConstStatus( gpr_IsConst );
+				if( !isConstWrite || inst.WritesMemory() || inst.HasSideEffects() )
+					m_blockspace.instlen++;
+			}
 
 			// prep the iopRegs for the next instruction fetch -->
 			// 
@@ -118,24 +125,29 @@ void recIR_Block()
 			if( inst.GetDivStall() != 0 )
 				DivStallUpdater( m_RecState.DivCycleAccum, inst.GetDivStall() );
 
-			// RFE, SYSCALL and BREAK cause exceptions, which should terminate block recompilation:
-			if( inst.HasSideEffects() )
+			// Check for 'Forced' End-of-Block Conditions:
+			//  * Writes to the Status register (can enable / disable memory operations)
+			//  * SYSCALL and BREAK need immediate branches (the interpreted handling of the exception
+			//     will have updated our PC accordingly)
+			//  * RFE re-enables exceptions, so it needs immediate Event Test
+			//    (note, by rule RFE should always be in the delay slot of a non-const branch instruction
+			//     so the block should be breaking *anyway* -- but no harm in being certain).
+			
+			if( inst.CausesConstException() )	// SYSCALL / BREAK (plus any other const-time exceptions)
 				termBlock = true;
-			else if( inst.IsUnconditionalBranchType() )
-				termBlock = false;
+			if( strcmp(inst.GetName(), "RFE")==0 )
+				termBlock = true;
+			//else if( inst.IsConstBranch() )
+			//	termBlock = false;
+
+			// Note: the MIPS _Rd_ field doubles as the Fs field on MTC instructions.
+			//if( (inst._Rd_ == 12) && ( (strcmp( inst.GetName(), "MTC0") == 0) || (strcmp( inst.GetName(), "CTC0") == 0) ) )
+			//	termBlock = true;
 		}
 
 		m_RecState.IncCycleAccum();
 
-		if( m_blockspace.instlen > 0 )
-		{
-			if( termBlock ) break;
-			if( m_RecState.BlockCycleAccum >= MaxCyclesPerBlock ) break;
-		}
-
-	} while( true );
-
-	jASSUME( m_blockspace.instlen != 0 );
+	} while( !termBlock && (m_RecState.BlockCycleAccum < MaxCyclesPerBlock) );
 
 	iopRegs.cycle += m_RecState.BlockCycleAccum;
 }

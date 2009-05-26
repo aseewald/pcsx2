@@ -21,6 +21,8 @@
 #include "ix86/ix86.h"
 #include <map>
 
+#include "iR3000airRegMapping.h"
+
 using namespace x86Emitter;
 
 #define ptrT xAddressIndexer<T>()
@@ -98,9 +100,9 @@ struct xAnyOperand
 	}
 };
 
-namespace R3000A
-{
+namespace R3000A {
 
+using namespace x86Emitter;
 class IntermediateRepresentation;
 
 extern void __fastcall DivStallUpdater( uint cycleAcc, int newstall );
@@ -138,325 +140,6 @@ struct iopRecState
 	}
 };
 
-
-// ------------------------------------------------------------------------
-template< typename ContentType >
-class xRegisterArray32
-{
-public:
-	ContentType Info[7];
-
-	ContentType& operator[]( const xRegister32& src )
-	{
-		return Info[ src.Id ];
-	}
-
-	const ContentType& operator[]( const xRegister32& src ) const
-	{
-		return Info[ src.Id ];
-	}
-};
-
-// ------------------------------------------------------------------------
-class xRegUseFlags : xRegisterArray32<bool>
-{
-public:
-	using xRegisterArray32<bool>::operator[];
-
-	void operator()( const xRegister32& src )
-	{
-		Info[src.Id] = true;
-	}
-	
-	// Uses no registers?  Clear the list baby!
-	void None()
-	{
-		memzero_obj( Info );
-	}
-	
-	// Modifies basic "front four" registers: eax, ebx, ecx, edx
-	void Basic4()
-	{
-		Info[eax.Id] = true;
-		Info[edx.Id] = true;
-		Info[ecx.Id] = true;
-		Info[ebx.Id] = true;
-	}
-
-	// Default constructor: clobber all four basic registers (eax, edx, ecx, ebx).
-	xRegUseFlags()
-	{
-		Basic4();
-	}
-};
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
-
-template< typename T >
-struct RegFieldArray
-{
-	T Rd, Rt, Rs, Hi, Lo;
-
-	__forceinline T& operator[]( RegField_t idx )
-	{
-		jASSUME( ((uint)idx) < RF_Count );
-		switch( idx )
-		{
-			case RF_Rd: return Rd;
-			case RF_Rt: return Rt;
-			case RF_Rs: return Rs;
-			case RF_Hi: return Hi;
-			case RF_Lo: return Lo;
-			jNO_DEFAULT
-		}
-	}
-
-	__forceinline const T& operator[]( RegField_t idx ) const
-	{
-		jASSUME( ((uint)idx) < RF_Count );
-		switch( idx )
-		{
-			case RF_Rd: return Rd;
-			case RF_Rt: return Rt;
-			case RF_Rs: return Rs;
-			case RF_Hi: return Hi;
-			case RF_Lo: return Lo;
-			jNO_DEFAULT
-		}
-	}
-
-	__forceinline T& operator[]( uint idx )
-	{
-		jASSUME( idx < RF_Count );
-		return operator[]( (RegField_t)idx );
-	}
-
-	__forceinline const T& operator[]( int idx ) const
-	{
-		jASSUME( idx < RF_Count );
-		return operator[]( (RegField_t)idx );
-	}
-};
-
-static const int RegCount_Mappable = 5;
-static const int RegCount_Temps = 5;
-
-enum DynExitMap_t
-{
-	DynEM_Unmapped = -1,
-	DynEM_Temp0 = 0,
-	DynEM_Temp1,
-	DynEM_Temp2,
-	DynEM_Temp3,
-	
-	DynEM_Rs,
-	DynEM_Rt,
-	DynEM_Hi,
-	DynEM_Lo,
-	
-	// Rd not included since it's never mapped on entry/source.	
-};
-
-// ------------------------------------------------------------------------
-// Describes register mapping information, on a per-gpr or per-field (Rs Rd Rt) basis.
-//
-struct DynRegMapInfo_Entry
-{
-	// Tells the recompiler that the reg must be force-loaded into an x86 register on entry.
-	// (recompiler will flush another reg if needed, and load this field in preparation for
-	// Emit entry).  The x86 register will be picked by the recompiler.
-	// Note: ForceDirect and ForceIndirect are mutually exclusive.  Setting both to true
-	// is an error, and will cause an assertion/exception.
-	bool ForceDirect;
-
-	// Tells recompiler the given instruction register field must be forced to Memory
-	// (flushed).  This is commonly used as an optimization guide for cases where all x86
-	// registers are modified by the instruction prior to the instruction using Rs [LWL/SWL
-	// type memory ops, namely].
-	// Note: ForceDirect and ForceIndirect are mutually exclusive.  Setting both to true
-	// is an error, and will cause an assertion/exception.
-	bool ForceIndirect;
-
-	// Specifies known "valid" mappings on exit from the instruction emitter.  The recompiler
-	// will use this to map registers more efficiently and avoid unnecessary register swapping.
-	// Notes:
-	//   * this is a suggestion only, and the recompiler reserves the right to map destinations
-	//     however it sees fit.
-	//
-	//   * By default the recompiler will assume (prefer) the register used for Rs as matching
-	//     Rt/Rd on exit, which is what most instructions do.
-	//
-	DynExitMap_t ExitMap;
-
-	DynRegMapInfo_Entry() :
-		ForceDirect( false ),
-		ForceIndirect( false ),
-		ExitMap( DynEM_Unmapped )
-	{
-	}
-};
-
-static const xRegister32 xRegAny( -2 );
-
-struct StrictRegMapInfo_Entry
-{
-	// Maps a GPR into to the specific x86 register on entry to the instruction's emitter.
-	// If a GPR is mapped to Empty here, it will be flushed to memory, and the Instruction
-	// recompiler will be provisioned with an indirect register mapping.
-	// If a GPR is mapped to xRegAny, the recompiler will select the best (most ideal) register
-	// for the GPR that isn't a register already explicitly mapped to another field.
-	xRegister32 EntryMap;
-
-	// Specifies known "valid" mappings on exit from the instruction emitter.  The recompiler
-	// will use this to map registers more efficiently and avoid unnecessary register swapping.
-	// Note: this is a suggestion only, and the recompiler reserves the right to map destinations
-	// however it sees fit.
-	xRegister32 ExitMap;
-	
-	StrictRegMapInfo_Entry() :
-		EntryMap(), ExitMap()
-	{
-	}
-};
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
-class RegMapInfo_Dynamic
-{
-public:
-	class xRegInUse_t
-	{
-	protected:
-		bool m_values[RegCount_Mappable];
-
-	public:
-		xRegInUse_t()
-		{
-			memzero_obj( m_values );
-		}
-
-		bool& operator[]( const xRegister32& reg );
-		const bool& operator[]( const xRegister32& reg ) const;
-
-		bool& operator[]( uint idx )
-		{
-			jASSUME( idx < RegCount_Mappable );
-			return m_values[idx];
-		}
-
-		const bool& operator[]( uint idx ) const
-		{
-			jASSUME( idx < RegCount_Mappable );
-			return m_values[idx];
-		}
-	};
-
-public:
-	// Array contents cover: Forced Direct or Indirect booleans for each GPR field, and
-	// output register mappings for the dest fields.
-	RegFieldArray<DynRegMapInfo_Entry> GprFields;
-	
-	// Set any of these true to allocate a temporary register to that slot.  Allocated
-	// registers are always from the pool of eax, edx, ecx, ebx -- so it's assured your
-	// allocated register will have low and high forms (al, bl, cl, dl, etc).
-	//
-	// Note: Setting all four of these true will only work if you are *not* using other
-	// forms of register mapping, since you can't map eax (for example) and expect to
-	// get four temp regs as well.  The recompiler will assert/exception.
-	bool AllocTemp[4];
-
-	// Each entry corresponds to the register in the m_tempRegs array.
-	xRegInUse_t xRegInUse;
-
-public:
-	__forceinline DynRegMapInfo_Entry& operator[]( RegField_t idx )
-	{
-		return GprFields[idx];
-	}
-
-	__forceinline const DynRegMapInfo_Entry& operator[]( RegField_t idx ) const
-	{
-		return GprFields[idx];
-	}
-
-	RegMapInfo_Dynamic()
-	{
-		memzero_obj( AllocTemp );
-	}
-};
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
-struct RegMapInfo_Strict
-{
-	// Specifies which x86 registers are modified by instruction code.  By default this
-	// array is assigned all 'true', meaning it assumes full outwardly modification of
-	// x86 registers.
-	xRegUseFlags ClobbersReg;
-
-	// Entry and exit map specifications for each GPR field.
-	RegFieldArray<StrictRegMapInfo_Entry> GprFields;
-
-	__forceinline StrictRegMapInfo_Entry& operator[]( RegField_t idx )
-	{
-		return GprFields[idx];
-	}
-
-	__forceinline const StrictRegMapInfo_Entry& operator[]( RegField_t idx ) const
-	{
-		return GprFields[idx];
-	}
-	
-	void EntryMapHiLo( const xRegister32& srchi, const xRegister32& srclo )
-	{
-		GprFields.Hi.EntryMap = srchi;
-		GprFields.Lo.EntryMap = srclo;
-	}
-
-	void ExitMapHiLo( const xRegister32& srchi, const xRegister32& srclo )
-	{
-		GprFields.Hi.ExitMap = srchi;
-		GprFields.Lo.ExitMap = srclo;
-	}
-
-};
-
-// ------------------------------------------------------------------------
-// Register mapping options for each instruction emitter implementation
-//
-class RegisterMappingOptions
-{
-public:
-	bool IsStrictMode;
-
-	RegMapInfo_Dynamic DynMap;
-	RegMapInfo_Strict StatMap;
-
-	// Set to true to inform the recompiler that it can swap Rs and Rt freely.  This option
-	// takes effect even if Rs or Rt have been forced to registers, or mapped to specific
-	// registers.
-	bool CommutativeSources;
-
-	RegisterMappingOptions() :
-		IsStrictMode( false ),
-		CommutativeSources( false )
-	{
-	}
-
-	RegMapInfo_Dynamic& UseDynMode()		{ IsStrictMode = false; return DynMap; }
-	RegMapInfo_Strict& UseStrictMode()		{ IsStrictMode = true; return StatMap; }
-
-	/*bool IsRequiredRegOnEntry( const xRegister32& reg ) const
-	{
-		for( int i=0; i<RF_Count; ++i )
-		{
-			if( GprFields[i].EntryMap == reg ) return true;
-		}
-
-		return false;
-	}*/
-};
 
 // ------------------------------------------------------------------------
 //
@@ -578,7 +261,7 @@ public:
 	// The recompiler will do necessary "busywork" needed to move registers from the
 	// dest mapping here to the src mapping of the next instruction.
 	// Dest operand can either be register or memory.
-	xDirectOrIndirect32 Dest[34];
+	xDirectOrIndirect32* Dest;
 
 	s32 ixImm;
 	InstructionRecMess Inst;		// raw instruction information.
@@ -600,7 +283,8 @@ protected:
 public:
 	IntermediateRepresentation() {}
 
-	IntermediateRepresentation( const InstructionConstOpt& src ) :
+	IntermediateRepresentation( const InstructionConstOpt& src, xDirectOrIndirect32* destMappings ) :
+		Dest( destMappings ),
 		Inst( src ),
 		ixImm( Inst.SignExtendsImm() ? Inst._Opcode_.Imm() : Inst._Opcode_.ImmU() ),
 		IsSwappedSources( false )
@@ -630,7 +314,7 @@ public:
 	
 	xRegister32 DynRegs_FindUnmappable( const xDirectOrIndirect32 maparray[34] ) const;
 	void		DynRegs_UnmapForcedIndirects( const RegMapInfo_Dynamic& dyno );
-	void		DynRegs_AssignTempReg( int tempslot, int regslot );
+	void		DynRegs_AssignTempReg( int tempslot, const xRegister32& reg );
 
 	void StrictRegs_UnmapClobbers( const RegMapInfo_Strict& stro );
 
@@ -794,7 +478,7 @@ struct xJumpLink
 	}
 };
 
-static const int MaxCyclesPerBlock = 128;
+static const int MaxCyclesPerBlock = 64;
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // recBlockItemTemp - Temporary workspace buffer used to reduce the number of heap allocations

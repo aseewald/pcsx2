@@ -65,16 +65,16 @@ namespace x86Emitter
 	{
 		if( src.IsEmpty() ) return "empty";
 		
-		if( src.Id > 0 )
+		switch( sizeof(T) )
 		{
-			switch( sizeof(T) )
-			{
-				case 1: return x86_regnames_gpr8[ src.Id ];
-				case 2: return x86_regnames_gpr16[ src.Id ];
-				case 4: return x86_regnames_gpr32[ src.Id ];
-			}
+			case 1: return x86_regnames_gpr8[ src.Id ];
+			case 2: return x86_regnames_gpr16[ src.Id ];
+			case 4: return x86_regnames_gpr32[ src.Id ];
+			
+			jNO_DEFAULT
 		}
-		return "unknown gpr";
+
+		return "oops?";
 	}
 
 	template< typename T >
@@ -82,15 +82,15 @@ namespace x86Emitter
 	{
 		if( src.IsEmpty() ) return "empty";
 		
-		if( src.Id >= 0 )
+		switch( sizeof(T) )
 		{
-			switch( sizeof(T) )
-			{
-				case 8: return x86_regnames_mmx[ src.Id ];
-				case 16: return x86_regnames_sse[ src.Id ];
-			}
+			case 8: return x86_regnames_mmx[ src.Id ];
+			case 16: return x86_regnames_sse[ src.Id ];
+			
+			jNO_DEFAULT
 		}
-		return "unknown simd";
+
+		return "oops?";
 	}
 
 	//////////////////////////////////////////////////////////////////////////////////////////

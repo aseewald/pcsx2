@@ -116,13 +116,12 @@ namespace recDIV_ConstNone
 	{
 		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
 		
-		rs[RF_Rs].EntryMap = ecx;
-		rs[RF_Rt].EntryMap = eax;
+		rs.EntryMap.Rs = ecx;
+		rs.EntryMap.Rt = eax;
 
-		rs[RF_Lo].ExitMap = eax;
-		
-		rs.ClobbersReg[ecx] = false;
-		rs.ClobbersReg[ebx] = false;
+		rs.ExitMap.eax = eMap_Lo;
+		rs.ExitMap.ecx = eMap_Untouched;
+		rs.ExitMap.ebx = eMap_Untouched;
 	}
 
 	static void Emit( const IntermediateRepresentation& info )
@@ -175,16 +174,15 @@ namespace recDIV_ConstRt
 
 		if( info.GetConstRt() == 0 )
 		{
-			rs[RF_Rs].EntryMap = edx;
+			rs.EntryMap.Rs = edx;
+			rs.ExitMap.edx = eMap_Untouched;
+			rs.ExitMap.ebx = eMap_Untouched;
 			rs.ExitMapHiLo( edx, eax );
-
-			rs.ClobbersReg[edx] = false;
-			rs.ClobbersReg[ebx] = false;
 		}
 		else if( info.GetConstRt() == -1 )
 		{
-			rs.ClobbersReg[ecx] = false;
-			rs.ClobbersReg[ebx] = false;
+			rs.ExitMap.ecx = eMap_Untouched;
+			rs.ExitMap.ebx = eMap_Untouched;
 			rs.ExitMapHiLo( edx, eax );
 		}
 		else
@@ -244,8 +242,8 @@ namespace recDIV_ConstRs
 	{
 		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
 
-		rs[RF_Rt].EntryMap = eax;
-		rs[RF_Rs].EntryMap = ecx;		// DIV lacks Imm forms, so force-load const Rs into ecx
+		rs.EntryMap.Rt = eax;
+		rs.EntryMap.Rs = ecx;		// DIV lacks Imm forms, so force-load const Rs into ecx
 
 		// When Const Rs == 0x80000000, the mappings of Hi/Lo are indeterminate.
 		if( info.GetConstRs() != 0x80000000 )
@@ -253,8 +251,8 @@ namespace recDIV_ConstRs
 			rs.ExitMapHiLo( edx, eax );
 		}
 
-		rs.ClobbersReg[ecx] = false;
-		rs.ClobbersReg[ebx] = false;
+		rs.ExitMap.ecx = eMap_Untouched;
+		rs.ExitMap.ebx = eMap_Untouched;
 	}
 	
 	static void Emit( const IntermediateRepresentation& info )

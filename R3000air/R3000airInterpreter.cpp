@@ -113,7 +113,8 @@ static __releaseinline void intStep()
 		// Optimization note: NOPs are almost never issued in pairs, so changing the if()
 		// above into a while() actually decreases overall performance.
 
-		PSXCPU_LOG( "NOP", iopRegs.IsDelaySlot ? "\n" : "" );
+		if( iopRegs.cycle > 0x470000 )
+			PSXCPU_LOG( "NOP", iopRegs.IsDelaySlot ? "\n" : "" );
 
 		iopRegs.pc			 = iopRegs.VectorPC;
 		iopRegs.VectorPC	+= 4;
@@ -140,7 +141,7 @@ static __releaseinline void intStep()
 	Instruction::Process( dudley );
 	
 #ifdef PCSX2_DEVBUILD
-	if( varLog & 0x00100000 )
+	if( (varLog & 0x00100000) && (iopRegs.cycle > 0x470000) )
 	{
 		dudley.GetDisasm( m_disasm );
 		dudley.GetValuesComment( m_comment );

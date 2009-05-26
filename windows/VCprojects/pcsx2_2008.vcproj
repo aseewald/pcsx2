@@ -1979,6 +1979,18 @@
 							RelativePath="..\..\R3000air\dynarec\iR3000airRegMapping.cpp"
 							>
 						</File>
+						<File
+							RelativePath="..\..\R3000air\dynarec\iR3000airRegMapping.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\dynarec\RegMap_Dynamic.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\dynarec\RegMap_Strict.h"
+							>
+						</File>
 					</Filter>
 				</Filter>
 			</Filter>

@@ -27,18 +27,14 @@ namespace R3000A
 
 typedef Instruction Inst;
 
-static __forceinline void _OverflowCheck( const Instruction& inst, u64 result )
+__forceinline bool Inst::_OverflowCheck( u64 result )
 {
 	// This 32bit method can rely on the MIPS documented method of checking for
 	// overflow, which simply compares bit 32 (rightmost bit of the upper word),
 	// against bit 31 (leftmost of the lower word).
 
 	const u32* const resptr = (u32*)&result;
-
-	if( !!(resptr[1] & 1) != !!(resptr[0] & 0x80000000) )
-		throw R3000Exception::Overflow( inst );
-		
-	//SetSideEffects();		// because of overflow exception handling.
+	return ConditionalException( IopExcCode::Overflow, !!(resptr[1] & 1) != !!(resptr[0] & 0x80000000) );
 }
 
 /*********************************************************
@@ -48,26 +44,23 @@ static __forceinline void _OverflowCheck( const Instruction& inst, u64 result )
 
 __instinline void Inst::BGEZ()	// Branch if Rs >= 0
 {
-	SetBranchInst(); Imm();
-	if( GetRs_SL() >= 0 ) DoBranch();
+	DoConditionalBranch( GetRs_SL() >= 0 );
 }
 
 __instinline void Inst::BGTZ()	// Branch if Rs >  0
 {
-	SetBranchInst(); Imm();
-	if( GetRs_SL() > 0 ) DoBranch();
+	DoConditionalBranch( GetRs_SL() > 0 );
 }
 
 __instinline void Inst::BLEZ()	// Branch if Rs <= 0
 {
-	SetBranchInst(); Imm();
-	if( GetRs_SL() <= 0 ) DoBranch();
+	DoConditionalBranch( GetRs_SL() <= 0 );
 }
 
 __instinline void Inst::BLTZ()	// Branch if Rs <  0
 {
-	SetBranchInst(); Imm();
-	if( GetRs_SL() < 0 ) DoBranch();
+	
+	DoConditionalBranch( GetRs_SL() < 0 );
 }
 
 __instinline void Inst::BGEZAL()	// Branch if Rs >= 0 and link
@@ -89,14 +82,12 @@ __instinline void Inst::BLTZAL()	// Branch if Rs <  0 and link
 *********************************************************/
 __instinline void Inst::BEQ()		// Branch if Rs == Rt
 {
-	SetBranchInst(); Imm();
-	if( GetRs_SL() == GetRt_SL() ) DoBranch();
+	DoConditionalBranch( GetRs_SL() == GetRt_SL() );
 }
 
 __instinline void Inst::BNE()		// Branch if Rs != Rt
 {
-	SetBranchInst(); Imm();
-	if( GetRs_SL() != GetRt_SL() ) DoBranch();
+	DoConditionalBranch( GetRs_SL() != GetRt_SL() );
 }
 
 
@@ -106,8 +97,8 @@ __instinline void Inst::BNE()		// Branch if Rs != Rt
 *********************************************************/
 __instinline void Inst::J()
 {
-	SetBranchInst();
-	DoBranch( JumpTarget() );
+	m_IsBranchType = true;
+	m_NextPC = JumpTarget();
 }
 
 __instinline void Inst::JAL()
@@ -124,13 +115,11 @@ __instinline void Inst::JAL()
 
 __instinline void Inst::JR()
 {
-	SetBranchInst();
+	m_IsBranchType = true;
 	u32 target = GetRs_UL();
 
-	if( target & 3 )
-		throw R3000Exception::AddressError( *this, target, false );
-
-	DoBranch( target );
+	if( !ConditionalException( IopExcCode::AddrErr_Load, !!(target & 3) ) )
+		m_NextPC = target;
 }
 
 __instinline void Inst::JALR()
@@ -139,8 +128,8 @@ __instinline void Inst::JALR()
 	// ification and the actual R3000A chip implementation may have its own defined behavior.  Needs to
 	// be investigated on PSX/PS2 hardware. -- air
 
-	if( _Rs_ == _Rd_ )
-		Console::Error( "Bad JALR? (Rs == Rd) @ IOP/0x%08x", params iopRegs.pc );
+	//if( _Rs_ == _Rd_ )
+	//	Console::Error( "Bad JALR? (Rs == Rd) @ IOP/0x%08x", params iopRegs.pc );
 
 	SetLinkRd(); JR();
 }
@@ -155,8 +144,8 @@ __instinline void Inst::JALR()
 __instinline void Inst::ADDI()
 {
 	s64 result = (s64)GetRs_SL() + Imm();
-	_OverflowCheck( *this, result );
-	SetRt_SL( (s32)result );
+	if( !_OverflowCheck( result ) )
+		SetRt_SL( (s32)result );
 }
 
 // Rt = Rs + Im (no exception)
@@ -204,8 +193,8 @@ __instinline void Inst::ADD()
 {
 	s64 result = (s64)GetRs_SL() + GetRt_SL();
 	
-	_OverflowCheck( *this, result );
-	SetRd_SL( (s32)result );
+	if( !_OverflowCheck( result ) )
+		SetRd_SL( (s32)result );
 }
 
 // Rd = Rs - Rt		(Exception on Integer Overflow)
@@ -213,8 +202,8 @@ __instinline void Inst::SUB()
 {
 	s64 result = (s64)GetRs_SL() - GetRt_SL();
 
-	_OverflowCheck( *this, result );
-	SetRd_SL( (s32)result );
+	if( !_OverflowCheck( result ) )
+		SetRd_SL( (s32)result );
 }
 
 __instinline void Inst::ADDU()	// Rd = Rs + Rt
@@ -418,24 +407,22 @@ __instinline void Inst::MTLO()	// Lo = Rs
 __instinline void Inst::BREAK()
 {
 	RaiseException( IopExcCode::Breakpoint );
-	SetSideEffects();
 }
 
 __instinline void Inst::SYSCALL()
 {
 	RaiseException( IopExcCode::Syscall );
-	SetSideEffects();
 }
 
 __instinline void Inst::_RFE()
 {
 	iopRegs.CP0.n.Status = (iopRegs.CP0.n.Status & 0xfffffff0) | ((iopRegs.CP0.n.Status & 0x3c) >> 2);
-	//SetSideEffects();
 }
 
 __instinline void Inst::RFE()
 {
 	_RFE();		// defer to the virtual implementation
+	SetSideEffects();
 }
 
 /*********************************************************
@@ -461,10 +448,8 @@ __instinline void Inst::LH()
 {
 	const u32 addr = AddrImm();
 	
-	if( addr & 1 )
-		throw R3000Exception::AddressError( *this, addr, false );
-	
-	SetRt_SL( (s16)MemoryRead16( addr ) );
+	if( !ConditionalException( IopExcCode::AddrErr_Load, !!(addr & 1) ) )
+		SetRt_SL( (s16)MemoryRead16( addr ) );
 }
 
 // Load Halfword Unsigned (16 bits)
@@ -473,10 +458,8 @@ __instinline void Inst::LHU()
 {
 	const u32 addr = AddrImm();
 
-	if( addr & 1 )
-		throw R3000Exception::AddressError( *this, addr, false );
-
-	SetRt_UL( MemoryRead16( addr ) );
+	if( !ConditionalException( IopExcCode::AddrErr_Load, !!(addr & 1) ) )
+		SetRt_UL( MemoryRead16( addr ) );
 }
 
 // Load Word (32 bits)
@@ -485,10 +468,8 @@ __instinline void Inst::LW()
 {
 	const u32 addr = AddrImm();
 
-	if( addr & 3 )
-		throw R3000Exception::AddressError( *this, addr, false );
-
-	SetRt_SL( MemoryRead32( addr ) );
+	if( !ConditionalException( IopExcCode::AddrErr_Load, !!(addr & 3) ) )
+		SetRt_SL( MemoryRead32( addr ) );
 }
 
 // Load Word Left (portion loaded determined by address lower 2 bits)
@@ -542,20 +523,16 @@ __instinline void Inst::SH()
 {
 	const u32 addr = AddrImm();
 	
-	if( addr & 1 )
-		throw R3000Exception::AddressError( *this, addr, true );
-
-	MemoryWrite16( addr, GetRt_US() );
+	if( !ConditionalException( IopExcCode::AddrErr_Store, !!(addr & 1) ) )
+		MemoryWrite16( addr, GetRt_US() );
 }
 
 __instinline void Inst::SW()
 {
 	const u32 addr = AddrImm();
 
-	if( addr & 3 )
-		throw R3000Exception::AddressError( *this, addr, true );
-
-	MemoryWrite32( addr, GetRt_UL() );
+	if( !ConditionalException( IopExcCode::AddrErr_Store, !!(addr & 3) ) )
+		MemoryWrite32( addr, GetRt_UL() );
 }
 
 // Store Word Left
@@ -621,20 +598,12 @@ __instinline void Inst::MTC0()
 {
 	u32 oldfs = FsValue().UL;
 	SetFs_UL( GetRt_UL() );
-	
-	// Writes to the CP0.Status register qualifies for having side effects.
-	if( _Rd_ == 12 )
-		SetSideEffects();
 }
 
 __instinline void Inst::CTC0()
 {
 	u32 oldfs = FsValue().UL;
 	SetFs_UL( GetRt_UL() );
-
-	// Writes to the CP0.Status register qualifies for having side effects.
-	if( _Rd_ == 12 )
-		SetSideEffects();
 }
 
 /*********************************************************
