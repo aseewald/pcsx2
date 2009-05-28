@@ -123,6 +123,7 @@ public:
 
 	template< typename T > __noinline void operator()( const xDirectOrIndirect<T>& to, const xDirectOrIndirect<T>& from ) const
 	{
+		if( to == from ) return;
 		_DoI_helpermess( *this, to, from );
 	}
 

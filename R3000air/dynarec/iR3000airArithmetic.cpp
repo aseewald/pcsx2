@@ -29,10 +29,6 @@ IMPL_RecPlacebo( MULT );
 IMPL_RecPlacebo( MULTU );
 IMPL_RecPlacebo( DIVU );
 
-IMPL_RecPlacebo( SUB );
-IMPL_RecPlacebo( SUBU );
-
-
 
 // ------------------------------------------------------------------------
 namespace recADDI_ConstNone
@@ -40,6 +36,10 @@ namespace recADDI_ConstNone
 	static void RegMapInfo( IntermediateRepresentation& info )
 	{
 		RegMapInfo_Dynamic& rd( info.RegOpts.UseDynMode() );
+
+		rd.ExitMap.Rt = DynEM_Rs;
+		if( info.GetImm() == 0 )
+			rd.ExitMap.Rs = DynEM_Untouched;
 	}
 	
 	static void Emit( const IntermediateRepresentation& info )
@@ -71,13 +71,16 @@ namespace recADD_ConstNone
 
 		// Rs and Rt can be swapped freely:
 		info.RegOpts.CommutativeSources	= true;
-
-		// Force Rs to register to prevent Add Rs+Rt from being 2-way indirect.
-		rd[RF_Rs].ForceDirect	= true;
+		
+		//if( _Rs_ == _Rd_ )
 	}
 
 	static void Emit( const IntermediateRepresentation& info )
 	{
+		/*if( _Rs_ == _Rd_ )
+		{
+			xADD( DestRegRd, RegRt );
+		}*/
 		xADD( RegRs, RegRt );
 		info.MoveToRd( RegRs );
 	}
@@ -95,7 +98,32 @@ void InstAPI::ADDU()
 	API.ConstRs		= recADD_ConstNone::GetInterface;
 }
 
+// ------------------------------------------------------------------------
+namespace recSUB_ConstNone
+{
+	static void RegMapInfo( IntermediateRepresentation& info )
+	{
+		RegMapInfo_Dynamic& rd( info.RegOpts.UseDynMode() );
+	}
 
+	static void Emit( const IntermediateRepresentation& info )
+	{
+		xSUB( RegRt, RegRs );
+		info.MoveToRd( RegRs );
+	}
+
+	IMPL_GetInterface()
+}
+
+IMPL_RecInstAPI( SUB );
+
+// Map to ADD until such time we implement exception handling/checking for ADD.
+void InstAPI::SUBU()
+{
+	API.ConstNone	= recSUB_ConstNone::GetInterface;
+	API.ConstRt		= recSUB_ConstNone::GetInterface;
+	API.ConstRs		= recSUB_ConstNone::GetInterface;
+}
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 // Div on MIPS:
@@ -119,9 +147,9 @@ namespace recDIV_ConstNone
 		rs.EntryMap.Rs = ecx;
 		rs.EntryMap.Rt = eax;
 
-		rs.ExitMap.eax = eMap_Lo;
-		rs.ExitMap.ecx = eMap_Untouched;
-		rs.ExitMap.ebx = eMap_Untouched;
+		rs.ExitMap.eax = StrictEM_Lo;
+		rs.ExitMap.ecx = StrictEM_Untouched;
+		rs.ExitMap.ebx = StrictEM_Untouched;
 	}
 
 	static void Emit( const IntermediateRepresentation& info )
@@ -175,14 +203,14 @@ namespace recDIV_ConstRt
 		if( info.GetConstRt() == 0 )
 		{
 			rs.EntryMap.Rs = edx;
-			rs.ExitMap.edx = eMap_Untouched;
-			rs.ExitMap.ebx = eMap_Untouched;
+			rs.ExitMap.edx = StrictEM_Untouched;
+			rs.ExitMap.ebx = StrictEM_Untouched;
 			rs.ExitMapHiLo( edx, eax );
 		}
 		else if( info.GetConstRt() == -1 )
 		{
-			rs.ExitMap.ecx = eMap_Untouched;
-			rs.ExitMap.ebx = eMap_Untouched;
+			rs.ExitMap.ecx = StrictEM_Untouched;
+			rs.ExitMap.ebx = StrictEM_Untouched;
 			rs.ExitMapHiLo( edx, eax );
 		}
 		else
@@ -251,8 +279,8 @@ namespace recDIV_ConstRs
 			rs.ExitMapHiLo( edx, eax );
 		}
 
-		rs.ExitMap.ecx = eMap_Untouched;
-		rs.ExitMap.ebx = eMap_Untouched;
+		rs.ExitMap.ecx = StrictEM_Untouched;
+		rs.ExitMap.ebx = StrictEM_Untouched;
 	}
 	
 	static void Emit( const IntermediateRepresentation& info )

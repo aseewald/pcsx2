@@ -99,20 +99,20 @@ void recBlockItem::Assign( const recBlockItemTemp& src )
 	// Note: unchecked pages (ROM, ROM1, or other read-only non-RAM pages) specify a
 	// ramlen of 0.. so handle it accordingly:
 
-	if( src.ramlen != 0 )
+	/*if( src.ramlen != 0 )
 	{
 		ValidationCopy.ExactAlloc( src.ramlen );
 		memcpy( ValidationCopy.GetPtr(), src.ramcopy, src.ramlen*sizeof(u32) );
 	}
 	else
-		ValidationCopy.Dispose();
+		ValidationCopy.Dispose();*/
 
 	// Instruction / IL cache (which should never be zero)
 
 	if( src.instlen != 0 )
 	{
 		IL.ExactAlloc( src.instlen );
-		memcpy( IL.GetPtr(), src.inst, src.instlen*sizeof(InstructionConstOpt) );
+		memcpy( IL.GetPtr(), src.icex, src.instlen*sizeof(InstConstInfoEx) );
 	}
 	clears++;
 }
@@ -259,7 +259,8 @@ static u32 EventHandler()
 //    the same speed or faster anyway.
 // 
 
-extern void recIR_Pass2( const SafeArray<InstructionConstOpt>& iList );
+extern void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList );
+extern void recIR_Pass3( uint numinsts );
 
 static void recRecompile()
 {
@@ -281,8 +282,8 @@ static void recRecompile()
 		//Console::WriteLn( "IOP First-pass block at PC: 0x%08x  (total blocks=%d)", params masked_pc, m_xBlockMap.Blocks.GetLength() );
 		recIR_Block();
 
-		if( !IsIopRamPage( masked_pc ) )	// disable block checking for non-ram (rom, rom1, etc)
-			m_blockspace.ramlen = 0;
+		//if( !IsIopRamPage( masked_pc ) )	// disable block checking for non-ram (rom, rom1, etc)
+		//	m_blockspace.ramlen = 0;
 		
 		m_xBlockMap.Map[masked_pc] = m_xBlockMap.Blocks.GetLength();
 		m_xBlockMap.Blocks.New().Assign( m_blockspace );
@@ -320,6 +321,7 @@ static void recRecompile()
 			// Integrity Verified... Generate X86.
 
 			recIR_Pass2( mess.IL );
+			recIR_Pass3( mess.IL.GetLength() );
 			mess.IL.Dispose();
 		}
 		recIR_Block();
@@ -538,12 +540,16 @@ static void recShutdown()
 	safe_aligned_free( m_xBlockLutAlloc );
 }
 
+u8* m_xBlock_CurPtr = NULL;
+
 static void recReset()
 {
 	memset_8<0xcc, xBlockCacheSize>( m_xBlockCache );
 
 	for( int i=0; i<sizeof(xBlockLutAlloc)/4; ++i )
 		m_xBlockLut[i] = DynFunc::JITCompile;
+		
+	m_xBlock_CurPtr = m_xBlockCache;
 }
 
 static void recClear( u32, u32 )

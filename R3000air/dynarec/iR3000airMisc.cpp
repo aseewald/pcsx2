@@ -30,7 +30,6 @@ typedef InstructionRecMess InstAPI;
 
 IMPL_RecPlacebo( LUI );
 
-IMPL_RecPlacebo( MFHI );
 IMPL_RecPlacebo( MFLO );
 IMPL_RecPlacebo( MTHI );
 IMPL_RecPlacebo( MTLO );
@@ -40,10 +39,49 @@ IMPL_RecPlacebo( SYSCALL );
 IMPL_RecPlacebo( RFE );
 
 IMPL_RecPlacebo( CTC0 );
-IMPL_RecPlacebo( MTC0 );
 IMPL_RecPlacebo( CFC0 );
 IMPL_RecPlacebo( MFC0 );
 
 IMPL_RecPlacebo( Unknown );
+
+namespace recMFHI_ConstNone
+{
+	static void RegMapInfo( IntermediateRepresentation& info )
+	{
+		RegMapInfo_Dynamic& rd( info.RegOpts.UseDynMode() );
+		rd.ForceDirect.Hi	= true;
+		rd.ExitMap.Rd		= DynEM_Hi;
+		rd.ExitMap.Hi		= DynEM_Untouched;
+	}
+
+	static void Emit( const IntermediateRepresentation& info )
+	{
+		xMOV( DestRegRd, info.SrcField( RF_Hi ) );
+	}
+
+	IMPL_GetInterface()
+}
+
+IMPL_RecInstAPI( MFHI );
+
+
+namespace recMTC0_ConstNone
+{
+	static void RegMapInfo( IntermediateRepresentation& info )
+	{
+		RegMapInfo_Dynamic& rd( info.RegOpts.UseDynMode() );
+		rd.ForceDirect.Rt	= true;
+		rd.ExitMap.Rt		= DynEM_Untouched;
+	}
+
+	static void Emit( const IntermediateRepresentation& info )
+	{
+		xMOV( &iopRegs.CP0.r[info.Inst._Rd_], RegRt.GetReg() );
+	}
+
+	IMPL_GetInterface()
+}
+
+IMPL_RecInstAPI( MTC0 );
 
 }

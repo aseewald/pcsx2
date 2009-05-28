@@ -114,14 +114,14 @@ const xRegisterMMX
 const xAddressReg
 	eax( 0 ), ebx( 3 ),
 	ecx( 1 ), edx( 2 ),
-	esi( 6 ), edi( 7 ),
-	ebp( 5 ), esp( 4 );
+	esp( 4 ), ebp( 5 ),
+	esi( 6 ), edi( 7 );
 
 const xRegister16
 	ax( 0 ), bx( 3 ),
 	cx( 1 ), dx( 2 ),
-	si( 6 ), di( 7 ),
-	bp( 5 ), sp( 4 );
+	sp( 4 ), bp( 5 ),
+	si( 6 ), di( 7 );
 
 const xRegister8
 	al( 0 ),

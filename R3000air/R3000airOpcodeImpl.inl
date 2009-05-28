@@ -143,7 +143,7 @@ __instinline void Inst::JALR()
 // Rt = Rs + Im 	(Exception on Integer Overflow)
 __instinline void Inst::ADDI()
 {
-	s64 result = (s64)GetRs_SL() + Imm();
+	s64 result = (s64)GetRs_SL() + GetImm();
 	if( !_OverflowCheck( result ) )
 		SetRt_SL( (s32)result );
 }
@@ -153,35 +153,35 @@ __instinline void Inst::ADDI()
 // overflow exception check.
 __instinline void Inst::ADDIU()
 {
-	SetRt_SL( GetRs_SL() + Imm() );
+	SetRt_SL( GetRs_SL() + GetImm() );
 }
 
 __instinline void Inst::ANDI()	// Rt = Rs And Im
 {
-	SetRt_UL( GetRs_UL() & ImmU() );
+	SetRt_UL( GetRs_UL() & GetImmU() );
 }
 
 __instinline void Inst::ORI()		// Rt = Rs Or  Im
 {
-	SetRt_UL( GetRs_UL() | ImmU() );
+	SetRt_UL( GetRs_UL() | GetImmU() );
 }
 
 __instinline void Inst::XORI()	// Rt = Rs Xor Im
 {
-	SetRt_UL( GetRs_UL() ^ ImmU() );
+	SetRt_UL( GetRs_UL() ^ GetImmU() );
 }
 
 __instinline void Inst::SLTI()	// Rt = Rs < Im		(Signed)
 {
 	// Note: C standard guarantees conditionals resolve to 0 or 1 when cast to int.
-	SetRt_SL( GetRs_SL() < Imm() );
+	SetRt_SL( GetRs_SL() < GetImm() );
 }
 
 __instinline void Inst::SLTIU()	// Rt = Rs < Im		(Unsigned)
 {
 	// Note: Imm is the 16 bit value SIGN EXTENDED into 32 bits, which is why we
 	// cannot use ImmU() here!!
-	SetRt_UL( GetRs_UL() < (u32)Imm() ); 
+	SetRt_UL( GetRs_UL() < (u32)GetImm() ); 
 }
 
 /*********************************************************
@@ -323,17 +323,17 @@ __instinline void Inst::MULTU()
 *********************************************************/
 __instinline void Inst::SLL()		// Rd = Rt << sa
 {
-	SetRd_UL( GetRt_UL() << Sa() );
+	SetRd_UL( GetRt_UL() << GetSa() );
 }
 
 __instinline void Inst::SRA()		// Rd = Rt >> sa (arithmetic) [signed]
 {
-	SetRd_SL( GetRt_SL() >> Sa() );
+	SetRd_SL( GetRt_SL() >> GetSa() );
 }
 
 __instinline void Inst::SRL()		// Rd = Rt >> sa (logical) [unsigned]
 {
-	SetRd_UL( GetRt_UL() >> Sa() );
+	SetRd_UL( GetRt_UL() >> GetSa() );
 }
 
 /*********************************************************
@@ -367,7 +367,7 @@ __instinline void Inst::SRLV()	// Rd = Rt >> rs (logical)
 *********************************************************/
 __instinline void Inst::LUI()	// Rt = Im << 16  (lower 16 bits zeroed)
 {
-	SetRt_SL( Imm() << 16 );
+	SetRt_SL( GetImm() << 16 );
 }
 
 /*********************************************************

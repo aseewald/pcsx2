@@ -155,8 +155,10 @@ namespace recSLT_ConstNone
 		RegMapInfo_Dynamic& rd( info.RegOpts.UseDynMode() );
 		
 		info.RegOpts.CommutativeSources = true;
-		rd.AllocTemp[0] = true;
-		rd[RF_Rd].ExitMap = DynEM_Temp0;
+		rd.AllocTemp[0]	= true;
+		rd.ExitMap.Rs	= DynEM_Untouched;
+		rd.ExitMap.Rt	= DynEM_Untouched;
+		rd.ExitMap.Rd	= DynEM_Temp0;
 	}
 
 	static JccComparisonType CompareRsRt( bool isSwapped, bool isSigned )
@@ -170,7 +172,7 @@ namespace recSLT_ConstNone
 	template< bool IsSigned >
 	static void Emit( const IntermediateRepresentation& info )
 	{
-		xCMP( RegRs, RegRt );
+		xCMP( RegRt, RegRs );
 		xSET( CompareRsRt( info.IsSwappedSources, IsSigned ), tmp0reg8 );
 
 		if( DestRegRd.IsDirect() )
@@ -207,14 +209,15 @@ namespace recNOR_ConstNone
 	{
 		RegMapInfo_Dynamic& rd( info.RegOpts.UseDynMode() );
 		info.RegOpts.CommutativeSources = true;
-		rd[RF_Rs].ForceDirect = true;
-		//rd[RF_Rs].ExitMap = DynEM_Rd;
+		rd.ExitMap.Rt = DynEM_Untouched;
+		rd.ExitMap.Rd = DynEM_Rs;
 	}
 
 	static void Emit( const IntermediateRepresentation& info )
 	{
 		xOR( RegRs, RegRt );
 		xNOT( RegRs );
+		xMOV( DestRegRd, RegRs );
 	}
 
 	IMPL_GetInterface()

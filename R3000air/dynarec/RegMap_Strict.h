@@ -24,32 +24,14 @@ using namespace x86Emitter;
 
 enum ExitMapType
 {
-	eMap_Rd = 0,
-	eMap_Rt,
-	eMap_Rs,
-	eMap_Hi,
-	eMap_Lo,
+	StrictEM_Rd = 0,
+	StrictEM_Rt,
+	StrictEM_Rs,
+	StrictEM_Hi,
+	StrictEM_Lo,
 
-	eMap_Invalid,		// specifies the register is clobbered or in an invalid state on exit
-	eMap_Untouched,		// specifies register is untouched -- previous mapping is retained on exit
-};
-
-// ------------------------------------------------------------------------
-//
-struct StrictRegMapInfo_Entry
-{
-	xRegister32 EntryMap;
-
-	// Specifies known "valid" mappings on exit from the instruction emitter.  The recompiler
-	// will use this to map registers more efficiently and avoid unnecessary register swapping.
-	// Note: this is a suggestion only, and the recompiler reserves the right to map destinations
-	// however it sees fit.
-	xRegister32 ExitMap;
-	
-	StrictRegMapInfo_Entry() :
-		EntryMap(), ExitMap()
-	{
-	}
+	StrictEM_Invalid,		// specifies the register is clobbered or in an invalid state on exit
+	StrictEM_Untouched,		// specifies register is untouched -- previous mapping is retained on exit
 };
 
 // ------------------------------------------------------------------------
@@ -74,7 +56,7 @@ public:
 	{
 		// EntryMap will auto-init to Empties, but ExitMap needs some love:
 		for( int i=0; i<ExitMap.Length(); ++i )
-			ExitMap[(xRegister32)i] = eMap_Invalid;
+			ExitMap[(xRegister32)i] = StrictEM_Invalid;
 	}
 
 	void EntryMapHiLo( const xRegister32& srchi, const xRegister32& srclo )
@@ -85,14 +67,14 @@ public:
 
 	void ExitMapHiLo( const xRegister32& srchi, const xRegister32& srclo )
 	{
-		ExitMap[srchi] = eMap_Hi;
-		ExitMap[srclo] = eMap_Lo;
+		ExitMap[srchi] = StrictEM_Hi;
+		ExitMap[srclo] = StrictEM_Lo;
 	}
 	
 	void ClobbersNothing()
 	{
 		for( int i=0; i<ExitMap.Length(); ++i )
-			ExitMap[(xRegister32)i] = eMap_Untouched;
+			ExitMap[(xRegister32)i] = StrictEM_Untouched;
 	}
 };
 

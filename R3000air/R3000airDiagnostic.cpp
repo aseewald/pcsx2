@@ -264,11 +264,13 @@ InstParamType InstructionOptimizer::AssignFieldParam() const
 //
 void InstDiag::GetParamLayout( InstParamType iparam[3] ) const
 {
-	// MIPS lays all instructions out in the same basic pattern:
-	//   InstName  [Rd],[Rt],[Rs]
-	// .. where Rd, Rt, and Rs are all fairly optional, but always listed in that order
-	// such that Rd is always before Rs or Rt (if present, and Rs is always after Rd and
-	// Rt (if present).
+	// MIPS lays all instructions out in one of a few the basic patterns:
+	//   InstName  Rd,[Rs],[Rt]
+	//   InstName  Rt,[Rs]
+	//   InstName  Rs
+	//
+	// Fields in brackets are optional, and any instruction with less than than 3
+	// parameters could have either/or Imm or Sa parameter.
 	//
 	// Complication: Handling of address instructions, since the address parameters must
 	// be handled in a special way.
@@ -286,13 +288,30 @@ void InstDiag::GetParamLayout( InstParamType iparam[3] ) const
 	{
 		int cur = 0;	// current 'active' parameter
 
-		iparam[cur] = AssignFieldParam<RF_Rd>(); if( iparam[cur] != Param_None ) cur++;
-		iparam[cur] = AssignFieldParam<RF_Rt>(); if( iparam[cur] != Param_None ) cur++;
-		iparam[cur] = AssignFieldParam<RF_Rs>(); if( iparam[cur] != Param_None ) cur++;
+		iparam[cur] = AssignFieldParam<RF_Rd>();
+		if( iparam[cur] != Param_None )
+		{
+			// Format could be:
+			//   InstName  Rd,[Rs],[Rt]
+			//   InstName  Rd,[Rt]
+
+			cur++;
+			iparam[cur] = AssignFieldParam<RF_Rs>(); if( iparam[cur] != Param_None ) cur++;
+			iparam[cur] = AssignFieldParam<RF_Rt>(); if( iparam[cur] != Param_None ) cur++;
+		}
+		else
+		{
+			// Format should be either:
+			//   InstName  Rt,[Rs]
+			//   InstName  Rs
+
+			iparam[cur] = AssignFieldParam<RF_Rt>(); if( iparam[cur] != Param_None ) cur++;
+			iparam[cur] = AssignFieldParam<RF_Rs>(); if( iparam[cur] != Param_None ) cur++;
+		}
 
 		if( WritesHi() && WritesLo() )
 		{
-			iparam[cur++] = Param_HiLo;		// Used DIV / MULT instructions
+			iparam[cur++] = Param_HiLo;		// Used by DIV / MULT instructions [target only]
 		}
 		else
 		{
@@ -300,15 +319,18 @@ void InstDiag::GetParamLayout( InstParamType iparam[3] ) const
 			iparam[cur] = AssignFieldParam<RF_Lo>(); if( iparam[cur] != Param_None ) cur++;
 		}
 
-		// BranchType part checks for conditional branches (Which always have an Imm but don't 
-		// currently set the ReadsImm flag)
-		if( m_ReadsImm ) //|| (IsBranchType() && ReadsRs() && ReadsRt()) )
+		if( m_ReadsSa )
 		{
+			// reading of Sa should only occur on instructions with 2 valid params above.
+			jASSUME( cur < 3 );
+			iparam[cur++] = Param_Sa;
+		}
+		else if( m_ReadsImm )
+		{
+			// reading of Imm8 should only occur on instructions with 2 valid params above.
 			jASSUME( cur < 3 );
 			iparam[cur++] = IsBranchType() ? Param_BranchOffset : Param_Imm;
 		}
-
-		jASSUME( cur <= 3 );
 	}
 }
 

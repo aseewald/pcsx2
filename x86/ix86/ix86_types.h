@@ -491,6 +491,18 @@ __forceinline void xWrite( T val )
 
 		__forceinline ModSibStrict<OperandType> operator+( const s32 imm ) const { return ModSibStrict<OperandType>( *this ).Add( imm ); }
 		__forceinline ModSibStrict<OperandType> operator-( const s32 imm ) const { return ModSibStrict<OperandType>( *this ).Add( -imm ); }
+
+		bool operator==( const ModSibStrict<OperandType>& src ) const
+		{
+			return
+				( Base == src.Base ) && ( Index == src.Index ) &&
+				( Scale == src.Scale ) && ( Displacement == src.Displacement );
+		}
+
+		bool operator!=( const ModSibStrict<OperandType>& src ) const
+		{
+			return !operator==( src );
+		}
 	};
 
 	//////////////////////////////////////////////////////////////////////////////////////////
@@ -597,7 +609,19 @@ __forceinline void xWrite( T val )
 		const ModSibStrict<OperandType>& GetMem() const { return m_MemIndirect; }
 		bool IsDirect() const { return !m_RegDirect.IsEmpty(); }
 		bool IsIndirect() const { return m_RegDirect.IsEmpty(); }
+
+		bool operator==( const xDirectOrIndirect<OperandType>& src ) const
+		{
+			return IsDirect() ? 
+				(m_RegDirect == src.m_RegDirect) :
+				(m_MemIndirect == src.m_MemIndirect);
+		}
 		
+		bool operator!=( const xDirectOrIndirect<OperandType>& src ) const 
+		{
+			return !operator==( src );
+		}
+
 		bool operator==( const xRegister<OperandType>& src ) const	{ return (m_RegDirect == src); }
 		bool operator!=( const xRegister<OperandType>& src ) const	{ return (m_RegDirect == src); }
 	};

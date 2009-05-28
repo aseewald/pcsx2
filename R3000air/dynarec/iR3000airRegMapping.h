@@ -29,43 +29,76 @@ template< typename ContentType >
 class xRegisterArray32
 {
 public:
-	ContentType eax, ecx, edx, ebx, ebp, esp, esi, edi;
+	ContentType eax, ecx, edx, ebx, esp, ebp, esi, edi;
 
 	int Length() const { return iREGCNT_GPR; }
+
+	xRegister32 GetRegAt( uint idx ) const
+	{
+		return xRegister32( idx );
+	}
 
 	__forceinline ContentType& operator[]( const xRegister32& src )
 	{
 		jASSUME( !src.IsEmpty() );
-		switch( src.Id )
-		{
-			case 0: return eax;
-			case 1: return ecx;
-			case 2: return edx;
-			case 3: return ebx;
-			case 4: return ebp;
-			case 5: return esp;
-			case 6: return esi;
-			case 7: return edi;
-			
-			jNO_DEFAULT
-		}
+		return (&eax)[src.Id];
 	}
 
 	__forceinline const ContentType& operator[]( const xRegister32& src ) const 
 	{
 		jASSUME( !src.IsEmpty() );
-		switch( src.Id )
+		return (&eax)[src.Id];
+	}
+
+	__forceinline ContentType& operator[]( uint idx )
+	{
+		jASSUME( idx < 4 );
+		return (&eax)[idx];
+	}
+
+	__forceinline const ContentType& operator[]( uint idx ) const
+	{
+		jASSUME( idx < 4 );
+		return (&eax)[idx];
+	}
+};
+
+// ------------------------------------------------------------------------
+// An array of valid temp registers - eax, ebx, ecx, and edx.  The other four x86
+// registers have special defined purposes.
+//
+class xMappableRegs32
+{
+public:
+	xMappableRegs32() {}
+
+	int Length() const { return 4; }
+
+	__forceinline const xRegister32& operator[]( uint idx )
+	{
+		switch( idx )
 		{
-			case 0: return eax;
-			case 1: return ecx;
-			case 2: return edx;
-			case 3: return ebx;
-			case 4: return ebp;
-			case 5: return esp;
-			case 6: return esi;
-			case 7: return edi;
+			//case 0: return edi;		// is hard-mapped to an index reg.
+			case 0: return edx;
+			case 1: return eax;
+			case 2: return ebx;
+			case 3: return ecx;
 			
-			jNO_DEFAULT
+			jNO_DEFAULT		// assert/exception? index was out of range..
+		}
+	}
+
+	__forceinline const xRegister32& operator[]( uint idx ) const
+	{
+		switch( idx )
+		{
+			//case 0: return edi;		// is hard-mapped to an index reg.
+			case 0: return edx;
+			case 1: return eax;
+			case 2: return ebx;
+			case 3: return ecx;
+
+			jNO_DEFAULT		// assert/exception? index was out of range..
 		}
 	}
 };
@@ -82,32 +115,33 @@ public:
 
 	int Length() const { return 4; }
 
+	xRegister32 GetRegAt( uint idx ) const
+	{
+		return xRegister32( idx );
+	}
+	
 	__forceinline ContentType& operator[]( const xRegister32& src )
 	{
 		jASSUME( !src.IsEmpty() );
-		switch( src.Id )
-		{
-			case 0: return eax;
-			case 1: return ecx;
-			case 2: return edx;
-			case 3: return ebx;
-			
-			jNO_DEFAULT		// assertion here means someone tried to use a register that's not ok for temp'ing.
-		}
+		return (&eax)[src.Id];
 	}
 
 	__forceinline const ContentType& operator[]( const xRegister32& src ) const 
 	{
 		jASSUME( !src.IsEmpty() );
-		switch( src.Id )
-		{
-			case 0: return eax;
-			case 1: return ecx;
-			case 2: return edx;
-			case 3: return ebx;
-			
-			jNO_DEFAULT		// assertion here means someone tried to use a register that's not ok for temp'ing.
-		}
+		return (&eax)[src.Id];
+	}
+
+	__forceinline ContentType& operator[]( uint idx )
+	{
+		jASSUME( idx < 4 );
+		return (&eax)[idx];
+	}
+
+	__forceinline const ContentType& operator[]( uint idx ) const
+	{
+		jASSUME( idx < 4 );
+		return (&eax)[idx];
 	}
 };
 
@@ -117,6 +151,8 @@ template< typename T >
 struct RegFieldArray
 {
 	T Rd, Rt, Rs, Hi, Lo;
+
+	int Length() const { return 5; }
 
 	__forceinline T& operator[]( RegField_t idx )
 	{
@@ -152,7 +188,7 @@ struct RegFieldArray
 		return operator[]( (RegField_t)idx );
 	}
 
-	__forceinline const T& operator[]( int idx ) const
+	__forceinline const T& operator[]( uint idx ) const
 	{
 		jASSUME( idx < RF_Count );
 		return operator[]( (RegField_t)idx );
@@ -183,23 +219,13 @@ public:
 	bool CommutativeSources;
 
 	RegisterMappingOptions() :
-	IsStrictMode( false ),
-		CommutativeSources( false )
+		IsStrictMode( false )
+	,	CommutativeSources( false )
 	{
 	}
 
 	RegMapInfo_Dynamic& UseDynMode()		{ IsStrictMode = false; return DynMap; }
 	RegMapInfo_Strict& UseStrictMode()		{ IsStrictMode = true; return StatMap; }
-
-	/*bool IsRequiredRegOnEntry( const xRegister32& reg ) const
-	{
-	for( int i=0; i<RF_Count; ++i )
-	{
-	if( GprFields[i].EntryMap == reg ) return true;
-	}
-
-	return false;
-	}*/
 };
 
 }

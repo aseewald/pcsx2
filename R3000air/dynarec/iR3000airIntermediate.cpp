@@ -54,7 +54,7 @@ void recIR_Block()
 	bool termBlock = false;
 	bool skipTerm = false;		// used to skip termination of const branches
 
-	m_blockspace.ramlen = 0;
+	//m_blockspace.ramlen = 0;
 	m_blockspace.instlen = 0;
 
 	bool gpr_IsConst[34] = { true, false };	// GPR0 is always const!
@@ -62,13 +62,13 @@ void recIR_Block()
 	do 
 	{
 		termBlock = iopRegs.IsDelaySlot;		// terminate blocks after delay slots
-		
+
 		Opcode opcode( iopMemDirectRead32( iopRegs.pc ) );
-		m_blockspace.ramcopy[m_blockspace.ramlen++] = opcode.U32;
+		//m_blockspace.ramcopy[m_blockspace.ramlen++] = opcode.U32;
 
 		if( opcode.U32 == 0 )	// Iggy on the NOP please!  (Iggy Nop!)
 		{
-			if( iopRegs.cycle > 0x470000 )
+			//if( iopRegs.cycle > 0x470000 )
 				PSXCPU_LOG( "NOP%s", iopRegs.IsDelaySlot ? "\n" : "" );
 
 			iopRegs.pc			 = iopRegs.VectorPC;
@@ -77,11 +77,11 @@ void recIR_Block()
 		}
 		else
 		{
-			InstructionConstOpt& inst( m_blockspace.inst[m_blockspace.instlen] );
+			InstructionConstOpt& inst( m_blockspace.icex[m_blockspace.instlen].inst );
 			inst.Assign( opcode, gpr_IsConst );
 			inst.Process();
 
-			if( (varLog & 0x00100000) && (iopRegs.cycle > 0x470000) )
+			if( (varLog & 0x00100000) ) //&& (iopRegs.cycle > 0x470000) )
 			{
 				inst.GetDisasm( m_disasm );
 				inst.GetValuesComment( m_comment );
@@ -99,7 +99,23 @@ void recIR_Block()
 			{
 				bool isConstWrite = inst.UpdateConstStatus( gpr_IsConst );
 				if( !isConstWrite || inst.WritesMemory() || inst.HasSideEffects() )
+				{
+					InstConstInfoEx& hunnypie( (m_blockspace.icex[m_blockspace.instlen]) );
+					for( int i=0; i<34; ++i )
+					{
+						if( !gpr_IsConst[i] )
+						{
+							hunnypie.m_IsConstBits[i/8]	&= ~(1 << (i&7));
+						}
+						else
+						{
+							hunnypie.m_IsConstBits[i/8]	|= 1 << (i&7);
+							hunnypie.ConstVal[i]		 = iopRegs[(MipsGPRs_t)i].UL;
+						}
+					}
+
 					m_blockspace.instlen++;
+				}
 			}
 
 			// prep the iopRegs for the next instruction fetch -->

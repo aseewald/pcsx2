@@ -22,62 +22,26 @@ namespace R3000A {
 
 using namespace x86Emitter;
 
+// ------------------------------------------------------------------------
+// Implementation note: I've aligned the values of the enumeration to be in synch with
+// other Rs / Rt / Hi / Lo enumerations you'll spot around these parts.
+//
+//  * Rd not included since it's never mapped on entry/source.	
+//
 enum DynExitMap_t
 {
-	DynEM_Unmapped = -1,
-	DynEM_Temp0 = 0,
+	DynEM_Rt = 1,
+	DynEM_Rs,
+	DynEM_Hi,
+	DynEM_Lo,
+
+	DynEM_Invalid,
+	DynEM_Untouched,
+
+	DynEM_Temp0 = 8,
 	DynEM_Temp1,
 	DynEM_Temp2,
 	DynEM_Temp3,
-	
-	DynEM_Rs,
-	DynEM_Rt,
-	DynEM_Hi,
-	DynEM_Lo,
-	
-	// Rd not included since it's never mapped on entry/source.	
-};
-
-static const int RegCount_Mappable = 5;
-static const int RegCount_Temps = 4;
-
-// ------------------------------------------------------------------------
-// Describes register mapping information, on a per-gpr or per-field (Rs Rd Rt) basis.
-//
-struct DynRegMapInfo_Entry
-{
-	// Tells the recompiler that the reg must be force-loaded into an x86 register on entry.
-	// (recompiler will flush another reg if needed, and load this field in preparation for
-	// Emit entry).  The x86 register will be picked by the recompiler.
-	// Note: ForceDirect and ForceIndirect are mutually exclusive.  Setting both to true
-	// is an error, and will cause an assertion/exception.
-	bool ForceDirect;
-
-	// Tells recompiler the given instruction register field must be forced to Memory
-	// (flushed).  This is commonly used as an optimization guide for cases where all x86
-	// registers are modified by the instruction prior to the instruction using Rs [LWL/SWL
-	// type memory ops, namely].
-	// Note: ForceDirect and ForceIndirect are mutually exclusive.  Setting both to true
-	// is an error, and will cause an assertion/exception.
-	bool ForceIndirect;
-
-	// Specifies known "valid" mappings on exit from the instruction emitter.  The recompiler
-	// will use this to map registers more efficiently and avoid unnecessary register swapping.
-	// Notes:
-	//   * this is a suggestion only, and the recompiler reserves the right to map destinations
-	//     however it sees fit.
-	//
-	//   * By default the recompiler will assume (prefer) the register used for Rs as matching
-	//     Rt/Rd on exit, which is what most instructions do.
-	//
-	DynExitMap_t ExitMap;
-
-	DynRegMapInfo_Entry() :
-		ForceDirect( false ),
-		ForceIndirect( false ),
-		ExitMap( DynEM_Unmapped )
-	{
-	}
 };
 
 // ------------------------------------------------------------------------
@@ -85,9 +49,13 @@ struct DynRegMapInfo_Entry
 class RegMapInfo_Dynamic
 {
 public:
+	// Set to true to force the specified field into a register.  Note: by default Rs
+	// is auto-forced into a register!  Set it to false here to disable that behavior.
+	RegFieldArray<bool> ForceDirect;
+	
 	// Array contents cover: Forced Direct or Indirect booleans for each GPR field, and
 	// output register mappings for the dest fields.
-	RegFieldArray<DynRegMapInfo_Entry> GprFields;
+	RegFieldArray<DynExitMap_t> ExitMap;
 
 	// Set any of these true to allocate a temporary register to that slot.  Allocated
 	// registers are always from the pool of eax, edx, ecx, ebx -- so it's assured your
@@ -96,29 +64,34 @@ public:
 	// Note: Setting all four of these true will only work if you are *not* using other
 	// forms of register mapping, since you can't map eax (for example) and expect to
 	// get four temp regs as well.  The recompiler will assert/exception.
-	bool AllocTemp[4];
+	int AllocTemp[4];
 
+	// Intended for internal use by the RecMapping loginc only.
 	// Each entry corresponds to the register in the m_tempRegs array.
 	xRegisterArray32<bool> xRegInUse;
 
 public:
-	__forceinline DynRegMapInfo_Entry& operator[]( RegField_t idx )
-	{
-		return GprFields[idx];
-	}
-
-	__forceinline const DynRegMapInfo_Entry& operator[]( RegField_t idx ) const
-	{
-		return GprFields[idx];
-	}
 
 	RegMapInfo_Dynamic()
 	{
+		memzero_obj( ForceDirect );
+		ForceDirect.Rs = true;
+		
+		for( int i=0; i<ExitMap.Length(); ++i )
+			ExitMap[(DynExitMap_t)i] = DynEM_Untouched;
+		
 		memzero_obj( AllocTemp );
 		
-		for( int i=0; i<xRegInUse.Length(); ++i )
-			xRegInUse[(xRegister32)i] = false;
+		xRegInUse[eax] = false;
+		xRegInUse[ecx] = false;
+		xRegInUse[edx] = false;
+		xRegInUse[ebx] = false;
 
+		// Reserved / Unusable
+		xRegInUse[esi] = true;
+		xRegInUse[edi] = true;
+		xRegInUse[ebp] = true;
+		xRegInUse[esp] = true;
 	}
 };
 

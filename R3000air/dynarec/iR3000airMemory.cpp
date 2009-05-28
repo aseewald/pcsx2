@@ -148,16 +148,16 @@ namespace recLoad_ConstNone
 	{
 		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
 		rs.EntryMap.Rs = ecx;
-		rs.ExitMap.eax = eMap_Rt;
+		rs.ExitMap.eax = StrictEM_Rt;
 	}
 
 	template< typename T >
 	static void Emit( const IntermediateRepresentation& info )
 	{
 		// Make sure recompiler did it's job:
-		jASSUME( info.Src[RF_Rs].GetReg() == ecx );
+		jASSUME( RegRs == ecx );
 
-		xMOV( eax, info.Src[RF_Rs] );
+		xMOV( eax, ecx );
 		xAND( eax, AddressMask );
 		xSHR( eax, PageBitShift );
 
@@ -168,11 +168,11 @@ namespace recLoad_ConstNone
 		DynGen_IndirectDispatchJump<T>( 0, info.SignExtendsResult() );
 
 		// Direct Access on Load Operation:
-		xAND( info.Src[RF_Rs], PageMask );
-		info.SignExtendedMove( eax, ptrT[xAddressReg(info.Src[RF_Rs].GetReg())+eax] );
+		xAND( ecx, PageMask );
+		info.SignExtendedMove( eax, ptrT[ecx+eax] );
 
 		*writeback = (uptr)xGetPtr();		// return target for indirect's call/ret
-		//info.MoveToRt( eax );				// recompiler handles it for us
+		info.MoveToRt( eax );				// recompiler handles it for us
 	}
 	
 	IMPL_GetInterfaceTee( typename )
@@ -190,11 +190,11 @@ namespace recLoad_ConstRs
 		// ecx/edx get clobbered by the indirect handler, but are preserved on direct memOps:
 		if( constinfo.xlated > HandlerId_Maximum )
 		{
-			rs.ExitMap.ecx = eMap_Untouched;
-			rs.ExitMap.edx = eMap_Untouched;
+			rs.ExitMap.ecx = StrictEM_Untouched;
+			rs.ExitMap.edx = StrictEM_Untouched;
 		}
 
-		rs.ExitMap.eax = eMap_Rt;
+		rs.ExitMap.eax = StrictEM_Rt;
 	}
 
 	template< typename T >
@@ -212,7 +212,7 @@ namespace recLoad_ConstRs
 			CallIndirectDispatcher<T>( 0, info.SignExtendsResult() );
 			info.SignExtendEax<T>();
 		}
-		//info.MoveToRt( eax );
+		info.MoveToRt( eax );
 	}
 
 	IMPL_GetInterfaceTee( typename )
@@ -231,7 +231,7 @@ namespace recLoadWord_LorR_ConstNone
 		// might as well force the rec to flush it, and then reload it when ready.
 
 		rs.EntryMap.Rs = ecx;
-		rs.ExitMap.eax = eMap_Rt;
+		rs.ExitMap.eax = StrictEM_Rt;
 	}
 
 	template< bool IsLoadRight >
@@ -291,8 +291,8 @@ namespace recLoadWord_LorR_ConstNone
 			xSHL( eax, cl );
 			xOR( eax, ebx );
 		}
-		
-		// Recompiler reads eax into Rt for us.
+
+		info.MoveToRt( eax );
 	}
 
 	IMPL_GetInterfaceTee( bool )
@@ -308,21 +308,21 @@ namespace recLoadWord_LorR_ConstRs
 		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
 
 		rs.EntryMap.Rt = ebx;		// use ebx since it's preserved across indirect handlers.
-		rs.ExitMap.eax = eMap_Rt;
+		rs.ExitMap.eax = StrictEM_Rt;
 
 		// Note: ecx/edx are preserved for direct ops:
 		const ConstLoadOpInfo constinfo( info );
 		if( constinfo.xlated > HandlerId_Maximum )
 		{
-			rs.ExitMap.edx = eMap_Untouched;
-			rs.ExitMap.ecx = eMap_Untouched;
+			rs.ExitMap.edx = StrictEM_Untouched;
+			rs.ExitMap.ecx = StrictEM_Untouched;
 		}
 	}
 	
 	template< bool IsLoadRight >
 	static void Emit( const IntermediateRepresentation& info )
 	{
-		jASSUME( info.Src[RF_Rt] == ebx );
+		jASSUME( RegRt == ebx );
 
 		const ConstLoadOpInfo constinfo( info );
 		const uint shift		= (constinfo.addr & 3) << 3;
@@ -348,7 +348,7 @@ namespace recLoadWord_LorR_ConstRs
 
 		xAND( ebx, rtmask );
 		xOR( eax, ebx );
-		xMOV( info.Dest[RF_Rt], eax );
+		info.MoveToRt( eax );
 	}
 
 	IMPL_GetInterfaceTee( bool )
@@ -369,9 +369,8 @@ namespace recStore_ConstNone
 	static void Emit( const IntermediateRepresentation& info )
 	{
 		// Make sure recompiler did it's job:
-		jASSUME( info.Src[RF_Rs].GetReg() == ecx );
-		jASSUME( info.Src[RF_Rt].GetReg() == edx );
-
+		jASSUME( RegRs == ecx );
+		jASSUME( RegRt == edx );
 		xADD( ecx, info.ixImm );
 
 		xMOV( eax, ecx );
@@ -411,7 +410,7 @@ namespace recStore_ConstRs
 			rs.ClobbersNothing();
 		}
 		else
-			rs.ExitMap.ebx = eMap_Untouched;
+			rs.ExitMap.ebx = StrictEM_Untouched;
 	}
 
 	template< typename T >
@@ -449,7 +448,7 @@ namespace recStoreWord_LorR_ConstNone
 	template< bool IsStoreRight >
 	static void Emit( const IntermediateRepresentation& info )
 	{
-		jASSUME( info.Src[RF_Rs].GetReg() == ecx );
+		jASSUME( RegRs == ecx );
 		xADD( ecx, info.ixImm );
 
 		xMOV( eax, ecx );
@@ -538,8 +537,8 @@ namespace recStoreWord_LorR_ConstRs
 		const ConstLoadOpInfo constinfo( info );
 		if( constinfo.xlated > HandlerId_Maximum )
 		{
-			rs.ExitMap.ecx = eMap_Untouched;
-			rs.ExitMap.ebx = eMap_Untouched;
+			rs.ExitMap.ecx = StrictEM_Untouched;
+			rs.ExitMap.ebx = StrictEM_Untouched;
 		}
 	}
 

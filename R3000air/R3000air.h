@@ -449,6 +449,10 @@ public:
 	u32 Funct() const		{ return _Opcode_.Funct(); }
 	u32 Basecode() const	{ return _Opcode_.Basecode(); }
 	u32 Sa() const			{ return _Opcode_.Sa(); }
+	// Sign-extended immediate
+	s32 Imm()				{ return _Opcode_.Imm(); }
+	// Zero-extended immediate
+	u32 ImmU()				{ return _Opcode_.ImmU(); }
 
 	// Returns the target portion of the opcode (26 bit immediate)
 	uint Target() const		{ return _Opcode_.Target(); }
@@ -514,11 +518,13 @@ protected:
 	// ------------------------------------------------------------------------
 	// Begin Virtual API
 
+	virtual u32 GetSa()		{ return _Opcode_.Sa(); }
+
 	// Sign-extended immediate
-	virtual s32 Imm()		{ return _Opcode_.Imm(); }
+	virtual s32 GetImm()	{ return _Opcode_.Imm(); }
 
 	// Zero-extended immediate
-	virtual u32 ImmU()		{ return _Opcode_.ImmU(); }
+	virtual u32 GetImmU()	{ return _Opcode_.ImmU(); }
 	
 	virtual s32 GetRt_SL() { return iopRegs[_Rt_].SL; }
 	virtual s32 GetRs_SL() { return iopRegs[_Rs_].SL; }
@@ -591,6 +597,7 @@ protected:
 	bool m_SignExtRead:1;		// set TRUE if instruction sign extends on read from GPRs
 	bool m_SignExtWrite:1;		// set TRUE if instruction sign extends on write to GPRs
 	bool m_ReadsImm:1;
+	bool m_ReadsSa:1;
 
 	GprStatus m_ReadsGPR;
 	GprStatus m_WritesGPR;
@@ -606,6 +613,7 @@ public:
 	,	m_SignExtRead( false )
 	,	m_SignExtWrite( false )
 	,	m_ReadsImm( false )
+	,	m_ReadsSa( false )
 	{
 		m_ReadsGPR.Value	= 0;
 		m_WritesGPR.Value	= 0;
@@ -614,12 +622,14 @@ public:
 	__releaseinline void Assign( const Opcode& opcode )
 	{
 		Instruction::Assign( opcode );
-		m_HasSideEffects = false;
-		m_CanCauseExceptions = false;
-		m_SignExtImm = true;
-		m_SignExtRead = false;
-		m_SignExtWrite = false;
-		m_ReadsImm = false;
+		m_HasSideEffects		= false;
+		m_CanCauseExceptions	= false;
+		m_SignExtImm			= true;
+		m_SignExtRead			= false;
+		m_SignExtWrite			= false;
+		m_ReadsImm				= false;
+		m_ReadsSa				= false;
+
 		m_ReadsGPR.Value	= 0;
 		m_WritesGPR.Value	= 0;
 	}
@@ -667,8 +677,9 @@ protected:
 	// interpreter won't have to do more work than is needed.  To enable the extended optimization
 	// information, use an InstructionOptimizer instead.
 
-	virtual s32 Imm()	{ m_ReadsImm = true; m_SignExtImm = false; return _Opcode_.Imm(); }
-	virtual u32 ImmU()	{ m_ReadsImm = true; m_SignExtImm = true;  return _Opcode_.ImmU(); }
+	virtual u32 GetSa()			{ m_ReadsSa = true; return _Opcode_.Sa(); }
+	virtual s32 GetImm()		{ m_ReadsImm = true; m_SignExtImm = false; return _Opcode_.Imm(); }
+	virtual u32 GetImmU()		{ m_ReadsImm = true; m_SignExtImm = true;  return _Opcode_.ImmU(); }
 
 	virtual s32 GetRt_SL() { m_ReadsGPR.Rt = true; m_SignExtRead = true; return iopRegs[_Rt_].SL; }
 	virtual s32 GetRs_SL() { m_ReadsGPR.Rs = true; m_SignExtRead = true; return iopRegs[_Rs_].SL; }
@@ -694,10 +705,6 @@ protected:
 	virtual void SetHi_UL( u32 src ) { m_WritesGPR.Hi = true; m_SignExtWrite = false; iopRegs[GPR_hi].UL = src; }
 	virtual void SetLo_UL( u32 src ) { m_WritesGPR.Lo = true; m_SignExtWrite = false; iopRegs[GPR_lo].UL = src; }
 	virtual void SetFs_UL( u32 src ) { m_WritesGPR.Fs = true; m_SignExtWrite = false; iopRegs.CP0.r[_Rd_].UL = src; }
-
-	//virtual void SetRs_SL( s32 src ) { if(!_Rs_) return; m_WritesGPR.Rs = true; iopRegs[_Rs_].SL = src; }
-	//virtual void SetRs_UL( u32 src ) { if(!_Rs_) return; m_WritesGPR.Rs = true; iopRegs[_Rs_].UL = src; }
-	//const IntSign32 GetRd() { m_ReadsGPR.Rd = true; return iopRegs[_Rd_]; }
 
 	virtual u8  MemoryRead8( u32 addr );
 	virtual u16 MemoryRead16( u32 addr );
@@ -765,7 +772,7 @@ public:
 		jASSUME( !ReadsRd() );		// Rd should always be a target register.
 	}
 
-	__releaseinline bool UpdateConstStatus( bool gpr_IsConst[34] );
+	__releaseinline bool UpdateConstStatus( bool gpr_IsConst[34] ) const;
 	
 	bool IsConstRs() const { return ReadsRs() && m_IsConst.Rs; }
 	bool IsConstRt() const { return ReadsRt() && m_IsConst.Rt; }

@@ -43,7 +43,7 @@ namespace R3000A {
 
 	__instinline void Instruction::DoConditionalBranch( bool cond )
 	{
-		Imm(); m_IsBranchType = true;
+		GetImm(); m_IsBranchType = true;
 		if( cond )
 			m_NextPC = BranchTarget();
 	}
@@ -189,7 +189,7 @@ namespace R3000A {
 	
 	// Updates the const status flags in the given array as according to the register
 	// modifications performed by this instruction.
-	__instinline bool InstructionConstOpt::UpdateConstStatus( bool gpr_IsConst[34] )
+	__instinline bool InstructionConstOpt::UpdateConstStatus( bool gpr_IsConst[34] ) const
 	{
 		// if no regs are written then const status will be unchanged
 		if( !m_WritesGPR.Value )
