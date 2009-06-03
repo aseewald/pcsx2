@@ -198,29 +198,37 @@ static void __fastcall _spu2_write16( u32 addr, mem16_t val )	{ SPU2write( addr,
 //
 
 template< typename T >
+static __forceinline T _read_hwreg( u32 addr, const u32& src )
+{
+	const int misalign_mask = (4/sizeof(T))-1;
+	return ((T*)&src)[addr & misalign_mask];
+}
+
+template< typename T >
+static __forceinline u32 _zerofill_to_32( u32 addr, const T val )
+{
+	const int misalign_mask = (4/sizeof(T))-1;
+	return ((u32)val) << (addr & misalign_mask);
+}
+
+template< typename T >
 static T __fastcall _BIUctrl_Read( u32 addr )
 {
-	const bool is16bit = (sizeof(T) == 2);
-
 	// registers below 0x20 don't BusError:
 	if( addr < 0xfffe0020 ) return 0;
 
+	u32 masked_addr = addr & ~3;
+
 	if( addr >= 0xfffe0100 )
 	{
-		if( addr == 0xfffe0130 )
-			return ((T*)&iopRegs.BIU_Cache_Ctrl)[0];
-		if( is16bit && addr == 0xfffe0132 )
-			return ((T*)&iopRegs.BIU_Cache_Ctrl)[1];
+		if( masked_addr == 0xfffe0130 )
+			return _read_hwreg<T>( addr, iopRegs.BIU_Cache_Ctrl );
 
-		if( addr == 0xfffe0140 )
-			return ((T*)&iopRegs.MysteryRegAt_FFFE0140)[0];
-		if( is16bit && addr == 0xfffe0142 )
-			return ((T*)&iopRegs.MysteryRegAt_FFFE0140)[1];
+		if( masked_addr == 0xfffe0140 )
+			return _read_hwreg<T>( addr, iopRegs.MysteryRegAt_FFFE0140 );
 
-		if( addr == 0xfffe0144 )
-			return ((T*)&iopRegs.MysteryRegAt_FFFE0144)[0];
-		if( is16bit && addr == 0xfffe0146 )
-			return ((T*)&iopRegs.MysteryRegAt_FFFE0144)[1];
+		if( masked_addr == 0xfffe0144 )
+			return _read_hwreg<T>( addr, iopRegs.MysteryRegAt_FFFE0144 );
 
 		// unhandled registers from 0x100 thru 0x160 don't bus error.
 		if( addr < 0xfffe0160 ) return 0;
@@ -230,16 +238,22 @@ static T __fastcall _BIUctrl_Read( u32 addr )
 	return UnmappedRead<T>( addr );
 }
 
-static void __fastcall _BIUctrl_Write32( u32 addr, mem32_t val )
+template< typename T > 
+static void __fastcall _BIUctrl_Write( u32 addr, T val )
 {
+	// Note: BIU controller performs zero-fill on writes to lower portions of regs.
+
 	// Writes to registers below 0x20 don't BusError:
 	if( addr < 0xfffe0020 ) return;
 
+	u32 masked_addr = addr & ~3;
+
 	if( addr >= 0xfffe0100 )
 	{
-		if( addr == 0xfffe0130 )
+		if( masked_addr == 0xfffe0130 )
 		{
-			val &= ~((1<<6) | (1<<10));			// bits 6 and 10 are hardwired to zero.
+			u32 newval = _zerofill_to_32( addr, val );
+			newval &= ~((1<<6) | (1<<10));			// bits 6 and 10 are hardwired to zero.
 
 			// Remap the scratchpad if the bits are changed
 			uint scratchbits = BIU_Scratchpad_Mapped | BIU_Scratchpad_Enable;
@@ -256,13 +270,13 @@ static void __fastcall _BIUctrl_Write32( u32 addr, mem32_t val )
 			//Console::Notice( "IopMemory: Mysterious write to Mysterious Reg @ 0x%08x: val=%0x08x (pc=0x%08x)",
 			//	params addr, val, iopRegs.pc );
 		}
-		else if( addr == 0xfffe0140 )
+		else if( masked_addr == 0xfffe0140 )
 		{
-			iopRegs.MysteryRegAt_FFFE0140 = val;
+			iopRegs.MysteryRegAt_FFFE0140 = _zerofill_to_32( addr, val );
 		}
-		else if( addr == 0xfffe0144 )
+		else if( masked_addr == 0xfffe0144 )
 		{
-			iopRegs.MysteryRegAt_FFFE0144 = val;
+			iopRegs.MysteryRegAt_FFFE0144 = _zerofill_to_32( addr, val );
 		}
 
 		// unhandled registers from 0x100 thru 0x160 don't bus error.
@@ -296,6 +310,9 @@ static FnType_Write32*	const nullWrite32	= NullWrite<mem32_t>;
 static FnType_Read8*	const biuRead8		= _BIUctrl_Read<mem8_t>;
 static FnType_Read16*	const biuRead16		= _BIUctrl_Read<mem16_t>;
 static FnType_Read32*	const biuRead32		= _BIUctrl_Read<mem32_t>;
+static FnType_Write8*	const biuWrite8		= _BIUctrl_Write<mem8_t>;
+static FnType_Write16*	const biuWrite16	= _BIUctrl_Write<mem16_t>;
+static FnType_Write32*	const biuWrite32	= _BIUctrl_Write<mem32_t>;
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 // Indirect handlers table
@@ -322,9 +339,9 @@ PCSX2_ALIGNED( 64, const void* const tbl_IndirectHandlers[2][3][ HandlerId_Maxim
 	},
 
 	{
-		{ DEF_INDIRECT_SECTION( Write, 8 ),	iopHw4Write8,	uWrite8,		uWrite8		},
-		{ DEF_INDIRECT_SECTION( Write, 16 ),uWrite16,		_spu2_write16,	uWrite16	},
-		{ DEF_INDIRECT_SECTION( Write, 32 ),uWrite32,		uWrite32,		_BIUctrl_Write32 }
+		{ DEF_INDIRECT_SECTION( Write, 8 ),	iopHw4Write8,	uWrite8,		biuWrite8	},
+		{ DEF_INDIRECT_SECTION( Write, 16 ),uWrite16,		_spu2_write16,	biuWrite16	},
+		{ DEF_INDIRECT_SECTION( Write, 32 ),uWrite32,		uWrite32,		biuWrite32	}
 	}
 };
 
