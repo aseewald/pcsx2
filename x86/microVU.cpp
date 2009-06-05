@@ -20,7 +20,6 @@
 
 #include "PrecompiledHeader.h"
 #include "microVU.h"
-#ifdef PCSX2_MICROVU
 
 //------------------------------------------------------------------
 // Micro VU - Global Variables
@@ -36,7 +35,7 @@ declareAllVariables // Declares All Global Variables :D
 //------------------------------------------------------------------
 
 // Only run this once per VU! ;)
-microVUt(void) mVUinit(VURegs* vuRegsPtr) {
+microVUf(void) mVUinit(VURegs* vuRegsPtr) {
 
 	microVU* mVU	= mVUx;
 	mVU->regs		= vuRegsPtr;
@@ -48,7 +47,7 @@ microVUt(void) mVUinit(VURegs* vuRegsPtr) {
 	memset(&mVU->prog, 0, sizeof(mVU->prog));
 	mVUprint((vuIndex) ? "microVU1: init" : "microVU0: init");
 
-	mVU->cache = SysMmapEx((vuIndex ? 0x0f240000 : 0x0e240000), mVU->cacheSize + 0x1000, 0, (vuIndex ? "Micro VU1" : "Micro VU0"));
+	mVU->cache = SysMmapEx((vuIndex ? 0x5f240000 : 0x5e240000), mVU->cacheSize + 0x1000, 0, (vuIndex ? "Micro VU1" : "Micro VU0"));
 	if ( mVU->cache == NULL ) throw Exception::OutOfMemory(fmt_string( "microVU Error: Failed to allocate recompiler memory! (addr: 0x%x)", (u32)mVU->cache));
 
 	mVUreset<vuIndex>();
@@ -72,8 +71,8 @@ microVUx(void) mVUreset() {
 
 	// Setup Entrance/Exit Points
 	x86SetPtr(mVU->cache);
-	mVUdispatcherA<vuIndex>();
-	mVUdispatcherB<vuIndex>();
+	mVUdispatcherA(mVU);
+	mVUdispatcherB(mVU);
 
 	// Clear All Program Data
 	memset(&mVU->prog, 0, sizeof(mVU->prog));
@@ -99,7 +98,7 @@ microVUx(void) mVUreset() {
 }
 
 // Free Allocated Resources
-microVUt(void) mVUclose() {
+microVUf(void) mVUclose() {
 
 	microVU* mVU = mVUx;
 	mVUprint((vuIndex) ? "microVU1: close" : "microVU0: close");
@@ -117,7 +116,7 @@ microVUt(void) mVUclose() {
 }
 
 // Clears Block Data in specified range
-microVUt(void) mVUclear(u32 addr, u32 size) {
+microVUf(void) mVUclear(u32 addr, u32 size) {
 	microVU* mVU = mVUx;
 	if (!mVU->prog.cleared) {
 		memset(&mVU->prog.lpState, 0, sizeof(mVU->prog.lpState));
@@ -130,11 +129,10 @@ microVUt(void) mVUclear(u32 addr, u32 size) {
 //------------------------------------------------------------------
 
 // Clears program data (Sets used to 1 because calling this function implies the program will be used at least once)
-microVUt(void) mVUclearProg(int progIndex) {
+microVUf(void) mVUclearProg(int progIndex) {
 	microVU* mVU = mVUx;
 	mVU->prog.prog[progIndex].used = 1;
 	mVU->prog.prog[progIndex].last_used = 3;
-	mVU->prog.prog[progIndex].sFlagHack = 0;
 	mVU->prog.prog[progIndex].range[0] = -1;
 	mVU->prog.prog[progIndex].range[1] = -1;
 	mVU->prog.prog[progIndex].x86ptr = mVU->prog.prog[progIndex].x86start;
@@ -145,15 +143,14 @@ microVUt(void) mVUclearProg(int progIndex) {
 }
 
 // Caches Micro Program
-microVUt(void) mVUcacheProg(int progIndex) {
+microVUf(void) mVUcacheProg(int progIndex) {
 	microVU* mVU = mVUx;
 	memcpy_fast(mVU->prog.prog[progIndex].data, mVU->regs->Micro, mVU->microSize);
 	mVUdumpProg(progIndex);
-	mVUcheckSflag<vuIndex>(progIndex);
 }
 
 // Finds the least used program, (if program list full clears and returns an old program; if not-full, returns free program)
-microVUt(int) mVUfindLeastUsedProg() {
+microVUf(int) mVUfindLeastUsedProg() {
 	microVU* mVU = mVUx;
 	if (mVU->prog.total < mVU->prog.max) {
 		mVU->prog.total++;
@@ -193,7 +190,7 @@ microVUt(int) mVUfindLeastUsedProg() {
 // frame-based decrementing system in combination with a program-execution-based incrementing
 // system.  In english:  if last_used >= 2 it means the program has been used for the current
 // or prev frame.  if it's 0, the program hasn't been used for a while.
-microVUt(void) __mVUvsyncUpdate() {
+microVUf(void) mVUvsyncUpdate() {
 
 	microVU* mVU = mVUx;
 	if (mVU->prog.total < mVU->prog.max) return;
@@ -212,7 +209,7 @@ microVUt(void) __mVUvsyncUpdate() {
 }
 
 // Compare Cached microProgram to mVU->regs->Micro
-microVUt(int) mVUcmpProg(int progIndex, bool progUsed, bool needOverflowCheck, bool cmpWholeProg) {
+microVUf(int) mVUcmpProg(int progIndex, bool progUsed, bool needOverflowCheck, bool cmpWholeProg) {
 	microVU* mVU = mVUx;
 	
 	if (progUsed) {
@@ -232,7 +229,7 @@ microVUt(int) mVUcmpProg(int progIndex, bool progUsed, bool needOverflowCheck, b
 }
 
 // Searches for Cached Micro Program and sets prog.cur to it (returns 1 if program found, else returns 0)
-microVUt(int) mVUsearchProg() {
+microVUf(int) mVUsearchProg() {
 	microVU* mVU = mVUx;
 	
 	if (mVU->prog.cleared) { // If cleared, we need to search for new program
@@ -283,9 +280,7 @@ void runVUrec(u32 startPC, u32 cycles, const int vuIndex) {
 	else			startVU1(startPC, cycles);
 }
 
-void mVUvsyncUpdate() {
-	__mVUvsyncUpdate<0>();
-	__mVUvsyncUpdate<1>();
+void vsyncVUrec(const int vuIndex) {
+	if (!vuIndex)	mVUvsyncUpdate<0>();
+	else			mVUvsyncUpdate<1>();
 }
-
-#endif // PCSX2_MICROVU

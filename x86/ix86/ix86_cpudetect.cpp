@@ -131,7 +131,7 @@ extern s32 iCpuId( u32 cmd, u32 *regs )
 #endif // _MSC_VER
 }
 
-u64 GetCPUTick( void )
+u64 GetRdtsc( void )
 {
 #if defined (_MSC_VER) && _MSC_VER >= 1400
 
@@ -152,7 +152,7 @@ u64 GetCPUTick( void )
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Note: This function doesn't support GCC/Linux.  Looking online it seems the only 
-// way to simulate the Micrsoft SEH model is to use unix signals, and the 'sigaction'
+// way to simulate the Microsoft SEH model is to use unix signals, and the 'sigaction'
 // function specifically.  Maybe a project for a linux developer at a later date. :)
 #ifdef _MSC_VER
 static bool _test_instruction( void* pfnCall )
@@ -182,9 +182,9 @@ static char* bool_to_char( bool testcond )
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-s64 CPUSpeedHz( int time )
+s64 CPUSpeedHz( u64 time )
 {
-   int timeStart, 
+   u64 timeStart, 
             timeStop;
    s64 startTick, 
             endTick;
@@ -194,23 +194,22 @@ s64 CPUSpeedHz( int time )
       return 0; //check if function is supported
    }
 	
-	// Align the cpu execution to a timeGetTime boundary.
-	// Without this the result could be skewed by up to several milliseconds.
-	
-	do { timeStart = timeGetTime( );
-	} while( timeGetTime( ) == timeStart );
+	// Align the cpu execution to a cpuTick boundary.
+
+	do { timeStart = GetCPUTicks();
+	} while( GetCPUTicks() == timeStart );
 
 	do
 	{
-		timeStop = timeGetTime( );
-		startTick = GetCPUTick( );
-	} while( ( timeStop - timeStart ) < 1 );
+		timeStop = GetCPUTicks( );
+		startTick = GetRdtsc( );
+	} while( ( timeStop - timeStart ) == 0 );
 
 	timeStart = timeStop;
 	do
 	{
-		timeStop = timeGetTime();
-		endTick = GetCPUTick();
+		timeStop = GetCPUTicks();
+		endTick = GetRdtsc();
 	}
 	while( ( timeStop - timeStart ) < time );
 
@@ -364,10 +363,15 @@ void cpudetectInit()
 	cpucaps.hasAMD64BitArchitecture                      = ( cpuinfo.x86EFlags >> 29 ) & 1; //64bit cpu
 	cpucaps.has3DNOWInstructionExtensionsExt             = ( cpuinfo.x86EFlags >> 30 ) & 1; //3dnow+
 	cpucaps.has3DNOWInstructionExtensions                = ( cpuinfo.x86EFlags >> 31 ) & 1; //3dnow   
-	cpucaps.hasStreamingSIMD4ExtensionsA               = ( cpuinfo.x86EFlags2 >> 6 ) & 1; //INSERTQ / EXTRQ / MOVNT
+	cpucaps.hasStreamingSIMD4ExtensionsA                 = ( cpuinfo.x86EFlags2 >> 6 ) & 1; //INSERTQ / EXTRQ / MOVNT
 
+	InitCPUTicks();
+	u64 span = GetTickFrequency();
 
-	cpuinfo.cpuspeed = (u32)(CPUSpeedHz( 400 ) / 400000 );
+	if( (span % 1000) < 400 )	// helps minimize rounding errors
+		cpuinfo.cpuspeed = (u32)( CPUSpeedHz( span / 1000 ) / 1000 );
+	else
+		cpuinfo.cpuspeed = (u32)( CPUSpeedHz( span / 500 ) / 2000 );
 
 	// --> SSE3 / SSSE3 / SSE4.1 / SSE 4.2 detection <--
 

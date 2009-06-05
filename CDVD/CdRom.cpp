@@ -72,7 +72,7 @@ const char *CmdName[0x100]= {
 };
 
 cdrStruct cdr;
-long LoadCdBios;
+s32 LoadCdBios;
 
 u8 Test04[] = { 0 };
 u8 Test05[] = { 0 };
@@ -84,12 +84,15 @@ u8 Test23[] = { 0x43, 0x58, 0x44, 0x32, 0x39 ,0x34, 0x30, 0x51 };
 // PSXCLK = 1 sec in the ps
 // so (PSXCLK / 75) / BIAS = cdr read time (linuzappz)
 //#define cdReadTime ((PSXCLK / 75) / BIAS)
-unsigned long cdReadTime;// = ((PSXCLK / 75) / BIAS);
+u32 cdReadTime;// = ((PSXCLK / 75) / BIAS);
 
 #define CDR_INT(eCycle)    iopEvtSys.ScheduleEvent( IopEvt_Cdrom, eCycle )
 #define CDREAD_INT(eCycle) iopEvtSys.ScheduleEvent( IopEvt_CdromRead, eCycle )
 
-static __forceinline void StartReading(unsigned long type) {
+
+static void AddIrqQueue(u8 irq, u32 ecycle);
+
+static __forceinline void StartReading(u32 type) {
    	cdr.Reading = type;
   	cdr.FirstSector = 1;
   	cdr.Readed = 0xff;
@@ -151,7 +154,7 @@ static void ReadTrack() {
 #define DataEnd		4
 #define DiskError	5
 
-static void AddIrqQueue(u8 irq, unsigned long ecycle) {
+static void AddIrqQueue(u8 irq, u32 ecycle) {
 	cdr.Irq = irq;
 	if (cdr.Stat) {
 		cdr.eCycle = ecycle;
@@ -651,7 +654,7 @@ void cdrWrite1(u8 rt) {
 			for (i=0; i<3; i++) cdr.SetSector[i] = btoi(cdr.Param[i]);
 			cdr.SetSector[3] = 0;
 			if ((cdr.SetSector[0] | cdr.SetSector[1] | cdr.SetSector[2]) == 0) {
-				*(unsigned long *)cdr.SetSector = *(unsigned long *)cdr.SetSectorSeek;
+				*(u32 *)cdr.SetSector = *(u32 *)cdr.SetSectorSeek;
 			}
 			cdr.Ctrl|= 0x80;
 			cdr.Stat = NoIntr;
@@ -782,14 +785,14 @@ void cdrWrite1(u8 rt) {
 			break;
 
 		case CdlSeekL:
-			((unsigned long *)cdr.SetSectorSeek)[0] = ((unsigned long *)cdr.SetSector)[0];
+			((u32 *)cdr.SetSectorSeek)[0] = ((u32 *)cdr.SetSector)[0];
 			cdr.Ctrl|= 0x80;
 			cdr.Stat = NoIntr; 
 			AddIrqQueue(cdr.Cmd, 0x800);
 			break;
 
 		case CdlSeekP:
-			((unsigned long *)cdr.SetSectorSeek)[0] = ((unsigned long *)cdr.SetSector)[0];
+			((u32 *)cdr.SetSectorSeek)[0] = ((u32 *)cdr.SetSector)[0];
 			cdr.Ctrl|= 0x80;
 			cdr.Stat = NoIntr; 
 			AddIrqQueue(cdr.Cmd, 0x800);

@@ -214,7 +214,7 @@ __forceinline void SIF0Dma()
 				// Clearing handled by vtlb memory protection and manual blocks.
 				//Cpu->Clear(sif0dma->madr, readSize*4);
 
-				cycles += readSize * BIAS;	// fixme : BIAS is factored in below
+				cycles += readSize;	// fixme : BIAS is factored in below
 				sif0dma->qwc -= readSize;
 				sif0dma->madr += readSize << 4;
 			}
@@ -366,7 +366,7 @@ __forceinline void SIF1Dma()
 				SIF1write(data, qwTransfer << 2);
 
 				sif1dma->madr += qwTransfer << 4;
-				cycles += qwTransfer * BIAS;		// fixme : BIAS is factored in above
+				cycles += qwTransfer;		// fixme : BIAS is factored in above
 				sif1dma->qwc -= qwTransfer;
 			}
 		}
@@ -454,15 +454,15 @@ __forceinline void dmaSIF0()
 		SIF_LOG("warning, sif0.fifoReadPos != sif0.fifoWritePos");
 	}
 
-	psHu32(0x1000F240) |= 0x2000;
+	psHu32(SBUS_F240) |= 0x2000;
 	eesifbusy[0] = 1;
 	if (iopsifbusy[0] == 1)
 	{
 		FreezeXMMRegs(1);
 		hwIntcIrq(INTC_SBUS);
 		SIF0Dma();
-		psHu32(0x1000F240) &= ~0x20;
-		psHu32(0x1000F240) &= ~0x2000;
+		psHu32(SBUS_F240) &= ~0x20;
+		psHu32(SBUS_F240) &= ~0x2000;
 		FreezeXMMRegs(0);
 	}
 }
@@ -477,15 +477,15 @@ __forceinline void dmaSIF1()
 		SIF_LOG("warning, sif1.fifoReadPos != sif1.fifoWritePos");
 	}
 
-	psHu32(0x1000F240) |= 0x4000;
+	psHu32(SBUS_F240) |= 0x4000;
 	eesifbusy[1] = 1;
 	if (iopsifbusy[1] == 1)
 	{
 		FreezeXMMRegs(1);
 		SIF1Dma();
-		psHu32(0x1000F240) &= ~0x40;
-		psHu32(0x1000F240) &= ~0x100;
-		psHu32(0x1000F240) &= ~0x4000;
+		psHu32(SBUS_F240) &= ~0x40;
+		psHu32(SBUS_F240) &= ~0x100;
+		psHu32(SBUS_F240) &= ~0x4000;
 		FreezeXMMRegs(0);
 	}
 

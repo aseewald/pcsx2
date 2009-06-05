@@ -27,7 +27,6 @@
 #include "Common.h"
 #include "Threading.h"
 
-#define GSPATH3FIX
 
 PCSX2_ALIGNED16( extern u8 g_RealGSMem[0x2000] );
 #define GSCSRr *((u64*)(g_RealGSMem+0x1000))
@@ -111,7 +110,7 @@ struct GIFPath
 				return false;
 			}
 		}
-
+		
 		return true;
 	}
 };
@@ -265,7 +264,7 @@ protected:
 	// Processes a GIFtag & packet, and throws out some gsIRQs as needed.
 	// Used to keep interrupts in sync with the EE, while the GS itself
 	// runs potentially several frames behind.
-	u32 _gifTransferDummy( GIF_PATH pathidx, const u8 *pMem, u32 size );
+	int _gifTransferDummy( GIF_PATH pathidx, const u8 *pMem, u32 size );
 
 	// Used internally by SendSimplePacket type functions
 	uint _PrepForSimplePacket();

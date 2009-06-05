@@ -22,15 +22,15 @@ u16 __fastcall SifRead16( u32 iopaddr )
 	switch( iopaddr & 0xf0 )
 	{
 		case 0x00:
-			ret = psHu16(0x1000F200);
+			ret = psHu16(SBUS_F200);
 		break;
 		
 		case 0x10:
-			ret = psHu16(0x1000F210);
+			ret = psHu16(SBUS_F210);
 		break;
 		
 		case 0x40:
-			ret = psHu16(0x1000F240) | 0x0002;
+			ret = psHu16(SBUS_F240) | 0x0002;
 		break;
 		
 		case 0x60:
@@ -38,6 +38,7 @@ u16 __fastcall SifRead16( u32 iopaddr )
 		break;
 
 		default:
+			// Note: Should probably just be a Bus Error here.
 			ret = psxSu16( iopaddr );
 		break;
 	}
@@ -53,23 +54,23 @@ u32 __fastcall SifRead32( u32 iopaddr )
 	switch( iopaddr & 0xF0)
 	{
 		case 0x00:
-			ret = psHu32(0x1000F200);
+			ret = psHu32(SBUS_F200);
 		break;
 
 		case 0x10:
-			ret = psHu32(0x1000F210);
+			ret = psHu32(SBUS_F210);
 		break;
 
 		case 0x20:
-			ret = psHu32(0x1000F220);
+			ret = psHu32(SBUS_F220);
 		break;
 
 		case 0x30:	// EE Side
-			ret = psHu32(0x1000F230);
+			ret = psHu32(SBUS_F230);
 		break;
 
 		case 0x40:
-			ret = psHu32(0x1000F240) | 0xF0000002;
+			ret = psHu32(SBUS_F240) | 0xF0000002;
 		break;
 
 		case 0x60:
@@ -77,6 +78,7 @@ u32 __fastcall SifRead32( u32 iopaddr )
 		break;
 
 		default:
+			// Note: Should probably just be a Bus Error here too.
 			ret = psxSu32(iopaddr);
 		break;
 	}
@@ -100,7 +102,7 @@ void __fastcall SifWrite16( u32 iopaddr, u16 data )
 	{
 		case 0x10:
 			// write to ps2 mem
-			psHu16(0x1000F210) = data;
+			psHu16(SBUS_F210) = data;
 		return;
 		
 		case 0x40:
@@ -109,20 +111,24 @@ void __fastcall SifWrite16( u32 iopaddr, u16 data )
 			// write to ps2 mem
 			if(data & 0x20 || data & 0x80)
 			{
-				psHu16(0x1000F240) &= ~0xF000;
-				psHu16(0x1000F240) |= 0x2000;
+				psHu16(SBUS_F240) &= ~0xF000;
+				psHu16(SBUS_F240) |= 0x2000;
 			}
 
-			if(psHu16(0x1000F240) & temp)
-				psHu16(0x1000F240) &= ~temp;
+			if(psHu16(SBUS_F240) & temp)
+				psHu16(SBUS_F240) &= ~temp;
 			else
-				psHu16(0x1000F240) |= temp;
+				psHu16(SBUS_F240) |= temp;
 		}
 		return;
 
 		case 0x60:
-			psHu32(0x1000F260) = 0;
+			psHu32(SBUS_F260) = 0;
 		return;
+		
+		default:
+			// Chances are writes past 0x60 are a BUS ERROR.  Needs testing.
+		break;
 	}
 	psxSu16(iopaddr) = data;
 }
@@ -137,17 +143,17 @@ void __fastcall SifWrite32( u32 iopaddr, u32 data )
 		case 0x00: return;	// EE write path (EE/IOP readable, IOP ignores writes)
 
 		case 0x10:			// IOP write path (EE/IOP readable, EE ignores writes)
-			psHu32(0x1000F210) = data;
+			psHu32(SBUS_F210) = data;
 		return;
 
 		case 0x20:			// Bits cleared when written from IOP.
 			// write to ps2 mem
-			psHu32(0x1000F220) &= ~data;
+			psHu32(SBUS_F220) &= ~data;
 		return;
 
 		case 0x30:			// bits set when written from IOP
 			// write to ps2 mem
-			psHu32(0x1000F230) |= data;
+			psHu32(SBUS_F230) |= data;
 		return;
 
 		case 0x40:			// Control Register
@@ -157,26 +163,26 @@ void __fastcall SifWrite32( u32 iopaddr, u32 data )
 			// write to ps2 mem
 			if(iopaddr & 0x20 || iopaddr & 0x80)
 			{
-				psHu32(0x1000F240) &= ~0xF000;
-				psHu32(0x1000F240) |= 0x2000;
+				psHu32(SBUS_F240) &= ~0xF000;
+				psHu32(SBUS_F240) |= 0x2000;
 			}
 
-			if(psHu32(0x1000F240) & temp)
-				psHu32(0x1000F240) &= ~temp;
+			if(psHu32(SBUS_F240) & temp)
+				psHu32(SBUS_F240) &= ~temp;
 			else
-				psHu32(0x1000F240) |= temp;
+				psHu32(SBUS_F240) |= temp;
 		}
 		return;
 
 		case 0x60:
-			psHu32(0x1000F260) = 0;
+			psHu32(SBUS_F260) = 0;
 		return;
+
+		default:
+			// Chances are writes past 0x60 are a BUS ERROR.  Needs testing.
+		break;
 	}
 	psxSu32(iopaddr) = data; 
-
-	// write to ps2 mem
-	//if( (mem & 0xf0) != 0x60 )
-	//	*(u32*)(PS2MEM_HW+0xf200+(mem&0xf0)) = value;
 }
 
 }

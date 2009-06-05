@@ -20,8 +20,22 @@
 #define __CDROM_H__
 
 #include "IopCommon.h"
-#include "Decode_XA.h"
 #include "PS2Edefs.h"
+
+// Not used.
+typedef struct {
+	s32	y0, y1;
+} ADPCM_Decode_t;
+
+// Not used.
+typedef struct {
+	s32				freq;
+	s32				nbits;
+	s32				stereo;
+	s32				nsamples;
+	ADPCM_Decode_t	left, right;
+	s16			pcm[16384];
+} xa_decode_t;
 
 struct cdrStruct
 {
@@ -48,7 +62,7 @@ struct cdrStruct
 	u8 ResultReady;
 	u8 Cmd;
 	u8 Readed;
-	unsigned long Reading;
+	u32 Reading;
 
 	cdvdTN ResultTN;
 	u8 ResultTD[4];
@@ -67,12 +81,10 @@ struct cdrStruct
 	int Init;
 
 	u8 Irq;
-	unsigned long eCycle;
+	u32 eCycle;
 
 	char Unused[4087];
 };
-
-void AddIrqQueue(u8 irq, unsigned long ecycle);
 
 extern cdrStruct cdr;
 

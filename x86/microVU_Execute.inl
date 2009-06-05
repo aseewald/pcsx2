@@ -17,22 +17,18 @@
  */
 
 #pragma once
-#ifdef PCSX2_MICROVU
 
 //------------------------------------------------------------------
 // Dispatcher Functions
 //------------------------------------------------------------------
 
-void testFunction() { mVUprint("microVU: Entered Execution Mode"); }
-
 // Generates the code for entering recompiled blocks
-microVUt(void) mVUdispatcherA() {
-	microVU* mVU = mVUx;
+microVUt(void) mVUdispatcherA(mV) {
 	mVU->startFunct = x86Ptr;
 
 	// __fastcall = The first two DWORD or smaller arguments are passed in ECX and EDX registers; all other arguments are passed right to left.
-	if (!vuIndex) { CALLFunc((uptr)mVUexecuteVU0); }
-	else		  { CALLFunc((uptr)mVUexecuteVU1); }
+	if (!isVU1)	{ CALLFunc((uptr)mVUexecuteVU0); }
+	else		{ CALLFunc((uptr)mVUexecuteVU1); }
 
 	// Backup cpu state
 	PUSH32R(EBX);
@@ -44,12 +40,25 @@ microVUt(void) mVUdispatcherA() {
 	SSE_LDMXCSR((uptr)&g_sseVUMXCSR);
 
 	// Load Regs
-	MOV32MtoR(gprR,  (uptr)&mVU->regs->VI[REG_R].UL);
+	MOV32ItoR(gprR, Roffset); // Load VI Reg Offset
 	MOV32MtoR(gprF0, (uptr)&mVU->regs->VI[REG_STATUS_FLAG].UL);
-	AND32ItoR(gprF0, 0xffff);
+	
 	MOV32RtoR(gprF1, gprF0);
+	SHR32ItoR(gprF1, 3);
+	AND32ItoR(gprF1, 0x18);
+
 	MOV32RtoR(gprF2, gprF0);
-	MOV32RtoR(gprF3, gprF0);
+	SHL32ItoR(gprF2, 11);
+	AND32ItoR(gprF2, 0x1800);
+	OR32RtoR (gprF1, gprF2);
+
+	SHL32ItoR(gprF0, 14);
+	AND32ItoR(gprF0, 0x3cf0000);
+	OR32RtoR (gprF1, gprF0);
+
+	MOV32RtoR(gprF0, gprF1);
+	MOV32RtoR(gprF2, gprF1);
+	MOV32RtoR(gprF3, gprF1);
 
 	SSE_MOVAPS_M128_to_XMM(xmmT1, (uptr)&mVU->regs->VI[REG_MAC_FLAG].UL);
 	SSE_SHUFPS_XMM_to_XMM (xmmT1, xmmT1, 0);
@@ -70,25 +79,18 @@ microVUt(void) mVUdispatcherA() {
 		if (isMMX(i)) { MOVQMtoR(mmVI(i), (uptr)&mVU->regs->VI[i].UL); }
 	}
 
-	//PUSH32R(EAX);
-	//CALLFunc((uptr)testFunction);
-	//write8(0xcc);
-	//POP32R(EAX);
-
 	// Jump to Recompiled Code Block
 	JMPR(EAX);
 }
 
 // Generates the code to exit from recompiled blocks
-microVUt(void) mVUdispatcherB() {
-	microVU* mVU = mVUx;
+microVUt(void) mVUdispatcherB(mV) {
 	mVU->exitFunct = x86Ptr;
 
 	// Load EE's MXCSR state
 	SSE_LDMXCSR((uptr)&g_sseMXCSR);
 	
 	// Save Regs (Other Regs Saved in mVUcompile)
-	MOV32RtoM((uptr)&mVU->regs->VI[REG_R].UL, gprR);
 	SSE_MOVAPS_XMM_to_M128((uptr)&mVU->regs->ACC.UL[0], xmmACC);
 
 	for (int i = 1; i < 16; i++) {
@@ -96,8 +98,8 @@ microVUt(void) mVUdispatcherB() {
 	}
 
 	// __fastcall = The first two DWORD or smaller arguments are passed in ECX and EDX registers; all other arguments are passed right to left.
-	if (!vuIndex) { CALLFunc((uptr)mVUcleanUpVU0); }
-	else		  { CALLFunc((uptr)mVUcleanUpVU1); }
+	if (!isVU1) { CALLFunc((uptr)mVUcleanUpVU0); }
+	else		{ CALLFunc((uptr)mVUcleanUpVU1); }
 
 	// Restore cpu state
 	POP32R(EDI);
@@ -116,7 +118,7 @@ microVUt(void) mVUdispatcherB() {
 //------------------------------------------------------------------
 
 // Executes for number of cycles
-microVUt(void*) __fastcall mVUexecute(u32 startPC, u32 cycles) {
+microVUx(void*) __fastcall mVUexecute(u32 startPC, u32 cycles) {
 
 	microVU* mVU = mVUx;
 	//mVUprint("microVU%x: startPC = 0x%x, cycles = 0x%x", params vuIndex, startPC, cycles);
@@ -134,7 +136,7 @@ microVUt(void*) __fastcall mVUexecute(u32 startPC, u32 cycles) {
 // Cleanup Functions
 //------------------------------------------------------------------
 
-microVUt(void) mVUcleanUp() {
+microVUx(void) mVUcleanUp() {
 	microVU* mVU = mVUx;
 	//mVUprint("microVU: Program exited successfully!");
 	//mVUprint("microVU: VF0 = {%x,%x,%x,%x}", params mVU->regs->VF[0].UL[0], mVU->regs->VF[0].UL[1], mVU->regs->VF[0].UL[2], mVU->regs->VF[0].UL[3]);
@@ -157,4 +159,3 @@ void* __fastcall mVUexecuteVU1(u32 startPC, u32 cycles) { return mVUexecute<1>(s
 void  __fastcall mVUcleanUpVU0() { mVUcleanUp<0>(); }
 void  __fastcall mVUcleanUpVU1() { mVUcleanUp<1>(); }
 
-#endif //PCSX2_MICROVU

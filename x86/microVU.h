@@ -24,7 +24,7 @@
 #include "VU.h"
 #include "GS.h"
 #include "ix86/ix86.h"
-#include "microVU_Alloc.h"
+#include "microVU_IR.h"
 #include "microVU_Misc.h"
 
 #define mMaxBlocks 32 // Max Blocks With Different Pipeline States (For n = 1, 2, 4, 8, 16, etc...)
@@ -74,13 +74,12 @@ struct microProgram {
 	u32 data[progSize];
 	u32 used;		// Number of times its been used
 	u32 last_used;	// Counters # of frames since last use (starts at 3 and counts backwards to 0 for each 30fps vSync)
-	u32 sFlagHack;	// Optimize out Status Flag Updates if Program doesn't use Status Flags
 	s32 range[2];	// The range of microMemory that has already been recompiled for the current program
 	u8* x86ptr;		// Pointer to program's recompilation code
 	u8* x86start;	// Start of program's rec-cache
 	u8* x86end;		// Limit of program's rec-cache
 	microBlockManager* block[progSize/2];
-	microAllocInfo<progSize> allocInfo;
+	microIR<progSize> allocInfo;
 };
 
 #define mMaxProg 32		// The amount of Micro Programs Recs will 'remember' (For n = 1, 2, 4, 8, 16, etc...)
@@ -101,6 +100,7 @@ struct microVU {
 	PCSX2_ALIGNED16(u32 macFlag[4]);  // 4 instances of mac  flag (used in execution)
 	PCSX2_ALIGNED16(u32 clipFlag[4]); // 4 instances of clip flag (used in execution)
 	PCSX2_ALIGNED16(u32 xmmPQb[4]);   // Backup for xmmPQ
+	PCSX2_ALIGNED16(u32 xmmVFb[4]);   // Backup for VF regs
 
 	u32 index;		// VU Index (VU0 or VU1)
 	u32 microSize;	// VU Micro Memory Size
@@ -116,7 +116,8 @@ struct microVU {
 	u8*		exitFunct;	 // Ptr Function to the Exit code for recompiled programs
 	u32		code;		 // Contains the current Instruction
 	u32		divFlag;	 // 1 instance of I/D flags
-	u32		VIbackup[2]; // Holds a backup of a VI reg if modified before a branch
+	u32		VIbackup;	 // Holds a backup of a VI reg if modified before a branch
+	u32		VIxgkick;	 // Holds a backup of a VI reg used for xgkick-delays
 	u32		branch;		 // Holds branch compare result (IBxx) OR Holds address to Jump to (JALR/JR)
 	u32		p;			 // Holds current P instance index
 	u32		q;			 // Holds current Q instance index
@@ -132,25 +133,28 @@ extern PCSX2_ALIGNED16(microVU microVU1);
 extern void (*mVU_UPPER_OPCODE[64])( VURegs* VU, s32 info );
 extern void (*mVU_LOWER_OPCODE[128])( VURegs* VU, s32 info );
 
+// Debug Helper
+extern int mVUdebugNow;
+
 // Main Functions
-microVUt(void) mVUinit(VURegs*);
+microVUf(void) mVUinit(VURegs*);
 microVUx(void) mVUreset();
-microVUt(void) mVUclose();
-microVUt(void) mVUclear(u32, u32);
+microVUf(void) mVUclose();
+microVUf(void) mVUclear(u32, u32);
 
 // Prototypes for Linux
 void  __fastcall mVUcleanUpVU0();
 void  __fastcall mVUcleanUpVU1();
 void* __fastcall mVUcompileVU0(u32 startPC, uptr pState);
 void* __fastcall mVUcompileVU1(u32 startPC, uptr pState);
-microVUf(void) mVUopU();
-microVUf(void) mVUopL();
+mVUop(mVUopU);
+mVUop(mVUopL);
 
 // Private Functions
-microVUt(void)		mVUclearProg(microVU* mVU, int progIndex);
-microVUt(int)		mVUfindLeastUsedProg(microVU* mVU);
-microVUt(int)		mVUsearchProg();
-microVUt(void)		mVUcacheProg(int progIndex);
+microVUf(void)		mVUclearProg(microVU* mVU, int progIndex);
+microVUf(int)		mVUfindLeastUsedProg(microVU* mVU);
+microVUf(int)		mVUsearchProg();
+microVUf(void)		mVUcacheProg(int progIndex);
 void* __fastcall	mVUexecuteVU0(u32 startPC, u32 cycles);
 void* __fastcall	mVUexecuteVU1(u32 startPC, u32 cycles);
 

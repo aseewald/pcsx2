@@ -265,6 +265,7 @@ typedef IopCounterType<u32,u64> IopCounterType32;
 static IopCounterType16 iopCounters16[3];
 static IopCounterType32 iopCounters32[3];
 
+// Macro is set up in this specific way as it allows Visual Assist X to resolve class member intellisense. :)
 #define IopCounterMethod( return_type ) template< typename CntType, typename MathType > __forceinline return_type
 #define ICT IopCounterType<CntType,MathType>
 
@@ -315,9 +316,11 @@ IopCounterMethod(void) ICT::ResetCount( CntType newcnt )
 {
 	Count = newcnt;
 	IsFutureTarget = false;
-	iopEvtSys.CancelEvent( GetEventId() );
 
-	Reschedule();
+	if( IsCounting )
+		Reschedule();
+	else
+		iopEvtSys.CancelEvent( GetEventId() );
 }
 
 // ------------------------------------------------------------------------
@@ -398,6 +401,7 @@ IopCounterMethod(void) ICT::_writeMode16( u32 newmode )
 
 		if( m_mode & IOPCNT_ENABLE_GATE )
 		{
+			IsCounting = false;
 			PSXCNT_LOG( "IOP Counter[%d] Notice: Gate Check Enabled.", Index );
 			if( Index == 0 )
 				iopGateFlags.hBlank0 = true;
@@ -426,6 +430,7 @@ IopCounterMethod(void) ICT::_writeMode32( u32 newmode )
 
 		if( m_mode & IOPCNT_ENABLE_GATE )
 		{
+			IsCounting = false;
 			PSXCNT_LOG( "IOP Counter[3] Notice: Gate Check Enabled" );
 			iopGateFlags.vBlank3 = true;
 		}

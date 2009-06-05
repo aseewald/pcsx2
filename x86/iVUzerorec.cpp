@@ -342,9 +342,9 @@ void SuperVUAlloc(int vuindex)
 	if (s_recVUMem == NULL)
 	{
 		// upper 4 bits must be zero!
-		// Changed "first try base" to 0xb800000, since 0x0c000000 liked to fail a lot. (air)
-		s_recVUMem = SysMmapEx(0x0e000000, VU_EXESIZE, 0x10000000, "SuperVUAlloc");
-
+		// Changed "first try base" to 0xf1e0000, since 0x0c000000 liked to fail a lot. (cottonvibes)
+		s_recVUMem = SysMmapEx(0xf1e0000, VU_EXESIZE, 0x10000000, "SuperVUAlloc");
+		
 		if (s_recVUMem == NULL)
 		{
 			throw Exception::OutOfMemory(
@@ -4409,7 +4409,7 @@ void recVUMI_XGKICK_(VURegs *VU)
 		CALLFunc((uptr)GSgifTransfer1);
 #endif
 	}
-
+	psHu32(GIF_STAT) &= ~(GIF_STAT_APATH1 | GIF_STAT_OPH); //Probably should be in the recompilation but im a rec nab :( (Refraction)
 	s_ScheduleXGKICK = 0;
 }
 
@@ -4430,6 +4430,8 @@ void recVUMI_XGKICK(VURegs *VU, int info)
 	SHL32ItoR(isreg, 4);
 	AND32ItoR(isreg, 0x3fff);
 	s_XGKICKReg = isreg;
+	psHu32(GIF_STAT) |= (GIF_STAT_APATH1 | GIF_STAT_OPH); //Probably should be in the recompilation but im a rec nab :( (Refraction)
+
 
 	if (!SUPERVU_XGKICKDELAY || pc == s_pCurBlock->endpc)
 	{

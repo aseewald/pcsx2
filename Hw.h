@@ -85,21 +85,70 @@ enum HWaddress
 	RCNT3_TARGET	=	0x10001820,
 
 	IPU_CMD			=	0x10002000,
-	IPU_CTRL			=	0x10002010,
+	IPU_CTRL		=	0x10002010,
 	IPU_BP			=	0x10002020,
 	IPU_TOP			=	0x10002030,
 
-	GIF_CTRL			=	0x10003000,
+	GIF_CTRL		=	0x10003000,
 	GIF_MODE		=	0x10003010,
-	GIF_STAT			=	0x10003020,
-	GIF_TAG0			=	0x10003040,
-	GIF_TAG1			=	0x10003050,
-	GIF_TAG2			=	0x10003060,
-	GIF_TAG3			=	0x10003070,
+	GIF_STAT		=	0x10003020,
+	GIF_TAG0		=	0x10003040,
+	GIF_TAG1		=	0x10003050,
+	GIF_TAG2		=	0x10003060,
+	GIF_TAG3		=	0x10003070,
 	GIF_CNT			=	0x10003080,
 	GIF_P3CNT		=	0x10003090,
 	GIF_P3TAG		=	0x100030A0,
-	GIF_FIFO			=	0x10006000,
+	
+	// Vif Memory Locations
+	VIF0_STAT		= 	0x10003800,
+	VIF0_FBRST		= 	0x10003810,
+	VIF0_ERR		= 	0x10003820,
+	VIF0_MARK		= 	0x10003830,
+	VIF0_CYCLE		=	0x10003840,
+	VIF0_MODE		= 	0x10003850,
+	VIF0_NUM		= 	0x10003860,
+	VIF0_MASK		= 	0x10003870,
+	VIF0_CODE		= 	0x10003880,
+	VIF0_ITOPS		=	0x10003890,
+	VIF0_ITOP		= 	0x100038d0,
+	VIF0_TOP		=	0x100038e0,
+	VIF0_R0			= 	0x10003900,
+	VIF0_R1			= 	0x10003910,
+	VIF0_R2			= 	0x10003920,
+	VIF0_R3			=	0x10003930,
+	VIF0_C0			= 	0x10003940,
+	VIF0_C1			= 	0x10003950,
+	VIF0_C2			=	0x10003960,
+	VIF0_C3			= 	0x10003970,
+	
+	VIF1_STAT		=	0x10003c00,
+	VIF1_FBRST		=	0x10003c10,
+	VIF1_ERR		= 	0x10003c20,
+	VIF1_MARK		= 	0x10003c30,
+	VIF1_CYCLE		=	0x10003c40,
+	VIF1_MODE		= 	0x10003c50,
+	VIF1_NUM		=	0x10003c60,
+	VIF1_MASK		=	0x10003c70,
+	VIF1_CODE		=	0x10003c80,
+	VIF1_ITOPS		= 	0x10003c90,
+	VIF1_BASE		=	0x10003ca0,
+	VIF1_OFST		= 	0x10003cb0,
+	VIF1_TOPS		= 	0x10003cc0,
+	VIF1_ITOP		= 	0x10003cd0,
+	VIF1_TOP		= 	0x10003ce0,
+	VIF1_R0			= 	0x10003d00,
+	VIF1_R1			= 	0x10003d10,
+	VIF1_R2			=	0x10003d20,
+	VIF1_R3			=	0x10003d30,
+	VIF1_C0			=	0x10003d40,
+	VIF1_C1			=	0x10003d50,
+	VIF1_C2			= 	0x10003d60,
+	VIF1_C3			= 	0x10003d70,
+	
+	VIF0_FIFO		=	0x10004000,
+	VIF1_FIFO		=	0x10005000,
+	GIF_FIFO		=	0x10006000,
 
 	IPUout_FIFO		=	0x10007000,
 	IPUin_FIFO		=	0x10007010,
@@ -150,6 +199,7 @@ enum HWaddress
 	D6_CHCR			=	0x1000C400,
 	D6_MADR			=	0x1000C410,
 	D6_QWC			=	0x1000C420,
+	D6_TADR			=	0x1000C430,
 
 //SIF2
 	D7_CHCR			=	0x1000C800,
@@ -161,6 +211,7 @@ enum HWaddress
 	D8_MADR			=	0x1000D010,
 	D8_QWC			=	0x1000D020,
 	D8_SADR			=	0x1000D080,
+	SPR1_CHCR		=	0x1000D400,
 
 	DMAC_CTRL		=	0x1000E000,
 	DMAC_STAT		=	0x1000E010,
@@ -173,10 +224,29 @@ enum HWaddress
 	INTC_STAT		=	0x1000F000,
 	INTC_MASK		=	0x1000F010,
 
-	SBUS_F220		=	0x1000F220,
-	SBUS_SMFLG		=	0x1000F230,
-	SBUS_F240		=	0x1000F240,
+	SIO_LCR			=	0x1000F100,
+	SIO_LSR			=	0x1000F110,
+	SIO_IER			=	0x1000F120,
+	SIO_ISR			=	0x1000F130,//
+	SIO_FCR			=	0x1000F140,
+	SIO_BGR			=	0x1000F150,
+	SIO_TXFIFO		=	0x1000F180,
+	SIO_RXFIFO		=	0x1000F1C0,
 
+	// Note: SBUS (SIF BUS) addresses are the same for both EE and IOP, and are
+	// used as thread-synchronized 32-bit communications ports.
+
+	SBUS_F200		=	0x1000F200,	// [MSCOM]  Writes data to IOP-side
+	SBUS_F210		=	0x1000F210,	// [SMCOM]  Writes data to EE-side
+	SBUS_F220		=	0x1000F220,	// [MSFLG]  EE set bit / IOP clear bit on write
+	SBUS_F230		=	0x1000F230,	// [SMFLG]  EE clear bit / IOP set bit on write
+	SBUS_F240		=	0x1000F240,
+	SBUS_F250		=	0x1000F250,
+	SBUS_F260		=	0x1000F260,	// Zero register (always zeros)
+
+	MCH_RICM		=	0x1000F430,
+	MCH_DRD			=	0x1000F440,
+	
 	DMAC_ENABLER	=	0x1000F520,
 	DMAC_ENABLEW	=	0x1000F590,
 
@@ -288,6 +358,23 @@ enum DMACIrqs
 #define VIF_STAT_ER1	(1<<13)
 #define VIF_STAT_FDR	(1<<23)
 
+//GIF_STAT 
+
+#define GIF_STAT_M3R    (1)  //GIF_MODE Mask
+#define GIF_STAT_M3P    (1<<1) //VIF PATH3 Mask
+#define GIF_STAT_IMT    (1<<2) //Intermittent Transfer Mode
+#define GIF_STAT_PSE    (1<<3) //Temporary Transfer Stop
+#define GIF_STAT_IP3    (1<<5) //Interrupted PATH3
+#define GIF_STAT_P3Q    (1<<6) //PATH3 request Queued
+#define GIF_STAT_P2Q    (1<<7) //PATH2 request Queued
+#define GIF_STAT_P1Q    (1<<8) //PATH1 request Queued
+#define GIF_STAT_OPH    (1<<9) //Output Path (Outputting Data)
+#define GIF_STAT_APATH1 (1<<10) //Data Transfer Path 1 (In progress)
+#define GIF_STAT_APATH2 (2<<10) //Data Transfer Path 2 (In progress)
+#define GIF_STAT_APATH3 (3<<10) //Data Transfer Path 3 (In progress) (Mask too)
+#define GIF_STAT_DIR	(1<<12) //Transfer Direction
+#define GIF_STAT_FQC    (31<<24) //QWC in GIF-FIFO
+
 //DMA interrupts & masks
 enum DMAInter
 {	
@@ -350,8 +437,8 @@ static __forceinline void *dmaGetAddr(u32 addr) {
 
 //	if (addr & 0xf) { DMA_LOG("*PCSX2*: DMA address not 128bit aligned: %8.8x", addr); }
 	
-	//  teh sux why the f00k 0xE0000000
-	if (addr & 0x80000000) return (void*)&psS[addr & 0x3ff0];
+	//  Need to check the physical address as well as just the "SPR" flag, as VTLB doesnt seem to handle it
+	if ((addr & 0x80000000) || (addr & 0x70000000) == 0x70000000) return (void*)&psS[addr & 0x3ff0];
 
 	ptr = (u8*)vtlb_GetPhyPtr(addr&0x1FFFFFF0);
 	if (ptr == NULL) {

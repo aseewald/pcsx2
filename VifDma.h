@@ -18,6 +18,13 @@
 #ifndef __VIFDMA_H__
 #define __VIFDMA_H__
 
+enum VifModes
+{
+	VIF_NORMAL_MODE = 0,
+	VIF_NORMAL_MEM_MODE = 1,
+	VIF_CHAIN_MODE = 2
+};
+
 struct vifCode {
    u32 addr;
    u32 size;
@@ -47,7 +54,7 @@ struct vifStruct {
 };
 
 extern vifStruct vif0, vif1;
-extern bool Path3transfer;
+extern int Path3progress;
 
 void __fastcall UNPACK_S_32( u32 *dest, u32 *data, int size );
 

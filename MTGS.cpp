@@ -259,10 +259,11 @@ void mtgsThreadObject::Reset()
 // Used to keep interrupts in sync with the EE, while the GS itself
 // runs potentially several frames behind.
 // size - size of the packet in simd128's
-__forceinline u32 mtgsThreadObject::_gifTransferDummy( GIF_PATH pathidx, const u8* pMem, u32 size )
+__forceinline int mtgsThreadObject::_gifTransferDummy( GIF_PATH pathidx, const u8* pMem, u32 size )
 {
 	GIFPath& path = m_path[pathidx];
-
+  /*	bool path1loop = false;
+	int startval = size;*/
 #ifdef PCSX2_GSRING_SAMPLING_STATS
 	static uptr profStartPtr = 0;
 	static uptr profEndPtr = 0;
@@ -287,16 +288,33 @@ __forceinline u32 mtgsThreadObject::_gifTransferDummy( GIF_PATH pathidx, const u
 			pMem += sizeof(GIFTAG);
 			--size;
 
-			if(pathidx == 2 && path.tag.eop)
-			{
-				Path3transfer = FALSE;
+			if(pathidx == 2)
+			{			
+				if(path.tag.flg != GIF_FLG_IMAGE)Path3progress = 1; //Other mode
+				else  Path3progress = 0; //IMAGE mode
+				//if(pathidx == 2) GIF_LOG("Set Giftag NLoop %d EOP %x Mode %d Path3msk %x Path3progress %x ", path.tag.nloop, path.tag.eop, path.tag.flg, vif1Regs->mskpath3, Path3progress);
 			}
 
 			if( pathidx == 0 ) 
-			{                        
+			{                       
+			//	int transize = 0;
 				// hack: if too much data for VU1, just ignore.
 
 				// The GIF is evil : if nreg is 0, it's really 16.  Otherwise it's the value in nreg.
+				/*const int numregs = path.tag.nreg ? path.tag.nreg : 16;
+				if(path.tag.flg < 2)
+				{
+					transize = (path.tag.nloop * numregs);
+				}
+				else transize = path.tag.nloop;
+
+				if(transize > (path.tag.flg == 1 ? 0x800 : 0x400))
+				{
+					//DevCon::Notice("Too much data");
+					path.tag.nloop = 0;
+					if(path1loop == true)return ++size - 0x400;
+					else return ++size;
+				}*/
 				const int numregs = ((path.tag.nreg-1)&15)+1;
 
 				if((path.tag.nloop * numregs) > (size * ((path.tag.flg == 1) ? 2 : 1)))
@@ -305,11 +323,11 @@ __forceinline u32 mtgsThreadObject::_gifTransferDummy( GIF_PATH pathidx, const u
 					return ++size;
 				}
 			}
-		}
-		else
+		}else
 		{
 			// NOTE: size > 0 => do {} while(size > 0); should be faster than while(size > 0) {}
-
+		
+			//if(pathidx == 2) GIF_LOG("PATH3 NLoop %d EOP %x Mode %d Path3msk %x Path3progress %x ", path.tag.nloop, path.tag.eop, path.tag.flg, vif1Regs->mskpath3, Path3progress);
 			switch(path.tag.flg)
 			{
 			case GIF_FLG_PACKED:
@@ -371,18 +389,50 @@ __forceinline u32 mtgsThreadObject::_gifTransferDummy( GIF_PATH pathidx, const u
 
 			}
 		}
-
-		if(pathidx == 0)
+		
+		if(path.tag.nloop == 0)
 		{
-			if(path.tag.eop && path.tag.nloop == 0)
+			if(path.tag.eop)
 			{
-				break;
-			}
-		}
+				if(pathidx != 1)
+				{				
+					break;
+				}
+				/*if((path.tag.nloop > 0 || (!path.tag.eop && path.tag.nloop == 0)) && size == 0)
+				{
+					if(path1loop == true) return size - 0x400;
+					//DevCon::Notice("Looping Nloop %x, Eop %x, FLG %x", params path.tag.nloop, path.tag.eop, path.tag.flg);
+					size = 0x400;
+					pMem -= 0x4000;
+					path1loop = true;
+				}*/
+			} 
+			/*else if(size == 0 && pathidx == 0)
+			{
+				if(path1loop == true) return size - 0x400;
+				//DevCon::Notice("Looping Nloop %x, Eop %x, FLG %x", params path.tag.nloop, path.tag.eop, path.tag.flg);
+				size = 0x400;
+				pMem -= 0x4000;
+				path1loop = true;
+			}*/
+		} 
+		/*else if(size == 0 && pathidx == 0)
+		{
+			if(path1loop == true) return size - 0x400;
+			//DevCon::Notice("Looping Nloop %x, Eop %x, FLG %x", params path.tag.nloop, path.tag.eop, path.tag.flg);
+			size = 0x400;
+			pMem -= 0x4000;
+			path1loop = true;
+		}*/
 	}
 
 	if(pathidx == 0)
 	{
+		//If the XGKick has spun around the VU memory end address, we need to INCREASE the size sent.
+		/*if(path1loop == true)
+		{
+			return (size - 0x400); //This will cause a negative making eg. size(20) - retval(-30) = 50;
+		}*/
 		if(size == 0 && path.tag.nloop > 0)
 		{
 			path.tag.nloop = 0;
@@ -392,6 +442,23 @@ __forceinline u32 mtgsThreadObject::_gifTransferDummy( GIF_PATH pathidx, const u
 			// along the way (often means curreg was in a bad state or something)
 		}
 	}
+
+	
+	if(pathidx == 2)
+		{
+			if(path.tag.nloop == 0 )
+			{
+				//DevCon::Notice("Finishing Giftag NLoop %d EOP %x Mode %d nregs %d Path3progress %d Vifstat VGW %x", 
+					//params path.tag.nloop, path.tag.eop, path.tag.flg, path.tag.nreg, Path3progress, vif1Regs->stat & VIF1_STAT_VGW);
+				if(path.tag.eop)
+				{
+					Path3progress = 2;	
+					//GIF_LOG("Set progress NLoop %d EOP %x Mode %d Path3msk %x Path3progress %x ", path.tag.nloop, path.tag.eop, path.tag.flg, vif1Regs->mskpath3, Path3progress);
+				}
+				
+			}
+		
+		}
 #ifdef PCSX2_GSRING_SAMPLING_STATS
 	__asm
 	{
@@ -513,8 +580,8 @@ int mtgsThreadObject::Callback()
 					const u128* data = m_RingBuffer.GetPtr( m_RingPos+1 );
 
 					// make sure that tag>>16 is the MAX size readable
-					//GSgifTransfer1(((u32*)data) - 0x1000 + 4*qsize, 0x4000-qsize*16);
 					GSgifTransfer1((u32*)(data - 0x400 + qsize), 0x4000-qsize*16);
+					//GSgifTransfer1((u32*)data, qsize);
 					ringposinc += qsize;
 				}
 				break;
@@ -769,15 +836,16 @@ static u32 GSRingBufCopySz = 0;
 int mtgsThreadObject::PrepDataPacket( GIF_PATH pathidx, const u8* srcdata, u32 size )
 {
 #ifdef PCSX2_GSRING_TX_STATS
-	ringtx_s+=size;
-	ringtx_s_ulg+=size&0x7F;
-	ringtx_s_min=min(ringtx_s_min,size);
-	ringtx_s_max=max(ringtx_s_max,size);
+	ringtx_s += size;
+	ringtx_s_ulg += size&0x7F;
+	ringtx_s_min = min(ringtx_s_min,size);
+	ringtx_s_max = max(ringtx_s_max,size);
 	ringtx_c++;
-	unsigned long tx_sz;
+	u32 tx_sz;
+	
 	if (_BitScanReverse(&tx_sz,size))
 	{
-		unsigned long tx_algn;
+		u32 tx_algn;
 		_BitScanForward(&tx_algn,size);
 		ringtx_inf[tx_sz][tx_algn]++;
 		ringtx_inf_s[tx_sz]+=size;
@@ -837,6 +905,12 @@ int mtgsThreadObject::PrepDataPacket( GIF_PATH pathidx, const u8* srcdata, u32 s
 	// enough room for size - retval:
 	int retval = _gifTransferDummy( pathidx, srcdata, size );
 
+	if(pathidx == 2)
+	{
+		gif->madr += (size - retval) * 16;
+		gif->qwc -= size - retval;
+	}
+	//if(retval < 0) DevCon::Notice("Increasing size from %x to %x path %x", params size, size-retval, pathidx+1);
 	size = size - retval;
 	m_packet_size = size;
 	size++;			// takes into account our command qword.
