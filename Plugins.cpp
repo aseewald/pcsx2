@@ -780,8 +780,8 @@ skipOpenCDVD:
 		if( SPU2setDMABaseAddr != NULL )
 			SPU2setDMABaseAddr((uptr)iopMem->Ram);
 
-		if(SPU2setClockPtr != NULL)
-			SPU2setClockPtr(&iopRegs.cycle);
+		//if(SPU2setClockPtr != NULL)
+		//	SPU2setClockPtr(&iopRegs.cycle);
 
 		ret = SPU2open((void*)&pDsp);
 		if (ret != 0) { Msgbox::Alert("Error Opening SPU2 Plugin"); goto OpenError; }

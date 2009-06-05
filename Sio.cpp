@@ -22,6 +22,8 @@
 #include "MemoryCard.h"
 #include "sio_internal.h"
 
+using namespace R3000A;
+
 _sio sio;
 
 static const u8 cardh[4] = { 0xFF, 0xFF, 0x5a, 0x5d };
@@ -31,20 +33,12 @@ static const mc_command_0x26_tag mc_command_0x26= {'+', 512, 16, 0x4000, 0x52, 0
 
 static int m_PostSavestateCards[2] = { 0, 0 };
 
-// SIO Inline'd IRQs : Calls the SIO interrupt handlers directly instead of
-// feeding them through the IOP's branch test. (see SIO.H for details)
-
-#ifdef SIO_INLINE_IRQS
-#define SIO_INT() sioInterrupt()
-#define SIO_FORCEINLINE
-#else
 __forceinline void SIO_INT()
 {
-	if( !(iopRegs.interrupt & (1<<IopEvt_SIO)) )
-		PSX_INT(IopEvt_SIO, 64 ); // PSXCLK/250000);
+	if( !iopEvtSys.GetInfo( IopEvt_SIO ).IsEnabled )
+		PSX_INT( IopEvt_SIO, 64 ); // PSXCLK/250000);
 }
 #define SIO_FORCEINLINE __forceinline
-#endif
 
 // Currently only check if pad wants mtap to be active.
 // Could lets PCSX2 have its own options, if anyone ever
@@ -647,14 +641,16 @@ void sioWriteCtrl16(u16 value) {
 	{
 		sio.mtapst = 0; sio.padst = 0; sio.mcdst = 0; sio.parp = 0;
 		sio.StatReg = TX_RDY | TX_EMPTY;
-		iopRegs.interrupt &= ~(1<<IopEvt_SIO);
+		iopEvtSys.CancelEvent( IopEvt_SIO );
+		//iopRegs.interrupt &= ~(1<<IopEvt_SIO);
 	}
 }
 
 void SIO_FORCEINLINE sioInterrupt() {
 	PAD_LOG("Sio Interrupt");
 	sio.StatReg|= IRQ;
-	psxHu32(0x1070)|=0x80;
+	iopRegs.RaiseExtInt( IopInt_SIO0 );
+	//psxHu32(0x1070)|=0x80;
 }
 
 // Signals the sio to eject the specified memory card.

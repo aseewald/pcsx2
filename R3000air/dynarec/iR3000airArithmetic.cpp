@@ -155,8 +155,12 @@ namespace recDIV_ConstNone
 	static void Emit( const IntermediateRepresentation& info )
 	{
 		// Make sure recompiler did it's job:
-		jASSUME( info.Src[RF_Rs].GetReg() == ecx );
-		jASSUME( info.Src[RF_Rt].GetReg() == eax );
+		if( info.Inst._Rs_ != info.Inst._Rt_ )
+		{
+			DynarecAssume( (RegRs == ecx) && (RegRt == eax), info.Inst,
+				"Recompiler failed to prepare strict eax/ecx mappings."
+			);
+		}
 
 		xCMP( eax, 0 );
 		xForwardJE8 skipOverflowRt;
@@ -234,12 +238,12 @@ namespace recDIV_ConstRt
 			xCMP( edx, 0 );
 			xCMOVGE( eax, ecx );
 			// edx == Hi, eax == Lo
-			//info.MoveToHiLo( edx, eax );
+			info.MoveToHiLo( edx, eax );
 		}
 		else if( info.GetConstRt() == -1 )
 		{
 			xMOV( eax, 0x80000000 );
-			xCMP( info.Src[RF_Rs], eax );
+			xCMP( RegRs, eax );
 
 			xForwardJNE8 doFullDiv;
 			info.MoveToHiLo( eax );
@@ -247,8 +251,8 @@ namespace recDIV_ConstRt
 
 			doFullDiv.SetTarget();
 			xMOV( eax, info.GetConstRs() );
-			xDIV( info.Src[RF_Rs] );
-			//info.MoveToHiLo( edx, eax );
+			xDIV( RegRs );
+			info.MoveToHiLo( edx, eax );
 
 			skipAll.SetTarget();
 		}
@@ -290,8 +294,11 @@ namespace recDIV_ConstRs
 		jASSUME( !info.IsConstRt() );
 
 		// Make sure recompiler did it's job:
-		jASSUME( info.Src[RF_Rt].GetReg() == eax );
-		jASSUME( info.Src[RF_Rs].GetReg() == ecx );
+		if( info.Inst._Rs_ != info.Inst._Rt_ )
+		{
+			DynarecAssume( (RegRs == ecx) && (RegRt == eax), info.Inst,
+				"Recompiler failed to prepare strict eax/ecx mappings [ConstRs form]." );
+		}
 
 		xCMP( eax, 0 );
 		xForwardJZ8 skipOverflowRt;

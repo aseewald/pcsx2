@@ -180,7 +180,7 @@ static void __fastcall _rcntTestTarget( int i )
 
 		psxHu32(0x1070) |= psxCounters[i].interrupt;
 	}
-	
+
 	if (psxCounters[i].mode & 0x08)
 	{
 		// Reset on target

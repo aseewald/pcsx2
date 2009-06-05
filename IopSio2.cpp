@@ -20,6 +20,8 @@
 #include "IopCommon.h"
 #include "sio_internal.h"
 
+using namespace R3000A;
+
 sio2Struct sio2;
 
 /*
@@ -232,7 +234,7 @@ void psxDma11(u32 madr, u32 bcr, u32 chcr) {
 
 finished:
 	HW_DMA11_MADR = madr;
-	PSX_INT(IopEvt_Dma11,(size>>2));	// Interrupts should always occur at the end
+	PSX_INT(IopEvt_SIO2_Dma11,(size>>2));	// Interrupts should always occur at the end
 }
 
 void psxDMA11Interrupt()
@@ -256,7 +258,7 @@ void psxDma12(u32 madr, u32 bcr, u32 chcr) {
 		if(sio2.recvIndex == sio2.packet.sendSize) break;
 	}
 	HW_DMA12_MADR = madr;
-	PSX_INT(IopEvt_Dma12,(size>>2));	// Interrupts should always occur at the end
+	PSX_INT(IopEvt_SIO2_Dma12,(size>>2));	// Interrupts should always occur at the end
 }
 
 void psxDMA12Interrupt()

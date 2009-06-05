@@ -47,22 +47,11 @@ static void __fastcall psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore, _
 
 	if (SPU2async)
 	{
-		SPU2async(iopRegs.cycle - psxCounters[6].sCycleT);	
-		//Console::Status("cycles sent to SPU2 %x\n", iopRegs.cycle - psxCounters[6].sCycleT);
+		SPU2async( iopEvtSys.GetInfo( IopEvt_SPU2 ).GetTimepass() );
+		iopEvtSys.ScheduleEvent( IopEvt_SPU2, size * 3 );
 
-		psxCounters[6].sCycleT = iopRegs.cycle;
-		psxCounters[6].CycleT = size * 3;
-
-		iopRegs.NextCounter -= (iopRegs.cycle-iopRegs.NextsCounter);
-		iopRegs.NextsCounter = iopRegs.cycle;
-		if(psxCounters[6].CycleT < iopRegs.NextCounter)
-			iopRegs.NextCounter = psxCounters[6].CycleT;
-
-		if( (iopRegs.NextBranchCycle - iopRegs.NextsCounter) > (u32)iopRegs.NextCounter)
-		{
-			//DevCon::Notice("SPU2async Setting new counter branch, old %x new %x ((%x - %x = %x) > %x delta)", params g_psxNextBranchCycle, psxNextsCounter + psxNextCounter, g_psxNextBranchCycle, psxNextsCounter, (g_psxNextBranchCycle - psxNextsCounter), psxNextCounter);
-			iopRegs.NextBranchCycle = iopRegs.NextsCounter + iopRegs.NextCounter;
-		}
+		//iopEvtSys.CancelEvent( IopEvt_SPU2 );
+		//iopEvtSys.ScheduleEvent( spuCore ? IopEvt_SPU2_Dma7 : IopEvt_SPU2_Dma4, size * 3 );
 	}
 
 	switch (chcr)
@@ -75,7 +64,6 @@ static void __fastcall psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore, _
 		case 0x01000200: //spu2 to cpu transfer
 			PSXDMA_LOG("*** DMA %c - spu2mem *** %x addr = %x size = %x", dmaNum, chcr, madr, bcr);
 			spu2ReadFunc((u16 *)iopPhysMem(madr), size*2);
-			psxCpu->Clear(spuCore ? HW_DMA7_MADR : HW_DMA4_MADR, size);
 		break;
 
 		default:
@@ -101,7 +89,9 @@ int psxDma4Interrupt()
 {
 	HW_DMA4_CHCR &= ~0x01000000;
 	psxDmaInterrupt(4);
-	iopIntcIrq(9);
+	
+	iopRegs.RaiseExtInt( IopInt_SPU2 );
+	//iopIntcIrq(9);
 	return 1;
 }
 
@@ -145,7 +135,6 @@ int psxDma7Interrupt()
 
 void psxDma8(u32 madr, u32 bcr, u32 chcr)
 {
-
 	const int size = (bcr >> 16) * (bcr & 0xFFFF) * 8;
 
 	switch (chcr & 0x01000201)
@@ -207,7 +196,8 @@ void dev9Interrupt()
 {
 	if ((dev9Handler != NULL) && (dev9Handler() != 1)) return;
 
-	iopIntcIrq(13);
+	iopRegs.RaiseExtInt( IopInt_DEV9 );
+	//iopIntcIrq(13);
 	hwIntcIrq(INTC_SBUS);
 }
 
@@ -220,7 +210,8 @@ void usbInterrupt()
 {
 	if (usbHandler != NULL && (usbHandler() != 1)) return;
 
-	iopIntcIrq(22);
+	iopRegs.RaiseExtInt( IopInt_USB );
+	//iopIntcIrq(22);
 	hwIntcIrq(INTC_SBUS);
 }
 
@@ -231,7 +222,7 @@ void usbIrq(int cycles)
 
 void fwIrq()
 {
-	iopIntcIrq(24);
+	iopRegs.RaiseExtInt( IopInt_FireWire );
 	hwIntcIrq(INTC_SBUS);
 }
 
@@ -251,14 +242,13 @@ void spu2DMA7Irq()
 
 void spu2Irq()
 {
-	iopIntcIrq(9);
+	iopRegs.RaiseExtInt( IopInt_SPU2 );
 	hwIntcIrq(INTC_SBUS);
 }
 
 void iopIntcIrq(uint irqType)
 {
-	psxHu32(0x1070) |= 1 << irqType;
-	iopTestIntc();
+	iopRegs.RaiseExtInt( irqType );
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////

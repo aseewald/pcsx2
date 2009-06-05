@@ -19,6 +19,7 @@
 #pragma once
 
 #include "IopMem.h"
+#include "IopEvents.h"
 
 static const u32
 	HW_USB_START	= 0x1f801600,
@@ -198,41 +199,49 @@ enum IOPCountRegs
 #define HW_DMA_PCR2  (psxHu32(0x1570))
 #define HW_DMA_ICR2  (psxHu32(0x1574))
 
-enum IopEventId
+// ------------------------------------------------------------------------
+// IopInterrupts : These represent the bits in the 0x1070 (INTC_STAT) register, and
+// when enabled raise exceptions to the R3000A cpu.
+//
+// Parts commented out are unused in the IOP, and are likely from PSX/PS1 origins.
+//
+enum IopInterrupts
 {
-	IopEvt_Cdvd = 5		// General Cdvd commands (Seek, Standby, Break, etc)
-,	IopEvt_SIF0 = 9
-,	IopEvt_SIF1 = 10
-,	IopEvt_Dma11 = 11
-,	IopEvt_Dma12 = 12
-,	IopEvt_SIO = 16
-,	IopEvt_Cdrom = 17
-,	IopEvt_CdromRead = 18
-,	IopEvt_CdvdRead = 19
-,	IopEvt_DEV9 = 20
-,	IopEvt_USB = 21
+	IopInt_VBlank	= 0,
+	IopInt_GM		= 1,
+	IopInt_CDROM	= 2,
+	IopInt_DMA		= 3,
+
+	IopInt_RTC0		= 4,
+	IopInt_RTC1		= 5,
+	IopInt_RTC2		= 6,
+
+	IopInt_SIO0		= 7,
+	IopInt_SIO1		= 8,
+	IopInt_SPU2		= 9,
+	IopInt_PIO		= 10,
+	IopInt_VBlankEnd= 11,
+	IopInt_DVD		= 12,
+	IopInt_DEV9		= 13,
+
+	IopInt_RTC3		= 14,
+	IopInt_RTC4		= 15,
+	IopInt_RTC5		= 16,
+
+	IopInt_SIO2		= 17,
+
+	IopInt_HTR0		= 18,
+	IopInt_HTR1		= 19,
+	IopInt_HTR2		= 20,
+	IopInt_HTR3		= 21,
+
+	IopInt_USB		= 22,
+	IopInt_EXTR		= 23,
+	IopInt_FireWire	= 24,
+	IopInt_FDMA		= 25  
 };
 
-extern void PSX_INT( IopEventId n, s32 ecycle);
-
-extern void iopSetNextBranch( u32 startCycle, s32 delta );
-extern void iopSetNextBranchDelta( s32 delta );
-extern int iopTestCycle( u32 startCycle, s32 delta );
-extern void _iopTestInterrupts();
-extern int iopTestCycle( u32 startCycle, s32 delta );
-extern void _iopTestInterrupts();
-
-// Depreciated : Use iopHwRead* functions defined in IopMem.h instead.
-u8   psxHwRead8 (u32 add);
-u16  psxHwRead16(u32 add);
-u32  psxHwRead32(u32 add);
-
-// Depreciated : Use iopHwWrite* functions defined in IopMem.h instead.
-void psxHwWrite8 (u32 add, u8  value);
-void psxHwWrite16(u32 add, u16 value);
-void psxHwWrite32(u32 add, u32 value);
 
 extern void psxHwReset();
-
 extern void psxDmaInterrupt(int n);
 extern void psxDmaInterrupt2(int n);

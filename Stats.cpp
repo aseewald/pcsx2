@@ -64,8 +64,8 @@ void statsVSync() {
 
 	stats.eeCycles+= cpuRegs.cycle - stats.eeSCycle;
 	stats.eeSCycle = cpuRegs.cycle;
-	stats.iopCycles+= iopRegs.cycle - stats.iopSCycle;
-	stats.iopSCycle = iopRegs.cycle;
+	stats.iopCycles+= iopRegs.GetCycle() - stats.iopSCycle;
+	stats.iopSCycle = iopRegs.GetCycle();
 	stats.vsyncCount++;
 	stats.vif1count = 0;
 	stats.vu1count = 0;

@@ -173,15 +173,15 @@ static __forceinline void _HwWrite_16or32_Page1( u32 addr, T val )
 		switch( masked_addr & 0xf )
 		{
 			case 0x0:
-				psxRcntWcount16( cntidx, val );
+				IopCounters::WriteCount16( cntidx, val );
 			break;
 
 			case 0x4:
-				psxRcntWmode16( cntidx, val );
+				IopCounters::WriteMode( cntidx, val );
 			break;
 
 			case 0x8:
-				psxRcntWtarget16( cntidx, val );
+				IopCounters::WriteTarget16( cntidx, val );
 			break;
 			
 			default:
@@ -198,23 +198,23 @@ static __forceinline void _HwWrite_16or32_Page1( u32 addr, T val )
 		switch( masked_addr & 0xf )
 		{
 			case 0x0:
-				psxRcntWcount32( cntidx, val );
+				IopCounters::WriteCount32( cntidx, val );
 			break;
 
 			case 0x2:	// Count HiWord
-				psxRcntWcount32( cntidx, (u32)val << 16 );
+				IopCounters::WriteCount32( cntidx, (u32)val << 16 );
 			break;
 
 			case 0x4:
-				psxRcntWmode32( cntidx, val );
+				IopCounters::WriteMode( cntidx, val );
 			break;
 
 			case 0x8:
-				psxRcntWtarget32( cntidx, val );
+				IopCounters::WriteTarget32( cntidx, val );
 			break;
 
 			case 0xa:	// Target HiWord
-				psxRcntWtarget32( cntidx, (u32)val << 16);
+				IopCounters::WriteTarget32( cntidx, (u32)val << 16);
 			break;
 
 			default:
@@ -306,12 +306,12 @@ static __forceinline void _HwWrite_16or32_Page1( u32 addr, T val )
 			break;
 
 			mcase(HW_ICTRL):
-				psxHu(addr) = val;
+				psxHu(HW_ICTRL) = val;
 				iopTestIntc();
 			break;
 
 			mcase(HW_ICTRL+2):
-				psxHu(addr) = val;
+				psxHu(HW_ICTRL) = val;
 				iopTestIntc();
 			break;
 
@@ -536,6 +536,15 @@ void __fastcall iopHwWrite32_Page8( u32 addr, mem32_t val )
 	else psxHu32(addr) = val;
 
 	PSXHW_LOG( "HwWrite32 to %s, addr 0x%08x = 0x%02x", _log_GetIopHwName<mem32_t>( addr ), addr, val );
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+__forceinline void __fastcall IopMemory::iopHw4Write8(u32 add, u8 value) 
+{
+	u8 mem = (u8)add;	// only lower 8 bits are relevant (cdvd regs mirror across the page)
+	cdvdWrite(mem, value); 
+	PSXHW_LOG("HwWrite8 to Cdvd [segment 0x1f40], addr 0x%02x = 0x%02x", mem, value);
 }
 
 }

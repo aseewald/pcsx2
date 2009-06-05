@@ -1708,6 +1708,30 @@
 				<File
 					RelativePath="..\..\IopCounters.cpp"
 					>
+					<FileConfiguration
+						Name="Debug|Win32"
+						ExcludedFromBuild="true"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+						/>
+					</FileConfiguration>
+					<FileConfiguration
+						Name="Devel|Win32"
+						ExcludedFromBuild="true"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+						/>
+					</FileConfiguration>
+					<FileConfiguration
+						Name="Release|Win32"
+						ExcludedFromBuild="true"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+						/>
+					</FileConfiguration>
 				</File>
 				<File
 					RelativePath="..\..\IopCounters.h"
@@ -1719,6 +1743,18 @@
 				</File>
 				<File
 					RelativePath="..\..\IopDma.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\ps2\Iop\IopEvents.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\IopEvents.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\ps2\Iop\IopNewCounters.cpp"
 					>
 				</File>
 				<File
@@ -1747,6 +1783,30 @@
 					<File
 						RelativePath="..\..\IopHw.cpp"
 						>
+						<FileConfiguration
+							Name="Debug|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Devel|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Release|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
 					</File>
 					<File
 						RelativePath="..\..\IopHw.h"
@@ -1973,6 +2033,10 @@
 						</File>
 						<File
 							RelativePath="..\..\R3000air\dynarec\iR3000airMisc.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\dynarec\iR3000airRecompileBlock.cpp"
 							>
 						</File>
 						<File

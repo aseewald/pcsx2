@@ -417,6 +417,7 @@ __instinline void Inst::SYSCALL()
 __instinline void Inst::_RFE()
 {
 	iopRegs.CP0.n.Status = (iopRegs.CP0.n.Status & 0xfffffff0) | ((iopRegs.CP0.n.Status & 0x3c) >> 2);
+	iopTestIntc();
 }
 
 __instinline void Inst::RFE()

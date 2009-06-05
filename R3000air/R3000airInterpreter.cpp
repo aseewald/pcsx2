@@ -31,6 +31,14 @@
 
 R3000Exception::BaseExcept::~BaseExcept() throw() {}
 
+R3000Exception::BaseExcept::BaseExcept( const R3000A::Instruction& inst, const std::string& msg ) :
+	Exception::Ps2Generic( "(IOP) " + msg ),
+	cpuState( iopRegs ),
+	Inst( inst ),
+	m_IsDelaySlot( iopRegs.IsDelaySlot )
+{
+}
+
 R3000Exception::BaseExcept::BaseExcept( const std::string& msg ) :
 	Exception::Ps2Generic( "(IOP) " + msg ),
 	cpuState( iopRegs ),
@@ -56,46 +64,6 @@ namespace R3000A {
 static void intAlloc() { }
 static void intReset() { }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// Tests the iop Interrupt status to see if something needs to raise an
-// exception.
-//
-// Implementation notes: Interrupt-style exceptions are raised inline, through  re-assignment
-// of the iopRegs.pc (which differs from other exceptions based on C++ SEH handlers).
-// Interrupts happen a lot, unlike other types of exceptions, so handling them inline is a
-// must (SEH is slow and intended for 'exceptional' use only).
-static __forceinline bool intExceptionTest()
-{
-	if( psxHu32(0x1078) == 0 ) return false;
-	if( (psxHu32(0x1070) & psxHu32(0x1074)) == 0 ) return false;
-	if( (iopRegs.CP0.n.Status & 0xFE01) < 0x401 ) return false;
-
-	iopException(0, iopRegs.IsDelaySlot );
-	return true;
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////
-// Yay hack!  This is here until I replace it with a non-shitty event system.
-//
-static void intEventTest()
-{
-	if( iopTestCycle( iopRegs.NextsCounter, iopRegs.NextCounter ) )
-	{
-		psxRcntUpdate();
-	}
-
-	// start the next branch at the next counter event by default
-	// the interrupt code below will assign nearer branches if needed.
-	iopRegs.NextBranchCycle = iopRegs.NextsCounter+iopRegs.NextCounter;
-
-	if (iopRegs.interrupt)
-	{
-		iopEventTestIsActive = true;
-		_iopTestInterrupts();
-		iopEventTestIsActive = false;
-	}
-}
-
 #ifdef PCSX2_DEVBUILD
 static string m_disasm;
 static string m_comment;
@@ -113,24 +81,17 @@ static __releaseinline void intStep()
 		// Optimization note: NOPs are almost never issued in pairs, so changing the if()
 		// above into a while() actually decreases overall performance.
 
-		if( iopRegs.cycle > 0x470000 )
+		//if( iopRegs.GetCycle() > 0x470000 )
 			PSXCPU_LOG( "NOP", iopRegs.IsDelaySlot ? "\n" : "" );
 
 		iopRegs.pc			 = iopRegs.VectorPC;
 		iopRegs.VectorPC	+= 4;
 		iopRegs.IsDelaySlot	 = false;
 
-		iopRegs.cycle++;
-
-		if( iopRegs.DivUnitCycles > 0 )
-			iopRegs.DivUnitCycles--;
+		iopRegs.AddCycles( 1 );
 		
 		opcode = iopMemDirectRead32( iopRegs.pc );
 	}
-
-	s32 woot = iopRegs.NextBranchCycle - iopRegs.cycle;
-	if( woot <= 0 )
-		intEventTest();
 
 #ifdef PCSX2_DEVBUILD
 	InstructionOptimizer dudley( opcode );
@@ -141,7 +102,7 @@ static __releaseinline void intStep()
 	Instruction::Process( dudley );
 	
 #ifdef PCSX2_DEVBUILD
-	if( (varLog & 0x00100000) && (iopRegs.cycle > 0x470000) )
+	if( (varLog & 0x00100000) ) //&& (iopRegs.GetCycle() > 0x470000) )
 	{
 		dudley.GetDisasm( m_disasm );
 		dudley.GetValuesComment( m_comment );
@@ -167,32 +128,9 @@ static __releaseinline void intStep()
 	iopRegs.pc			= iopRegs.VectorPC;
 	iopRegs.VectorPC	= dudley.GetNextPC();
 	iopRegs.IsDelaySlot	= dudley.IsBranchType();
+	iopRegs.AddCycles( 1 );
 
-	// Test for interrupts *after* updating the PC, otherwise the EPC on exception
-	// vector will be wrong!
-	if( intExceptionTest() )
-	{
-		iopRegs.pc			 = iopRegs.VectorPC;
-		iopRegs.VectorPC	+= 4;
-		iopRegs.IsDelaySlot	 = false;
-	}
-
-	iopRegs.cycle++;
-
-	// ------------------------------------------------------------------------
-	// The DIV pipe runs in parallel to the rest of the CPU, but if one of the dependent instructions
-	// is used, it means we need to stall the IOP to wait for the result.
-
-	if( iopRegs.DivUnitCycles > 0 )
-	{
-		iopRegs.DivUnitCycles--;
-		if( dudley.GetDivStall() != 0 )
-		{
-			iopRegs.cycle += iopRegs.DivUnitCycles;
-			iopRegs.DivUnitCycles = dudley.GetDivStall();	// stall for the following instruction.
-		}
-	}
-	else iopRegs.DivUnitCycles = dudley.GetDivStall();	// optimized case, when DivUnitCycles is known zero.
+	iopRegs.DivUnitStall( dudley.GetDivStall() );
 }
 
 static void intExecute()
@@ -209,19 +147,26 @@ static void intExecute()
 // caught up with the EE's instruction status.  The actual number of cycles will
 // vary from the value requested (usually higher, but sometimes lower, depending
 // on if events occurred).
+//
 static s32 intExecuteBlock( s32 eeCycles )
 {	
 	iopRegs.IsExecuting = true;
-	iopRegs.eeCycleStart = iopRegs.cycle;
-	iopRegs.eeCycleDelta = eeCycles/8;
+	u32 eeCycleStart = iopRegs.GetCycle();
+	iopEvtSys.ScheduleEvent( IopEvt_BreakForEE, eeCycles/8 );
 
 	do
 	{
 		intStep();
-	} while( iopTestCycle( iopRegs.eeCycleStart, iopRegs.eeCycleDelta ) == 0 );
-	
-	iopRegs.IsExecuting = false;
-	return eeCycles - ((iopRegs.cycle - iopRegs.eeCycleStart) * 8);
+
+		jASSUME( iopRegs.evtCycleCountdown <= iopRegs.evtCycleDuration );
+
+		if( iopRegs.evtCycleCountdown <= 0 )
+			iopEvtSys.ExecutePendingEvents();
+
+	} while( iopRegs.IsExecuting ); //iopTestCycle( iopRegs.eeCycleStart, iopRegs.eeCycleDelta ) == 0 );
+
+	//iopRegs.IsExecuting = false;
+	return eeCycles - ((iopRegs.GetCycle() - eeCycleStart) * 8);
 }
 
 static void intClear(u32 Addr, u32 Size) { }

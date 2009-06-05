@@ -16,43 +16,30 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
-#ifndef __PSXCOUNTERS_H__
-#define __PSXCOUNTERS_H__
+#pragma once
 
-struct psxCounter {
-	u64 count, target;
-    u32 mode;
-	u32 rate, interrupt;
-	u32 sCycleT;
-	s32 CycleT;
-};
+namespace IopCounters
+{
+	extern void Reset();
 
-#ifdef ENABLE_NEW_IOPDMA
-#	define NUM_COUNTERS 9
-#else
-#	define NUM_COUNTERS 8
-#endif
+	extern u16 ReadCount16( uint cntidx );
+	extern u32 ReadCount32( uint cntidx );
+	extern u16 ReadTarget16( uint cntidx );
+	extern u32 ReadTarget32( uint cntidx );
+	extern u32 ReadMode( uint cntidx );
 
-extern psxCounter psxCounters[NUM_COUNTERS];
+	extern void WriteCount16( uint cntidx, u16 count );
+	extern void WriteCount32( uint cntidx, u32 count );
+	extern void WriteTarget16( uint cntidx, u16 target );
+	extern void WriteTarget32( uint cntidx, u32 target );
+	extern void WriteMode( uint cntidx, u32 mode );
 
-extern void psxRcntInit();
-extern void psxRcntUpdate();
-extern void cntspu2async();
-extern void psxRcntWcount16(int index, u16 value);
-extern void psxRcntWcount32(int index, u32 value);
-extern void psxRcntWmode16(int index, u32 value);
-extern void psxRcntWmode32(int index, u32 value);
-extern void psxRcntWtarget16(int index, u32 value);
-extern void psxRcntWtarget32(int index, u32 value);
-extern u16  psxRcntRcount16(int index);
-extern u32  psxRcntRcount32(int index);
-extern u64  psxRcntCycles(int index);
+	extern void Update( uint cntidx );
 
-extern void psxVBlankStart();
-extern void psxVBlankEnd();
-extern void psxCheckStartGate16(int i);
-extern void psxCheckEndGate16(int i);
-//static void psxCheckStartGate32(int i);
-//static void psxCheckEndGate32(int i);
+	extern void VBlankStart();
+	extern void VBlankEnd();
+	extern void CheckStartGate0();
+	extern void CheckEndGate0();
+}
 
-#endif /* __PSXCOUNTERS_H__ */
+

@@ -26,14 +26,15 @@
 // is true, even if it's already running ahead a bit.
 bool iopBranchAction = false;
 
-bool iopEventTestIsActive = false;
-
 PCSX2_ALIGNED16(R3000A::Registers iopRegs);
+IopEventSystem iopEvtSys;
 
 R3000Acpu *psxCpu;
 
 using namespace R3000A;
 
+// ------------------------------------------------------------------------
+//
 void iopReset()
 {
 	memzero_obj(iopRegs);
@@ -42,9 +43,13 @@ void iopReset()
 	iopRegs.CP0.n.Status = 0x10900000; // COP0 enabled | BEV = 1 | TS = 1
 	iopRegs.CP0.n.PRid   = 0x0000001f; // PRevID = Revision ID, same as the IOP R3000A
 
-	iopRegs.NextBranchCycle = iopRegs.cycle + 4;
 	iopRegs.VectorPC = iopRegs.pc + 4;
 	iopRegs.IsDelaySlot = false;
+	
+	iopRegs.evtCycleCountdown	= 32;
+	iopRegs.evtCycleDuration	= 32;
+
+	iopEvtSys.Reset();
 
 	psxHwReset();
 	psxBiosInit();
@@ -57,7 +62,8 @@ void iopShutdown() {
 	//psxCpu->Shutdown();
 }
 
-// Returns the new PC to vector to.
+// ------------------------------------------------------------------------
+//
 void iopException(u32 code, u32 bd)
 {
 	PSXCPU_LOG("psxException 0x%x: 0x%x, 0x%x %s\n",
@@ -124,138 +130,71 @@ void iopException(u32 code, u32 bd)
 	}*/
 }
 
-__forceinline void iopSetNextBranch( u32 startCycle, s32 delta )
+void R3000A::Registers::StopExecution()
 {
-	// typecast the conditional to signed so that things don't blow up
-	// if startCycle is greater than our next branch cycle.
-
-	if( (int)(iopRegs.NextBranchCycle - startCycle) > delta )
-		iopRegs.NextBranchCycle = startCycle + delta;
+	if( !IsExecuting ) return;
+	iopEvtSys.ScheduleEvent( IopEvt_BreakForEE, 2 );
 }
 
-__forceinline void iopSetNextBranchDelta( s32 delta )
+void R3000A::Registers::RaiseExtInt( uint irq )
 {
-	iopSetNextBranch( iopRegs.cycle, delta );
+	psxHu32(0x1070) |= (1 << irq);
+	iopTestIntc();
 }
 
-__forceinline int iopTestCycle( u32 startCycle, s32 delta )
-{
-	// typecast the conditional to signed so that things don't explode
-	// if the startCycle is ahead of our current cpu cycle.
-
-	return (int)(iopRegs.cycle - startCycle) >= delta;
-}
-
-__forceinline void PSX_INT( IopEventId n, s32 ecycle )
-{
-	// Generally speaking games shouldn't throw ints that haven't been cleared yet.
-	// It's usually indicative os something amiss in our emulation, so uncomment this
-	// code to help trap those sort of things.
-
-	// Exception: IRQ16 - SIO - it drops ints like crazy when handling PAD stuff.
-	//if( /*n!=16 &&*/ iopRegs.interrupt & (1<<n) )
-	//	SysPrintf( "***** IOP > Twice-thrown int on IRQ %d\n", n );
-
-	iopRegs.interrupt |= 1 << n;
-
-	iopRegs.sCycle[n] = iopRegs.cycle;
-	iopRegs.eCycle[n] = ecycle;
-
-	iopSetNextBranchDelta( ecycle );
-
-	if( !iopRegs.IsExecuting )
-	{
-		s32 iopDelta = (iopRegs.NextBranchCycle-iopRegs.cycle)*8;
-		cpuSetNextBranchDelta( iopDelta );
-	}
-}
-
-static __forceinline void IopTestEvent( IopEventId n, void (*callback)() )
-{
-	if( !(iopRegs.interrupt & (1 << n)) ) return;
-
-	if( iopTestCycle( iopRegs.sCycle[n], iopRegs.eCycle[n] ) )
-	{
-		iopRegs.interrupt &= ~(1 << n);
-		callback();
-	}
-	else
-		iopSetNextBranch( iopRegs.sCycle[n], iopRegs.eCycle[n] );
-}
-
-__forceinline void _iopTestInterrupts()
-{
-	IopTestEvent(IopEvt_SIF0,		sif0Interrupt);	// SIF0
-	IopTestEvent(IopEvt_SIF1,		sif1Interrupt);	// SIF1
-	IopTestEvent(IopEvt_SIO,		sioInterrupt);
-	IopTestEvent(IopEvt_CdvdRead,	cdvdReadInterrupt);
-
-	// Profile-guided Optimization (sorta)
-	// The following ints are rarely called.  Encasing them in a conditional
-	// as follows helps speed up most games.
-
-	if( iopRegs.interrupt & ( (1ul<<5) | (3ul<<11) | (3ul<<20) | (3ul<<17) ) )
-	{
-		IopTestEvent(IopEvt_Cdvd,		cdvdActionInterrupt);
-		IopTestEvent(IopEvt_Dma11,		psxDMA11Interrupt);	// SIO2
-		IopTestEvent(IopEvt_Dma12,		psxDMA12Interrupt);	// SIO2
-		IopTestEvent(IopEvt_Cdrom,		cdrInterrupt);
-		IopTestEvent(IopEvt_CdromRead,	cdrReadInterrupt);
-		IopTestEvent(IopEvt_DEV9,		dev9Interrupt);
-		IopTestEvent(IopEvt_USB,		usbInterrupt);
-	}
-}
-
-void iopEventTest()
-{
-	if( iopTestCycle( iopRegs.NextsCounter, iopRegs.NextCounter ) )
-	{
-		psxRcntUpdate();
-		iopBranchAction = true;
-	}
-
-	// start the next branch at the next counter event by default
-	// the interrupt code below will assign nearer branches if needed.
-	iopRegs.NextBranchCycle = iopRegs.NextsCounter+iopRegs.NextCounter;
-	
-	if (iopRegs.interrupt)
-	{
-		iopEventTestIsActive = true;
-		_iopTestInterrupts();
-		iopEventTestIsActive = false;
-	}
-
-	if( psxHu32(0x1078) == 0 ) return;
-	if( (psxHu32(0x1070) & psxHu32(0x1074)) == 0 ) return;
-
-	if ((iopRegs.CP0.n.Status & 0xFE01) >= 0x401)
-	{
-		PSXCPU_LOG("Interrupt: %x  %x\n", psxHu32(0x1070), psxHu32(0x1074));
-		iopException(0, 0);
-		iopBranchAction = true;
-	}
-}
 
 void iopTestIntc()
 {
 	if( psxHu32(0x1078) == 0 ) return;
 	if( (psxHu32(0x1070) & psxHu32(0x1074)) == 0 ) return;
 
-	if( !eeEventTestIsActive )
-	{
-		// An iop exception has occurred while the EE is running code.
-		// Inform the EE to branch so the IOP can handle it promptly:
-
-		cpuSetNextBranchDelta( 16 );
-		iopBranchAction = true;
-		//Console::Error( "** IOP Needs an EE EventText, kthx **  %d", params psxCycleEE );
-
-		// Note: No need to set the iop's branch delta here, since the EE
-		// will run an IOP branch test regardless.
-	}
-	else if( !iopEventTestIsActive )
-		iopSetNextBranchDelta( 2 );
+	iopEvtSys.RaiseException();
 }
+
+void psxHwReset() {
+
+	//	mdecInit(); //initialize mdec decoder
+	cdrReset();
+	cdvdReset();
+
+	IopCounters::Reset();
+	iopEvtSys.ScheduleEvent( IopEvt_SPU2, 768*8 );
+
+	sioInit();
+	//sio2Reset();
+}
+
+void psxDmaInterrupt(int n)
+{
+	if (HW_DMA_ICR & (1 << (16 + n)))
+	{
+		PSXDMA_LOG( "DMA Interrupt Raised on DMA %02d", n );
+
+		HW_DMA_ICR|= (1 << (24 + n));
+		iopRegs.CP0.n.Cause |= 1 << (9 + n);
+		iopRegs.RaiseExtInt( IopInt_DMA );
+	}
+}
+
+void psxDmaInterrupt2(int n)
+{
+	if (HW_DMA_ICR2 & (1 << (16 + n)))
+	{
+/*		if (HW_DMA_ICR2 & (1 << (24 + n))) {
+			Console::WriteLn("*PCSX2*: HW_DMA_ICR2 n=%d already set", params n);
+		}
+		if (psxHu32(0x1070) & 8) {
+			Console::WriteLn("*PCSX2*: psxHu32(0x1070) 8 already set (n=%d)", params n);
+		}*/
+
+		PSXDMA_LOG( "DMA Interrupt Raised on DMA %02d", n+16 );
+
+		HW_DMA_ICR2 |= (1 << (24 + n));
+		iopRegs.CP0.n.Cause |= 1 << (16 + n);
+		iopRegs.RaiseExtInt( IopInt_DMA );
+	}
+}
+
 
 void psxExecuteBios() {
 /*	while (iopRegs.pc != 0x80030000)

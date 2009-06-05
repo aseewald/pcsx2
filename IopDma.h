@@ -61,6 +61,23 @@ extern void cdvdDmaInterrupt(s32 channel);
 //#else
 #endif
 
+enum IopDmaType
+{
+	IopDma_Cdvd = 5		// General Cdvd commands (Seek, Standby, Break, etc)
+,	IopDma_SIF0 = 9
+,	IopDma_SIF1 = 10
+,	IopDma_Dma11 = 11
+,	IopDma_Dma12 = 12
+,	IopDma_SIO = 16
+,	IopDma_Cdrom = 17
+,	IopDma_CdromRead = 18
+,	IopDma_CdvdRead = 19
+,	IopDma_DEV9 = 20
+,	IopDma_USB = 21
+};
+
+//extern void PSX_INT( IopEventId n, s32 ecycle );
+
 extern void psxDma2(u32 madr, u32 bcr, u32 chcr);
 extern void psxDma3(u32 madr, u32 bcr, u32 chcr);
 extern void psxDma4(u32 madr, u32 bcr, u32 chcr);

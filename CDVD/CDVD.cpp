@@ -25,6 +25,8 @@
 #include "CDVDiso.h"
 #include "CDVD_internal.h"
 
+using namespace R3000A;
+
 static cdvdStruct cdvd;
 
 static __forceinline void SetResultSize(u8 size)
@@ -54,7 +56,7 @@ static void cdvdSetIrq( uint id = (1<<Irq_CommandComplete) )
 	cdvd.PwOff |= id;
 	iopIntcIrq( 2 );
 	hwIntcIrq(INTC_SBUS);
-	iopSetNextBranchDelta( 20 );
+	//iopSetNextBranchDelta( 20 );
 }
 
 static int mg_BIToffset(u8 *buffer)
@@ -722,7 +724,8 @@ __forceinline void cdvdActionInterrupt()
 	cdvd.Action = cdvdAction_None;
 
 	cdvd.PwOff |= 1<<Irq_CommandComplete;
-	psxHu32(0x1070)|= 0x4;
+	iopRegs.RaiseExtInt( IopInt_CDROM );
+	//psxHu32(0x1070)|= 0x4;
 	hwIntcIrq(INTC_SBUS);
 }
 
@@ -748,7 +751,7 @@ __forceinline void cdvdReadInterrupt()
 		cdvd.Sector = cdvd.SeekToSector;
 
 		CDR_LOG( "Cdvd Seek Complete > Scheduling block read interrupt at iopcycle=%8.8x.",
-			iopRegs.cycle + cdvd.ReadTime );
+			iopRegs.GetCycle() + cdvd.ReadTime );
 
 		CDVDREAD_INT(cdvd.ReadTime);
 		return;
@@ -787,7 +790,8 @@ __forceinline void cdvdReadInterrupt()
 	if (--cdvd.nSectors <= 0)
 	{
 		cdvd.PwOff |= 1<<Irq_CommandComplete;
-		psxHu32(0x1070)|= 0x4;
+		iopRegs.RaiseExtInt( IopInt_CDROM );
+		//psxHu32(0x1070)|= 0x4;
 		hwIntcIrq(INTC_SBUS);
 
 		HW_DMA3_CHCR &= ~0x01000000;
@@ -1287,7 +1291,9 @@ static __forceinline void cdvdWrite07(u8 rt)		// BREAK
 	// Aborts any one of several CD commands:
 	// Pause, Seek, Read, Status, Standby, and Stop
 
-	iopRegs.interrupt &= ~( (1<<IopEvt_Cdvd) | (1<<IopEvt_CdvdRead) );
+	iopEvtSys.CancelEvent( IopEvt_Cdvd );
+	iopEvtSys.CancelEvent( IopEvt_CdvdRead );
+	//iopRegs.interrupt &= ~( (1<<IopEvt_Cdvd) | (1<<IopEvt_CdvdRead) );
 
 	cdvd.Action = cdvdAction_Break;
 	CDVD_INT( 64 );
@@ -1314,7 +1320,7 @@ static __forceinline void cdvdWrite0F(u8 rt) { // TYPE
 }
 
 static __forceinline void cdvdWrite14(u8 rt) { // PS1 MODE??
-	u32 cycle = iopRegs.cycle;
+	u32 cycle = iopRegs.GetCycle();
 
 	if (rt == 0xFE)	
 		Console::Notice("*PCSX2*: go PS1 mode DISC SPEED = FAST");
@@ -1322,9 +1328,9 @@ static __forceinline void cdvdWrite14(u8 rt) { // PS1 MODE??
 		Console::Notice("*PCSX2*: go PS1 mode DISC SPEED = %dX", params rt);
 
 	iopReset();
-	psxHu32(0x1f801450) = 0x8;
-	psxHu32(0x1f801078) = 1;
-	iopRegs.cycle = cycle;
+	psxHu32(HW_ICFG)	= 0x8;
+	psxHu32(HW_ICTRL)	= 1;
+	iopRegs._cycle		= cycle;
 }
 
 static __forceinline void fail_pol_cal()

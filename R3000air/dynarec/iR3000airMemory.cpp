@@ -154,8 +154,8 @@ namespace recLoad_ConstNone
 	template< typename T >
 	static void Emit( const IntermediateRepresentation& info )
 	{
-		// Make sure recompiler did it's job:
-		jASSUME( RegRs == ecx );
+		DynarecAssume( RegRs == ecx, info.Inst,
+			"Recompiler failed to prepare strict eax/ecx mappings [ConstRs form]." );
 
 		xMOV( eax, ecx );
 		xAND( eax, AddressMask );
@@ -361,16 +361,22 @@ namespace recStore_ConstNone
 	static void RegMapInfo( IntermediateRepresentation& info )
 	{
 		RegMapInfo_Strict& rs( info.RegOpts.UseStrictMode() );
+		
 		rs.EntryMap.Rs = ecx;
-		rs.EntryMap.Rt = edx;
+
+		//if( info.Inst._Rs_ != info.Inst._Rt_ )
+			rs.EntryMap.Rt = edx;
 	}
 
 	template< typename T >
 	static void Emit( const IntermediateRepresentation& info )
 	{
-		// Make sure recompiler did it's job:
-		jASSUME( RegRs == ecx );
-		jASSUME( RegRt == edx );
+		if( info.Inst._Rs_ != info.Inst._Rt_ )
+		{
+			DynarecAssume( (RegRs == ecx) && (RegRt == edx), info.Inst,
+				"Recompiler failed to prepare strict ecx/edx mappings." );
+		}
+
 		xADD( ecx, info.ixImm );
 
 		xMOV( eax, ecx );

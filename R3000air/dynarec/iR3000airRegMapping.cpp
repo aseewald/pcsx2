@@ -26,27 +26,94 @@ using namespace x86Emitter;
 
 namespace R3000A {
 
+typedef IntermediateRepresentation IR;
+
 namespace Analytics
 {
 	int RegMapped_TypeA = 0;
 	int RegMapped_TypeB = 0;
 }
 
+// ------------------------------------------------------------------------
+// An array of valid mappable registers between/across instructions - typically 
+// eax, ebx, ecx, edx, and edi.  EDI is allowed as a mappable register since
+// the recompiler makes no garauntee that mappable registers have 8-bit forms.
+// (temp registers are limited to the first four for that reason).
+//
+// EDI is conditionally available based on the state of the gpr_map_edi var.
+// When the map is -1 (unmapped), this struct returns eax->edi.  If the gpr
+// is mapped then it returns eax->edx (edi is reserved for recompiler special
+// use).
+//
+class xMappableRegs32
+{
+public:
+	xMappableRegs32() {}
+
+	int Length() const { return g_BlockState.HasMappedEdi() ? 4 : 5; }
+
+	__forceinline const xRegister32& operator[]( uint idx )
+	{
+		return _fetch_reg( idx );
+	}
+
+	__forceinline const xRegister32& operator[]( uint idx ) const
+	{
+		return _fetch_reg( idx );
+	}
+	
+protected:
+	// Internal function for allowing const and non-const fetches via the
+	// [] inexer operator.
+	const xRegister32& _fetch_reg( uint idx ) const
+	{
+		if( g_BlockState.HasMappedEdi() )
+		{
+			switch( idx )
+			{
+				case 0: return edx;
+				case 1: return eax;
+				case 2: return ebx;
+				case 3: return ecx;
+				
+				jNO_DEFAULT		// assert/exception? index was out of range..
+			}
+		}
+		else
+		{
+			// EDI is available so let's make it the highest priority mapping,
+			// since it gets preserved across memory operations.
+
+			switch( idx )
+			{
+				case 0: return edi;
+				case 1: return edx;
+				case 2: return eax;
+				case 3: return ebx;
+				case 4: return ecx;
+				
+				jNO_DEFAULT		// assert/exception? index was out of range..
+			}
+		}
+	}
+
+};
+
 // buffer used to process intermediate instructions.
-static IntermediateRepresentation m_intermediates[MaxCyclesPerBlock];
+IntermediateRepresentation m_intermediates[MaxCyclesPerBlock];
 
 // GRP's indexer is mapped to esi (using const 6 instead of esi to avoid the pitfalls of out-
 // of-order C++ initializer chaos).
 static const xAddressReg GPR_xIndexReg( 6 );
 
+// This is a special list type used to prioritize selection of mappable registers.  It also
+// has a flag for enabling mapping of EDI.
 static const xMappableRegs32 m_mappableRegs;
-
-static int gpr_map_edi;
 
 // ------------------------------------------------------------------------
 // returns an indirect x86 memory operand referencing the requested register.
 //
-static ModSibStrict<u32> GPR_GetMemIndexer( MipsGPRs_t gpridx )
+ModSibStrict<u32> IR::GetMemIndexer( MipsGPRs_t gpridx )
 {
 	// There are 34 GPRs counting HI/LO, so the GPR indexer (ESI) points to
 	// the HI/LO pair and uses negative addressing for the regular 32 GPRs.
@@ -54,8 +121,9 @@ static ModSibStrict<u32> GPR_GetMemIndexer( MipsGPRs_t gpridx )
 	return ptr32[GPR_xIndexReg - ((32-(uint)gpridx)*4)];
 }
 
-static ModSibStrict<u32> GPR_GetMemIndexer( int gpridx )
+ModSibStrict<u32> IR::GetMemIndexer( int gpridx )
 {
+	jASSUME( gpridx < 34 );
 	return ptr32[GPR_xIndexReg - ((32-gpridx)*4)];
 }
 
@@ -81,14 +149,14 @@ static const char* RegField_ToString( RegField_t field )
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-IntermediateRepresentation::IntermediateRepresentation( const xAddressReg& idxreg ) :
+IR::IntermediateRepresentation( const xAddressReg& idxreg ) :
 	m_constinfoex( (InstConstInfoEx&)*(InstConstInfoEx*)0 )		// One of the more evil hacks you'll ever see?
 {
 	SetFlushingState();
 }
 
 
-IntermediateRepresentation::IntermediateRepresentation( const InstConstInfoEx& src ) :
+IR::IntermediateRepresentation( const InstConstInfoEx& src ) :
 	Inst( src.inst )
 ,	m_constinfoex( src )
 ,	ixImm( Inst.SignExtendsImm() ? Inst._Opcode_.Imm() : Inst._Opcode_.ImmU() )
@@ -124,31 +192,33 @@ IntermediateRepresentation::IntermediateRepresentation( const InstConstInfoEx& s
 }
 
 // Initializes all sources to memory / flush status.
-void IntermediateRepresentation::SetFlushingState()
+void IR::SetFlushingState()
 {
 	for( int gpr=0; gpr<34; ++gpr )
-		Dest[gpr] = GPR_GetMemIndexer( gpr );
+		Dest[gpr] = GetMemIndexer( gpr );
 }
 
 // ------------------------------------------------------------------------
 // Removes the direct register mapping for the specified register (if one exists).  Or does
 // nothing if the register is unmapped.
 //
-void IntermediateRepresentation::UnmapReg( xDirectOrIndirect32 maparray[34], const xRegister32& reg )
+void IR::UnmapReg( xDirectOrIndirect32 maparray[34], const xRegister32& reg )
 {
 	// Note: having a register mapped to multiple GPRs is not an error.  Instructions
 	// which operate on cases where Rs == Rt and such will tend to end up with multiple
-	// GPRs being 
+	// GPRs being mapped to a single x86reg.
+	
+	DynarecAssume( !reg.IsEmpty(), Inst, "Tried to unmap an empty register." );
 
 	int unmap_count=0;		// analytic for number of gprs this reg was mapped to.
 	for( int i=0; i<34; ++i )
 	{
 		if( maparray[i] == reg )
 		{
-			if( i == gpr_map_edi )
+			if( i == g_BlockState.gpr_map_edi )
 				maparray[i] = edi;
 			else
-				maparray[i] = GPR_GetMemIndexer( i );
+				maparray[i] = GetMemIndexer( i );
 			unmap_count++;
 		}
 	}
@@ -160,7 +230,7 @@ void IntermediateRepresentation::UnmapReg( xDirectOrIndirect32 maparray[34], con
 // ------------------------------------------------------------------------
 // Returns true if the register is currently mapped in the given list.
 //
-bool IntermediateRepresentation::IsMappedReg( const xDirectOrIndirect32 maparray[34], const xRegister32& reg ) const
+bool IR::IsMappedReg( const xDirectOrIndirect32 maparray[34], const xRegister32& reg ) const
 {
 	for( int i=0; i<34; ++i )
 	{
@@ -170,7 +240,7 @@ bool IntermediateRepresentation::IsMappedReg( const xDirectOrIndirect32 maparray
 	return false;
 }
 
-void IntermediateRepresentation::DynRegs_AssignTempReg( int tempslot, const xRegister32& reg )
+void IR::DynRegs_AssignTempReg( int tempslot, const xRegister32& reg )
 {
 	m_TempReg[tempslot] = reg;
 	m_TempReg8[tempslot] = xRegister8( reg.Id );
@@ -179,14 +249,10 @@ void IntermediateRepresentation::DynRegs_AssignTempReg( int tempslot, const xReg
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-void recIR_PerformDynamicRegisterMapping( IntermediateRepresentation& cir )
+void recIR_PerformDynamicRegisterMapping( IR& cir )
 {
 	RegMapInfo_Dynamic& dyno( cir.RegOpts.DynMap );
 	
-	// Requirements:
-	//  * At least one of the sources must be mapped to a direct register, since no
-	//    x86 operations support two indirect sources.
-
 	// To map registers smartly, and without doing mind-breaking logic, we break the
 	// process into several passes.  The first couple pass unmaps things we know don't
 	// need to be mapped.  The next pass checks for existing maps that are "logical"
@@ -196,9 +262,6 @@ void recIR_PerformDynamicRegisterMapping( IntermediateRepresentation& cir )
 	// ------------------------------------------------------------------------
 	// Reserve/Map temp registers
 	
-	if( strcmp( cir.Inst.GetName(), "SLTU" ) == 0 )
-		Console::WriteLn( "Sing" );
-
 	int tmpinc = 0;
 	for( int tc=0; tc<4; ++tc )
 	{
@@ -214,11 +277,11 @@ void recIR_PerformDynamicRegisterMapping( IntermediateRepresentation& cir )
 		if( freereg >= freglen )
 			freereg = tmpinc++;		// TODO: pick register based on some analytic?
 
-		// there should always be a free register, unless the regalloc descriptor is malformed,
+		// there should always be a free register, unless the regmap descriptor is malformed,
 		// such as an instruction which incorrectly tries to allocate too many regs.
-		jASSUME( freereg < freglen );
+		DynarecAssume( freereg < freglen, cir.Inst, "Ran out of allocable x86 registers (possible malformed regmap descriptor)" );
 
-		const xRegister32& woot( m_mappableRegs[freereg] );	// translate from mappable list to xRegInUse list.
+		const xRegister32& woot( m_mappableRegs[freereg] );	// translate from mappableRegs list to xRegInUse list.
 		cir.UnmapReg( cir.Src, woot );
 		cir.DynRegs_AssignTempReg( tc, woot );
 		dyno.xRegInUse[woot] = true;
@@ -271,7 +334,7 @@ void recIR_PerformDynamicRegisterMapping( IntermediateRepresentation& cir )
 
 			// assert: there should always be a free register, unless the regalloc descriptor is
 			// malformed, such as an instruction which incorrectly tries to allocate too many regs.
-			jASSUME( freereg <= frlen );
+			DynarecAssume( freereg < frlen, cir.Inst, "Ran out of allocable x86 registers (possible malformed regmap descriptor)" );
 		}
 
 		const xRegister32& woot( (m_mappableRegs[freereg]) );
@@ -284,7 +347,7 @@ void recIR_PerformDynamicRegisterMapping( IntermediateRepresentation& cir )
 	// ------------------------------------------------------------------------
 	// Map non-ForceDirect SourceFields to any remaining unmapped registers:
 	//
-		
+	
 	for( int cf=0; cf<RF_Count; ++cf )
 	{
 		RegField_t curfield = (RegField_t)cf;
@@ -329,7 +392,7 @@ void recIR_PerformDynamicRegisterMapping( IntermediateRepresentation& cir )
 	}
 }
 
-void recIR_ForceDestFlushes( IntermediateRepresentation& cir )
+void recIR_ForceDestFlushes( IR& cir )
 {
 	// Unmap anything flagged as needing a flush.
 
@@ -340,11 +403,11 @@ void recIR_ForceDestFlushes( IntermediateRepresentation& cir )
 	}
 
 	// Output map for edi is always valid:
-	if( gpr_map_edi > 0 )
-		cir.Dest[gpr_map_edi] = edi;
+	if( g_BlockState.HasMappedEdi() )
+		cir.Dest[g_BlockState.gpr_map_edi] = edi;
 }
 
-void recIR_PerformDynamicRegisterMapping_Exit( IntermediateRepresentation& cir )
+void recIR_PerformDynamicRegisterMapping_Exit( IR& cir )
 {
 	RegMapInfo_Dynamic& dyno( cir.RegOpts.DynMap );
 
@@ -381,7 +444,7 @@ void recIR_PerformDynamicRegisterMapping_Exit( IntermediateRepresentation& cir )
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-void recIR_PerformStrictRegisterMapping( IntermediateRepresentation& cir )
+void recIR_PerformStrictRegisterMapping( IR& cir )
 {
 	const RegMapInfo_Strict& stro( cir.RegOpts.StatMap );
 
@@ -397,7 +460,7 @@ void recIR_PerformStrictRegisterMapping( IntermediateRepresentation& cir )
 		{
 			cir.UnmapReg( cir.Src, stro.EntryMap[curfield] );
 			cir.Src[f_gpr] = stro.EntryMap[curfield];
-			cir.RequiredSrcMapping[f_gpr] = true;	// unused, but might use it later...
+			cir.RequiredSrcMapping[f_gpr] = true;
 		}
 	}
 	
@@ -411,7 +474,7 @@ void recIR_PerformStrictRegisterMapping( IntermediateRepresentation& cir )
 	}
 }
 
-void recIR_PerformStrictRegisterMapping_Exit( IntermediateRepresentation& cir )
+void recIR_PerformStrictRegisterMapping_Exit( IR& cir )
 {
 	const RegMapInfo_Strict& stro( cir.RegOpts.StatMap );
 
@@ -422,30 +485,26 @@ void recIR_PerformStrictRegisterMapping_Exit( IntermediateRepresentation& cir )
 		ExitMapType exitmap = stro.ExitMap[ridx];
 		if( exitmap == StrictEM_Untouched ) continue;		// retains src[] mapping
 
-		const xRegister32& tempReg( stro.ExitMap.GetRegAt( ridx ) );
+		const xRegister32& xReg( stro.ExitMap.GetRegAt( ridx ) );
 
 		// flush all src mappings and replace with the strict specifications of
 		// the user-specified mappings (if not invalid).
-		cir.UnmapReg( cir.Dest, tempReg );
+		cir.UnmapReg( cir.Dest, xReg );
 		if( exitmap == StrictEM_Invalid ) continue;		// unmapped / clobbered
 
 		// Got this far?  Valid register mapping specified:
-		// exit-mapped register must be a valid Written Field (assertion failure indicates ints/recs mismatch)
+		// exit-mapped register must be a valid Written Field (assertion failure indicates
+		// ints/recs mismatch, ie a malformed regmap descriptor)
 		int f_gpr = cir.Inst.WritesField( ToRegField( exitmap ) );
-		jASSUME( f_gpr != -1 );
+		DynarecAssume( f_gpr != -1, cir.Inst,
+			"Regmap descriptor specifies an invalid write-field." );
 
-		cir.UnmapReg( cir.Dest, tempReg );
-		cir.Dest[f_gpr] = tempReg;
+		cir.UnmapReg( cir.Dest, xReg );
+		cir.Dest[f_gpr] = xReg;
 	}
 }
 
 static string m_disasm;
-
-struct GPR_UsePair
-{
-	int gpr;
-	int used;
-};
 
 static void DumpSomeGprs( char* sbuf, const xDirectOrIndirect32* arr )
 {
@@ -471,6 +530,7 @@ static const int Pass3_DoNothing = 1;
 
 // ------------------------------------------------------------------------
 // Used to propagate some local static info through the Pass3 recursion.
+//
 struct PASS3_RECURSE
 {
 	int numinsts;
@@ -484,20 +544,25 @@ struct PASS3_RECURSE
 	{
 	}
 
+	// Checks the specified instruction index for matching register allocation
+	// info to the originating instruction info (contained within this class).
+	// If the instruction reuses the register, NextInstruction returns Pass3_DoNothing.
+	// If it unmaps the register, NextInstruction returns Pass3_Unmap.
+	//
 	int NextInstruction( int ni )
 	{
+		// End of list without a second use? then unmap...
 		if( ni == numinsts ) return Pass3_Unmap;
 
-		IntermediateRepresentation& nir( m_intermediates[ni] );
+		IR& nir( m_intermediates[ni] );
 
 		if( nir.Src[gpr].IsIndirect() )
 		{
-			// Unmap this bad boy.
 			nir.UnmapReg( nir.Src, xanal );
 			return Pass3_Unmap;
 		}
 
-		if( nir.RequiredSrcMapping[gpr] || nir.xForceFlush[xanal] )
+		if( nir.RequiredSrcMapping[gpr] )
 			return Pass3_DoNothing;
 
 		if( NextInstruction( ni+1 ) == Pass3_Unmap )
@@ -510,24 +575,19 @@ struct PASS3_RECURSE
 	}
 };
 
-
 //////////////////////////////////////////////////////////////////////////////////////////
-// Intermediate Pass 2 -- Maps GPRs to x86 registers prior to the x86 codegen.
+// Find the most frequently used GPR for memory indexing, and map it to EDI at the block-
+// wide level.  The mapping is done when there are memory operations for EDI to map
+// across, and EDI is picked to map to the most frequently used register.  This generally
+// results in the most optimal solution since EDI is automatically preserved across
+// register calls.
 //
-void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
+// If the block contains no memory operations, EDI will not be mapped.
+// May be extended at a later date to include EBP.. ?
+//
+void _map_BlockWideRegisters( const SafeArray<InstConstInfoEx>& iList )
 {
 	const int numinsts = iList.GetLength();
-
-	// Pass 2 officially consists of a multiple-pass IL stage, which first initializes
-	// a flat unoptimized register mapping, and then goes back through and re-maps
-	// registers in a second pass in a more optimized fashion.
-	
-	// ------------------------------------------------------------------------
-	// Find the most frequently used GPR for memory indexing, and map it to EDI!
-	// Not counted is anything which is const, since that's of minimal importance.
-	// Only memory operations matter, since EDI is "special" in being preserved
-	// across memory operations.
-	//
 	int gpr_counter[34] = {0};
 
 	for( int i=0; i<numinsts; ++i )
@@ -557,13 +617,21 @@ void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
 		}
 	}
 
-	gpr_map_edi = high.gpr;
+	g_BlockState.SetMapEdi( high );
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// Intermediate Pass 2 -- Maps GPRs to x86 registers prior to the x86 codegen.
+//
+void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
+{
+	const int numinsts = iList.GetLength();
+
+	// Pass 2 officially consists of a multiple-pass IL stage, which first initializes
+	// a flat unoptimized register mapping, and then goes back through and re-maps
+	// registers in a second pass in a more optimized fashion.
 	
-	if( high.used < 2 )
-	{
-		Console::Notice( "IOPrec: No good match for EDI found. ;_;" );
-		gpr_map_edi = -1;
-	}
+	_map_BlockWideRegisters( iList );
 
 	// ------------------------------------------------------------------------
 	// Next pass - Map "required" registers accordingly, and fill in everything
@@ -577,13 +645,13 @@ void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
 
 	for( int i=0; i<numinsts; ++i )
 	{
-		IntermediateRepresentation& fnew( m_intermediates[i] );
+		IR& fnew( m_intermediates[i] );
 
 		if( i == 0 )
 		{
 			// Start with a clean slate.  Everything's loaded from memory, except EDI:
 			for( int gpr=0; gpr<34; ++gpr )
-				fnew.Src[gpr] = ((gpr == gpr_map_edi) ? (xDirectOrIndirect32)edi : (xDirectOrIndirect32)GPR_GetMemIndexer( gpr ) );
+				fnew.Src[gpr] = g_BlockState.IsEdiMappedTo( gpr ) ? (xDirectOrIndirect32)edi : (xDirectOrIndirect32)IR::GetMemIndexer( gpr );
 		}
 		else
 		{
@@ -606,7 +674,7 @@ void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
 		recIR_ForceDestFlushes( fnew );		// unmap clobbers
 
 		if( i == numinsts-1 )
-			fnew.SetFlushingState();
+			; //fnew.SetFlushingState();
 
 		else if( fnew.RegOpts.IsStrictMode )
 			recIR_PerformStrictRegisterMapping_Exit( fnew );
@@ -621,7 +689,7 @@ void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
 
 	for( int i=0; i<numinsts; ++i )
 	{
-		IntermediateRepresentation& ir( m_intermediates[i] );
+		IR& ir( m_intermediates[i] );
 
 		// For each GPR at each instruction, look for any Direct Mappings that are not
 		// strict/required.  From there count forward until either the instruction is
@@ -633,7 +701,7 @@ void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
 			if( ir.RequiredSrcMapping[gpr] || ir.Src[gpr].IsIndirect() ) continue;
 			
 			/*PASS3_RECURSE searcher( numinsts, gpr, ir.Src[gpr].GetReg() );
-			
+
 			if( searcher.NextInstruction( i ) == Pass3_Unmap )
 			{
 				Console::Status( "IOPrec Unmapping Register %s @ inst %d", params xGetRegName( searcher.xanal ), i );
@@ -641,6 +709,8 @@ void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
 			}*/
 		}
 	}
+
+	return;
 
 	// ------------------------------------------------------------------------
 	// Perform Full-on Block Dump
@@ -650,7 +720,7 @@ void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
 
 	for( int i=0; i<numinsts; ++i )
 	{
-		const IntermediateRepresentation& rdump( m_intermediates[i] );
+		const IR& rdump( m_intermediates[i] );
 
 		rdump.Inst.GetDisasm( m_disasm );
 		Console::WriteLn( "\n%s\n", params m_disasm.c_str() );
@@ -663,197 +733,6 @@ void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
 	}	
 
 }
-
-// ------------------------------------------------------------------------
-//         W-T-Crap?  Time to generate x86 code?!  *scrreeech*
-// ------------------------------------------------------------------------
-
-extern u8* m_xBlock_CurPtr;
-
-void recIR_Pass3( uint numinsts )
-{
-	xSetPtr( m_xBlock_CurPtr );
-	
-	// Generate Event Test: Suspiciously Absent ?!
-	// It's a [TODO]
-
-
-	// Prepare Esi/Edi:
-	
-	xMOV( esi, &iopRegs[GPR_hi] );
-	if( gpr_map_edi > 0 )
-		xMOV( edi, GPR_GetMemIndexer( gpr_map_edi ) );
-
-	// Dirty tracking for x86 registers -- if the register is written, it becomes
-	// dirty and needs to be flushed.  If it's not dirty then no flushing is needed
-	// (dirty implies read-only).
-
-	bool xIsDirty[iREGCNT_GPR] = { false };
-
-	for( uint i=0; i<numinsts; ++i )
-	{
-		const IntermediateRepresentation& ir( m_intermediates[i] );
-		
-		if( IsDevBuild )
-		{
-			// Debugging helper: Marks the current instruction's PC.
-			// Double up on the XOR preserves EAX status. :D
-			xXOR( eax, ir.Inst._Pc_ );
-			xXOR( eax, ir.Inst._Pc_ );
-		}
-
-		// ------------------------------------------------------------------------
-		// Map Entry Registers:
-
-		if( i == 0 )
-		{
-			// Initial mapping from memory / const / edi
-			// (zero reg is included -- needed for some store ops, but should otherwise be unmapped)
-
-			for( int gpr=0; gpr<34; gpr++ )
-			{
-				if( ir.Src[gpr].IsIndirect() ) continue;
-
-				if( gpr == gpr_map_edi )
-					xMOV( ir.Src[gpr], edi );
-
-				else if( ir.m_constinfoex.IsConst( gpr ) )
-					xMOV( ir.Src[gpr], ir.m_constinfoex.ConstVal[gpr] );
-
-				else
-					xMOV( ir.Src[gpr].GetReg(), GPR_GetMemIndexer(gpr) );
-			}
-		}
-		else
-		{
-			// Standard mapping from prev instruction's output register status to the input
-			// status needed by the current instruction.
-
-			IntermediateRepresentation& previr( m_intermediates[i-1] );
-			xDirectOrIndirect32 prevmap[34];
-			
-			memcpy_fast( prevmap, previr.Dest, sizeof( prevmap ) );
-
-			// (note: zero reg is included -- needed for some store ops, but should otherwise be unmapped)
-
-			for( int dgpr=0; dgpr<34; ++dgpr )
-			{
-				const xDirectOrIndirect32* target = ir.Src;
-				if( prevmap[dgpr] == target[dgpr] ) continue;
-
-				if( target[dgpr].IsDirect() )
-				{
-					if( dgpr == gpr_map_edi )
-					{
-						// Special handler for reloading from EDI
-						xMOV( target[dgpr].GetReg(), edi );
-						prevmap[dgpr] = target[dgpr];
-						continue;
-					}
-
-					// Xchg/Order checks on direct targets: It's possible for registers in a src map to
-					// be dependent on each other, in which case movs must be ordered to avoid over-writing
-					// a register before it's moved to it's destination.  For example, if eax->ecx and
-					// ecx->edx, then it's imperative that ecx be moved *first*, otherwise it'll end up
-					// holding the value of eax instead.
-
-					for( int sgpr=0; sgpr<34; ++sgpr )
-					{
-						// Scan a copy of the previr's output registers to see if the current target
-						// register had any previous assignments that need to be dealt with first.
-
-						if( (dgpr == sgpr) || (target[dgpr] != prevmap[sgpr]) ) continue;
-
-						if( prevmap[dgpr] == target[sgpr] )
-						{
-							Console::Notice( "IOPrec: Exchange Condition Detected." );
-							prevmap[sgpr] = target[sgpr];
-							prevmap[dgpr] = target[dgpr];	// this'll turn the xMOV below into a no-op. :)
-						}
-						else
-						{
-							if( ir.m_constinfoex.IsConst( sgpr ) )
-								xMOV( target[sgpr], ir.m_constinfoex.ConstVal[sgpr] );
-							else
-								xMOV( target[sgpr], prevmap[sgpr] );
-						}
-						prevmap[sgpr] = target[sgpr];		// mark it as done.
-					}
-
-					if( target[dgpr] != prevmap[dgpr] )		// second check needed in case of out-of-order loading above.
-					{
-						if( ir.m_constinfoex.IsConst( dgpr ) )
-							xMOV( target[dgpr], ir.m_constinfoex.ConstVal[dgpr] );
-						else
-							xMOV( target[dgpr], prevmap[dgpr] );
-
-						prevmap[dgpr] = target[dgpr];		// mark it as done.
-					}
-				}
-				else if( xIsDirty[prevmap[dgpr].GetReg().Id] )
-				{
-					// Flushing cases -- Only flush if needed.
-
-					jASSUME( prevmap[dgpr].IsDirect() );
-					xMOV( target[dgpr].GetMem(), prevmap[dgpr].GetReg() );
-					prevmap[dgpr] = target[dgpr];
-				}
-			}
-			
-			// ------------------------------------------------------------------------
-			// Pre-instruction Flush Stage
-			//
-			// Check the Src against the Dest, and flush any registers which go from Direct to Indirect mappings.
-
-			for( int gpr=1; gpr<34; ++gpr )
-			{
-				if( gpr == gpr_map_edi ) continue;
-
-				const xRegister32& xreg( ir.Src[gpr].GetReg() );
-
-				if( !xreg.IsEmpty() && xIsDirty[xreg.Id] && ir.Dest[gpr].IsIndirect() )
-				{
-					xMOV( ir.Dest[gpr].GetMem(), xreg );
-					xIsDirty[xreg.Id] = false;
-				}
-			}
-		}
-
-		ir.Emitface.Emit( ir );
-
-		// Update Dirty Status on Exit, for any written regs.
-		
-		for( int cf=0; cf<RF_Count; ++cf )
-		{
-			RegField_t curfield = (RegField_t)cf;
-			int gpr = ir.Inst.WritesField( curfield );
-			if( gpr == -1 ) continue;
-			
-			if( ir.Dest[gpr].IsDirect() )
-				xIsDirty[ir.Dest[gpr].GetReg().Id] = true;
-		}
-	}
-
-	// ------------------------------------------------------------------------
-	// End-of-Block Flush Stage
-	//
-	IntermediateRepresentation& last( m_intermediates[numinsts-1] );
-
-	for( int gpr=1; gpr<34; gpr++ )
-	{
-		const xRegister32& xreg( last.Dest[gpr].GetReg() );
-		
-		if( !xreg.IsEmpty() && xIsDirty[xreg.Id] )
-			xMOV( GPR_GetMemIndexer( gpr ), last.Dest[gpr].GetReg() );
-
-		else if( last.m_constinfoex.IsConst(gpr) )
-			xMOV( GPR_GetMemIndexer( gpr ), last.m_constinfoex.ConstVal[gpr] );
-	}
-	
-	m_xBlock_CurPtr = xGetPtr();
-	Console::Notice( "Stage done!" );
-}
-
 
 }
 

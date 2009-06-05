@@ -109,6 +109,20 @@ mem8_t __fastcall iopHwRead8_Page8( u32 addr )
 	return ret;	
 }
 
+/*template< typename T >
+static __forceinline T _read_hwreg( u32 addr, const u32 src )
+{
+	const int alignpos = (addr & 0x3);
+	return (T)( src >> (alignpos*8) );
+}*/
+
+template< typename T >
+static __forceinline T _read_hwreg( u32 addr, const u32& src )
+{
+	const int alignpos = (addr & 0x3);
+	return *(T*)( ((u8*)&src) + alignpos );
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 template< typename T >
@@ -134,22 +148,15 @@ static __forceinline T _HwRead_16or32_Page1( u32 addr )
 		switch( masked_addr & 0xf )
 		{
 			case 0x0:
-				ret = (T)psxRcntRcount16( cntidx );
+				ret = (T)IopCounters::ReadCount16( cntidx );
 			break;
 
 			case 0x4:
-				ret = psxCounters[cntidx].mode;
-				
-				// hmm!  The old code only did this bitwise math for 16 bit reads.
-				// Logic indicates it should do the math consistently.  Question is,
-				// should it do the logic for both 16 and 32, or not do logic at all?
-
-				psxCounters[cntidx].mode &= ~0x1800;
-				psxCounters[cntidx].mode |= 0x400;
+				ret = IopCounters::ReadMode( cntidx );
 			break;
 
 			case 0x8:
-				ret = psxCounters[cntidx].target;
+				ret = (T)IopCounters::ReadTarget16( cntidx );
 			break;
 			
 			default:
@@ -166,30 +173,15 @@ static __forceinline T _HwRead_16or32_Page1( u32 addr )
 		switch( masked_addr & 0xf )
 		{
 			case 0x0:
-				ret = (T)psxRcntRcount32( cntidx );
-			break;
-
-			case 0x2:
-				ret = (T)(psxRcntRcount32( cntidx ) >> 16);
+				ret = IopCounters::ReadCount32( cntidx );
 			break;
 
 			case 0x4:
-				ret = psxCounters[cntidx].mode;
-
-				// hmm!  The old code only did the following bitwise math for 16 bit reads.
-				// Logic indicates it should do the math consistently.  Question is,
-				// should it do the logic for both 16 and 32, or not do logic at all?
-
-				psxCounters[cntidx].mode &= ~0x1800;
-				psxCounters[cntidx].mode |= 0x400;
+				ret = IopCounters::ReadMode( cntidx );
 			break;
 
 			case 0x8:
-				ret = psxCounters[cntidx].target;
-			break;
-
-			case 0xa:
-				ret = psxCounters[cntidx].target >> 16;
+				ret = IopCounters::ReadTarget32( cntidx );
 			break;
 
 			default:
@@ -312,6 +304,8 @@ static __forceinline T _HwRead_16or32_Page1( u32 addr )
 	PSXHW_LOG( "HwRead%s from %s, addr 0x%08x = 0x%04x",
 		(sizeof(T) == 2) ? "16" : "32", _log_GetIopHwName<T>( addr ), addr, ret
 	);
+	
+	//return _read_hwreg<T>( masked_addr, ret );
 	return ret;
 }
 
@@ -427,6 +421,18 @@ mem32_t __fastcall iopHwRead32_Page8( u32 addr )
 	PSXHW_LOG( "HwRead32 from %s, addr 0x%08x = 0x%02x", _log_GetIopHwName<mem32_t>( addr ), addr, ret );
 	return ret;
 }
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+__forceinline u8 __fastcall IopMemory::iopHw4Read8(u32 add) 
+{
+	u16 mem = add & 0xFF;
+	u8 ret = cdvdRead(mem);
+	PSXHW_LOG("HwRead8 from Cdvd [segment 0x1f40], addr 0x%02x = 0x%02x", mem, ret);
+	return ret;
+}
+
 
 }
 

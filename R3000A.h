@@ -22,7 +22,6 @@
 #include "R3000air/R3000air.h"
 
 extern bool iopBranchAction;
-extern bool iopEventTestIsActive;
 
 ////////////////////////////////////////////////////////////////////
 // R3000A  Public Interface / API
@@ -41,6 +40,8 @@ extern R3000Acpu *psxCpu;
 //extern R3000Acpu psxInt;
 extern R3000Acpu psxRec;
 extern R3000Acpu iopInt;
+
+using R3000A::iopRegs;
 
 extern void iopReset();
 extern void iopShutdown();

@@ -17,8 +17,9 @@
  */
 
 #include "PrecompiledHeader.h"
-
 #include "IopCommon.h"
+
+using namespace R3000A;
 
 //THIS ALL IS FOR THE CDROM REGISTERS HANDLING
 
@@ -85,8 +86,8 @@ u8 Test23[] = { 0x43, 0x58, 0x44, 0x32, 0x39 ,0x34, 0x30, 0x51 };
 //#define cdReadTime ((PSXCLK / 75) / BIAS)
 unsigned long cdReadTime;// = ((PSXCLK / 75) / BIAS);
 
-#define CDR_INT(eCycle)    PSX_INT(IopEvt_Cdrom, eCycle)
-#define CDREAD_INT(eCycle) PSX_INT(IopEvt_CdromRead, eCycle)
+#define CDR_INT(eCycle)    iopEvtSys.ScheduleEvent( IopEvt_Cdrom, eCycle )
+#define CDREAD_INT(eCycle) iopEvtSys.ScheduleEvent( IopEvt_CdromRead, eCycle )
 
 static __forceinline void StartReading(unsigned long type) {
    	cdr.Reading = type;
@@ -98,7 +99,8 @@ static __forceinline void StartReading(unsigned long type) {
 static __forceinline void StopReading() {
 	if (cdr.Reading) {
 		cdr.Reading = 0;
-		iopRegs.interrupt &= ~(1<<IopEvt_CdromRead);
+		iopEvtSys.CancelEvent( IopEvt_CdromRead );
+		//iopRegs.interrupt &= ~(1<<IopEvt_CdromRead);
 	}
 }
 
@@ -154,7 +156,7 @@ static void AddIrqQueue(u8 irq, unsigned long ecycle) {
 	if (cdr.Stat) {
 		cdr.eCycle = ecycle;
 	} else {
-		CDR_INT(ecycle);
+		iopEvtSys.ScheduleEvent( IopEvt_Cdrom, ecycle );
 	}
 }
 
@@ -487,7 +489,7 @@ void  cdrInterrupt() {
 	}
 
 	if (cdr.Stat != NoIntr && cdr.Reg2 != 0x18)
-		psxHu32(0x1070)|= 0x4;
+		iopRegs.RaiseExtInt( 2 );
 
 	CDR_LOG("Cdr Interrupt %x\n", Irq);
 }
@@ -550,7 +552,7 @@ void  cdrReadInterrupt() {
 		CDREAD_INT((cdr.Mode & 0x80) ? (cdReadTime / 2) : cdReadTime);
 	}
 
-	psxHu32(0x1070)|= 0x4;
+	iopRegs.RaiseExtInt( 2 );
 	return;
 }
 
@@ -918,7 +920,6 @@ void psxDma3(u32 madr, u32 bcr, u32 chcr) {
 
 			cdsize = (bcr & 0xffff) * 4;
 			memcpy_fast(iopPhysMem(madr), cdr.pTransfer, cdsize);
-			psxCpu->Clear(madr, cdsize/4);
 			cdr.pTransfer+=cdsize;
 
 			break;

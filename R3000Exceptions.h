@@ -40,14 +40,7 @@ namespace R3000Exception
 	public:
 		virtual ~BaseExcept() throw()=0;
 
-		explicit BaseExcept( const R3000A::Instruction& inst, const std::string& msg ) :
-			Exception::Ps2Generic( "(IOP) " + msg ),
-			cpuState( iopRegs ),
-			Inst( inst ),
-			m_IsDelaySlot( iopRegs.IsDelaySlot )
-		{
-		}
-
+		explicit BaseExcept( const R3000A::Instruction& inst, const std::string& msg );
 		explicit BaseExcept( const std::string& msg );
 
 		u32 GetPc() const { return cpuState.pc; }

@@ -52,54 +52,14 @@ public:
 
 	__forceinline ContentType& operator[]( uint idx )
 	{
-		jASSUME( idx < 4 );
+		jASSUME( idx < iREGCNT_GPR );
 		return (&eax)[idx];
 	}
 
 	__forceinline const ContentType& operator[]( uint idx ) const
 	{
-		jASSUME( idx < 4 );
+		jASSUME( idx < iREGCNT_GPR );
 		return (&eax)[idx];
-	}
-};
-
-// ------------------------------------------------------------------------
-// An array of valid temp registers - eax, ebx, ecx, and edx.  The other four x86
-// registers have special defined purposes.
-//
-class xMappableRegs32
-{
-public:
-	xMappableRegs32() {}
-
-	int Length() const { return 4; }
-
-	__forceinline const xRegister32& operator[]( uint idx )
-	{
-		switch( idx )
-		{
-			//case 0: return edi;		// is hard-mapped to an index reg.
-			case 0: return edx;
-			case 1: return eax;
-			case 2: return ebx;
-			case 3: return ecx;
-			
-			jNO_DEFAULT		// assert/exception? index was out of range..
-		}
-	}
-
-	__forceinline const xRegister32& operator[]( uint idx ) const
-	{
-		switch( idx )
-		{
-			//case 0: return edi;		// is hard-mapped to an index reg.
-			case 0: return edx;
-			case 1: return eax;
-			case 2: return ebx;
-			case 3: return ecx;
-
-			jNO_DEFAULT		// assert/exception? index was out of range..
-		}
 	}
 };
 

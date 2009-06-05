@@ -24,6 +24,8 @@
 namespace IopMemory
 {
 
+using namespace R3000A;
+
 //////////////////////////////////////////////////////////////////////////////////////////
 // BIU/Cache config register [0xfffe0130]
 // "Where's it goin' to?  And what does it think it's gonna do when it gets there?" - air

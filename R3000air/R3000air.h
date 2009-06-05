@@ -56,6 +56,14 @@ enum MipsGPRs_t
 	GPR_hi, GPR_lo
 };
 
+static __forceinline void DevAssume( bool condition, const char* msg, bool inReleaseMode=false )
+{
+	if( (inReleaseMode || IsDevBuild) && !condition )
+	{
+		throw Exception::LogicError( msg );
+	}
+}
+
 namespace R3000A
 {
 
@@ -112,68 +120,78 @@ struct Registers
 	u32 pc;					// Program counter for the next instruction fetch
 	u32 VectorPC;			// pc to vector to after the next instruction fetch
 
-	u32 cycle;
-	u32 DivUnitCycles;		// number of cycles pending on the current div unit instruction (mult and div both run in the same unit)
+	// Internal cycle counter.  Depending on the type of event system used to manage
+	u32 _cycle;
 
-	u32 interrupt;
-	u32 sCycle[32];			// start cycle for signaled ints
-	s32 eCycle[32];			// cycle delta for signaled ints (sCycle + eCycle == branch cycle)
+	// marks the original duration of time for the current pending event.  This is
+	// typically used to determine the amount of time passed since the last update
+	// to iopRegs._cycle:
+	//  currentcycle = _cycle + ( evtCycleDuration - evtCycleCountdown );
+	s32 evtCycleDuration;
 
-	u32 NextsCounter;
-	s32 NextCounter;
+	// marks the *current* duration of time until the current pending event. In
+	// other words: counts down from evtCycleDuration to 0; event is raised when 0
+	// is reached.
+	s32 evtCycleCountdown;
 
-	u32 eeCycleStart;		// [used for synchronizing with the EE]
-	s32 eeCycleDelta;		// [used for synchronizing with the EE]
-
-	u32 NextBranchCycle;	// Controls when branch tests are performed.
+	s32 DivUnitCycles;		// number of cycles pending on the current div unit instruction (mult and div both run in the same unit)
 
 	bool IsDelaySlot;
 	bool IsExecuting;
+
+	void StopExecution();
+
+	u32 GetCycle() const
+	{
+		return _cycle + ( evtCycleDuration - evtCycleCountdown );
+	}
+	
+	void AddCycles( int amount )
+	{
+		evtCycleCountdown	-= amount;
+		DivUnitCycles		-= amount;
+	}
 
 	// Sets a new PC in "abrupt" fashion (without consideration for delay slot).
 	// Effectively cancels the delay slot instruction, making this ideal for use
 	// in raising exceptions.
 	__releaseinline void SetExceptionPC( u32 newpc )
 	{
-		//pc = newpc;
-		VectorPC = newpc;
+		pc			= newpc;
+		VectorPC	= newpc + 4;
 		IsDelaySlot = false;
 	}
 	
-	__releaseinline void SetNextBranch( u32 startCycle, s32 delta )
+	// ------------------------------------------------------------------------
+	// DivUnitStall - CPU stalls are performed accordingly and the DivUnit's cycle status
+	// is updated.  The DIV pipe runs in parallel to the rest of the CPU, but if one of
+	// the dependent  instructions is used, it means we need to stall the IOP to wait for
+	// the result.
+	//
+	// newStall - non-zero values indicate an instruction which depends on the DivUnit.
+	//
+	__releaseinline void DivUnitStall( u32 newStall )
 	{
-		// typecast the conditional to signed so that things don't blow up
-		// if startCycle is greater than our next branch cycle.
+		if( newStall == 0 ) return;		// instruction doesn't use the DivUnit?
 
-		if( (int)(NextBranchCycle - startCycle) > delta )
-			NextBranchCycle = startCycle + delta;
+		// anything zero or less means the DivUnit is empty
+		if( DivUnitCycles > 0 )
+			evtCycleCountdown -= DivUnitCycles;
+
+		DivUnitCycles = newStall;
 	}
-
-	__releaseinline void SetNextBranchDelta( s32 delta )
-	{
-		SetNextBranch( cycle, delta );
-	}
-
-	__releaseinline int TestCycle( u32 startCycle, s32 delta )
-	{
-		// typecast the conditional to signed so that things don't explode
-		// if the startCycle is ahead of our current cpu cycle.
-
-		return (int)(cycle - startCycle) >= delta;
-	}
-
-	__releaseinline void StopExecution()
+	
+	void RaiseExtInt( uint irq );
+	
+	/*__releaseinline void StopExecution()
 	{
 		if( !IsExecuting ) return;
 		eeCycleDelta = 0;
 		SetNextBranchDelta( 0 );
-	}
+	}*/
 };
-}
 
-PCSX2_ALIGNED16_EXTERN(R3000A::Registers iopRegs);
-
-namespace R3000A {
+PCSX2_ALIGNED16_EXTERN(Registers iopRegs);
 
 union GprStatus
 {
@@ -538,8 +556,8 @@ protected:
 	virtual u32 GetLo_UL() { return iopRegs[GPR_lo].SL; }
 	virtual u32 GetFs_UL() { return iopRegs.CP0.r[_Rd_].SL; }
 
-	virtual u32 GetRt_US( int idx=0 ) { return iopRegs[_Rt_].US[idx]; }
-	virtual u32 GetRt_UB( int idx=0 ) { return iopRegs[_Rt_].UB[idx]; }
+	virtual u16 GetRt_US( int idx=0 ) { return iopRegs[_Rt_].US[idx]; }
+	virtual u8 GetRt_UB( int idx=0 ) { return iopRegs[_Rt_].UB[idx]; }
 
 	virtual void SetRd_SL( s32 src ) { if(!_Rd_) return; iopRegs[_Rd_].SL = src; }
 	virtual void SetRt_SL( s32 src ) { if(!_Rt_) return; iopRegs[_Rt_].SL = src; }
@@ -692,6 +710,9 @@ protected:
 	virtual u32 GetHi_UL() { m_ReadsGPR.Hi = true; m_SignExtRead = false; return iopRegs[GPR_hi].UL; }
 	virtual u32 GetLo_UL() { m_ReadsGPR.Lo = true; m_SignExtRead = false; return iopRegs[GPR_lo].UL; }
 	virtual u32 GetFs_UL() { m_ReadsGPR.Fs = true; m_SignExtRead = false; return iopRegs.CP0.r[_Rd_].UL; }
+
+	virtual u16 GetRt_US( int idx=0 ) { m_ReadsGPR.Rt = true; m_SignExtRead = false; return iopRegs[_Rt_].US[idx]; }
+	virtual u8 GetRt_UB( int idx=0 ) { m_ReadsGPR.Rt = true; m_SignExtRead = false; return iopRegs[_Rt_].UB[idx]; }
 
 	virtual void SetRd_SL( s32 src ) { if(!_Rd_) return; m_WritesGPR.Rd = true; m_SignExtWrite = true; iopRegs[_Rd_].SL = src; }
 	virtual void SetRt_SL( s32 src ) { if(!_Rt_) return; m_WritesGPR.Rt = true; m_SignExtWrite = true; iopRegs[_Rt_].SL = src; }

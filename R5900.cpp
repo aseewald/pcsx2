@@ -479,7 +479,7 @@ __forceinline bool _cpuBranchTest_Shared()
 
 	// The IOP could be running ahead/behind of us, so adjust the iop's next branch by its
 	// relative position to the EE (via EEsCycle)
-	cpuSetNextBranchDelta( ((iopRegs.NextBranchCycle-iopRegs.cycle)*8) - EEsCycle );
+	cpuSetNextBranchDelta( (iopRegs.evtCycleCountdown*8) - EEsCycle );
 
 	// Apply the hsync counter's nextCycle
 	cpuSetNextBranch( hsyncCounter.sCycle, hsyncCounter.CycleT );

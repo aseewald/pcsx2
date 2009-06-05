@@ -20,49 +20,7 @@
 #include "IopCommon.h"
 #include "iR3000air.h"
 
-using namespace x86Emitter;
-
 namespace R3000A {
-
-iopRecState m_RecState;
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
-class xBlocksMap
-{
-public:
-	typedef std::map<u32, s32> Blockmap_t;
-	typedef Blockmap_t::iterator Blockmap_iterator;
-
-	SafeList<recBlockItem> Blocks;
-
-	// Mapping of pc (u32) to recBlockItem* (s32).  The recBlockItem pointers are not absolute!
-	// They are relative to the Blocks array above.
-	// Implementation Note: This could be replaced with a hash and would, likely, be more
-	// efficient.  However for the hash to be efficient it needs to ensure a fairly regular
-	// dispersal of the IOP code addresses across the span of a 32 bit hash, and I'm just too
-	// lazy to bother figuring such an algorithm out right now.  [this is not speed-critical
-	// code anyway, so wouldn't much matter even if it were faster]
-	Blockmap_t Map;
-
-public:
-	xBlocksMap() :
-		Blocks( 4096, "recBlocksMap::Blocks" ),
-		Map()
-	{
-		Blocks.New();
-	}
-
-	// pc - ps2 address target of the x86 jump instruction
-	// x86addr - x86 address of the x86 jump instruction
-	void AddLink( u32 pc, JccComparisonType cctype );
-	
-protected:
-	recBlockItem& _getItem( u32 pc );
-};
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 
 // Allocates 8 megs of ram for the IOP's generated x86 code.  [might be better set to 4 megs?]
 static const uint xBlockCacheSize = 0x0800000;
@@ -74,9 +32,11 @@ struct xBlockLutAlloc
 	uptr ROM1[Ps2MemSize::Rom1 / 4];
 };
 
-static xBlockLutAlloc* m_xBlockLutAlloc = NULL;
-static u8** m_xBlockLut = NULL;
-static xBlocksMap m_xBlockMap;
+static xBlockLutAlloc*	m_xBlockLutAlloc = NULL;
+static u8**				m_xBlockLut = NULL;
+
+iopRec_PersistentState	g_PersState;
+iopRec_BlockState		g_BlockState;
 
 namespace DynFunc
 {
@@ -159,36 +119,36 @@ void xBlocksMap::AddLink( u32 pc, JccComparisonType cctype )
 // ------------------------------------------------------------------------
 // cycleAcc - accumulated cycles since last stall update.
 //
-void __fastcall DivStallUpdater( uint cycleAcc, int newstall )
+void __fastcall DivStallUpdater( int cycleAcc, int newstall )
 {
+	if( newstall == 0 ) return;		// instruction doesn't use the DivUnit.
+
 	if( cycleAcc < iopRegs.DivUnitCycles )
-		iopRegs.cycle += iopRegs.DivUnitCycles - cycleAcc;
+		iopRegs.evtCycleCountdown -= iopRegs.DivUnitCycles - cycleAcc;
 
 	iopRegs.DivUnitCycles = newstall;
 }
 
 // ------------------------------------------------------------------------
 //
-void DynGen_DivStallUpdate( int stallcycles, const xRegister32& tempreg=eax )
+void DynGen_DivStallUpdate( int newstall, const xRegister32& tempreg=eax )
 {
 	// DivUnit Stalling occurs any time the current instruction has a non-zero
 	// DivStall value.  Otherwise we just increment internal cycle counters
 	// (which essentially behave as const-optimizations, and are written to
 	// memory only when needed).
 
-	if( stallcycles != 0 )
+	if( newstall != 0 )
 	{
 		// Inline version:
-		xMOV( tempreg, &iopRegs.DivUnitCycles );
-		xSUB( tempreg, m_RecState.GetScaledDivCycles() );
+		/*xMOV( tempreg, &iopRegs.DivUnitCycles );
+		xSUB( tempreg, ir.DivUnit_GetCycleAccum() );
 		xForwardJS8 skipStall;
-		xADD( &iopRegs.cycle, tempreg );
-		skipStall.SetTarget();
+		xSUB( &iopRegs.evtCycleCountdown, tempreg );
+		skipStall.SetTarget();*/
 
-		m_RecState.DivCycleAccum = 0;
+		xMOV( ptr32[&iopRegs.DivUnitCycles], newstall );
 	}
-	else
-		m_RecState.DivCycleInc();
 }
 
 static __forceinline bool intExceptionTest()
@@ -201,46 +161,43 @@ static __forceinline bool intExceptionTest()
 	return true;
 }
 
-static u32 EventHandler()
-{
-	if( iopTestCycle( iopRegs.NextsCounter, iopRegs.NextCounter ) )
-	{
-		psxRcntUpdate();
-	}
-
-	// start the next branch at the next counter event by default
-	// the interrupt code below will assign nearer branches if needed.
-	iopRegs.NextBranchCycle = iopRegs.NextsCounter+iopRegs.NextCounter;
-
-	if (iopRegs.interrupt)
-	{
-		iopEventTestIsActive = true;
-		_iopTestInterrupts();
-		iopEventTestIsActive = false;
-	}
-
-	if( intExceptionTest() )
-	{
-		iopRegs.pc			 = iopRegs.VectorPC;
-		iopRegs.VectorPC	+= 4;
-		iopRegs.IsDelaySlot	 = false;
-	}
-
-	if( iopTestCycle( iopRegs.eeCycleStart, iopRegs.eeCycleDelta ) ) return 1;
-
-	iopSetNextBranch( iopRegs.eeCycleStart, iopRegs.eeCycleDelta );
-	return 0;
-}
-
 //////////////////////////////////////////////////////////////////////////////////////////
+// ROM pages, and optimizing for them:
 //
-
+// Typically the ROm is run only once, and very briefly at that.  Analysis counted 184 ROM
+// pages executed during a full startup, many of which were run only once.  Total ROM block
+// executions (recompiled) tallied 18204, which is like practically nothing.  This analysis
+// hlped me determine that there's no point in including special opts for ROM page re-
+// compilation with the *possible* exception of just disabling recompilation for ROM pages
+// entirely (ie, running them through the high-speed interpreter).
+//
+//////////////////////////////////////////////////////////////////////////////////////////
 // Block (in-)validation Patterns of the IOP, and how to optimize for it:
 //
-// Currently the IOP recompiler uses a simple (and fail-safe) approach of manually checking
-// the integrity of a block when the block is run.  I've done quite a bit of careful re-
-// search in deciding on this approach.
+// As it turns out, the IOP has a fail-safe mechanism for detecting and handling block
+// invalidation.  In order for the R3000's cache to be cleared of any wrong-doing, the
+// IOP must perform a special Cache Clearing ritual after any and all modifucations of 
+// code pages.  This is detected by watching Bit 16 on the COP0's status register.  When
+// the bit goes high, the IOP is in cache clearing mode.  When the bit goes back low, the
+// IOP is returned to standard operation.
 //
+// So for fully comprehensive invalidation, we simply issue a recReset at each changing of
+// the status bit.  This works in two fronts, since it also allows us to optimize memory
+// accesses based on the assumption that the status of the COP0 Status bit 16 is *constant*
+// .. which removes a cmp/jmp from the IOP's recompiled memory ops. :)
+//
+// Optimizing Block Invalidation:
+// 
+// The best approach (likely) for optimizing the COP0's Status16 bit going high is to use
+// the interpreter for executing code during that time.  The code being executed is
+// typically just a 4k memory clear which turns into an extended NOP in emulation terms
+// since all SW ops are ignored during that time.  An optimized interpreter could dispatch
+// the NOP'd SWs in rapid fashion and likely be much faster than the effort needed to
+// generate, link, and execute x86 code for such a specialized routine.
+//
+// For posterity, I've included some additional info/analysis from before I was educated on
+// this nifty bit's true purpose (and thus thought I had to come up with some more clever
+// system for IOP invalidation):
 //
 // Q: Why not Virtual Protection like what the EErec uses?
 // A: The IOP tends to mix code and data in the same 4k page with relative certainty, such
@@ -272,25 +229,25 @@ static void recRecompile()
 	if( masked_pc < 0x800000 )
 		masked_pc &= Ps2MemSize::IopRam-1;
 	
-	xBlocksMap::Blockmap_iterator blowme( m_xBlockMap.Map.find( masked_pc ) );
+	xBlocksMap::Blockmap_iterator blowme( g_PersState.xBlockMap.Map.find( masked_pc ) );
 
-	memzero_obj( m_RecState );
-	//m_RecState.pc = iopRegs.pc;
+	memzero_obj( g_BlockState );
+	//g_BlockState.pc = iopRegs.pc;
 
-	if( blowme == m_xBlockMap.Map.end() )
+	if( blowme == g_PersState.xBlockMap.Map.end() )
 	{
-		//Console::WriteLn( "IOP First-pass block at PC: 0x%08x  (total blocks=%d)", params masked_pc, m_xBlockMap.Blocks.GetLength() );
+		//Console::WriteLn( "IOP First-pass block at PC: 0x%08x  (total blocks=%d)", params masked_pc, g_PersState.xBlockMap.Blocks.GetLength() );
 		recIR_Block();
 
 		//if( !IsIopRamPage( masked_pc ) )	// disable block checking for non-ram (rom, rom1, etc)
 		//	m_blockspace.ramlen = 0;
 		
-		m_xBlockMap.Map[masked_pc] = m_xBlockMap.Blocks.GetLength();
-		m_xBlockMap.Blocks.New().Assign( m_blockspace );
+		g_PersState.xBlockMap.Map[masked_pc] = g_PersState.xBlockMap.Blocks.GetLength();
+		g_PersState.xBlockMap.Blocks.New().Assign( m_blockspace );
 	}
 	else
 	{
-		recBlockItem& mess( m_xBlockMap.Blocks[blowme->second] );
+		recBlockItem& mess( g_PersState.xBlockMap.Blocks[blowme->second] );
 
 		int numinsts = mess.IL.GetLength();
 		if( numinsts != 0 )
@@ -316,7 +273,7 @@ static void recRecompile()
 				}*/
 			}
 
-			//Console::WriteLn( "IOP Second-pass block at PC: 0x%08x  (total blocks=%d)", params masked_pc, m_xBlockMap.Blocks.GetLength() );
+			//Console::WriteLn( "IOP Second-pass block at PC: 0x%08x  (total blocks=%d)", params masked_pc, g_PersState.xBlockMap.Blocks.GetLength() );
 
 			// Integrity Verified... Generate X86.
 
@@ -377,9 +334,6 @@ static void DynGen_Functions()
 	// then re-dispatch based on the new PC coming out of the event handler)
 
 	DynFunc::JITCompile = xGetPtr();
-	xMOV( eax, &iopRegs.cycle );
-	xSUB( eax, &iopRegs.NextBranchCycle );
-	xForwardJNS8 label_callEvent;
 	xCALL( recRecompile );
 	xForwardJump8 label_dispatcher;
 
@@ -388,11 +342,12 @@ static void DynGen_Functions()
 	// This either jumps to a RET instruction (rec exit), or falls through to the dispatcher.
 	// The dispatcher is the common execution path, hence it's the fall-through choice.
 	
-	label_callEvent.SetTarget();		// uncomment for conditional dispatcher profile test above.
+	//label_callEvent.SetTarget();		// uncomment for conditional dispatcher profile test above.
 	DynFunc::CallEventHandler = xGetPtr();
-	xCALL( EventHandler );
-	xTEST( eax, eax );
-	xForwardJNZ8 label_exitRec;
+	xMOV( ecx, &iopEvtSys );
+	xCALL( iopExecutePendingEvents );
+	xCMP( ptr8[&iopRegs.IsExecuting], 0 );
+	xForwardJNE8 label_exitRec;
 
 	// ------------------------------------------------------------------------
 	// Dispatcher!
@@ -419,14 +374,8 @@ static void DynGen_Functions()
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-void DynGen_BeginBranch( const IntermediateRepresentation& il, recBlockItem& block )
+void DynGen_BeginBranch( const IntermediateRepresentation& ir, recBlockItem& block )
 {
-	xMOV( ptr32[iopRegs.pc], il.Inst._Pc_ );
-	xMOV( eax, &iopRegs.cycle );
-	xADD( eax, m_RecState.GetScaledBlockCycles() );
-	xMOV( &iopRegs.cycle, eax );
-	xSUB( eax, &iopRegs.NextBranchCycle );
-	xJNS( DynFunc::CallEventHandler );
 }
 
 void DynGen_BranchReg()
@@ -436,7 +385,7 @@ void DynGen_BranchReg()
 
 void DynGen_BranchImm( u32 newpc, JccComparisonType cctype )
 {
-	m_xBlockMap.AddLink( newpc, cctype );
+	g_PersState.xBlockMap.AddLink( newpc, cctype );
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -444,10 +393,8 @@ void DynGen_BranchImm( u32 newpc, JccComparisonType cctype )
 static s32 recExecuteBlock( s32 eeCycles )
 {
 	iopRegs.IsExecuting = true;
-	iopRegs.eeCycleStart = iopRegs.cycle;
-	iopRegs.eeCycleDelta = eeCycles/8;
-
-	iopSetNextBranchDelta( iopRegs.eeCycleDelta );
+	u32 eeCycleStart = iopRegs.GetCycle();
+	iopEvtSys.ScheduleEvent( IopEvt_BreakForEE, eeCycles/8 );
 
 	// Optimization note : Compared pushad against manually pushing the regs one-by-one.
 	// Manually pushing is faster, especially on Core2's and such. :)
@@ -468,7 +415,7 @@ static s32 recExecuteBlock( s32 eeCycles )
 	}
 	
 	iopRegs.IsExecuting = false;
-	return eeCycles - ((iopRegs.cycle - iopRegs.eeCycleStart) * 8);
+	return eeCycles - ((iopRegs._cycle - eeCycleStart) * 8);
 }
 
 static void recExecute()
@@ -494,12 +441,11 @@ static void TranslatePC_SetPages( u32* target, u32 startpc, int size )
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-static u8* m_xBlockCache = NULL;
 
 static void recAlloc()
 {
-	if( m_xBlockCache == NULL )
-		m_xBlockCache = (u8*)SysMmapEx( 0x28000000, xBlockCacheSize, 0, "recAlloc(R3000A)" );
+	if( g_PersState.xBlockCache == NULL )
+		g_PersState.xBlockCache = (u8*)SysMmapEx( 0x28000000, xBlockCacheSize, 0, "recAlloc(R3000A)" );
 
 	if( m_xBlockLutAlloc == NULL )
 		m_xBlockLutAlloc = (xBlockLutAlloc*) _aligned_malloc( sizeof( xBlockLutAlloc ), 4096 );
@@ -516,8 +462,8 @@ static void recAlloc()
 	// memory that map to RAM or ROM.  [executable code sources]
 	// Each element in the TranslatePC table covers a 256k page of memory.
 
-	const int RamPages = Ps2MemSize::IopRam / XlatePC_PageSize;
-	const int RomPages = Ps2MemSize::Rom / XlatePC_PageSize;
+	const int RamPages	= Ps2MemSize::IopRam / XlatePC_PageSize;
+	const int RomPages	= Ps2MemSize::Rom / XlatePC_PageSize;
 	const int Rom1Pages = Ps2MemSize::Rom1 / XlatePC_PageSize;
 
 	// regular ram is a 2mb mapping, mirrored four times across the lower portion of RAM.
@@ -536,7 +482,7 @@ static void recShutdown()
 {
 	//ProfilerTerminateSource( "IOPRec" );
 	
-	SafeSysMunmap( m_xBlockCache, xBlockCacheSize );
+	SafeSysMunmap( g_PersState.xBlockCache, xBlockCacheSize );
 	safe_aligned_free( m_xBlockLutAlloc );
 }
 
@@ -544,12 +490,12 @@ u8* m_xBlock_CurPtr = NULL;
 
 static void recReset()
 {
-	memset_8<0xcc, xBlockCacheSize>( m_xBlockCache );
+	memset_8<0xcc, xBlockCacheSize>( g_PersState.xBlockCache );
 
 	for( int i=0; i<sizeof(xBlockLutAlloc)/4; ++i )
 		m_xBlockLut[i] = DynFunc::JITCompile;
 		
-	m_xBlock_CurPtr = m_xBlockCache;
+	m_xBlock_CurPtr = g_PersState.xBlockCache;
 }
 
 static void recClear( u32, u32 )

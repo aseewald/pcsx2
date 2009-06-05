@@ -86,7 +86,7 @@ int CreateSocket(HWND hDlg, int port){
 	Edit_SetText(GetDlgItem(hDlg, IDC_IOPPC), message);
 	sprintf(message, "%d", cpuRegs.cycle);
 	Edit_SetText(GetDlgItem(hDlg, IDC_EECYCLE), message);
-	sprintf(message, "%d", iopRegs.cycle);
+	sprintf(message, "%d", iopRegs.GetCycle());
 	Edit_SetText(GetDlgItem(hDlg, IDC_IOPCYCLE), message);
 	Button_SetCheck(GetDlgItem(hDlg, IDC_DEBUGEE),  (debuggedCpu==0));
 	Button_SetCheck(GetDlgItem(hDlg, IDC_DEBUGIOP), (debuggedCpu==1));

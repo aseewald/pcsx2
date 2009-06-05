@@ -407,7 +407,7 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 	sprintf(eepc,  "%08X", cpuRegs.pc);
 	sprintf(ioppc, "%08X", iopRegs.pc);
 	sprintf(eecy,  "%d", cpuRegs.cycle);
-	sprintf(iopcy, "%d", iopRegs.cycle);
+	sprintf(iopcy, "%d", iopRegs.GetCycle());
 	writeData(outbuffer);
 }
 

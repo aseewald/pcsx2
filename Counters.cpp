@@ -31,8 +31,6 @@
 
 using namespace Threading;
 
-extern u8 psxhblankgate;
-
 static const uint EECNT_FUTURE_TARGET = 0x10000000;
 
 u64 profile_starttick = 0;
@@ -213,11 +211,9 @@ static void vSyncInfoCalc( vSyncTimingInfo* info, u32 framesPerSecond, u32 scans
 	else if( ( hBlank - info->hBlank ) >= 5000 ) info->hBlank++;
 	
 	// Calculate accumulative hSync rounding error per half-frame:
-	{
 	u32 hSyncCycles = ((info->hRender + info->hBlank) * scansPerFrame) / 2;
 	u32 vSyncCycles = (info->Render + info->Blank);
 	info->hSyncError = vSyncCycles - hSyncCycles;
-	}
 
 	// Note: In NTSC modes there is some small rounding error in the vsync too,
 	// however it would take thousands of frames for it to amount to anything and
@@ -340,7 +336,7 @@ static __forceinline void VSyncStart(u32 sCycle)
 	if (!(GSIMR&0x800)) gsIrq();
 
 	hwIntcIrq(INTC_VBLANK_S);
-	psxVBlankStart();
+	IopCounters::VBlankStart();
 
 	if (gates) rcntStartGate(true, sCycle); // Counters Start Gate code
 	if (Config.Patch) applypatch(1); // Apply patches (ToDo: clean up patch code)
@@ -374,7 +370,7 @@ static __forceinline void VSyncEnd(u32 sCycle)
 	gsPostVsyncEnd( true );
 
 	hwIntcIrq(INTC_VBLANK_E);  // HW Irq
-	psxVBlankEnd(); // psxCounters vBlank End
+	IopCounters::VBlankEnd(); // psxCounters vBlank End
 	if (gates) rcntEndGate(true, sCycle); // Counters End Gate Code
 	frameLimit(); // limit FPS
 
@@ -396,7 +392,7 @@ __forceinline void rcntUpdate_hScanline()
 	//iopBranchAction = 1;
 	if (hsyncCounter.Mode & MODE_HBLANK) { //HBLANK Start
 		rcntStartGate(false, hsyncCounter.sCycle);
-		psxCheckStartGate16(0);
+		IopCounters::CheckStartGate0();
 		
 		// Setup the hRender's start and end cycle information:
 		hsyncCounter.sCycle += vSyncInfo.hBlank;		// start  (absolute cycle value)
@@ -407,7 +403,7 @@ __forceinline void rcntUpdate_hScanline()
 		if (CSRw & 0x4) GSCSRr |= 4; // signal
 		if (!(GSIMR&0x400)) gsIrq();
 		if (gates) rcntEndGate(false, hsyncCounter.sCycle);
-		if (psxhblankgate) psxCheckEndGate16(0);
+		IopCounters::CheckEndGate0();
 
 		// set up the hblank's start and end cycle information:
 		hsyncCounter.sCycle += vSyncInfo.hRender;	// start (absolute cycle value)

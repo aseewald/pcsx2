@@ -138,8 +138,7 @@ void recIR_Block()
 			// RecState's cycle accumulator.  This is because the same thing is done by the recs, and
 			// is designed to allow proper handling of stalls across branches.
 
-			if( inst.GetDivStall() != 0 )
-				DivStallUpdater( m_RecState.DivCycleAccum, inst.GetDivStall() );
+			DivStallUpdater( g_BlockState.DivCycleAccum, inst.GetDivStall() );
 
 			// Check for 'Forced' End-of-Block Conditions:
 			//  * Writes to the Status register (can enable / disable memory operations)
@@ -161,11 +160,11 @@ void recIR_Block()
 			//	termBlock = true;
 		}
 
-		m_RecState.IncCycleAccum();
+		g_BlockState.IncCycleAccum();
 
-	} while( !termBlock && (m_RecState.BlockCycleAccum < MaxCyclesPerBlock) );
+	} while( !termBlock && (g_BlockState.BlockCycleAccum < MaxCyclesPerBlock) );
 
-	iopRegs.cycle += m_RecState.BlockCycleAccum;
+	iopRegs.AddCycles( g_BlockState.BlockCycleAccum );
 }
 
 // TODO: Add the Const type to the parameters here, but I'm waiting for the wxWidgets merge.

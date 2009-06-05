@@ -105,42 +105,32 @@ namespace R3000A {
 using namespace x86Emitter;
 class IntermediateRepresentation;
 
-extern void __fastcall DivStallUpdater( uint cycleAcc, int newstall );
+extern void __fastcall DivStallUpdater( int cycleAcc, int newstall );
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// iopRecState - contains data representing the current known state of the emu during the
-// process of block recompilation.  Information in this struct
+// Generates an exception if the given condition is not true.  Exception's description
+// contains "IOPrec assumption failed on instruction 'INST': [usr msg]".
+// inReleaseMode - Exception is generated in Devel and Debug builds only by default.
+//   Pass 'true' as the inReleaseMode parameter to enable exception checking in Release
+//   builds as well (ie, all builds).
 //
-struct iopRecState
+static __forceinline void DynarecAssume( bool condition, const Instruction& inst, const char* msg, bool inReleaseMode=false )
 {
-	int BlockCycleAccum;
-	int DivCycleAccum;
-	u32 pc;				// pc for the currently recompiling/emitting instruction
-	u8* x86blockptr;	// address of the current block being generated (pointer to the recBlock array)
+	// [TODO]  Add a new exception type that allows specialized handling of dynarec-level
+	// exceptions, so that the exception handler can save the state of the emulation to
+	// a special savestate.  Such a savestate *should* be fully intact since dynarec errors
+	// occur during codegen, and prior to executing bad code.  Thus, once such bugs are
+	// fixed, the emergency savestate can be resumed successfully. :)
+	//
+	// [TODO]  Add a recompiler state/info dump to this, so that we can log PC, surrounding
+	// code, and other fun stuff!
 
-	int GetScaledBlockCycles() const
+	if( (inReleaseMode || IsDevBuild) && !condition )
 	{
-		return BlockCycleAccum * 1;
+		throw Exception::LogicError( fmt_string(
+			"IOPrec assumption failed on instruction '%s': %s", inst.GetName(), msg
+		) );
 	}
-
-	int GetScaledDivCycles() const
-	{
-		return DivCycleAccum * 1;
-	}
-	
-	__releaseinline void DivCycleInc()
-	{
-		if( DivCycleAccum < 0x7f )		// cap it at 0x7f (anything over 35 is ignored anyway)
-			DivCycleAccum++;
-	}
-	
-	__releaseinline void IncCycleAccum()
-	{
-		BlockCycleAccum++;
-		DivCycleInc();
-	}
-};
-
+}
 
 // ------------------------------------------------------------------------
 //
@@ -313,8 +303,8 @@ public:
 	const xDirectOrIndirect32& SrcField( RegField_t field ) const
 	{
 		int gpr = Inst.ReadsField( field );
-		if( IsDevBuild && (gpr == -1) )
-			throw Exception::LogicError( "IOPrec Logic Error: Instruction attempted to read an invalid field." );
+		DynarecAssume( gpr != -1, Inst,
+			"Attempted to read from a field that is not a valid input field for this instruction." );
 
 		return Src[gpr];
 	}
@@ -322,29 +312,33 @@ public:
 	const xDirectOrIndirect32& DestField( RegField_t field ) const
 	{
 		int gpr = Inst.WritesField( field );
-		if( IsDevBuild && (gpr == -1) )
-			throw Exception::LogicError( "IOPrec Logic Error: Instruction attempted to write to an invalid field." );
-
+		DynarecAssume( gpr != -1, Inst,
+			"Attempted to write to a field that is not a valid outpt field for this instruction." );
 		return Dest[gpr];
 	}
 
 	const xRegister32& TempReg( uint tempslot ) const
 	{
 		jASSUME( tempslot < 4 );
-		jASSUME( !m_TempReg[tempslot].IsEmpty() );	// make sure register was allocated properly!
+		DynarecAssume( !m_TempReg[tempslot].IsEmpty(), Inst,
+			"Referenced an unallocated temp register slot.", true );
 		return m_TempReg[tempslot];
 	}
 
 	const xRegister8& TempReg8( uint tempslot ) const
 	{
 		jASSUME( tempslot < 4 );
-		jASSUME( !m_TempReg8[tempslot].IsEmpty() );	// make sure register was allocated properly!
+		DynarecAssume( !m_TempReg[tempslot].IsEmpty(), Inst,
+			"Referenced an unallocated temp register slot.", true );
 		return m_TempReg8[tempslot];
 	}
 
 	// --------------------------------------------------------
 	//            Register Mapping / Allocation API
 	// --------------------------------------------------------
+	static ModSibStrict<u32> GetMemIndexer( MipsGPRs_t gpridx );
+	static ModSibStrict<u32> GetMemIndexer( int gpridx );
+
 	void SetFlushingState();
 	
 	//void		DynRegs_UnmapForcedIndirects( const RegMapInfo_Dynamic& dyno );
@@ -548,12 +542,151 @@ struct recBlockItem : public NoncopyableObject
 	void Assign( const recBlockItemTemp& src );
 };
 
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+class xBlocksMap
+{
+public:
+	typedef std::map<u32, s32> Blockmap_t;
+	typedef Blockmap_t::iterator Blockmap_iterator;
+
+	SafeList<recBlockItem> Blocks;
+
+	// Mapping of pc (u32) to recBlockItem* (s32).  The recBlockItem pointers are not absolute!
+	// They are relative to the Blocks array above.
+	//
+	// Implementation Note: This could be replaced with a hash and would, likely, be more
+	// efficient.  However for the hash to be efficient it needs to ensure a fairly regular
+	// dispersal of the IOP pc addresses across the span of a 32 bit hash, and I'm just too
+	// lazy to bother figuring such an algorithm out right now.  [this is not speed-critical
+	// code anyway, so wouldn't much matter even if it were faster]
+	Blockmap_t Map;
+
+public:
+	xBlocksMap() :
+		Blocks( 4096, "recBlocksMap::Blocks" ),
+		Map()
+	{
+		Blocks.New();
+	}
+
+	// pc - ps2 address target of the x86 jump instruction
+	// x86addr - x86 address of the x86 jump instruction
+	void AddLink( u32 pc, JccComparisonType cctype );
+	
+protected:
+	recBlockItem& _getItem( u32 pc );
+};
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// iopRec_PersistentState - houses variables which persist across the entire duration of 
+// the emulation session.  Most of these vars are only cleared/reset upon a call to
+// recReset.
+//
+struct iopRec_PersistentState
+{
+	// Block Cache is a largwe, flat, execution-allowed array.  x86 code is written here
+	// during recompilation and then is run during execution.  Code is written in blocks
+	// which typically span from an entry point (jump/branch target) to an exit point
+	// (jump or branch instruction).
+	u8*			xBlockCache;
+
+	// Pointer to the current/next block in the xBlockCache.  During Block recompilaion this
+	// points to the current block.  At the end of Block recompilation it is assigned a
+	// pointer to the position where the *next* block is to be emitted.
+	u8*			xBlockPtr;
+	
+	// The blockmap!  Consists of an allocation of blocks plus an associative mapping of
+	// iopRegs.pc to the block compilation in question, for fast pc->x86ptr block lookups.
+	xBlocksMap	xBlockMap;
+
+	iopRec_PersistentState() :
+		xBlockCache( NULL )
+	,	xBlockPtr( NULL )
+	,	xBlockMap()
+	{
+	}
+};
+
+struct GPR_UsePair
+{
+	int gpr;
+	int used;
+};
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// iopRecState - contains data representing the current known state of the emu during the
+// process of block recompilation.  This struct is cleared when the recompilation of a
+// block begins, and tracks data for that block across both Interp and Rec passes.
+//
+struct iopRec_BlockState
+{
+	int BlockCycleAccum;
+	int DivCycleAccum;
+	u32 pc;				// pc for the currently recompiling/emitting instruction
+	u8* xBlockPtr;		// base address of the current block being generated (pointer to the recBlock array)
+
+	int gpr_map_edi;	// block-wide mapping of EDI to a GPR (-1 for no mapping)
+
+	// -------------------------------------------------------------------
+	bool HasMappedEdi() const
+	{
+		return gpr_map_edi != -1;
+	}
+
+	void SetMapEdi( const GPR_UsePair& high )
+	{
+		gpr_map_edi = ( high.used < 1 || high.gpr == 0 ) ? -1 : high.gpr;
+	}
+	
+	bool IsEdiMappedTo( uint gpr ) const
+	{
+		return gpr == gpr_map_edi;
+	}
+
+	// Generates x86 code for loading block-scoped register mappings.
+	// (currently only Edi, may include Ebp at a later date).
+	void DynGen_InitMappedRegs() const
+	{
+		if( gpr_map_edi > 0 )
+			xMOV( edi, IntermediateRepresentation::GetMemIndexer( gpr_map_edi ) );
+	}
+	
+	// -------------------------------------------------------------------
+	int GetScaledBlockCycles() const
+	{
+		// [TODO] : Implement speedhacking.
+		return BlockCycleAccum * 1;
+	}
+
+	int GetScaledDivCycles() const
+	{
+		return DivCycleAccum * 1;
+	}
+	
+	__releaseinline void IncCycleAccum()
+	{
+		BlockCycleAccum++;
+		DivCycleAccum++;
+	}
+};
+
 
 //////////////////////////////////////////////////////////////////////////////////////////
 
 
-extern recBlockItemTemp m_blockspace;
-extern iopRecState m_RecState;
+extern recBlockItemTemp			m_blockspace;
+extern iopRec_PersistentState	g_PersState;
+extern iopRec_BlockState		g_BlockState;
+
+namespace DynFunc
+{
+	extern u8* JITCompile;
+	extern u8* CallEventHandler;
+	extern u8* Dispatcher;
+	extern u8* ExitRec;		// just a ret!
+}
+
 
 extern void recIR_Block();
 
