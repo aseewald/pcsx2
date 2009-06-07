@@ -29,6 +29,9 @@
 
 #include "DebugTools/Debug.h"
 
+extern u32 bExecBIOS;
+
+
 R3000Exception::BaseExcept::~BaseExcept() throw() {}
 
 R3000Exception::BaseExcept::BaseExcept( const R3000A::Instruction& inst, const std::string& msg ) :
@@ -69,6 +72,24 @@ static string m_disasm;
 static string m_comment;
 #endif
 
+static void FuckingExcept()
+{
+	if( psxHu32(0x1078) == 0 ) return;
+	if( (psxHu32(0x1070) & psxHu32(0x1074)) == 0 ) return;
+
+	if ((iopRegs.CP0.n.Status & 0xFE01) >= 0x401)
+	{
+		//PSXCPU_LOG("Interrupt: %x  %x\n", psxHu32(0x1070), psxHu32(0x1074));
+		PSXDMA_LOG("Interrupt: %x  %x\n", psxHu32(0x1070), psxHu32(0x1074));
+		iopException( 0, iopRegs.IsDelaySlot );
+
+		iopRegs.pc = iopRegs.VectorPC;
+		iopRegs.VectorPC += 4;
+		iopRegs.IsDelaySlot = false;
+		//iopBranchAction = true;
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////
 // Steps over the next instruction.
 //
@@ -78,18 +99,19 @@ static __releaseinline void intStep()
 
 	if( opcode.U32 == 0 )	// Iggy on the NOP please!  (Iggy Nop!)
 	{
-		// Optimization note: NOPs are almost never issued in pairs, so changing the if()
-		// above into a while() actually decreases overall performance.
+		// Optimization note:
+		// Special NOP handler.  This speeds up the interpretation process significantly.
+		// NOPs are almost never issued in pairs, so changing the if() above into a while()
+		// actually decreases overall performance.
 
-		//if( iopRegs.GetCycle() > 0x470000 )
+		//if( iopRegs.GetCycle() > 0x00077560 ) //0x003b0a57 )
 			PSXCPU_LOG( "NOP", iopRegs.IsDelaySlot ? "\n" : "" );
 
 		iopRegs.pc			 = iopRegs.VectorPC;
 		iopRegs.VectorPC	+= 4;
 		iopRegs.IsDelaySlot	 = false;
-
 		iopRegs.AddCycles( 1 );
-		
+
 		opcode = iopMemDirectRead32( iopRegs.pc );
 	}
 
@@ -100,9 +122,9 @@ static __releaseinline void intStep()
 #endif
 
 	Instruction::Process( dudley );
-	
+
 #ifdef PCSX2_DEVBUILD
-	if( (varLog & 0x00100000) ) //&& (iopRegs.GetCycle() > 0x470000) )
+	if( (varLog & 0x00100000) ) //&& (iopRegs.GetCycle() > 0x00077560 ) ) //0x003b0a57) )
 	{
 		dudley.GetDisasm( m_disasm );
 		dudley.GetValuesComment( m_comment );
@@ -114,22 +136,21 @@ static __releaseinline void intStep()
 	}
 #endif
 
-	// prep the iopRegs for the next instruction fetch -->
-	// 
-	// Typically VectorPC points to the delay slot instruction on branches, and the GetNextPC()
-	// references the *target* of the branch.  Thus the delay slot is processed on the next
-	// pass (unless an exception occurs), and *then* we vector to the branch target.  In other
-	// words, VectorPC acts as an instruction prefetch, only we prefetch just the PC (doing a
-	// full-on instruction prefetch is less efficient).
-	//
+	// Prep iopRegs for the next instruction in the queue.  The pipeline works by beginning
+	// processing of the current instruction above, and fetching the next instruction (below).
+	// The next instruction to fetch is determined by the VectorPC assigned by the previous
+	// instruction which is typically pc+4, but could be any branch target address.
+
 	// note: In the case of raised exceptions, VectorPC and GetNextPC() be overridden during
 	//  instruction processing above.
-	
+
 	iopRegs.pc			= iopRegs.VectorPC;
 	iopRegs.VectorPC	= dudley.GetNextPC();
 	iopRegs.IsDelaySlot	= dudley.IsBranchType();
-	iopRegs.AddCycles( 1 );
 
+	//FuckingExcept();
+
+	iopRegs.AddCycles( 1 );
 	iopRegs.DivUnitStall( dudley.GetDivStall() );
 }
 
@@ -149,10 +170,14 @@ static void intExecute()
 // on if events occurred).
 //
 static s32 intExecuteBlock( s32 eeCycles )
-{	
+{
+	// uncommenting this and/or adding 1 to the Break below breaks things, but shouldn't. Why?
+	//if( (eeCycles / 8) == 0 ) return eeCycles;
+
 	iopRegs.IsExecuting = true;
 	u32 eeCycleStart = iopRegs.GetCycle();
-	iopEvtSys.ScheduleEvent( IopEvt_BreakForEE, eeCycles/8 );
+
+	iopEvtSys.ScheduleEvent( IopEvt_BreakForEE, eeCycles/8 );		// add 1 to break FFXII booting.
 
 	do
 	{
@@ -160,12 +185,15 @@ static s32 intExecuteBlock( s32 eeCycles )
 
 		jASSUME( iopRegs.evtCycleCountdown <= iopRegs.evtCycleDuration );
 
+		//if( bExecBIOS && iopRegs.evtCycleCountdown > 0x10 )
+		//	Console::Error( "WTFH??" );
+
 		if( iopRegs.evtCycleCountdown <= 0 )
 			iopEvtSys.ExecutePendingEvents();
 
 	} while( iopRegs.IsExecuting ); //iopTestCycle( iopRegs.eeCycleStart, iopRegs.eeCycleDelta ) == 0 );
 
-	//iopRegs.IsExecuting = false;
+	//if( iopRegs.GetCycle() == 0x00010001 )
 	return eeCycles - ((iopRegs.GetCycle() - eeCycleStart) * 8);
 }
 

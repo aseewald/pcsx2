@@ -230,7 +230,7 @@ protected:
 		{
 			if( IsDevBuild )
 			{
-				u64 test = Count + GetEvtInfo().GetTimepass();
+				u64 test = Count + GetEvtInfo().GetTimepass() + iopRegs.GetPendingCycles();
 				DevAssume( Count < (Is16Bit() ? 0x10000 : 0x100000000), "IopCounter Logic Error : Rescheduled timer exceeds overflow value." );
 			}
 			Count += GetEvtInfo().GetTimepass();
@@ -330,7 +330,8 @@ IopCounterMethod(CntType) ICT::ReadCount() const
 
 	if( IsCounting )
 	{
-		s32 delta = (((MathType)GetEvtInfo().GetTimepass()) << IopRate_FixedBits) / m_rate;
+		MathType pendingCycles = (MathType)GetEvtInfo().GetTimepass() + iopRegs.GetPendingCycles();
+		s32 delta = (pendingCycles << IopRate_FixedBits) / m_rate;
 		retval += delta;
 	}
 
@@ -402,7 +403,7 @@ IopCounterMethod(void) ICT::_writeMode16( u32 newmode )
 		if( m_mode & IOPCNT_ENABLE_GATE )
 		{
 			IsCounting = false;
-			PSXCNT_LOG( "IOP Counter[%d] Notice: Gate Check Enabled.", Index );
+			DevCon::Notice( "IOP Counter[%d] Notice: Gate Check Enabled, mode=0x%04x", params Index, m_mode );
 			if( Index == 0 )
 				iopGateFlags.hBlank0 = true;
 			else
@@ -431,10 +432,11 @@ IopCounterMethod(void) ICT::_writeMode32( u32 newmode )
 		if( m_mode & IOPCNT_ENABLE_GATE )
 		{
 			IsCounting = false;
-			PSXCNT_LOG( "IOP Counter[3] Notice: Gate Check Enabled" );
+			DevCon::Notice( "IOP Counter[3] Notice: Gate Check Enabled, mode=0x%04x", params m_mode );
 			iopGateFlags.vBlank3 = true;
 		}
-		else iopGateFlags.vBlank3 = false;
+		else
+			iopGateFlags.vBlank3 = false;
 	}
 	else
 	{
@@ -620,6 +622,7 @@ IopCounterMethod(void) ICT::CheckStartGate()
 	switch((m_mode & 0x6) >> 1)
 	{
 		case 0x0: // GATE_ON_count - stop count on gate start:
+			PSXCNT_LOG( "IOP Counter[%d] stopped (Gate 0).", Index );
 			Stop();
 		return;
 
@@ -628,12 +631,14 @@ IopCounterMethod(void) ICT::CheckStartGate()
 		return;
 
 		case 0x2: //GATE_ON_Clear_OFF_Start - start counting on gate start, stop on gate end
+			PSXCNT_LOG( "IOP Counter[%d] started (Gate 2).", Index );
 			IsCounting	= true;
 			ResetCount(0);
 		break;
 
 		case 0x3: //GATE_ON_Start - start and count normally on gate end (no restarts or stops or clears)
 			// do nothing!
+			//ResetCount(0);
 		return;
 	}
 }
@@ -647,17 +652,20 @@ IopCounterMethod(void) ICT::CheckEndGate()
 	{
 		case 0x0: //GATE_ON_count - reset and start counting
 		case 0x1: //GATE_ON_ClearStart - count normally with resets after every end gate
+			PSXCNT_LOG( "IOP Counter[%d] started (Gate 0 and 1).", Index );
 			IsCounting = true;
 			ResetCount(0);
 		break;
 
 		case 0x2: //GATE_ON_Clear_OFF_Start - start counting on gate start, stop on gate end
+			PSXCNT_LOG( "IOP Counter[%d] stopped (Gate 2).", Index );
 			Stop();
 		return;	// do not set the counter
 
 		case 0x3: //GATE_ON_Start - start and count normally (no restarts or stops or clears)
 			if( !IsCounting )
 			{
+				PSXCNT_LOG( "IOP Counter[%d] started (Gate 3).", Index );
 				IsCounting = true;
 				ResetCount(0);
 			}
@@ -764,24 +772,24 @@ __releaseinline void IopCounters::WriteMode( uint cntidx, u32 mode )
 }
 
 // ------------------------------------------------------------------------
-
+int s_vsync_count = 0;
 __releaseinline void IopCounters::VBlankStart()
 {
-	PSXDMA_LOG( " -------->>>> Iop Vsync Start!  O_o <<<<--------" );
+	Console::WriteLn( " -------->>>> Iop Vsync Start!  %6d <<<<--------", params s_vsync_count );
+	//PSXCNT_LOG( " -------->>>> Iop Vsync Start!  O_o <<<<--------" );
 	cdvdVsync();
 	iopRegs.RaiseExtInt( IopInt_VBlank );
-	//psxHu32(0x1070) |= 1;
 	if( iopGateFlags.vBlank1 ) iopCounters16[1].CheckStartGate();
-	if( iopGateFlags.vBlank3 ) iopCounters32[3].CheckStartGate();
+	if( iopGateFlags.vBlank3 ) iopCounters32[0].CheckStartGate();
 }
 
 __releaseinline void IopCounters::VBlankEnd()
 {
-	PSXDMA_LOG( " -------->>>>  Iop Vsync End!  o_O  <<<<--------" );
+	Console::WriteLn( " -------->>>>  Iop Vsync End!  %6d  <<<<--------", params s_vsync_count++ );
+	//PSXCNT_LOG( " -------->>>>  Iop Vsync End!  o_O  <<<<--------" );
 	iopRegs.RaiseExtInt( IopInt_VBlankEnd );
-	//psxHu32(0x1070) |= 0x800;
 	if( iopGateFlags.vBlank1 ) iopCounters16[1].CheckEndGate();
-	if( iopGateFlags.vBlank3 ) iopCounters32[3].CheckEndGate();
+	if( iopGateFlags.vBlank3 ) iopCounters32[0].CheckEndGate();
 }
 
 __releaseinline void IopCounters::Update( uint cntidx )

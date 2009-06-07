@@ -151,7 +151,9 @@ __forceinline void SIF0Dma()
 					// iop is 1/8th the clock rate of the EE and psxcycles is in words (not quadwords)
 					// So when we're all done, the equation looks like thus:
 					//PSX_INT(IopEvt_SIF0, ( ( psxCycles*BIAS ) / 4 ) / 8);
-					PSX_INT(IopEvt_SIF0, psxCycles);
+					
+					// Adding +1 or +2 here improves FFXII booting (but still broken)
+					PSX_INT(IopEvt_SIF0, psxCycles+1);
 
 					sif0.sifData.data = 0;
 					done = TRUE;
@@ -384,7 +386,6 @@ __forceinline void SIF1Dma()
 				SIF_LOG(" IOP SIF doing transfer %04X to %08X", readSize, HW_DMA10_MADR);
 
 				SIF1read((u32*)iopPhysMem(HW_DMA10_MADR), readSize);
-				psxCpu->Clear(HW_DMA10_MADR, readSize);
 				psxCycles += readSize / 4;		// fixme: should be / 16
 				sif1.counter = size - readSize;
 				HW_DMA10_MADR += readSize << 2;
@@ -400,7 +401,9 @@ __forceinline void SIF1Dma()
 						SIF_LOG(" IOP SIF interrupt");
 					
 					iopsifbusy[1] = 0;
-					PSX_INT(IopEvt_SIF1, psxCycles);
+					// Adding +1 or +2 here improves FFXII booting (but still broken)
+					PSX_INT(IopEvt_SIF1, psxCycles+1);
+
 					sif1.tagMode = 0;
 					done = TRUE;
 				}
@@ -420,13 +423,13 @@ __forceinline void SIF1Dma()
 	while (!done);
 }
 
-__forceinline void  sif0Interrupt()
+__releaseinline void  sif0Interrupt()
 {
 	HW_DMA9_CHCR &= ~0x01000000;
 	psxDmaInterrupt2(2);
 }
 
-__forceinline void  sif1Interrupt()
+__releaseinline void  sif1Interrupt()
 {
 	HW_DMA10_CHCR &= ~0x01000000; //reset TR flag
 	psxDmaInterrupt2(3);

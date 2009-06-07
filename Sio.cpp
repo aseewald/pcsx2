@@ -646,7 +646,7 @@ void sioWriteCtrl16(u16 value) {
 	}
 }
 
-void SIO_FORCEINLINE sioInterrupt() {
+__releaseinline void sioInterrupt() {
 	PAD_LOG("Sio Interrupt");
 	sio.StatReg|= IRQ;
 	iopRegs.RaiseExtInt( IopInt_SIO0 );

@@ -148,11 +148,15 @@ __instinline void Inst::ADDI()
 		SetRt_SL( (s32)result );
 }
 
+extern void zeroEx();
+
 // Rt = Rs + Im (no exception)
 // This is exactly like ADDI (yes, its signed! not unsigned) but does not perform an
 // overflow exception check.
 __instinline void Inst::ADDIU()
 {
+	if( _Rt_ == 0 ) zeroEx();
+
 	SetRt_SL( GetRs_SL() + GetImm() );
 }
 

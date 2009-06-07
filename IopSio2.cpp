@@ -237,7 +237,7 @@ finished:
 	PSX_INT(IopEvt_SIO2_Dma11,(size>>2));	// Interrupts should always occur at the end
 }
 
-void psxDMA11Interrupt()
+__releaseinline void psxDMA11Interrupt()
 {
 	HW_DMA11_CHCR &= ~0x01000000;
 	psxDmaInterrupt2(4);
@@ -261,7 +261,7 @@ void psxDma12(u32 madr, u32 bcr, u32 chcr) {
 	PSX_INT(IopEvt_SIO2_Dma12,(size>>2));	// Interrupts should always occur at the end
 }
 
-void psxDMA12Interrupt()
+__releaseinline void psxDMA12Interrupt()
 {
 	HW_DMA12_CHCR &= ~0x01000000;
 	psxDmaInterrupt2(5);

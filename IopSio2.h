@@ -92,8 +92,8 @@ u8   sio2_fifoOut();
 void psxDma11(u32 madr, u32 bcr, u32 chcr);
 void psxDma12(u32 madr, u32 bcr, u32 chcr);
 
-void psxDMA11Interrupt();
-void psxDMA12Interrupt();
+extern void psxDMA11Interrupt();
+extern void psxDMA12Interrupt();
 
 #endif /* __PSXSIO2_H__ */
 

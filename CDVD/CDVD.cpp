@@ -692,7 +692,7 @@ int cdvdReadSector() {
 }
 
 // inlined due to being referenced in only one place.
-__forceinline void cdvdActionInterrupt()
+__releaseinline void cdvdActionInterrupt()
 {
 	switch( cdvd.Action )
 	{
@@ -730,7 +730,7 @@ __forceinline void cdvdActionInterrupt()
 }
 
 // inlined due to being referenced in only one place.
-__forceinline void cdvdReadInterrupt()
+__releaseinline void cdvdReadInterrupt()
 {
 	//Console::WriteLn("cdvdReadInterrupt %x %x %x %x %x", params cpuRegs.interrupt, cdvd.Readed, cdvd.Reading, cdvd.nSectors, (HW_DMA3_BCR_H16 * HW_DMA3_BCR_L16) *4);
 

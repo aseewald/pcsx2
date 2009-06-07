@@ -115,9 +115,15 @@ protected:
 	bool m_IsDispatching;
 
 public:
+	IopEventSystem() :
+		m_NextEvent( IopEvt_Idle )
+	,	m_IsDispatching( false )
+	{
+	}
+
 	void Reset();
 
-	void UpdateSchedule( s32 timepass );
+	void UpdateSchedule( s32 timepass, Pair& pair ); //s32 timepass );
 	void ScheduleEvent( IopEventType evt, s32 delta );
 	void RaiseException();
 	void Dispatch( IopEventType evt );
@@ -133,7 +139,6 @@ public:
 
 protected:
 	void GetNearestEvent( Pair& pair ) const;
-	IopEventType PrepNextEvent() const;
 	void FetchNextEvent( Pair& pair ) const;
 };
 
@@ -143,5 +148,5 @@ extern void iopExecutePendingEvents();
 
 static __forceinline void PSX_INT( IopEventType evt, int deltaCycles )
 {
-	iopEvtSys.ScheduleEvent( evt, deltaCycles );
+	iopEvtSys.ScheduleEvent( evt, deltaCycles+3 );
 }

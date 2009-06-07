@@ -163,7 +163,7 @@ static void AddIrqQueue(u8 irq, u32 ecycle) {
 	}
 }
 
-void  cdrInterrupt() {
+__releaseinline void cdrInterrupt() {
 	cdvdTD trackInfo;
 	int i;
 	u8 Irq = cdr.Irq;
@@ -497,7 +497,7 @@ void  cdrInterrupt() {
 	CDR_LOG("Cdr Interrupt %x\n", Irq);
 }
 
-void  cdrReadInterrupt() {
+__releaseinline void cdrReadInterrupt() {
 	u8 *buf;
 
 	if (!cdr.Reading)

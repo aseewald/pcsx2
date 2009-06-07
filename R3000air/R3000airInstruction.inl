@@ -51,7 +51,7 @@ namespace R3000A {
 	__instinline void Instruction::RaiseException( uint code )
 	{
 		iopException( code, iopRegs.IsDelaySlot );
-		m_NextPC = iopRegs.VectorPC+4;
+		m_NextPC = iopRegs.VectorPC + 4;
 		SetSideEffects();
 	}
 
@@ -154,7 +154,7 @@ namespace R3000A {
 	{
 		m_IsConstException = true;
 		iopException( code, iopRegs.IsDelaySlot );
-		m_NextPC = iopRegs.VectorPC+4;
+		m_NextPC = iopRegs.VectorPC + 4;
 		SetSideEffects();
 	}
 

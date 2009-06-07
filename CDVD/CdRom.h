@@ -88,9 +88,10 @@ struct cdrStruct
 
 extern cdrStruct cdr;
 
+extern void  cdrInterrupt();
+extern void  cdrReadInterrupt();
+
 void cdrReset();
-void  cdrInterrupt();
-void  cdrReadInterrupt();
 u8   cdrRead0(void);
 u8   cdrRead1(void);
 u8   cdrRead2(void);

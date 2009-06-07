@@ -192,7 +192,7 @@ void psxDma10(u32 madr, u32 bcr, u32 chcr)
 
 /* psxDma11 & psxDma 12 are in IopSio2,cpp, along with the appropriate interrupt functions. */
 
-void dev9Interrupt()
+__releaseinline void dev9Interrupt()
 {
 	if ((dev9Handler != NULL) && (dev9Handler() != 1)) return;
 
@@ -206,7 +206,7 @@ void dev9Irq(int cycles)
 	PSX_INT(IopEvt_DEV9, cycles);
 }
 
-void usbInterrupt()
+__releaseinline void usbInterrupt()
 {
 	if (usbHandler != NULL && (usbHandler() != 1)) return;
 

@@ -569,10 +569,10 @@ void zeroEx()
 	if (!Config.PsxOut) return;
 
 	pc = iopRegs.pc;
-	while (iopMemRead32(pc) != 0x41e00000) pc-=4;
+	while (iopMemDirectRead32(pc) != 0x41e00000) pc-=4;
 
 	lib  = iopVirtMemR<char>(pc+12);
-	code = iopMemRead32(iopRegs.pc - 4) & 0xffff;
+	code = iopMemDirectRead32(iopRegs.pc) & 0xffff;
 
 	for (i=0; i<IRXLIBS; i++) {
 		if (!strncmp(lib, irxlibs[i].name, 8)) {

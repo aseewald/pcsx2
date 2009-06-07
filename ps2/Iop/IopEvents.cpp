@@ -26,6 +26,8 @@ using namespace R3000A;
 void IopEventSystem::Reset()
 {
 	memzero_obj( m_Events );
+	m_NextEvent = IopEvt_Idle;
+	m_IsDispatching = false;
 }
 
 // ------------------------------------------------------------------------
@@ -52,39 +54,22 @@ __forceinline void IopEventSystem::GetNearestEvent( Pair& pair ) const
 // of the iopRegs._cycle variable.  This function should only be called during
 // ExecutePendingEvents()
 //
-__forceinline void IopEventSystem::UpdateSchedule( s32 timepass )
+__forceinline void IopEventSystem::UpdateSchedule( s32 timepass, Pair& pair ) //s32 timepass )
 {
-	if( timepass == 0 ) return;
+	pair.nearest_evt = -1;
+	pair.shortest_delta = 0x40000;
 
 	for( int i=0; i<IopEvt_Count; ++i )
 	{
 		if( !m_Events[i].IsEnabled ) continue;
 		m_Events[i].Countdown -= timepass;
+
+		if( m_Events[i].Countdown < pair.shortest_delta )
+		{
+			pair.shortest_delta	= m_Events[i].Countdown;
+			pair.nearest_evt	= i;
+		}
 	}
-}
-
-__forceinline IopEventType IopEventSystem::PrepNextEvent() const
-{
-	Pair pair;
-	GetNearestEvent( pair );
-
-	if( pair.nearest_evt == -1 ) 
-	{
-		// This should probably should never happen since counters are perpetually
-		// scheduled.  But including a handler here anyway, just in case.
-
-		DevCon::Status( "IopEvtSched: All events are disabled, falling back on idle schedule." );
-		//m_NextEvent					= -1;
-		iopRegs.evtCycleDuration	= 4096;
-		iopRegs.evtCycleCountdown	= 4096;
-		return IopEvt_Idle;
-	}
-
-	//g_iopEventHandler			= m_EventHandlers[i];
-	//m_NextEvent					= pair.nearest_evt;
-	iopRegs.evtCycleDuration	= pair.shortest_delta;
-	iopRegs.evtCycleCountdown	= pair.shortest_delta;
-	return (IopEventType)pair.nearest_evt;
 }
 
 __forceinline void IopEventSystem::FetchNextEvent( Pair& pair ) const
@@ -94,7 +79,7 @@ __forceinline void IopEventSystem::FetchNextEvent( Pair& pair ) const
 
 // ------------------------------------------------------------------------
 //
-__forceinline void IopEventSystem::Dispatch( IopEventType evt )
+__releaseinline void IopEventSystem::Dispatch( IopEventType evt )
 {
 	// Optimization Note:  The use of a switch statement here is *intentional* as it
 	// typically yields superior performance to function pointer lookup tables, and is
@@ -106,11 +91,10 @@ __forceinline void IopEventSystem::Dispatch( IopEventType evt )
 	// range of cases are contiguous from 0 to ~18 or so.  Binary partitions are used
 	// for non-contiguous switches, such as the IopHwMemory handlers.
 
+	if( evt == IopEvt_Idle ) return;
 	m_Events[evt].IsEnabled = false;
 	switch( evt )
 	{
-		case IopEvt_Idle: break;
-
 		case IopEvt_Counter0:
 		case IopEvt_Counter1:
 		case IopEvt_Counter2:
@@ -134,6 +118,10 @@ __forceinline void IopEventSystem::Dispatch( IopEventType evt )
 				//PSXCPU_LOG("Interrupt: %x  %x\n", psxHu32(0x1070), psxHu32(0x1074));
 				PSXDMA_LOG("Interrupt: %x  %x\n", psxHu32(0x1070), psxHu32(0x1074));
 				iopException( 0, iopRegs.IsDelaySlot );
+				
+				iopRegs.pc = iopRegs.VectorPC;
+				iopRegs.VectorPC += 4;
+				iopRegs.IsDelaySlot = false;
 				//iopBranchAction = true;
 			}
 		}
@@ -161,7 +149,7 @@ __forceinline void IopEventSystem::Dispatch( IopEventType evt )
 		break;
 
 		case IopEvt_Cdvd:
-			cdvdReadInterrupt();
+			cdvdActionInterrupt();
 		break;
 
 		case IopEvt_CdvdRead:
@@ -212,7 +200,7 @@ __forceinline void IopEventSystem::Dispatch( IopEventType evt )
 // for this routine to perform a thorough and orderly execution of latent events, to ensure
 // proper event order.
 //
-__releaseinline void IopEventSystem::ExecutePendingEvents()
+void IopEventSystem::ExecutePendingEvents()
 {
 	m_IsDispatching = true;
 
@@ -220,29 +208,25 @@ __releaseinline void IopEventSystem::ExecutePendingEvents()
 
 	do
 	{
-		iopRegs._cycle += iopRegs.evtCycleDuration;
-		UpdateSchedule( iopRegs.evtCycleDuration );
-
-		// note: making duration equal countdown lets iopRegs know that _cycle is up-to-date
-		// And we need to preserve the Countdown, since it has the remainder of cycles (overlap).
-
 		//Console::WriteLn( "Dispatching event %d @ cycle=0x%x", params m_NextEvent, iopRegs._cycle );
-		iopRegs.evtCycleDuration	 = iopRegs.evtCycleCountdown;
+		s32 oldcdown = iopRegs.evtCycleCountdown;
+		iopRegs.evtCycleCountdown	 = 0;
 		Dispatch( (IopEventType) m_NextEvent );
 
+		iopRegs._cycle += iopRegs.evtCycleDuration;
 		Pair pair;
-		GetNearestEvent( pair );
+		UpdateSchedule( iopRegs.evtCycleDuration, pair );
 		m_NextEvent					 = pair.nearest_evt;
 		iopRegs.evtCycleDuration	 = pair.shortest_delta;
-		iopRegs.evtCycleCountdown	+= pair.shortest_delta;
+		iopRegs.evtCycleCountdown	 = oldcdown + pair.shortest_delta;
 
-		if( pair.shortest_delta > 0 ) break;
-
+		if( iopRegs.evtCycleCountdown > 0 ) break;
 	} while( true );
 
 	m_IsDispatching = false;
 }
 
+// Entry point for the IOP recompiler.
 void iopExecutePendingEvents()
 {
 	iopEvtSys.ExecutePendingEvents();
@@ -257,6 +241,8 @@ void IopEventSystem::CancelEvent( IopEventType evt )
 	m_Events[evt].IsEnabled = false;
 	if( !m_IsDispatching && (evt == m_NextEvent) )
 	{
+		//Console::Notice( "IOP Canceling Event %d", params evt );
+
 		// pending cycles in the event queue:
 		int iopPending = iopRegs.evtCycleDuration - iopRegs.evtCycleCountdown;
 
@@ -276,6 +262,7 @@ void IopEventSystem::CancelEvent( IopEventType evt )
 void IopEventSystem::ScheduleEvent( IopEventType evt, s32 delta )
 {
 	jASSUME( evt < IopEvt_Count );
+	//DevAssume( delta > 0, "Iop ScheduleEvent Logic Error: delta must be non-zero." );
 
 	// iopPass is our base/reference point for scheduling stuff:
 	int iopPending = iopRegs.evtCycleDuration - iopRegs.evtCycleCountdown;
@@ -288,11 +275,9 @@ void IopEventSystem::ScheduleEvent( IopEventType evt, s32 delta )
 	{
 		// event happens sooner than the currently-scheduled one.  Replace it with ours.
 		
-		//Console::WriteLn( "Pre-emptive rescheduling of event %d: delta=0x%x", params evt, delta );
-		
-		m_NextEvent					 = evt;
-		iopRegs.evtCycleCountdown	 = delta;
-		iopRegs.evtCycleDuration	 = iopRegs.evtCycleCountdown + iopPending;
+		m_NextEvent					= evt;
+		iopRegs.evtCycleCountdown	= delta;
+		iopRegs.evtCycleDuration	= iopRegs.evtCycleCountdown + iopPending;
 
 		// Tell the EE to do an event test if the EE's currently the code-runner:
 		// Important: timeouts over 0x10000000 will cause overflows on the EE's current
@@ -318,6 +303,6 @@ void IopEventSystem::RaiseException()
 	}
 	
 	if( !GetInfo( IopEvt_Exception ).IsEnabled )
-		ScheduleEvent( IopEvt_Exception, 2 );
+		ScheduleEvent( IopEvt_Exception, 0 );		// must be zero!
 }
 

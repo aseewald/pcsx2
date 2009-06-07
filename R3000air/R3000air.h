@@ -146,6 +146,11 @@ struct Registers
 		return _cycle + ( evtCycleDuration - evtCycleCountdown );
 	}
 	
+	s32 GetPendingCycles() const
+	{
+		return evtCycleDuration - evtCycleCountdown;
+	}
+	
 	void AddCycles( int amount )
 	{
 		evtCycleCountdown	-= amount;
@@ -157,8 +162,8 @@ struct Registers
 	// in raising exceptions.
 	__releaseinline void SetExceptionPC( u32 newpc )
 	{
-		pc			= newpc;
-		VectorPC	= newpc + 4;
+		//pc			= newpc;
+		VectorPC	= newpc;
 		IsDelaySlot = false;
 	}
 	
@@ -176,7 +181,10 @@ struct Registers
 
 		// anything zero or less means the DivUnit is empty
 		if( DivUnitCycles > 0 )
+		{
 			evtCycleCountdown -= DivUnitCycles;
+			//Console::Status( "Iop DivUnit Stall for %d cycles.", params DivUnitCycles );
+		}
 
 		DivUnitCycles = newStall;
 	}
