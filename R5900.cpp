@@ -379,7 +379,7 @@ __forceinline bool _cpuBranchTest_Shared()
 	EEsCycle += cpuRegs.cycle - EEoCycle;
 	EEoCycle = cpuRegs.cycle;
 
-	if( EEsCycle > 0 )
+	if( EEsCycle >= 8 )
 		iopBranchAction = true;
 
 	// ---- Counters -------------

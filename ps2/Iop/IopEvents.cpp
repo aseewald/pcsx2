@@ -21,6 +21,25 @@
 
 using namespace R3000A;
 
+static const char *const tbl_EventNames[] =
+{
+	"Counter0", "Counter1", "Counter2",
+	"Counter3", "Counter4", "Counter5",
+	
+	"Exception",
+
+	"SIF0", "SIF1", "SIO", "SIO2_Dma11", "SIO2_Dma12",
+
+	"CdvdCommand",  "CdvdRead",
+	"CdromCommand", "CdromRead",
+	
+	"SPU2_Dma4", "Sup2_Dma7", "SPU2cmd",
+
+	"DEV9", "USB",
+
+	"BreakForEE"
+};
+
 // ------------------------------------------------------------------------
 //
 void IopEventSystem::Reset()
@@ -54,8 +73,26 @@ __forceinline void IopEventSystem::GetNearestEvent( Pair& pair ) const
 // of the iopRegs._cycle variable.  This function should only be called during
 // ExecutePendingEvents()
 //
-__forceinline void IopEventSystem::UpdateSchedule( s32 timepass, Pair& pair ) //s32 timepass )
+__forceinline void IopEventSystem::UpdateSchedule( s32 timepass, Pair& pair )
 {
+	// performance note: This function is currently the "slow part" of the event system.
+	// The best way to optimize it is to sub-divide the event list into three "Buckets"
+	// similar to the concept of a hash table:
+	//  * Counters
+	//  * SIF/SIO/CDVD
+	//  * Everything else (including exceptions, which are typically infrequent on the IOP).
+	//
+	// Furthermore, the BreakForEE event should be a top-level event since it typically occurs
+	// more often than any other event.  (and, in fact, simply optimizing BreakForEE out into
+	// it's own separate event timer would probably be enough to cut the overhead of UpdateSchedule
+	// to 50% it's current level).
+	//
+	// Alternative: The system could also be set up as an ordered list, where each event in the
+	// event list has a "nextEvent" pointer that points to the next event in the schedule.  However
+	// all this does is defer the performance cost of executing an event from the dispatcher to
+	// the rescheduler (which must sort and insert into the list).  My gut says buckets will be
+	// better since most events reschedule themselves anyway.
+
 	pair.nearest_evt = -1;
 	pair.shortest_delta = 0x40000;
 
@@ -81,6 +118,8 @@ __forceinline void IopEventSystem::FetchNextEvent( Pair& pair ) const
 //
 __releaseinline void IopEventSystem::Dispatch( IopEventType evt )
 {
+	if( evt == IopEvt_Idle ) return;
+
 	// Optimization Note:  The use of a switch statement here is *intentional* as it
 	// typically yields superior performance to function pointer lookup tables, and is
 	// generally easier to maintain and debug as an added bonus. :)
@@ -90,9 +129,11 @@ __releaseinline void IopEventSystem::Dispatch( IopEventType evt )
 	// branching algo.  In this case the compiler will typically use a LUT since the
 	// range of cases are contiguous from 0 to ~18 or so.  Binary partitions are used
 	// for non-contiguous switches, such as the IopHwMemory handlers.
-
-	if( evt == IopEvt_Idle ) return;
+	
 	m_Events[evt].IsEnabled = false;
+
+	//IOPEVT_LOG( "IopEvent Dispatch @ %d(%s)", evt, m_tbl_EventNames[evt] );
+
 	switch( evt )
 	{
 		case IopEvt_Counter0:
@@ -106,17 +147,17 @@ __releaseinline void IopEventSystem::Dispatch( IopEventType evt )
 		
 		case IopEvt_Exception:
 		{
-			// Note: Re-test conditions here (for now) under the assumption that something
-			// else might have cleared them already between the time the exception was raised
-			// and the time it's being handled here.
+			//IOPEVT_LOG("Interrupt: %x  %x\n", psxHu32(0x1070), psxHu32(0x1074));
+
+			// Note: Re-test conditions here under the assumption that something else might have
+			// cleared the condition masks between the time the exception was raised and the time
+			// it's being handled here.
 
 			if( psxHu32(0x1078) == 0 ) return;
 			if( (psxHu32(0x1070) & psxHu32(0x1074)) == 0 ) return;
 
 			if ((iopRegs.CP0.n.Status & 0xFE01) >= 0x401)
 			{
-				//PSXCPU_LOG("Interrupt: %x  %x\n", psxHu32(0x1070), psxHu32(0x1074));
-				PSXDMA_LOG("Interrupt: %x  %x\n", psxHu32(0x1070), psxHu32(0x1074));
 				iopException( 0, iopRegs.IsDelaySlot );
 				
 				iopRegs.pc = iopRegs.VectorPC;
@@ -299,7 +340,6 @@ void IopEventSystem::RaiseException()
 		// Inform the EE to branch so the IOP can handle it promptly:
 
 		iopBranchAction = true;
-		//Console::Error( "** IOP Needs an EE EventText, kthx **  %d", params psxCycleEE );
 	}
 	
 	if( !GetInfo( IopEvt_Exception ).IsEnabled )

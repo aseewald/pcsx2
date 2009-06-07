@@ -18,9 +18,7 @@
 
 
 #include "PrecompiledHeader.h"
-
 #include "System.h"
-
 #include "IopCommon.h"
 
 #include "R3000airInstruction.inl"
@@ -30,6 +28,7 @@
 #include "DebugTools/Debug.h"
 
 extern u32 bExecBIOS;
+extern int s_vsync_count;
 
 
 R3000Exception::BaseExcept::~BaseExcept() throw() {}
@@ -72,24 +71,6 @@ static string m_disasm;
 static string m_comment;
 #endif
 
-static void FuckingExcept()
-{
-	if( psxHu32(0x1078) == 0 ) return;
-	if( (psxHu32(0x1070) & psxHu32(0x1074)) == 0 ) return;
-
-	if ((iopRegs.CP0.n.Status & 0xFE01) >= 0x401)
-	{
-		//PSXCPU_LOG("Interrupt: %x  %x\n", psxHu32(0x1070), psxHu32(0x1074));
-		PSXDMA_LOG("Interrupt: %x  %x\n", psxHu32(0x1070), psxHu32(0x1074));
-		iopException( 0, iopRegs.IsDelaySlot );
-
-		iopRegs.pc = iopRegs.VectorPC;
-		iopRegs.VectorPC += 4;
-		iopRegs.IsDelaySlot = false;
-		//iopBranchAction = true;
-	}
-}
-
 //////////////////////////////////////////////////////////////////////////////////////////
 // Steps over the next instruction.
 //
@@ -105,6 +86,8 @@ static __releaseinline void intStep()
 		// actually decreases overall performance.
 
 		//if( iopRegs.GetCycle() > 0x00077560 ) //0x003b0a57 )
+		if( s_vsync_count >= 96 )
+		//if( !bExecBIOS )
 			PSXCPU_LOG( "NOP", iopRegs.IsDelaySlot ? "\n" : "" );
 
 		iopRegs.pc			 = iopRegs.VectorPC;
@@ -124,7 +107,8 @@ static __releaseinline void intStep()
 	Instruction::Process( dudley );
 
 #ifdef PCSX2_DEVBUILD
-	if( (varLog & 0x00100000) ) //&& (iopRegs.GetCycle() > 0x00077560 ) ) //0x003b0a57) )
+	if( (varLog & 0x00100000) && s_vsync_count >= 96 ) //&& (iopRegs.GetCycle() > 0x00077560 ) ) //0x003b0a57) )
+	//if( !bExecBIOS )
 	{
 		dudley.GetDisasm( m_disasm );
 		dudley.GetValuesComment( m_comment );
@@ -148,8 +132,6 @@ static __releaseinline void intStep()
 	iopRegs.VectorPC	= dudley.GetNextPC();
 	iopRegs.IsDelaySlot	= dudley.IsBranchType();
 
-	//FuckingExcept();
-
 	iopRegs.AddCycles( 1 );
 	iopRegs.DivUnitStall( dudley.GetDivStall() );
 }
@@ -171,13 +153,10 @@ static void intExecute()
 //
 static s32 intExecuteBlock( s32 eeCycles )
 {
-	// uncommenting this and/or adding 1 to the Break below breaks things, but shouldn't. Why?
-	//if( (eeCycles / 8) == 0 ) return eeCycles;
-
 	iopRegs.IsExecuting = true;
 	u32 eeCycleStart = iopRegs.GetCycle();
 
-	iopEvtSys.ScheduleEvent( IopEvt_BreakForEE, eeCycles/8 );		// add 1 to break FFXII booting.
+	iopEvtSys.ScheduleEvent( IopEvt_BreakForEE, (eeCycles/8)+1 );
 
 	do
 	{
@@ -185,15 +164,11 @@ static s32 intExecuteBlock( s32 eeCycles )
 
 		jASSUME( iopRegs.evtCycleCountdown <= iopRegs.evtCycleDuration );
 
-		//if( bExecBIOS && iopRegs.evtCycleCountdown > 0x10 )
-		//	Console::Error( "WTFH??" );
-
 		if( iopRegs.evtCycleCountdown <= 0 )
 			iopEvtSys.ExecutePendingEvents();
 
-	} while( iopRegs.IsExecuting ); //iopTestCycle( iopRegs.eeCycleStart, iopRegs.eeCycleDelta ) == 0 );
+	} while( iopRegs.IsExecuting );
 
-	//if( iopRegs.GetCycle() == 0x00010001 )
 	return eeCycles - ((iopRegs.GetCycle() - eeCycleStart) * 8);
 }
 

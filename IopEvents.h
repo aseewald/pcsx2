@@ -37,7 +37,6 @@ enum IopEventType
 {
 	// Idle state, no events scheduled.  Placed at -1 since it has no actual
 	// entry in the Event System's event schedule table.
-
 	IopEvt_Idle = -1,
 
 	IopEvt_Counter0 = 0,
@@ -148,5 +147,5 @@ extern void iopExecutePendingEvents();
 
 static __forceinline void PSX_INT( IopEventType evt, int deltaCycles )
 {
-	iopEvtSys.ScheduleEvent( evt, deltaCycles+3 );
+	iopEvtSys.ScheduleEvent( evt, deltaCycles );
 }

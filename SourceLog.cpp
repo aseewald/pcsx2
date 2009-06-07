@@ -86,6 +86,9 @@ void __Log( const char* fmt, ... )
 
 static __forceinline void _vSourceLog( u16 protocol, u8 source, u32 cpuPc, u32 cpuCycle, const char *fmt, va_list list )
 {
+	// Uncomment this to disable logging during the boot stub (useful when using hefty logs)
+	//if( bExecBIOS ) return;
+
 	char tmp[2024];
 
 	int prelength = sprintf( tmp, "%c/%8.8lx %8.8lx: ", source, cpuPc, cpuCycle );
