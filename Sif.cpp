@@ -152,7 +152,9 @@ __forceinline void SIF0Dma()
 					// So when we're all done, the equation looks like thus:
 					//PSX_INT(IopEvt_SIF0, ( ( psxCycles*BIAS ) / 4 ) / 8);
 					
-					// +1 here improves FFXII boot but doesn't fix it outright.  Can' find any other games					// that have issue with the new event system other than FFXII here.					PSX_INT(IopEvt_SIF0, psxCycles+1);
+					// +1 here improves FFXII boot but doesn't fix it outright.  Can' find any other games
+					// that have issue with the new event system other than FFXII here.
+					PSX_INT(IopEvt_SIF0, psxCycles+1);
 
 					sif0.sifData.data = 0;
 					done = TRUE;
