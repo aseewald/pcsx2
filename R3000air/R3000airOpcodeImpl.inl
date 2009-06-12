@@ -97,8 +97,8 @@ __instinline void Inst::BNE()		// Branch if Rs != Rt
 *********************************************************/
 __instinline void Inst::J()
 {
-	m_IsBranchType = true;
-	m_NextPC = JumpTarget();
+	m_HasDelaySlot = true;
+	SetNextPC( JumpTarget() );
 }
 
 __instinline void Inst::JAL()
@@ -115,18 +115,20 @@ __instinline void Inst::JAL()
 
 __instinline void Inst::JR()
 {
-	m_IsBranchType = true;
+	m_HasDelaySlot = true;
 	u32 target = GetRs_UL();
 
 	if( !ConditionalException( IopExcCode::AddrErr_Load, !!(target & 3) ) )
-		m_NextPC = target;
+		SetNextPC( target );
 }
 
 __instinline void Inst::JALR()
 {
-	// Testing needed: MIPS documents Rs==Rd cases as "undefined".  However that's typically just a spec-
-	// ification and the actual R3000A chip implementation may have its own defined behavior.  Needs to
-	// be investigated on PSX/PS2 hardware. -- air
+	// Testing needed: MIPS documents Rs==Rd cases as "undefined", which is because the clause
+	// is unsafe in an exception-correct environment.  If an exception occurs on the delay slot
+	// instruction, the branch cannot be re-run without altering the original behavior.  Chances
+	// are PS2 games would never violate this rule since they are inherently multi-threaded
+	// and reliant on providing safe exception handling environments at all times. -- air
 
 	//if( _Rs_ == _Rd_ )
 	//	Console::Error( "Bad JALR? (Rs == Rd) @ IOP/0x%08x", params iopRegs.pc );
@@ -418,15 +420,10 @@ __instinline void Inst::SYSCALL()
 	RaiseException( IopExcCode::Syscall );
 }
 
-__instinline void Inst::_RFE()
+__instinline void Inst::RFE()
 {
 	iopRegs.CP0.n.Status = (iopRegs.CP0.n.Status & 0xfffffff0) | ((iopRegs.CP0.n.Status & 0x3c) >> 2);
 	iopTestIntc();
-}
-
-__instinline void Inst::RFE()
-{
-	_RFE();		// defer to the virtual implementation
 	SetSideEffects();
 }
 

@@ -161,6 +161,8 @@ IR::IntermediateRepresentation( const InstConstInfoEx& src ) :
 ,	m_constinfoex( src )
 ,	ixImm( Inst.SignExtendsImm() ? Inst._Opcode_.Imm() : Inst._Opcode_.ImmU() )
 ,	IsSwappedSources( false )
+,	m_EbpReadMap( GPR_Invalid )
+,	m_EbpLoadMap( GPR_Invalid )
 {
 	memzero_obj( RequiredSrcMapping );
 
@@ -245,7 +247,6 @@ void IR::DynRegs_AssignTempReg( int tempslot, const xRegister32& reg )
 	m_TempReg[tempslot] = reg;
 	m_TempReg8[tempslot] = xRegister8( reg.Id );
 }
-
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -394,8 +395,10 @@ void recIR_PerformDynamicRegisterMapping( IR& cir )
 
 void recIR_ForceDestFlushes( IR& cir )
 {
-	// Unmap anything flagged as needing a flush.
+	// ebp is never a valid dest (it's read-only)
+	cir.UnmapReg( cir.Dest, ebp );
 
+	// Unmap anything flagged as needing a flush.
 	for( int i=0; i<cir.xForceFlush.Length(); ++i )
 	{
 		if( cir.xForceFlush[i] )
@@ -506,19 +509,26 @@ void recIR_PerformStrictRegisterMapping_Exit( IR& cir )
 
 static string m_disasm;
 
-static void DumpSomeGprs( char* sbuf, const xDirectOrIndirect32* arr )
+static const char* GetGprStatus( const xDirectOrIndirect32* arr, const InstConstInfoEx& cinfo, int gpridx )
+{
+	if( cinfo.IsConst( gpridx ) ) return "const";
+	if( arr[gpridx].IsDirect() ) return xGetRegName( arr[gpridx].GetReg() );
+	return "unmap";
+}
+
+static void DumpSomeGprs( char* sbuf, const xDirectOrIndirect32* arr, const InstConstInfoEx& cinfo )
 {
 	for( int reg=0; reg<32; reg+=8 )
 	{
 		sprintf( sbuf, "\t%s[%-5s]  %s[%-5s]  %s[%-5s]  %s[%-5s]  %s[%-5s]  %s[%-5s]  %s[%-5s]  %s[%-5s]",
-			Diag_GetGprName( (MipsGPRs_t)(reg+0) ), arr[reg+0].IsDirect() ? xGetRegName( arr[reg+0].GetReg() ) : "unmap",
-			Diag_GetGprName( (MipsGPRs_t)(reg+1) ), arr[reg+1].IsDirect() ? xGetRegName( arr[reg+1].GetReg() ) : "unmap",
-			Diag_GetGprName( (MipsGPRs_t)(reg+2) ), arr[reg+2].IsDirect() ? xGetRegName( arr[reg+2].GetReg() ) : "unmap",
-			Diag_GetGprName( (MipsGPRs_t)(reg+3) ), arr[reg+3].IsDirect() ? xGetRegName( arr[reg+3].GetReg() ) : "unmap",
-			Diag_GetGprName( (MipsGPRs_t)(reg+4) ), arr[reg+4].IsDirect() ? xGetRegName( arr[reg+4].GetReg() ) : "unmap",
-			Diag_GetGprName( (MipsGPRs_t)(reg+5) ), arr[reg+5].IsDirect() ? xGetRegName( arr[reg+5].GetReg() ) : "unmap",
-			Diag_GetGprName( (MipsGPRs_t)(reg+6) ), arr[reg+6].IsDirect() ? xGetRegName( arr[reg+6].GetReg() ) : "unmap",
-			Diag_GetGprName( (MipsGPRs_t)(reg+7) ), arr[reg+7].IsDirect() ? xGetRegName( arr[reg+7].GetReg() ) : "unmap"
+			Diag_GetGprName( (MipsGPRs_t)(reg+0) ), GetGprStatus( arr, cinfo, reg+0 ),
+			Diag_GetGprName( (MipsGPRs_t)(reg+1) ), GetGprStatus( arr, cinfo, reg+1 ),
+			Diag_GetGprName( (MipsGPRs_t)(reg+2) ), GetGprStatus( arr, cinfo, reg+2 ),
+			Diag_GetGprName( (MipsGPRs_t)(reg+3) ), GetGprStatus( arr, cinfo, reg+3 ),
+			Diag_GetGprName( (MipsGPRs_t)(reg+4) ), GetGprStatus( arr, cinfo, reg+4 ),
+			Diag_GetGprName( (MipsGPRs_t)(reg+5) ), GetGprStatus( arr, cinfo, reg+5 ),
+			Diag_GetGprName( (MipsGPRs_t)(reg+6) ), GetGprStatus( arr, cinfo, reg+6 ),
+			Diag_GetGprName( (MipsGPRs_t)(reg+7) ), GetGprStatus( arr, cinfo, reg+7 )
 		);
 
 		Console::WriteLn( sbuf );
@@ -623,15 +633,16 @@ void _map_BlockWideRegisters( const SafeArray<InstConstInfoEx>& iList )
 //////////////////////////////////////////////////////////////////////////////////////////
 // Intermediate Pass 2 -- Maps GPRs to x86 registers prior to the x86 codegen.
 //
-void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
+void recIR_Pass2( const recBlockItem& irBlock )
 {
-	const int numinsts = iList.GetLength();
+	const SafeArray<InstConstInfoEx>& iList(  );
+	const int numinsts = irBlock.IR.GetLength();
 
 	// Pass 2 officially consists of a multiple-pass IL stage, which first initializes
 	// a flat unoptimized register mapping, and then goes back through and re-maps
 	// registers in a second pass in a more optimized fashion.
 	
-	_map_BlockWideRegisters( iList );
+	_map_BlockWideRegisters( irBlock.IR );
 
 	// ------------------------------------------------------------------------
 	// Next pass - Map "required" registers accordingly, and fill in everything
@@ -641,7 +652,7 @@ void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
 	// it spares us the agony of the failure that is the C++ copy constructor.
 	//
 	for( int i=0; i<numinsts; ++i )
-		new (&m_intermediates[i]) IntermediateRepresentation( iList[i] );
+		new (&m_intermediates[i]) IntermediateRepresentation( irBlock.GetInst(i) );
 
 	for( int i=0; i<numinsts; ++i )
 	{
@@ -649,16 +660,26 @@ void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
 
 		if( i == 0 )
 		{
-			// Start with a clean slate.  Everything's loaded from memory, except EDI:
+			// First instruction: Start with a clean slate.  Everything's loaded from memory, except EDI:
 			for( int gpr=0; gpr<34; ++gpr )
 				fnew.Src[gpr] = g_BlockState.IsEdiMappedTo( gpr ) ? (xDirectOrIndirect32)edi : (xDirectOrIndirect32)IR::GetMemIndexer( gpr );
 		}
 		else
 		{
-			// this instruction's source mappings start with the previous instruction's dest mappings.
-			// We'll modify relevant entries (this instruction's rs/rt/rd and requests for temp regs).
-
+			// All other instructions: source mappings start with the previous instruction's dest mappings.
 			memcpy_fast( fnew.Src, m_intermediates[i-1].Dest, sizeof( fnew.Src ) );
+			fnew.m_EbpReadMap = m_intermediates[i-1].m_EbpLoadMap;
+		}
+		
+		if( irBlock.GetInst(i).DelayedDependencyRd )
+		{
+			DynarecAssume( !fnew.m_EbpLoadMap, fnew.Inst, "DependencySlot is already reserved to a GPR." );
+			DynarecAssume( fnew.Inst.WritesField( RF_Rd ) != GPR_Invalid, fnew.Inst, "DependencySlot flag enabled on an instruction with no Rd writeback." );
+			fnew.m_EbpLoadMap = fnew.Inst._Rd_;
+		}
+		else if( fnew.m_EbpReadMap != GPR_Invalid )
+		{
+			fnew.Src[fnew.m_EbpReadMap] = ebp;
 		}
 
 		if( fnew.RegOpts.IsStrictMode )
@@ -666,9 +687,8 @@ void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
 		else		
 			recIR_PerformDynamicRegisterMapping( fnew );
 
-		// Assign destination (result) registers.
-		// Start with the source registers, and remove register mappings based on the
-		// instruction's information (regs clobbered, etc)
+		// Assign destination (result) registers.  Start with the source registers, and remove
+		// register mappings based on the instruction's information (regs clobbered, etc)
 
 		memcpy_fast( fnew.Dest, fnew.Src, sizeof( fnew.Src ) );
 		recIR_ForceDestFlushes( fnew );		// unmap clobbers
@@ -700,6 +720,8 @@ void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
 		{
 			if( ir.RequiredSrcMapping[gpr] || ir.Src[gpr].IsIndirect() ) continue;
 			
+			// Note: buggy as hell, just crashes still.
+			
 			/*PASS3_RECURSE searcher( numinsts, gpr, ir.Src[gpr].GetReg() );
 
 			if( searcher.NextInstruction( i ) == Pass3_Unmap )
@@ -710,7 +732,7 @@ void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
 		}
 	}
 
-	return;
+	//return;
 
 	// ------------------------------------------------------------------------
 	// Perform Full-on Block Dump
@@ -723,13 +745,13 @@ void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList )
 		const IR& rdump( m_intermediates[i] );
 
 		rdump.Inst.GetDisasm( m_disasm );
-		Console::WriteLn( "\n%s\n", params m_disasm.c_str() );
+		Console::WriteLn( "\n[0x%08X] %s\n", params rdump.Inst._Pc_, m_disasm.c_str() );
 
 		Console::WriteLn( "    Input Mappings:" );
-		DumpSomeGprs( sbuf, rdump.Src );
+		DumpSomeGprs( sbuf, rdump.Src, rdump.m_constinfoex );
 		
 		Console::WriteLn( "    Output Mappings:" );
-		DumpSomeGprs( sbuf, rdump.Dest );
+		DumpSomeGprs( sbuf, rdump.Dest, rdump.m_constinfoex );
 	}	
 
 }

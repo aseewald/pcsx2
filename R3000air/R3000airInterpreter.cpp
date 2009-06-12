@@ -93,7 +93,7 @@ static __releaseinline void intStep()
 		iopRegs.pc			 = iopRegs.VectorPC;
 		iopRegs.VectorPC	+= 4;
 		iopRegs.IsDelaySlot	 = false;
-		iopRegs.AddCycles( 1 );
+		iopRegs.AddCycles( 2 );
 
 		opcode = iopMemDirectRead32( iopRegs.pc );
 	}
@@ -129,8 +129,8 @@ static __releaseinline void intStep()
 	//  instruction processing above.
 
 	iopRegs.pc			= iopRegs.VectorPC;
-	iopRegs.VectorPC	= dudley.GetNextPC();
-	iopRegs.IsDelaySlot	= dudley.IsBranchType();
+	iopRegs.VectorPC	= dudley.GetVectorPC();
+	iopRegs.IsDelaySlot	= dudley.HasDelaySlot();
 
 	iopRegs.AddCycles( 1 );
 	iopRegs.DivUnitStall( dudley.GetDivStall() );

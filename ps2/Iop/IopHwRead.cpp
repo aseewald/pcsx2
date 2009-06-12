@@ -142,6 +142,10 @@ static __forceinline T _HwRead_16or32_Page1( u32 addr )
 	// ------------------------------------------------------------------------
 	// Counters, 16-bit varieties!
 	//
+	// Note: word reads/writes to the uppoer halfword of the 16 bit registers should 
+	// just map to the HW memory map (tested on real IOP) -- ie, a write to the upper
+	// halfword of 0xcccc will have those upper values return 0xcccc always.
+	//
 	if( masked_addr >= 0x100 && masked_addr < 0x130 )
 	{
 		int cntidx = ( masked_addr >> 4 ) & 0xf;

@@ -134,7 +134,11 @@ struct Registers
 	// is reached.
 	s32 evtCycleCountdown;
 
-	s32 DivUnitCycles;		// number of cycles pending on the current div unit instruction (mult and div both run in the same unit)
+	// number of cycles pending on the current div unit instruction (mult and div both run in the same
+	// unit).  Any zero-or-negative values mean the unit is free and no stalls incurred for executing
+	// a new instruction on the pipeline.  Negative values are flushed to 0 during PendingEvent executions.
+	// (faster than flushing to zero on every cycle update).
+	s32 DivUnitCycles;
 
 	bool IsDelaySlot;
 	bool IsExecuting;
@@ -190,13 +194,6 @@ struct Registers
 	}
 	
 	void RaiseExtInt( uint irq );
-	
-	/*__releaseinline void StopExecution()
-	{
-		if( !IsExecuting ) return;
-		eeCycleDelta = 0;
-		SetNextBranchDelta( 0 );
-	}*/
 };
 
 PCSX2_ALIGNED16_EXTERN(Registers iopRegs);
@@ -347,6 +344,8 @@ enum RegField_t
 	RF_Hi,
 	RF_Lo,
 
+	RF_Link,
+
 	RF_Count		// total number of register fields
 };
 
@@ -422,7 +421,7 @@ protected:
 	u32 m_NextPC;		// new PC after instruction has finished execution.
 	u32 m_DivStall;		// indicates the cycle stall of the current instruction if the DIV pipe is already in use.
 	const char* m_Name;	// text name/representation for this instruction
-	bool m_IsBranchType;
+	bool m_HasDelaySlot;
 
 public:
 	Instruction() {}
@@ -436,7 +435,7 @@ public:
 	,	m_NextPC( iopRegs.VectorPC + 4 )
 	,	m_DivStall( 0 )
 	,	m_Name( NULL )
-	,	m_IsBranchType( false )
+	,	m_HasDelaySlot( false )
 	{
 	}
 	
@@ -450,7 +449,7 @@ public:
 		m_NextPC	= iopRegs.VectorPC + 4;
 		m_DivStall	= 0;
 		m_Name		= NULL;
-		m_IsBranchType = false;
+		m_HasDelaySlot = false;
 	}
 
 public:
@@ -462,46 +461,34 @@ public:
 	// Returns true if this instruction is a branch/jump type (which means it
 	// will have a delay slot which should execute prior to the jump but *after*
 	// the branch instruction's target has been calculated).
-	const bool IsBranchType() const;
+	const bool HasDelaySlot() const { return m_HasDelaySlot; }
 	
-	const u32 GetNextPC() const		{ return m_NextPC; }
-	const u32 GetDivStall() const	{ return m_DivStall; }
+	const u32  GetVectorPC() const	{ return m_NextPC; }
+	const u32  GetDivStall() const	{ return m_DivStall; }
 	const char* GetName() const		{ return m_Name; }
 
 	// ------------------------------------------------------------------------
 	// APIs for grabbing portions of the opcodes.  These are just passthrough
 	// functions to the Opcode type.
 
-	u32 Funct() const		{ return _Opcode_.Funct(); }
-	u32 Basecode() const	{ return _Opcode_.Basecode(); }
-	u32 Sa() const			{ return _Opcode_.Sa(); }
+	u32  Funct() const		{ return _Opcode_.Funct(); }
+	u32  Basecode() const	{ return _Opcode_.Basecode(); }
+	u32  Sa() const			{ return _Opcode_.Sa(); }
 	// Sign-extended immediate
-	s32 Imm()				{ return _Opcode_.Imm(); }
+	s32  Imm()				{ return _Opcode_.Imm(); }
 	// Zero-extended immediate
-	u32 ImmU()				{ return _Opcode_.ImmU(); }
+	u32  ImmU()				{ return _Opcode_.ImmU(); }
 
 	// Returns the target portion of the opcode (26 bit immediate)
 	uint Target() const		{ return _Opcode_.Target(); }
 
-	u32 TrapCode() const	{ return _Opcode_.TrapCode(); }
+	u32  TrapCode() const	{ return _Opcode_.TrapCode(); }
 
 	// Calculates the target for a jump instruction (26 bit immediate added with the upper 4 bits of
 	// the current pc address)
 	uint JumpTarget() const	{ return (Target()<<2) + ((_Pc_+4) & 0xf0000000); }
-	u32 BranchTarget() const{ return (_Pc_+4) + (_Opcode_.Imm() * 4); }
-	u32 AddrImm()			{ return GetRs_UL() + _Opcode_.Imm(); }
-	
-	// Sets the link to the next instruction in the link register (Ra)
-	void SetLink();
-
-	// Sets the link to the next instruction into the Rd register
-	void SetLinkRd();
-	
-	// Sets the name of the instruction.
-	void SetName( const char* name )
-	{
-		m_Name = name;
-	}
+	u32  BranchTarget() const{ return (_Pc_+4) + (_Opcode_.Imm() * 4); }
+	u32  AddrImm()			{ return GetRs_UL() + Imm(); }
 
 	// ------------------------------------------------------------------------
 
@@ -514,6 +501,8 @@ public:
 			case RF_Rs: return _Rs_;
 			case RF_Hi: return GPR_hi;
 			case RF_Lo: return GPR_lo;
+			case RF_Link: return GPR_ra;
+
 			jNO_DEFAULT
 		}
 		return -1;
@@ -524,6 +513,15 @@ public:
 protected:
 	void MultHelper( u64 result );
 	bool _OverflowCheck( u64 result );
+
+	void SetLink();
+	void SetLinkRd();
+
+	// Sets the name of the instruction.
+	void SetName( const char* name )
+	{
+		m_Name = name;
+	}
 
 	// ------------------------------------------------------------------------
 	// Register value retrieval methods.  Use these to read/write the registers
@@ -545,12 +543,12 @@ protected:
 	// Begin Virtual API
 
 	virtual u32 GetSa()		{ return _Opcode_.Sa(); }
-
 	// Sign-extended immediate
 	virtual s32 GetImm()	{ return _Opcode_.Imm(); }
-
 	// Zero-extended immediate
 	virtual u32 GetImmU()	{ return _Opcode_.ImmU(); }
+
+	virtual u32  GetPC() { return _Pc_; }
 	
 	virtual s32 GetRt_SL() { return iopRegs[_Rt_].SL; }
 	virtual s32 GetRs_SL() { return iopRegs[_Rs_].SL; }
@@ -565,7 +563,7 @@ protected:
 	virtual u32 GetFs_UL() { return iopRegs.CP0.r[_Rd_].SL; }
 
 	virtual u16 GetRt_US( int idx=0 ) { return iopRegs[_Rt_].US[idx]; }
-	virtual u8 GetRt_UB( int idx=0 ) { return iopRegs[_Rt_].UB[idx]; }
+	virtual u8  GetRt_UB( int idx=0 ) { return iopRegs[_Rt_].UB[idx]; }
 
 	virtual void SetRd_SL( s32 src ) { if(!_Rd_) return; iopRegs[_Rd_].SL = src; }
 	virtual void SetRt_SL( s32 src ) { if(!_Rt_) return; iopRegs[_Rt_].SL = src; }
@@ -580,6 +578,8 @@ protected:
 	virtual void SetLo_UL( u32 src ) { iopRegs[GPR_lo].UL = src; }
 	virtual void SetFs_UL( u32 src ) { iopRegs.CP0.r[_Rd_].UL = src; }
 
+	virtual void SetNextPC( u32 addr ) { m_NextPC = addr; }
+
 	virtual u8  MemoryRead8( u32 addr );
 	virtual u16 MemoryRead16( u32 addr );
 	virtual u32 MemoryRead32( u32 addr );
@@ -592,15 +592,20 @@ protected:
 
 	virtual void RaiseException( uint code );
 	virtual bool ConditionalException( uint code, bool cond );
-	virtual void _RFE();	// virtual implementation of RFE
 	
 	// used to flag instructions which have a "critical" side effect elsewhere in emulation-
 	// land -- such as modifying COP0 registers, or other functions which cannot be safely
 	// optimized.
 	virtual void SetSideEffects() {}
 
+	// Flags instructions which can conditionally or unconditionally cause exceptions.
+	// Instructions which can cause exceptions should always generate x86 code, regardless
+	// of the const status of read and written registers.
+	virtual void SetCausesExceptions()	{ }
+
 	// -------------------------------------------------------------------------
-	// Helpers used to initialize the object state.
+	// Helpers used to parse the MIPS opcode fields, dispatch instructions, and
+	// subsequently initialize this object's state.
 
 	template< typename T > static void _dispatch_SPECIAL( T& Inst );
 	template< typename T > static void _dispatch_REGIMM( T& Inst );
@@ -625,6 +630,11 @@ protected:
 	bool m_ReadsImm:1;
 	bool m_ReadsSa:1;
 
+	bool m_ReadsPC:1;			// set true by jump and link / branch and link instructions
+	bool m_WritesPC:1;			// set true by all branch instructions and exceptions.
+
+	bool m_IsDelaySlot:1;		// records the status of iopRegs.IsDelaySlot when the instruction is initialized.
+
 	GprStatus m_ReadsGPR;
 	GprStatus m_WritesGPR;
 
@@ -640,6 +650,9 @@ public:
 	,	m_SignExtWrite( false )
 	,	m_ReadsImm( false )
 	,	m_ReadsSa( false )
+	,	m_ReadsPC( false )
+	,	m_WritesPC( false )
+	,	m_IsDelaySlot( iopRegs.IsDelaySlot )
 	{
 		m_ReadsGPR.Value	= 0;
 		m_WritesGPR.Value	= 0;
@@ -656,6 +669,11 @@ public:
 		m_ReadsImm				= false;
 		m_ReadsSa				= false;
 
+		m_ReadsPC				= false;
+		m_WritesPC				= false;
+
+		m_IsDelaySlot = iopRegs.IsDelaySlot;
+
 		m_ReadsGPR.Value	= 0;
 		m_WritesGPR.Value	= 0;
 	}
@@ -665,36 +683,45 @@ public:
 	MipsGPRs_t WritesField( RegField_t field ) const;
 	RegField_t WritesReg( int gpridx ) const;
 	
+	bool IsDelaySlot() const		{ return m_IsDelaySlot; }
 	bool SignExtendsImm() const		{ return m_SignExtImm; }
 	bool SignExtendsReads() const	{ return m_SignExtRead; }
 	bool SignExtendResult() const	{ return m_SignExtWrite; }
 
-	const bool IsUnconditionalBranchType() const
+	const bool IsConstBranch() const
 	{
-		// branches that don't read Imm are J's, which are always unconditional
-		if( !IsBranchType() || !m_ReadsImm ) return false;
-		if( !m_ReadsGPR.Rt ) return false;
-		return _Rs_ == _Rt_;						// Branches with the same reg for both inputs are unconditional too!
+		// Is it even a branching instruction?
+		if( !m_HasDelaySlot ) return false;
+
+		if( m_HasSideEffects || m_CanCauseExceptions ) return false;
+
+		// branches that don't read Imm are unconditional jumps (always!)
+		if( !m_ReadsImm ) return true;
+
+		// branches which don't read Rt are also unconditional (no comparisons made).
+		// Branches with the same reg for both inputs are unconditional as well
+		return !m_ReadsGPR.Rt || (_Rs_ == _Rt_);
 	}
 
-	bool ReadsRd() const { return m_ReadsGPR.Rd; }
-	bool ReadsRt() const { return m_ReadsGPR.Rt; }
-	bool ReadsRs() const { return m_ReadsGPR.Rs; }
-	bool ReadsHi() const { return m_ReadsGPR.Hi; }
-	bool ReadsLo() const { return m_ReadsGPR.Lo; }
-	bool ReadsFs() const { return m_ReadsGPR.Fs; }
-	bool ReadsMemory() const { return m_ReadsGPR.Memory; }
+	bool ReadsRd() const		{ return m_ReadsGPR.Rd; }
+	bool ReadsRt() const		{ return m_ReadsGPR.Rt; }
+	bool ReadsRs() const		{ return m_ReadsGPR.Rs; }
+	bool ReadsHi() const		{ return m_ReadsGPR.Hi; }
+	bool ReadsLo() const		{ return m_ReadsGPR.Lo; }
+	bool ReadsFs() const		{ return m_ReadsGPR.Fs; }
+	bool ReadsMemory() const	{ return m_ReadsGPR.Memory; }
 
-	bool WritesRd() const { return m_WritesGPR.Rd; }
-	bool WritesRt() const { return m_WritesGPR.Rt; }
-	bool WritesRs() const { return m_WritesGPR.Rs; }
-	bool WritesHi() const { return m_WritesGPR.Hi; }
-	bool WritesLo() const { return m_WritesGPR.Lo; }
-	bool WritesFs() const { return m_WritesGPR.Fs; }
-	bool WritesLink() const { return m_WritesGPR.Link; }
-	bool WritesMemory() const { return m_WritesGPR.Memory; }
+	bool WritesRd() const		{ return m_WritesGPR.Rd; }
+	bool WritesRt() const		{ return m_WritesGPR.Rt; }
+	bool WritesRs() const		{ return m_WritesGPR.Rs; }
+	bool WritesHi() const		{ return m_WritesGPR.Hi; }
+	bool WritesLo() const		{ return m_WritesGPR.Lo; }
+	bool WritesFs() const		{ return m_WritesGPR.Fs; }
+	bool WritesLink() const		{ return m_WritesGPR.Link; }
+	bool WritesMemory() const	{ return m_WritesGPR.Memory; }
 
-	bool HasSideEffects() const { return m_HasSideEffects; }
+	bool HasSideEffects() const	{ return m_HasSideEffects; }
+	bool CanCauseExceptions() const { return m_CanCauseExceptions; }
 
 protected:
 	// ------------------------------------------------------------------------
@@ -703,9 +730,10 @@ protected:
 	// interpreter won't have to do more work than is needed.  To enable the extended optimization
 	// information, use an InstructionOptimizer instead.
 
-	virtual u32 GetSa()			{ m_ReadsSa = true; return _Opcode_.Sa(); }
-	virtual s32 GetImm()		{ m_ReadsImm = true; m_SignExtImm = false; return _Opcode_.Imm(); }
-	virtual u32 GetImmU()		{ m_ReadsImm = true; m_SignExtImm = true;  return _Opcode_.ImmU(); }
+	virtual u32 GetSa()		{ m_ReadsSa = true; return _Opcode_.Sa(); }
+	virtual s32 GetImm()	{ m_ReadsImm = true; m_SignExtImm = false; return _Opcode_.Imm(); }
+	virtual u32 GetImmU()	{ m_ReadsImm = true; m_SignExtImm = true;  return _Opcode_.ImmU(); }
+	virtual u32 GetPC()		{ m_ReadsPC = true; return _Pc_; }
 
 	virtual s32 GetRt_SL() { m_ReadsGPR.Rt = true; m_SignExtRead = true; return iopRegs[_Rt_].SL; }
 	virtual s32 GetRs_SL() { m_ReadsGPR.Rs = true; m_SignExtRead = true; return iopRegs[_Rs_].SL; }
@@ -720,7 +748,7 @@ protected:
 	virtual u32 GetFs_UL() { m_ReadsGPR.Fs = true; m_SignExtRead = false; return iopRegs.CP0.r[_Rd_].UL; }
 
 	virtual u16 GetRt_US( int idx=0 ) { m_ReadsGPR.Rt = true; m_SignExtRead = false; return iopRegs[_Rt_].US[idx]; }
-	virtual u8 GetRt_UB( int idx=0 ) { m_ReadsGPR.Rt = true; m_SignExtRead = false; return iopRegs[_Rt_].UB[idx]; }
+	virtual u8  GetRt_UB( int idx=0 ) { m_ReadsGPR.Rt = true; m_SignExtRead = false; return iopRegs[_Rt_].UB[idx]; }
 
 	virtual void SetRd_SL( s32 src ) { if(!_Rd_) return; m_WritesGPR.Rd = true; m_SignExtWrite = true; iopRegs[_Rd_].SL = src; }
 	virtual void SetRt_SL( s32 src ) { if(!_Rt_) return; m_WritesGPR.Rt = true; m_SignExtWrite = true; iopRegs[_Rt_].SL = src; }
@@ -735,6 +763,8 @@ protected:
 	virtual void SetLo_UL( u32 src ) { m_WritesGPR.Lo = true; m_SignExtWrite = false; iopRegs[GPR_lo].UL = src; }
 	virtual void SetFs_UL( u32 src ) { m_WritesGPR.Fs = true; m_SignExtWrite = false; iopRegs.CP0.r[_Rd_].UL = src; }
 
+	virtual void SetNextPC( u32 addr ) { m_WritesPC = true; m_NextPC = addr; }
+
 	virtual u8  MemoryRead8( u32 addr );
 	virtual u16 MemoryRead16( u32 addr );
 	virtual u32 MemoryRead32( u32 addr );
@@ -743,7 +773,8 @@ protected:
 	virtual void MemoryWrite16( u32 addr, u16 val );
 	virtual void MemoryWrite32( u32 addr, u32 val );
 
-	virtual void SetSideEffects() { m_HasSideEffects = true; }
+	virtual void SetSideEffects()		{ m_HasSideEffects = true; }
+	virtual void SetCausesExceptions()	{ m_CanCauseExceptions = true; }
 	virtual bool ConditionalException( uint code, bool cond );
 
 protected:
@@ -775,11 +806,15 @@ public:
 	s32 ConstVal_Rs;
 	s32 ConstVal_Hi;
 	s32 ConstVal_Lo;
+
+	// fully qualified (absolute) target of this branch (valid for non-register jumps and
+	// branches only!)
+	u32 m_BranchTarget;
 	
 protected:
 	GprStatus m_IsConst;		// Const status of registers on input
 	bool m_IsConstException;	// flagged TRUE for instructions that cause exceptions with certainty.
-	bool m_IsConstBranch;		// flagged TRUE for instructions that branch unconditionally.
+	bool m_IsConstPc;			// flagged TRUE for instructions that branch unconditionally (m_NextPC is a known const)
 
 public:
 	InstructionConstOpt() {}
@@ -787,7 +822,7 @@ public:
 	InstructionConstOpt( const Opcode& opcode ) :
 		InstructionOptimizer( opcode )
 	,	m_IsConstException( false )
-	,	m_IsConstBranch( false )
+	,	m_IsConstPc( true )
 	{
 		m_IsConst.Value = 0;
 	}
@@ -806,9 +841,11 @@ public:
 	bool IsConstRs() const { return ReadsRs() && m_IsConst.Rs; }
 	bool IsConstRt() const { return ReadsRt() && m_IsConst.Rt; }
 	bool IsConstField( RegField_t field ) const;
-	bool IsConstBranch() const { return m_IsConstBranch; }
+	bool IsConstPc() const { return m_IsConstPc; }
 	
 	bool CausesConstException() const { return m_IsConstException; }
+	
+	u32  GetBranchTarget() const { return m_BranchTarget; }
 	
 protected:
 	void DoConditionalBranch( bool cond );

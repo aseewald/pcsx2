@@ -241,7 +241,7 @@ __releaseinline void IopEventSystem::Dispatch( IopEventType evt )
 // for this routine to perform a thorough and orderly execution of latent events, to ensure
 // proper event order.
 //
-void IopEventSystem::ExecutePendingEvents()
+__releaseinline void IopEventSystem::ExecutePendingEvents()
 {
 	m_IsDispatching = true;
 
@@ -265,6 +265,11 @@ void IopEventSystem::ExecutePendingEvents()
 	} while( true );
 
 	m_IsDispatching = false;
+	
+	// Periodic culling of DivStallCycles, prevents it from overflowing in the unlikely event that
+	// running code doesn't invoke a DIV or MUL in 2 billion cycles. ;)
+	if( iopRegs.DivUnitCycles < 0 )
+		iopRegs.DivUnitCycles = 0;
 }
 
 // Entry point for the IOP recompiler.

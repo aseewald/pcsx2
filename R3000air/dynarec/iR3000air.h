@@ -218,11 +218,35 @@ public:
 // Implementation note: I've separated the Gpr const info into two arrays to have an easier
 // time of bit-packing the IsConst array.
 //
-struct InstConstInfoEx
+class InstConstInfoEx
 {
+public:
 	InstructionConstOpt	inst;
-	u32					ConstVal[34];
-	u8					m_IsConstBits[5];		// 5 bytes to contain 34 bits.
+
+	JccComparisonType BranchCompareType;
+
+	// Intermediate Representation dependency indexer, for each valid readable field.
+	// The values of this array are indexes for the instructions that the field being
+	// read is dependent on.  When re-ordering instructions, this instruction must be
+	// ordered *after* any instruction listed here.
+	// [not implemented yet]
+	int			iRepDep[RF_Count];
+
+	// Set true when the following instruction has a read dependency on the Rd gpr
+	// of this instruction.  The regmapper will map the value of Rd prior to instruction
+	// execution to a fixed register (and preserve it).  The next instruction in the 
+	// list will read Rs or Rt from the Dependency slot instead.
+	bool		DelayedDependencyRd;
+
+	//bool		isConstPC:1;
+	u8			m_IsConstBits[5];		// 5 bytes to contain 34 bits.
+
+	// Stores all constant status for this instruction.
+	// Note: I store all 34 GPRs on purpose, even tho the instruction itself will only
+	// need to know it's own regfields at dyngen time.  The rest are used for generating
+	// register state info for advanced exception handling and recovery.
+	u32			ConstVal[34];
+	u32			ConstPC;
 
 	bool IsConst( int gpridx ) const
 	{
@@ -274,7 +298,13 @@ public:
 	// circumstance.  Anything left 'false' can be unmapped and left as an indirect.
 	bool RequiredSrcMapping[34];
 	
-	xTempRegsArray32<bool> xForceFlush;			// optional forced flush of volatile x86 registers
+	// Optional forced flush of volatile x86 registers during Strict mapping operations.
+	// Registers in this list are flushed *prior* to instruction execution, instead of
+	// being handled as writebacks at the conclusion of instruction execution.
+	// Note: Currently xForceFlush and Dest(map) are somewhat redundant in purpose.
+	// I'm sure there's a way to simplify and remove one or the other, but my head's
+	// unable to find it currently.
+	xTempRegsArray32<bool> xForceFlush;
 
 	InstructionRecMess Inst;		// raw instruction information.
 	InstructionEmitterAPI Emitface;
@@ -286,11 +316,18 @@ public:
 	// it can be useful for instructions that use conditionals (xCMP, etc) and need to swap
 	// the conditional accordingly.
 	bool IsSwappedSources;
+	
 	const InstConstInfoEx& m_constinfoex;
+
+	// Special dependency slot mapping of EBP.  When mapped, EBP is a *read only* register
+	// which is not flushed to memory.
+	MipsGPRs_t m_EbpLoadMap;
+	MipsGPRs_t m_EbpReadMap;
 
 protected:
 	xRegister32 m_TempReg[4];
 	xRegister8 m_TempReg8[4];
+
 
 public:
 	IntermediateRepresentation() :
@@ -457,14 +494,6 @@ public:
 	}
 };
 
-
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
-class IntermediateBlock
-{
-};
-
 //////////////////////////////////////////////////////////////////////////////////////////
 // xJumpLink - houses the address of the jump instruction and the comparison type.  The
 // address is the full instruction (not just the displacement portion), and comparison type
@@ -491,7 +520,8 @@ struct xJumpLink
 	}
 };
 
-static const int MaxCyclesPerBlock = 64;
+static const int MaxCyclesPerBlock			= 64;
+static const int MaxInstructionsPerBlock	= 128;
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // recBlockItemTemp - Temporary workspace buffer used to reduce the number of heap allocations
@@ -499,11 +529,8 @@ static const int MaxCyclesPerBlock = 64;
 //
 struct recBlockItemTemp
 {
-	InstConstInfoEx	icex[MaxCyclesPerBlock];
+	InstConstInfoEx	icex[MaxInstructionsPerBlock];
 	int instlen;
-
-	//u32				ramcopy[MaxCyclesPerBlock];
-	//int ramlen;
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -515,31 +542,37 @@ struct recBlockItem : public NoncopyableObject
 	
 	// Intermediate language allocation.  If size is non-zero, then we're on our second pass
 	// and the IL should be recompiled into x86 code for direct execution.
-	SafeArray<InstConstInfoEx> IL;
+	SafeArray<InstConstInfoEx> IR;
+	SafeArray<int> InstOrder;			// instruction execution order
 
 	// A list of all block links dependent on this block.  If this block moves, then all links
 	// in this list need to have their x86 jump instructions rewritten.
 	SafeList<xJumpLink> DependentLinks;
 
-	// This member contains a copy of the code originally recompiled, for use with
-	// MMX/XMM optimized validation of blocks (and subsequent clearing if the block
-	// in memory does not match the validation copy recorded when recompilation was
-	// performed).
-	SafeArray<u32> ValidationCopy;
-
 	recBlockItem() :
-		x86len( 0 ),
-		clears( 0 ),
-		IL( "recBlockItem::IL" ),
-		DependentLinks( 4, "recBlockItem::DependentLinks" ),
-		ValidationCopy( "recBlockItem::ValidationCopy" )
+		x86len( 0 )
+	,	clears( 0 )
+	,	IR( "IntermediateBlock::IR" )
+	,	InstOrder( "IntermediateBlock::InstOrder" )
+	,	DependentLinks( 4, "recBlockItem::DependentLinks" )
 	{
-		IL.ChunkSize = 32;
+		IR.ChunkSize = 32;
+		InstOrder.ChunkSize = 32;
 		DependentLinks.ChunkSize = 8;
-		ValidationCopy.ChunkSize = 32;
+	}
+	
+	const InstConstInfoEx& GetInst( uint idx ) const
+	{
+		return IR[InstOrder[idx]];
+	}
+
+	InstConstInfoEx& GetInst( uint idx )
+	{
+		return IR[InstOrder[idx]];
 	}
 
 	void Assign( const recBlockItemTemp& src );
+	void ReorderDelaySlots();
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -549,6 +582,7 @@ class xBlocksMap
 public:
 	typedef std::map<u32, s32> Blockmap_t;
 	typedef Blockmap_t::iterator Blockmap_iterator;
+	typedef Blockmap_t::const_iterator Blockmap_iterator_const;
 
 	SafeList<recBlockItem> Blocks;
 
@@ -591,7 +625,7 @@ struct iopRec_PersistentState
 	// (jump or branch instruction).
 	u8*			xBlockCache;
 
-	// Pointer to the current/next block in the xBlockCache.  During Block recompilaion this
+	// Pointer to the current/next block in the xBlockCache.  During Block recompilation this
 	// points to the current block.  At the end of Block recompilation it is assigned a
 	// pointer to the position where the *next* block is to be emitted.
 	u8*			xBlockPtr;
@@ -605,6 +639,13 @@ struct iopRec_PersistentState
 	,	xBlockPtr( NULL )
 	,	xBlockMap()
 	{
+	}
+	
+	s8* xGetBlockPtr( u32 pc ) const
+	{
+		xBlocksMap::Blockmap_iterator_const block = xBlockMap.Map.find( pc );
+		if( block == xBlockMap.Map.end() ) return NULL;
+		return (s8*)block->second;
 	}
 };
 

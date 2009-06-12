@@ -24,45 +24,41 @@
 
 namespace R3000A {
 
-	__instinline const bool Instruction::IsBranchType() const
-	{
-		return m_IsBranchType;
-	}
-
-	// Sets the link to the next instruction in the given GPR
-	// (defaults to the link register if none specified)
+	// Sets the link to the next instruction in the link register (Ra)
 	__instinline void Instruction::SetLink()
 	{
-		SetLink( _Pc_ + 8 );
+		SetLink( GetPC() + 8 );
 	}
 
+	// Sets the link to the next instruction (after the delay slot) in the link
+	// register
 	__instinline void Instruction::SetLinkRd()
 	{
-		SetRd_UL( _Pc_ + 8 );
+		SetRd_UL( GetPC() + 8 );
 	}
 
 	__instinline void Instruction::DoConditionalBranch( bool cond )
 	{
-		GetImm(); m_IsBranchType = true;
-		if( cond )
-			m_NextPC = BranchTarget();
+		GetImm(); m_HasDelaySlot = true;
+		SetNextPC( cond ? BranchTarget() : m_NextPC );
 	}
 
 	__instinline void Instruction::RaiseException( uint code )
 	{
-		iopException( code, iopRegs.IsDelaySlot );
-		m_NextPC = iopRegs.VectorPC + 4;
+		iopException( code, m_HasDelaySlot );
+		SetNextPC( iopRegs.VectorPC + 4 );
 		SetSideEffects();
+		SetCausesExceptions();
 	}
 
 	__instinline bool Instruction::ConditionalException( uint code, bool cond )
 	{
 		if( cond )
 		{
-			iopException( code, iopRegs.IsDelaySlot );
-			m_NextPC = iopRegs.VectorPC+4;
+			iopException( code, m_HasDelaySlot );
+			SetNextPC( iopRegs.VectorPC + 4 );
 		}
-
+		SetCausesExceptions();
 		return cond;
 	}
 	
@@ -105,6 +101,8 @@ namespace R3000A {
 			case RF_Hi: return !ReadsHi() ? GPR_Invalid : GPR_hi;
 			case RF_Lo: return !ReadsLo() ? GPR_Invalid : GPR_lo;
 			
+			case RF_Link: return GPR_Invalid;
+			
 			jNO_DEFAULT
 		}
 	}
@@ -122,6 +120,8 @@ namespace R3000A {
 			case RF_Hi: return !WritesHi() ? GPR_Invalid : GPR_hi;
 			case RF_Lo: return !WritesLo() ? GPR_Invalid : GPR_lo;
 			
+			case RF_Link: return !WritesLink() ? GPR_Invalid : GPR_ra;
+			
 			jNO_DEFAULT
 		}
 	}
@@ -135,8 +135,10 @@ namespace R3000A {
 		if( gpridx == _Rt_ && WritesRt() ) return RF_Rt;
 		if( gpridx == _Rs_ && WritesRs() ) return RF_Rs;
 		
-		if( gpridx == 32 && WritesHi() ) return RF_Hi;
-		if( gpridx == 33 && WritesLo() ) return RF_Lo;
+		if( gpridx == GPR_hi && WritesHi() ) return RF_Hi;
+		if( gpridx == GPR_lo && WritesLo() ) return RF_Lo;
+		
+		if( gpridx == GPR_ra && WritesLink() ) return RF_Link;
 		
 		return RF_Unused;
 	}
@@ -146,7 +148,8 @@ namespace R3000A {
 
 	__instinline void InstructionConstOpt::DoConditionalBranch( bool cond )
 	{
-		m_IsConstBranch = (!ReadsRt() || m_IsConst.Rt) && (!ReadsRs() || m_IsConst.Rs);
+		m_IsConstPc = (!ReadsRt() || m_IsConst.Rt) && (!ReadsRs() || m_IsConst.Rs);
+		m_BranchTarget = BranchTarget();
 		Instruction::DoConditionalBranch( cond );
 	}
 
@@ -154,7 +157,7 @@ namespace R3000A {
 	{
 		m_IsConstException = true;
 		iopException( code, iopRegs.IsDelaySlot );
-		m_NextPC = iopRegs.VectorPC + 4;
+		SetNextPC( iopRegs.VectorPC + 4 );
 		SetSideEffects();
 	}
 
@@ -183,7 +186,7 @@ namespace R3000A {
 		m_IsConst.Hi = constStatus[GPR_hi];
 		m_IsConst.Lo = constStatus[GPR_lo];
 
-		m_IsConstBranch		= false;
+		m_IsConstPc			= true;
 		m_IsConstException	= false;
 	}
 	
@@ -236,6 +239,8 @@ namespace R3000A {
 
 			case RF_Hi: return m_IsConst.Hi;
 			case RF_Lo: return m_IsConst.Lo;
+			
+			case RF_Link: return m_IsConst.Link;
 
 			jNO_DEFAULT
 		}

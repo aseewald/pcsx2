@@ -137,6 +137,8 @@ public:
 		safe_free( m_ptr );
 	}
 
+	bool IsDisposed() const { return (m_ptr==NULL); }
+
 	// Returns the size of the memory allocation, as according to the array type.
 	int GetLength() const { return m_size; }
 	// Returns the size of the memory allocation in bytes.
@@ -214,7 +216,6 @@ protected:
 #endif
 		return &m_ptr[i];
 	}
-
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////

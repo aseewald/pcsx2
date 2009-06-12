@@ -133,7 +133,7 @@ void iopException(u32 code, u32 bd)
 void R3000A::Registers::StopExecution()
 {
 	if( !IsExecuting ) return;
-	iopEvtSys.ScheduleEvent( IopEvt_BreakForEE, 2 );
+	iopEvtSys.ScheduleEvent( IopEvt_BreakForEE, 0 );
 }
 
 void R3000A::Registers::RaiseExtInt( uint irq )

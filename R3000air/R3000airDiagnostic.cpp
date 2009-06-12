@@ -275,14 +275,13 @@ void InstDiag::GetParamLayout( InstParamType iparam[3] ) const
 	// Complication: Handling of address instructions, since the address parameters must
 	// be handled in a special way.
 
-	if( IsBranchType() && !ReadsRs() )
+	if( HasDelaySlot() && !ReadsRs() )
 	{
-		// Branch address parameter required
+		// Branch instructions which do not read Rs are J and JAL only:
 
-		if( strcmp( m_Name, "J" ) == 0 )
-			iparam[0] = Param_JumpTarget;
-		else
-			iparam[0] = Param_BranchOffset;
+		jASSUME( strcmp( m_Name, "J" ) == 0 || strcmp( m_Name, "JAL" ) == 0 );
+
+		iparam[0] = Param_JumpTarget;
 	}
 	else
 	{
@@ -329,7 +328,7 @@ void InstDiag::GetParamLayout( InstParamType iparam[3] ) const
 		{
 			// reading of Imm8 should only occur on instructions with 2 valid params above.
 			jASSUME( cur < 3 );
-			iparam[cur++] = IsBranchType() ? Param_BranchOffset : Param_Imm;
+			iparam[cur++] = HasDelaySlot() ? Param_BranchOffset : Param_Imm;
 		}
 	}
 }

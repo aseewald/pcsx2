@@ -19,6 +19,7 @@
 #include "PrecompiledHeader.h"
 #include "IopCommon.h"
 #include "iR3000air.h"
+#include "../R3000airInstruction.inl"
 
 namespace R3000A {
 
@@ -34,6 +35,19 @@ struct xBlockLutAlloc
 
 static xBlockLutAlloc*	m_xBlockLutAlloc = NULL;
 static u8**				m_xBlockLut = NULL;
+static u8*				m_xBlock_CurPtr = NULL;
+
+// Smallest page of the IOP's physical mapping of valid PC addresses (in this case determined
+// by the size of ROM1 -- 256kb).
+static const uint XlatePC_PageBitShift = 18;
+static const uint XlatePC_PageSize = 0x40000;	// 1 << 18 [XlatePC_PageBitShift]
+static const uint XlatePC_PageMask = XlatePC_PageSize - 1;
+
+// Length of the translation table.
+static const uint XlatePC_TableLength = 0x20000000 / XlatePC_PageSize;
+
+// Translation table used to convert PC addresses into physical ram mappings.
+PCSX2_ALIGNED16( static uptr m_tbl_TranslatePC[XlatePC_TableLength] );
 
 iopRec_PersistentState	g_PersState;
 iopRec_BlockState		g_BlockState;
@@ -71,8 +85,9 @@ void recBlockItem::Assign( const recBlockItemTemp& src )
 
 	if( src.instlen != 0 )
 	{
-		IL.ExactAlloc( src.instlen );
-		memcpy( IL.GetPtr(), src.icex, src.instlen*sizeof(InstConstInfoEx) );
+		IR.ExactAlloc( src.instlen );
+		InstOrder.ExactAlloc( src.instlen );
+		memcpy( IR.GetPtr(), src.icex, src.instlen*sizeof(InstConstInfoEx) );
 	}
 	clears++;
 }
@@ -151,14 +166,48 @@ void DynGen_DivStallUpdate( int newstall, const xRegister32& tempreg=eax )
 	}
 }
 
-static __forceinline bool intExceptionTest()
+// ------------------------------------------------------------------------
+// Reorders all delay slots with the branch instructions that follow them.
+//
+void recBlockItem::ReorderDelaySlots()
 {
-	if( psxHu32(0x1078) == 0 ) return false;
-	if( (psxHu32(0x1070) & psxHu32(0x1074)) == 0 ) return false;
-	if( (iopRegs.CP0.n.Status & 0xFE01) < 0x401 ) return false;
+	DevAssume( !IR.IsDisposed(), "recBlockItem: Invalid object state when calling ReorderDelaySlots.  IR list is emptied." );
 
-	iopException(0, iopRegs.IsDelaySlot );
-	return true;
+	// Note: ignore the last instruction, since if it's a branch it clearly doesn't have
+	// a delay slot (it's a NOP that was optimized away).
+
+	const uint LengthOneLess( IR.GetLength()-1 );
+	for( uint i=0; i<LengthOneLess; ++i )
+	{
+		InstConstInfoEx& ir( IR[i] );
+
+		if( ir.inst.HasDelaySlot() && IR[i+1].inst.IsDelaySlot() )
+		{
+			InstConstInfoEx& delayslot( IR[i+1] );
+
+			// Check for branch dependency on Rd.
+			
+			bool isDependent = false;
+			if( delayslot.inst.WritesReg( ir.inst.ReadsField( RF_Rs ) ) != RF_Unused )
+				isDependent = true;
+			if( delayslot.inst.WritesReg( ir.inst.ReadsField( RF_Rt ) ) != RF_Unused )
+				isDependent = true;
+
+			delayslot.DelayedDependencyRd = isDependent;
+
+			// Reorder instructions :D
+			
+			InstOrder[i] = i+1;
+			InstOrder[i+1] = i;
+			++i;
+		}
+		else
+		{
+			InstOrder[i] = i;
+		}
+	}
+	
+	InstOrder[LengthOneLess] = LengthOneLess;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -216,7 +265,7 @@ static __forceinline bool intExceptionTest()
 //    the same speed or faster anyway.
 // 
 
-extern void recIR_Pass2( const SafeArray<InstConstInfoEx>& iList );
+extern void recIR_Pass2( const recBlockItem& irBlock );
 extern void recIR_Pass3( uint numinsts );
 
 static void recRecompile()
@@ -239,6 +288,10 @@ static void recRecompile()
 		//Console::WriteLn( "IOP First-pass block at PC: 0x%08x  (total blocks=%d)", params masked_pc, g_PersState.xBlockMap.Blocks.GetLength() );
 		recIR_Block();
 
+		jASSUME( iopRegs.evtCycleCountdown <= iopRegs.evtCycleDuration );
+		if( iopRegs.evtCycleCountdown <= 0 )
+			iopEvtSys.ExecutePendingEvents();
+
 		//if( !IsIopRamPage( masked_pc ) )	// disable block checking for non-ram (rom, rom1, etc)
 		//	m_blockspace.ramlen = 0;
 		
@@ -249,58 +302,32 @@ static void recRecompile()
 	{
 		recBlockItem& mess( g_PersState.xBlockMap.Blocks[blowme->second] );
 
-		int numinsts = mess.IL.GetLength();
-		if( numinsts != 0 )
+		if( !mess.IR.IsDisposed() )
 		{
 			// Second Pass Time -- Compile to x86 code!
 			// ----------------------------------------
 
-			if(mess.ValidationCopy.GetLength() != 0)
-			{
-				// Integrity check --> if the program code has been altered just repeat the 
-				// first pass interpreter.
-
-				const u32* maskptr = (u32*)IopMemory::iopGetPhysPtr( masked_pc );
-				const u32* validptr = (u32*)mess.ValidationCopy.GetPtr();
-
-				/*if(	(memcmp( validptr, maskptr, mess.ValidationCopy.GetSizeInBytes()) != 0) )
-				{
-					Console::WriteLn( "-/- IOP Clearing block at PC: 0x%08x", params masked_pc );
-
-					recIR_Block();
-					mess.Assign( m_blockspace );
-					return;
-				}*/
-			}
-
 			//Console::WriteLn( "IOP Second-pass block at PC: 0x%08x  (total blocks=%d)", params masked_pc, g_PersState.xBlockMap.Blocks.GetLength() );
 
 			// Integrity Verified... Generate X86.
-
-			recIR_Pass2( mess.IL );
-			recIR_Pass3( mess.IL.GetLength() );
-			mess.IL.Dispose();
+			
+			g_BlockState.xBlockPtr = m_xBlock_CurPtr;
+			mess.ReorderDelaySlots();
+			recIR_Pass2( mess );			
+			recIR_Pass3( mess.IR.GetLength() );
+			m_xBlock_CurPtr = xGetPtr();
+			mess.IR.Dispose();
+			
+			uptr temp = m_tbl_TranslatePC[masked_pc>>XlatePC_PageBitShift];
+			uptr* dispatch_ptr = (uptr*)(temp + (masked_pc & XlatePC_PageMask));
+			*dispatch_ptr = (uptr)g_BlockState.xBlockPtr;
 		}
-		recIR_Block();
 	}
 }
 
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-
-
-// Smallest page of the IOP's physical mapping of valid PC addresses (in this case determined
-// by the size of ROM1 -- 256kb).
-static const uint XlatePC_PageBitShift = 18;
-static const uint XlatePC_PageSize = 0x40000;	// 1 << 18 [XlatePC_PageBitShift]
-static const uint XlatePC_PageMask = XlatePC_PageSize - 1;
-
-// Length of the translation table.
-static const uint XlatePC_TableLength = 0x20000000 / XlatePC_PageSize;
-
-// Translation table used to convert PC addresses into physical ram mappings.
-uptr m_tbl_TranslatePC[XlatePC_TableLength];
 
 static void DynGen_Dispatcher()
 {
@@ -330,10 +357,9 @@ static void DynGen_Functions()
 	// ------------------------------------------------------------------------
 	// JITCompile
 	//
-	// Note: perform an event test!  If an event is pending, handle it first (which will
-	// then re-dispatch based on the new PC coming out of the event handler)
-
 	DynFunc::JITCompile = xGetPtr();
+	xCMP( ptr8[&iopRegs.IsExecuting], 0 );
+	xForwardJE8 label_exitRec;
 	xCALL( recRecompile );
 	xForwardJump8 label_dispatcher;
 
@@ -344,10 +370,9 @@ static void DynGen_Functions()
 	
 	//label_callEvent.SetTarget();		// uncomment for conditional dispatcher profile test above.
 	DynFunc::CallEventHandler = xGetPtr();
-	xMOV( ecx, &iopEvtSys );
 	xCALL( iopExecutePendingEvents );
 	xCMP( ptr8[&iopRegs.IsExecuting], 0 );
-	xForwardJNE8 label_exitRec;
+	xForwardJE8 label_exitRec2;
 
 	// ------------------------------------------------------------------------
 	// Dispatcher!
@@ -366,6 +391,7 @@ static void DynGen_Functions()
 	// IOP code execution needs to break, and return control to the EE.
 	//
 	label_exitRec.SetTarget();
+	label_exitRec2.SetTarget();
 	DynFunc::ExitRec = xGetPtr();
 	xRET();
 	
@@ -394,7 +420,7 @@ static s32 recExecuteBlock( s32 eeCycles )
 {
 	iopRegs.IsExecuting = true;
 	u32 eeCycleStart = iopRegs.GetCycle();
-	iopEvtSys.ScheduleEvent( IopEvt_BreakForEE, eeCycles/8 );
+	iopEvtSys.ScheduleEvent( IopEvt_BreakForEE, (eeCycles/8)+1 );
 
 	// Optimization note : Compared pushad against manually pushing the regs one-by-one.
 	// Manually pushing is faster, especially on Core2's and such. :)
@@ -485,8 +511,6 @@ static void recShutdown()
 	SafeSysMunmap( g_PersState.xBlockCache, xBlockCacheSize );
 	safe_aligned_free( m_xBlockLutAlloc );
 }
-
-u8* m_xBlock_CurPtr = NULL;
 
 static void recReset()
 {

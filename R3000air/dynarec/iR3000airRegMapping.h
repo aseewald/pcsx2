@@ -110,7 +110,7 @@ public:
 template< typename T >
 struct RegFieldArray
 {
-	T Rd, Rt, Rs, Hi, Lo;
+	T Rd, Rt, Rs, Hi, Lo, Link;
 
 	int Length() const { return 5; }
 
@@ -124,6 +124,7 @@ struct RegFieldArray
 			case RF_Rs: return Rs;
 			case RF_Hi: return Hi;
 			case RF_Lo: return Lo;
+			case RF_Link: return Link;
 			jNO_DEFAULT
 		}
 	}
@@ -138,6 +139,7 @@ struct RegFieldArray
 			case RF_Rs: return Rs;
 			case RF_Hi: return Hi;
 			case RF_Lo: return Lo;
+			case RF_Link: return Link;
 			jNO_DEFAULT
 		}
 	}

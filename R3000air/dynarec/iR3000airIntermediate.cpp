@@ -46,6 +46,48 @@ recBlockItemTemp m_blockspace;
 static string m_disasm;
 static string m_comment;
 
+// ------------------------------------------------------------------------
+// Reordering instructions simply involves moving instructions, when possible, so that
+// registers written are read back as soon as possible.  Typically this will allow the
+// register mapper to optimize things better, since registers will have a higher % of
+// reuse between instructions.
+//
+// Re-ordering non-const_address memory operations with other non-const_address memory
+// ops is expressly prohibited because reads from and writes to registers can cause 
+// changes in behavior.  Const memory operations can be re-ordered but only if they
+// are direct memory operations.
+//
+void _recIR_Reorder()
+{
+
+}
+
+// ------------------------------------------------------------------------
+//
+__releaseinline bool _recIR_TestConst( InstructionConstOpt& inst, bool gpr_IsConst[34] )
+{
+	// Test and update const status -- return now if the instruction is full const
+	// (optimized away to nothing)
+	bool isConstWrite = inst.UpdateConstStatus( gpr_IsConst );
+	if( isConstWrite && !inst.WritesMemory() && !inst.HasSideEffects() && inst.IsConstPc() ) return true;
+
+	InstConstInfoEx& hunnypie( (m_blockspace.icex[m_blockspace.instlen]) );
+	for( int i=0; i<34; ++i )
+	{
+		if( gpr_IsConst[i] )
+		{
+			hunnypie.m_IsConstBits[i/8]	|= 1 << (i&7);
+			hunnypie.ConstVal[i]		 = iopRegs[(MipsGPRs_t)i].UL;
+		}
+		else
+			hunnypie.m_IsConstBits[i/8]	&= ~(1 << (i&7));
+	}
+
+	hunnypie.DelayedDependencyRd = false;
+	m_blockspace.instlen++;
+	return false;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////
 // Generates IR for an entire block of code.
 //
@@ -54,22 +96,21 @@ void recIR_Block()
 	bool termBlock = false;
 	bool skipTerm = false;		// used to skip termination of const branches
 
-	//m_blockspace.ramlen = 0;
 	m_blockspace.instlen = 0;
 
 	bool gpr_IsConst[34] = { true, false };	// GPR0 is always const!
+	int gpr_DepIndex[34] = { 0 };
 
 	do 
 	{
 		termBlock = iopRegs.IsDelaySlot;		// terminate blocks after delay slots
 
 		Opcode opcode( iopMemDirectRead32( iopRegs.pc ) );
-		//m_blockspace.ramcopy[m_blockspace.ramlen++] = opcode.U32;
 
 		if( opcode.U32 == 0 )	// Iggy on the NOP please!  (Iggy Nop!)
 		{
 			//if( iopRegs.cycle > 0x470000 )
-				PSXCPU_LOG( "NOP%s", iopRegs.IsDelaySlot ? "\n" : "" );
+				PSXCPU_LOG( "( NOP )%s", iopRegs.IsDelaySlot ? "\n" : "" );
 
 			iopRegs.pc			 = iopRegs.VectorPC;
 			iopRegs.VectorPC	+= 4;
@@ -81,86 +122,88 @@ void recIR_Block()
 			inst.Assign( opcode, gpr_IsConst );
 			inst.Process();
 
+			// ------------------------------------------------------------------------
+			// Check for 'Forced' End-of-Block Conditions:
+			//  * Writes to the Status register (can enable / disable memory operations)
+			//  * SYSCALL and BREAK need immediate branches (the interpreted handling of the exception
+			//     will have updated our PC accordingly)
+			//  * RFE re-enables exceptions, so it needs immediate Event Test to handle pending exceptions.
+			//    (note, by rule RFE should always be in the delay slot of a non-const branch instruction
+			//     so the block should be breaking *anyway* -- but no harm in being certain).
+
+			if( inst.CausesConstException() )	// SYSCALL / BREAK (plus any other const-time exceptions)
+				termBlock = true;
+			if( strcmp(inst.GetName(), "RFE")==0 )
+				termBlock = true;
+
+			// Note: the MIPS _Rd_ field doubles as the Fs field on MTC instructions.
+			//if( (inst._Rd_ == 12) && ( (strcmp( inst.GetName(), "MTC0") == 0) || (strcmp( inst.GetName(), "CTC0") == 0) ) )
+			//	termBlock = true;
+
+			// Const branching heuristics.
+			// Requirements: We only want to follow const branches if the "reward" outweighs the
+			// cost.  Typically this should be a function of const optimization benefits against
+			// the actual number of IR instructions being generated.
+			if( inst.IsConstBranch() )
+			{
+				if( inst.GetVectorPC() == iopRegs.pc )
+				{
+					// Const jump instruction to itself.  If the delay slot is a NOP then this is
+					// a common case in the IOP which means it's waiting for an exception to occur.
+					// We optimize it by generating code that fast forwards to the next event and ends the block.
+
+					// [not implemented yet]
+				}
+				else
+				{
+					// I dunno.  I'm burnt out thinking about optimizing MIPS right now.
+					// Let's just break all the other branches regardless and optimize later. --air
+				}
+			}
+
+			// ------------------------------------------------------------------------
+			// Add this instruction to the IntRep list -- but *only* if it's non-const.
+			// If the inputs and result are const then we can just skip the little bugger altogether.
+			
+			bool isConstOptimised = _recIR_TestConst( inst, gpr_IsConst );
+			
 			if( (varLog & 0x00100000) ) //&& (iopRegs.cycle > 0x470000) )
 			{
 				inst.GetDisasm( m_disasm );
 				inst.GetValuesComment( m_comment );
 
+				// format: Prefixed with (const) tag and postfixed with the comment from the asm
+				// generator, if one exists.
+
 				if( m_comment.empty() )
-					PSXCPU_LOG( "%s%s", m_disasm.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
+					PSXCPU_LOG( "(%s) %s%s", isConstOptimised ? "const" : "     ", m_disasm.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
 				else
-					PSXCPU_LOG( "%-34s ; %s%s", m_disasm.c_str(), m_comment.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
+					PSXCPU_LOG( "(%s) %-34s ; %s%s", isConstOptimised ? "const" : "     ", m_disasm.c_str(), m_comment.c_str(), iopRegs.IsDelaySlot ? "\n" : "" );
 			}
 
-			// Add this instruction to the IntRep list -- but *only* if it's non-const.
-			// If the inputs and result are const then we can just skip the little bugger altogether.
-			
-			if( !inst.IsConstBranch() )
-			{
-				bool isConstWrite = inst.UpdateConstStatus( gpr_IsConst );
-				if( !isConstWrite || inst.WritesMemory() || inst.HasSideEffects() )
-				{
-					InstConstInfoEx& hunnypie( (m_blockspace.icex[m_blockspace.instlen]) );
-					for( int i=0; i<34; ++i )
-					{
-						if( !gpr_IsConst[i] )
-						{
-							hunnypie.m_IsConstBits[i/8]	&= ~(1 << (i&7));
-						}
-						else
-						{
-							hunnypie.m_IsConstBits[i/8]	|= 1 << (i&7);
-							hunnypie.ConstVal[i]		 = iopRegs[(MipsGPRs_t)i].UL;
-						}
-					}
+			// ------------------------------------------------------------------------
+			// Prep iopRegs for the next instruction in the queue.  The pipeline works by beginning
+			// processing of the current instruction above, and fetching the next instruction (below).
+			// The next instruction to fetch is determined by the VectorPC assigned by the previous
+			// instruction which is typically pc+4, but could be any branch target address.
 
-					m_blockspace.instlen++;
-				}
-			}
-
-			// prep the iopRegs for the next instruction fetch -->
-			// 
-			// Typically VectorPC points to the delay slot instruction on branches, and the GetNextPC()
-			// references the *target* of the branch.  Thus the delay slot is processed on the next
-			// pass (unless an exception occurs), and *then* we vector to the branch target.  In other
-			// words, VectorPC acts as an instruction prefetch, only we prefetch just the PC (doing a
-			// full-on instruction prefetch is less efficient).
-			//
-			// note: In the case of raised exceptions, VectorPC and GetNextPC() can be overridden during
+			// note: In the case of raised exceptions, VectorPC and GetNextPC() be overridden during
 			//  instruction processing above.
 
 			iopRegs.pc			= iopRegs.VectorPC;
-			iopRegs.VectorPC	= inst.GetNextPC();
-			iopRegs.IsDelaySlot	= inst.IsBranchType();
+			iopRegs.VectorPC	= inst.GetVectorPC();
+			iopRegs.IsDelaySlot	= inst.HasDelaySlot();
 
-			// Test for DivUnit Stalls.
 			// Note: DivStallUpdater applies the stall directly to the iopRegs, instead of using the
 			// RecState's cycle accumulator.  This is because the same thing is done by the recs, and
-			// is designed to allow proper handling of stalls across branches.
+			// the global stall vars must be updates to allow proper handling of stalls between blocks.
 
 			DivStallUpdater( g_BlockState.DivCycleAccum, inst.GetDivStall() );
-
-			// Check for 'Forced' End-of-Block Conditions:
-			//  * Writes to the Status register (can enable / disable memory operations)
-			//  * SYSCALL and BREAK need immediate branches (the interpreted handling of the exception
-			//     will have updated our PC accordingly)
-			//  * RFE re-enables exceptions, so it needs immediate Event Test
-			//    (note, by rule RFE should always be in the delay slot of a non-const branch instruction
-			//     so the block should be breaking *anyway* -- but no harm in being certain).
-			
-			if( inst.CausesConstException() )	// SYSCALL / BREAK (plus any other const-time exceptions)
-				termBlock = true;
-			if( strcmp(inst.GetName(), "RFE")==0 )
-				termBlock = true;
-			//else if( inst.IsConstBranch() )
-			//	termBlock = false;
-
-			// Note: the MIPS _Rd_ field doubles as the Fs field on MTC instructions.
-			//if( (inst._Rd_ == 12) && ( (strcmp( inst.GetName(), "MTC0") == 0) || (strcmp( inst.GetName(), "CTC0") == 0) ) )
-			//	termBlock = true;
 		}
 
 		g_BlockState.IncCycleAccum();
+
+		if( m_blockspace.instlen >= MaxInstructionsPerBlock ) break;
 
 	} while( !termBlock && (g_BlockState.BlockCycleAccum < MaxCyclesPerBlock) );
 

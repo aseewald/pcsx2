@@ -775,7 +775,7 @@ __releaseinline void IopCounters::WriteMode( uint cntidx, u32 mode )
 int s_vsync_count = 0;
 __releaseinline void IopCounters::VBlankStart()
 {
-	Console::WriteLn( " -------->>>> Iop Vsync Start!  %6d <<<<--------", params s_vsync_count );
+	//Console::WriteLn( " -------->>>> Iop Vsync Start!  %6d <<<<--------", params s_vsync_count );
 	//PSXCNT_LOG( " -------->>>> Iop Vsync Start!  O_o <<<<--------" );
 	cdvdVsync();
 	iopRegs.RaiseExtInt( IopInt_VBlank );
@@ -785,7 +785,7 @@ __releaseinline void IopCounters::VBlankStart()
 
 __releaseinline void IopCounters::VBlankEnd()
 {
-	Console::WriteLn( " -------->>>>  Iop Vsync End!  %6d  <<<<--------", params s_vsync_count++ );
+	//Console::WriteLn( " -------->>>>  Iop Vsync End!  %6d  <<<<--------", params s_vsync_count++ );
 	//PSXCNT_LOG( " -------->>>>  Iop Vsync End!  o_O  <<<<--------" );
 	iopRegs.RaiseExtInt( IopInt_VBlankEnd );
 	if( iopGateFlags.vBlank1 ) iopCounters16[1].CheckEndGate();

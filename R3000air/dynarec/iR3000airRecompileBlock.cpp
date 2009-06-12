@@ -68,6 +68,7 @@ static void _DynGen_PreInstructionFlush( const IR& ir, xRegisterArray32<bool> xI
 	}
 }
 
+// ------------------------------------------------------------------------
 // Special case "Strict Mode" handler, for Rs==Rt cases.
 // This handler is needed because Strict Mode can map the same source GPR
 // to many x86 registers.  Our SrcMap/DestMap system only supports mapping
@@ -104,6 +105,8 @@ static void _DynGen_MapStrictMultimap( const IR& ir )
 	}
 }
 
+// ------------------------------------------------------------------------
+//
 static void _DynGen_MapRegisters( const IR& ir, const IR& previr, xRegisterArray32<bool> xIsDirty )
 {
 	xDirectOrIndirect32 prevmap[34];
@@ -177,6 +180,8 @@ static void _DynGen_MapRegisters( const IR& ir, const IR& previr, xRegisterArray
 	}
 }
 
+// ------------------------------------------------------------------------
+//
 static void _DynGen_ConstSelfCheck()
 {
 	// [TODO] Finish the Const Self-Check Implementation Below ...
@@ -201,24 +206,88 @@ static void _DynGen_ConstSelfCheck()
 	}*/	
 }
 
+// ------------------------------------------------------------------------
+//
 static void _DynGen_EventTest()
 {
-	//xMOV( eax, &iopRegs.cycle );
-	//xADD( eax, g_BlockState.GetScaledBlockCycles() );
-	//xMOV( &iopRegs.cycle, eax ); // update cycles
-	//xSUB( eax, &iopRegs.NextBranchCycle );
-	//xJNS( DynFunc::CallEventHandler );
-
-	// Method we'll use for the new event handler system:
 	xSUB( ptr32[&iopRegs.evtCycleCountdown], g_BlockState.GetScaledBlockCycles() );
 	xJLE( DynFunc::CallEventHandler );
 }
 
+Registers s_intRegsResult;
+IopEventSystem s_intEventsResult;
+
+// ------------------------------------------------------------------------
+// Self-checking against the interpreter!  [Clever and slow]
+// Runs the code both as the interpreter and the recompiler, and checks the register state
+// results of both passes at the end of the block.  Assert on differences.
+//
+static void _SelfCheckInterp_Setup()
+{
+	Registers savedRegs = iopRegs;
+	IopEventSystem savedEvts = iopEvtSys;
+	recIR_Block();
+
+	s_intRegsResult = iopRegs;
+	s_intEventsResult = iopEvtSys;
+
+	// Restore state for the recompiler pass.
+	iopRegs = savedRegs;
+	iopEvtSys = savedEvts;
+}
+
+// ------------------------------------------------------------------------
+static void _SelfCheckInterp_Assert()
+{
+	if( memcmp(&s_intRegsResult, &iopRegs, sizeof( iopRegs )) != 0 )
+	{
+		assert( false );
+	}
+	
+	if( memcmp(&s_intEventsResult, &iopEvtSys, sizeof( iopEvtSys )) != 0 )
+	{
+		assert( false );
+	}
+}
+
+// ------------------------------------------------------------------------
+static void recIR_Flush( const IR& ir, xRegisterArray32<bool>& xIsDirty )
+{
+	for( int gpr=1; gpr<34; gpr++ )
+	{
+		const xRegister32& xreg( ir.Dest[gpr].GetReg() );
+
+		if( !xreg.IsEmpty() && xIsDirty[xreg.Id] )
+		{
+			xMOV( IR::GetMemIndexer( gpr ), ir.Dest[gpr].GetReg() );
+			xIsDirty[xreg.Id] = false;
+		}
+		else if( ir.m_constinfoex.IsConst(gpr) )
+		{
+			xMOV( IR::GetMemIndexer( gpr ), ir.m_constinfoex.ConstVal[gpr] );
+		}
+	}
+}
+
+// ------------------------------------------------------------------------
+// returns the inverted conditional type for this Jcc condition.  Ie, JNS will become JS.
+JccComparisonType xInvertCond( JccComparisonType src )
+{
+	jASSUME( src != Jcc_Unknown );
+	if( Jcc_Unconditional == src ) return Jcc_Unconditional;
+
+	// x86 conditionals are clever!  To invert conditional types, just invert the lower bit:
+	return (JccComparisonType)((int)src ^ 1);
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//
 void recIR_Pass3( uint numinsts )
 {
 	xSetPtr( g_BlockState.xBlockPtr );
-	
 	_DynGen_EventTest();
+	
+	//xCALL( _SelfCheckInterp_Setup );
 
 	g_BlockState.DynGen_InitMappedRegs();
 
@@ -232,8 +301,20 @@ void recIR_Pass3( uint numinsts )
 
 	for( uint i=0; i<numinsts; ++i )
 	{
+		// EBP is 'magic' and never flushes.
+		xIsDirty.ebp = false;
+
 		const IR& ir( m_intermediates[i] );
-		
+
+		// Flush all dirty regs prior to any instruction which has a non-const PC result.
+		// [TODO] : For optimized mid-block branches (unrolled loops), this code should
+		// leave the flushing to the discretion of the implementing instruction, so that
+		// the instruction can conditionally flush on branch taken, and not flush when
+		// branch is not taken.
+
+		if( !ir.Inst.IsConstPc() )
+			recIR_Flush( ir, xIsDirty );
+
 		if( IsDevBuild )
 		{
 			// Debugging helper: Marks the current instruction's PC.
@@ -272,41 +353,63 @@ void recIR_Pass3( uint numinsts )
 		}
 
 		ir.Emitface.Emit( ir );
-
-		// Update Dirty Status on Exit, for any written regs.
-
-		for( int cf=0; cf<RF_Count; ++cf )
+		
+		if( ir.m_constinfoex.BranchCompareType != Jcc_Unknown)
 		{
-			RegField_t curfield = (RegField_t)cf;
-			int gpr = ir.Inst.WritesField( curfield );
-			if( gpr == -1 ) continue;
+			DynarecAssume( !ir.Inst.IsConstPc(), ir.Inst, "Branch conditional type specified for non-branching instruction (has const PC)." );
 
-			if( ir.Dest[gpr].IsDirect() )
-				xIsDirty[ir.Dest[gpr].GetReg()] = true;
+			// [TODO] Note: Conditional branch instructions should *never* modify registers in
+			// a non-const fashion.  Check for that here and assert...
+
+			// Instruction generated is a branch compare (by spec the compare generated should
+			// be oriented to match the specified comparison type in BranchCompareType, and both
+			// together should follow the *branch taken* path).
+
+			u32 pcBranchTarg	= ir.Inst.GetBranchTarget();
+			u32 pcFallthru		= ir.Inst._Pc_ + 8;
+			bool branchTaken	= (ir.Inst.GetVectorPC() != pcFallthru);
+
+			if( branchTaken )
+			{
+				// First-pass interpreter has "discovered" that the branch is taken, and we'll
+				// assume that this is the common path (most likely a loop to itself).  Two checks:
+				//   (a) Does the branch target a block already compiled in x86 space?
+				//      yes -> Link directly to the existing block with non-inverted conditional.
+				//   (b) Does the branch target a block with existing IR compilation?
+				//      yes -> Link to "branch taken" path with non-inverted conditional, and compile
+				//             branch-taken path *directly* below this block (no jump linking needed).
+
+				g_PersState.xBlockMap.AddLink( ir.Inst.GetVectorPC(), xInvertCond( ir.m_constinfoex.BranchCompareType ) );
+
+				if( s8* x86block = g_PersState.xGetBlockPtr( ir.Inst.GetVectorPC() ) )
+				{
+					
+				}
+			}
+			else
+			{
+			}
+		}
+		else
+		{
+			// Update Dirty Status on Exit, for any written regs.
+
+			for( int cf=0; cf<RF_Count; ++cf )
+			{
+				RegField_t curfield = (RegField_t)cf;
+				int gpr = ir.Inst.WritesField( curfield );
+				if( gpr == -1 ) continue;
+
+				if( ir.Dest[gpr].IsDirect() )
+					xIsDirty[ir.Dest[gpr].GetReg()] = true;
+			}
 		}
 	}
 
-	// ------------------------------------------------------------------------
-	// End-of-Block Flush Stage
-	// Flush any and all remaining dirty registers.
-	//
-	IR& last( m_intermediates[numinsts-1] );
+	recIR_Flush( m_intermediates[numinsts-1], xIsDirty );
 
-	for( int gpr=1; gpr<34; gpr++ )
-	{
-		const xRegister32& xreg( last.Dest[gpr].GetReg() );
-
-		if( !xreg.IsEmpty() && xIsDirty[xreg.Id] )
-			xMOV( IR::GetMemIndexer( gpr ), last.Dest[gpr].GetReg() );
-
-		else if( last.m_constinfoex.IsConst(gpr) )
-			xMOV( IR::GetMemIndexer( gpr ), last.m_constinfoex.ConstVal[gpr] );
-	}
-
-	_DynGen_ConstSelfCheck();
-	
-	m_xBlock_CurPtr = xGetPtr();
-	Console::Notice( "Stage done!" );
+	//xCALL( _SelfCheckInterp_Assert );
+	//Console::Notice( "Stage done!" );
 }
 
 }

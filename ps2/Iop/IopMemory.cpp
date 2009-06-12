@@ -27,6 +27,17 @@ namespace IopMemory
 using namespace R3000A;
 
 //////////////////////////////////////////////////////////////////////////////////////////
+// HW Primary Registers Mapper [0x1f800004]:
+//
+// The address written to this register actually maps the main HW registers of the IOP.
+// If written with 0x1f802000 [default], the HW regs are at that address.  If written with
+// 0x1f801200, the regs are at that address instead (!).  Allowed granularity is at least
+// 0x100 and may be 0x80.
+//
+// [behavior is currently not emulated, no PSX or PS2 games appear to use anything other
+//  that default mappings]
+//
+//////////////////////////////////////////////////////////////////////////////////////////
 // BIU/Cache config register [0xfffe0130]
 // "Where's it goin' to?  And what does it think it's gonna do when it gets there?" - air
 //
