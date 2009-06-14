@@ -64,7 +64,7 @@ static void _evthandler_SPU2async()
 	PSXDMA_LOG( "SPU2 Async!" );
 	if(SPU2async)
 		SPU2async( iopRegs.GetEventInfo( IopEvt_SPU2 ).OrigDelta );
-	iopRegs.ScheduleEvent( IopEvt_SPU2, 768*8 );
+	iopRegs.RescheduleEvent( IopEvt_SPU2, 768*8 );
 }
 
 static void _evthandler_Exception()
@@ -173,13 +173,11 @@ void Registers::CancelEvent( CpuEventType& thisevt )
 	{
 		m_ActiveEvents = thisevt.next;
 
-		// Node is being removed from the head of the list, so reschedule the IOP's
-		// master counters as needed (only done if the IopEventDispatch isn't currently
-		// running, since it does its own internal management of the iopRegs vars).
-
+		// Node is being removed from the head of the list, so reschedule the
+		// IOP's master event scheduler:
 		int iopPending = GetPendingCycles();
-		evtCycleDuration	= thisevt.RelativeDelta;
-		evtCycleCountdown	= evtCycleDuration - iopPending;
+		evtCycleDuration	= m_ActiveEvents->RelativeDelta;
+		evtCycleCountdown	= m_ActiveEvents->RelativeDelta-iopPending;
 	}
 	else
 	{
@@ -196,6 +194,7 @@ void Registers::CancelEvent( CpuEventType& thisevt )
 		}
 	}
 
+	thisevt.next = NULL;
 	m_Events[IopEvt_Idle].RelativeDelta = 0x4000;
 }
 
@@ -205,6 +204,8 @@ void Registers::CancelEvent( IopEventType evt )
 	CancelEvent( m_Events[evt] );
 }
 
+// ------------------------------------------------------------------------
+//
 __releaseinline void Registers::RescheduleEvent( CpuEventType& thisevt, s32 delta )
 {
 	DevAssume( thisevt.next == NULL, "iopEvtSched Logic Error: Invalid object state; RescheduleEvent called on an event that is already scheduled." );
@@ -214,7 +215,7 @@ __releaseinline void Registers::RescheduleEvent( CpuEventType& thisevt, s32 delt
 
 	CpuEventType* curEvt = m_ActiveEvents;
 	CpuEventType* prevEvt = NULL;
-	s32 runningDelta = 0;
+	s32 runningDelta = -GetPendingCycles();
 
 	while( true )
 	{
@@ -234,9 +235,8 @@ __releaseinline void Registers::RescheduleEvent( CpuEventType& thisevt, s32 delt
 				// master counters as needed (only done if the IopEventDispatch isn't currently
 				// running, since it does its own internal management of the iopRegs vars).
 
-				int iopPending = GetPendingCycles();
 				evtCycleDuration	= thisevt.RelativeDelta;
-				evtCycleCountdown	= evtCycleDuration - iopPending;
+				evtCycleCountdown	= thisevt.OrigDelta;
 
 				// EE/IOP sync: If the EE is the current cpu timeslice (actively running code)
 				// then we might need to signal it for a branch test.
@@ -293,10 +293,16 @@ void Registers::RaiseException()
 	
 	if( !GetEventInfo( IopEvt_Exception ).next != NULL )
 	{
-		ScheduleEvent( IopEvt_Exception, 0 );		// must be zero!
+		ScheduleEvent( IopEvt_Exception, 1 );
 	}
 }
 
+}
+
+__forceinline void PSX_INT( IopEventType evt, int deltaCycles )
+{
+	PSXDMA_LOG( "Event: %s @ %d cycles", R3000A::tbl_EventNames[evt], deltaCycles );
+	R3000A::iopRegs.ScheduleEvent( evt, deltaCycles );
 }
 
 // Entry point for the IOP recompiler.

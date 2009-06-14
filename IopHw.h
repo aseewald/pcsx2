@@ -19,7 +19,6 @@
 #pragma once
 
 #include "IopMem.h"
-#include "IopEvents.h"
 
 static const u32
 	HW_USB_START	= 0x1f801600,

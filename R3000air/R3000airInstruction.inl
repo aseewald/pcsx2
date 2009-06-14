@@ -40,7 +40,7 @@ namespace R3000A {
 	__instinline void Instruction::DoConditionalBranch( bool cond )
 	{
 		GetImm(); m_HasDelaySlot = true;
-		SetNextPC( cond ? BranchTarget() : m_NextPC );
+		SetNextPC( cond ? BranchTarget() : m_VectorPC );
 	}
 
 	__instinline void Instruction::RaiseException( uint code )

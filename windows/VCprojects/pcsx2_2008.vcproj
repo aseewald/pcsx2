@@ -1823,10 +1823,6 @@
 					>
 				</File>
 				<File
-					RelativePath="..\..\IopEvents.h"
-					>
-				</File>
-				<File
 					RelativePath="..\..\ps2\Iop\IopNewCounters.cpp"
 					>
 				</File>

@@ -74,7 +74,7 @@ void sifInit()
 	memzero_obj(iopsifbusy);
 }
 
-static __forceinline void SIF0write(u32 *from, int words)
+static __releaseinline void SIF0write(u32 *from, int words)
 {
 	const int wP0 = min((FIFO_SIF0_W - sif0.fifoWritePos), words);
 	const int wP1 = words - wP0;
@@ -87,7 +87,7 @@ static __forceinline void SIF0write(u32 *from, int words)
 	SIF_LOG("  SIF0 + %d = %d (pos=%d)", words, sif0.fifoSize, sif0.fifoWritePos);
 }
 
-static __forceinline void SIF0read(u32 *to, int words)
+static __releaseinline void SIF0read(u32 *to, int words)
 {
 	const int wP0 = min((FIFO_SIF0_W - sif0.fifoReadPos), words);
 	const int wP1 = words - wP0;
@@ -100,7 +100,7 @@ static __forceinline void SIF0read(u32 *to, int words)
 	SIF_LOG("  SIF0 - %d = %d (pos=%d)", words, sif0.fifoSize, sif0.fifoReadPos);
 }
 
-__forceinline void SIF1write(u32 *from, int words)
+static __releaseinline void SIF1write(u32 *from, int words)
 {
 	const int wP0 = min((FIFO_SIF1_W - sif1.fifoWritePos), words);
 	const int wP1 = words - wP0;
@@ -113,7 +113,7 @@ __forceinline void SIF1write(u32 *from, int words)
 	SIF_LOG("  SIF1 + %d = %d (pos=%d)", words, sif1.fifoSize, sif1.fifoWritePos);
 }
 
-static __forceinline void SIF1read(u32 *to, int words)
+static __releaseinline void SIF1read(u32 *to, int words)
 {
 	const int wP0 = min((FIFO_SIF1_W - sif1.fifoReadPos), words);
 	const int wP1 = words - wP0;

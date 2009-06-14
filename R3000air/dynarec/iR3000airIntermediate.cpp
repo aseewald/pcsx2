@@ -29,18 +29,6 @@ using namespace x86Emitter;
 
 namespace R3000A {
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// Builds the intermediate const and regalloc resolutions.
-//
-void recIR_Expand( IntermediateRepresentation& iInst )
-{
-	const InstructionConstOpt& dudley = iInst.Inst;
-	
-	if( dudley.ReadsRd() )
-	{
-	}
-}
-
 recBlockItemTemp m_blockspace;
 
 static string m_disasm;
@@ -63,6 +51,8 @@ void _recIR_Reorder()
 }
 
 // ------------------------------------------------------------------------
+// Adds this instruction to the IntRep list -- but *only* if it's non-const.  If the inputs
+// and result are const then we can just skip the little bugger altogether.
 //
 __releaseinline bool _recIR_TestConst( InstructionConstOpt& inst, bool gpr_IsConst[34] )
 {
@@ -140,6 +130,7 @@ void recIR_Block()
 			//if( (inst._Rd_ == 12) && ( (strcmp( inst.GetName(), "MTC0") == 0) || (strcmp( inst.GetName(), "CTC0") == 0) ) )
 			//	termBlock = true;
 
+			// ------------------------------------------------------------------------
 			// Const branching heuristics.
 			// Requirements: We only want to follow const branches if the "reward" outweighs the
 			// cost.  Typically this should be a function of const optimization benefits against
@@ -161,10 +152,6 @@ void recIR_Block()
 				}
 			}
 
-			// ------------------------------------------------------------------------
-			// Add this instruction to the IntRep list -- but *only* if it's non-const.
-			// If the inputs and result are const then we can just skip the little bugger altogether.
-			
 			bool isConstOptimised = _recIR_TestConst( inst, gpr_IsConst );
 			
 			if( (varLog & 0x00100000) ) //&& (iopRegs.cycle > 0x470000) )

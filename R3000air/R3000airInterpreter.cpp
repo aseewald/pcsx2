@@ -93,7 +93,7 @@ static __releaseinline void intStep()
 		iopRegs.pc			 = iopRegs.VectorPC;
 		iopRegs.VectorPC	+= 4;
 		iopRegs.IsDelaySlot	 = false;
-		iopRegs.AddCycles( 2 );
+		iopRegs.AddCycles( 1 );
 
 		opcode = iopMemDirectRead32( iopRegs.pc );
 	}
@@ -169,6 +169,7 @@ static s32 intExecuteBlock( s32 eeCycles )
 
 	} while( iopRegs.IsExecuting );
 
+	//PSXDMA_LOG( "IOP SYNC BREAK SPOT = %d", eeCycles - ((iopRegs.GetCycle() - eeCycleStart) * 8) );
 	return eeCycles - ((iopRegs.GetCycle() - eeCycleStart) * 8);
 }
 

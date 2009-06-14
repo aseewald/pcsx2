@@ -530,7 +530,7 @@ protected:
 	// Interpretation status vars, updated post-Process, and accessible via read-only
 	// public accessors.
 
-	u32 m_NextPC;		// new PC after instruction has finished execution.
+	u32 m_VectorPC;		// new PC after instruction has finished execution.
 	u32 m_DivStall;		// indicates the cycle stall of the current instruction if the DIV pipe is already in use.
 	const char* m_Name;	// text name/representation for this instruction
 	bool m_HasDelaySlot;
@@ -544,7 +544,7 @@ public:
 	,	_Rt_( (MipsGPRs_t)opcode.Rt() )
 	,	_Rs_( (MipsGPRs_t)opcode.Rs() )
 	,	_Pc_( iopRegs.pc )
-	,	m_NextPC( iopRegs.VectorPC + 4 )
+	,	m_VectorPC( iopRegs.VectorPC + 4 )
 	,	m_DivStall( 0 )
 	,	m_Name( NULL )
 	,	m_HasDelaySlot( false )
@@ -558,7 +558,7 @@ public:
 		_Rt_		= (MipsGPRs_t)opcode.Rt();
 		_Rs_		= (MipsGPRs_t)opcode.Rs();
 		_Pc_		= iopRegs.pc;
-		m_NextPC	= iopRegs.VectorPC + 4;
+		m_VectorPC	= iopRegs.VectorPC + 4;
 		m_DivStall	= 0;
 		m_Name		= NULL;
 		m_HasDelaySlot = false;
@@ -575,7 +575,7 @@ public:
 	// the branch instruction's target has been calculated).
 	const bool HasDelaySlot() const { return m_HasDelaySlot; }
 	
-	const u32  GetVectorPC() const	{ return m_NextPC; }
+	const u32  GetVectorPC() const	{ return m_VectorPC; }
 	const u32  GetDivStall() const	{ return m_DivStall; }
 	const char* GetName() const		{ return m_Name; }
 
@@ -696,7 +696,7 @@ protected:
 	virtual u32 GetPC() { return _Pc_; }
 
 	virtual void SetLink( u32 addr ) { iopRegs[GPR_ra].UL = addr; }
-	virtual void SetNextPC( u32 addr ) { m_NextPC = addr; }
+	virtual void SetNextPC( u32 addr ) { m_VectorPC = addr; }
 
 	virtual u8  MemoryRead8( u32 addr );
 	virtual u16 MemoryRead16( u32 addr );
@@ -876,7 +876,7 @@ protected:
 	virtual void SetLo_UL( u32 src ) { m_WritesGPR.Lo = true; m_SignExtWrite = false; iopRegs[GPR_lo].UL = src; }
 	virtual void SetFs_UL( u32 src ) { m_WritesGPR.Fs = true; m_SignExtWrite = false; iopRegs.CP0.r[_Rd_].UL = src; }
 
-	virtual void SetNextPC( u32 addr ) { m_WritesPC = true; m_NextPC = addr; }
+	virtual void SetNextPC( u32 addr ) { m_WritesPC = true; m_VectorPC = addr; }
 
 	virtual u8  MemoryRead8( u32 addr );
 	virtual u16 MemoryRead16( u32 addr );
@@ -974,9 +974,5 @@ extern const char* Diag_GetGprName( MipsGPRs_t gpr );
 
 }
 
-static __forceinline void PSX_INT( IopEventType evt, int deltaCycles )
-{
-	R3000A::iopRegs.ScheduleEvent( evt, deltaCycles );
-}
-
+extern void PSX_INT( IopEventType evt, int deltaCycles );
 extern void iopExecutePendingEvents();
