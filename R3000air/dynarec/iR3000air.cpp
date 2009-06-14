@@ -290,7 +290,7 @@ static void recRecompile()
 
 		jASSUME( iopRegs.evtCycleCountdown <= iopRegs.evtCycleDuration );
 		if( iopRegs.evtCycleCountdown <= 0 )
-			iopEvtSys.ExecutePendingEvents();
+			iopRegs.ExecutePendingEvents();
 
 		//if( !IsIopRamPage( masked_pc ) )	// disable block checking for non-ram (rom, rom1, etc)
 		//	m_blockspace.ramlen = 0;
@@ -420,7 +420,7 @@ static s32 recExecuteBlock( s32 eeCycles )
 {
 	iopRegs.IsExecuting = true;
 	u32 eeCycleStart = iopRegs.GetCycle();
-	iopEvtSys.ScheduleEvent( IopEvt_BreakForEE, (eeCycles/8)+1 );
+	//iopRegs.ScheduleEvent( IopEvt_BreakForEE, eeCycles/8 );
 
 	// Optimization note : Compared pushad against manually pushing the regs one-by-one.
 	// Manually pushing is faster, especially on Core2's and such. :)
@@ -430,18 +430,18 @@ static s32 recExecuteBlock( s32 eeCycles )
 		push ebx
 		push esi
 		push edi
-		//push ebp		// probably not needed.
+		push ebp
 
 		call [DynFunc::Dispatcher]
 
-		//pop ebp
+		pop ebp
 		pop edi
 		pop esi
 		pop ebx
 	}
 	
 	iopRegs.IsExecuting = false;
-	return eeCycles - ((iopRegs._cycle - eeCycleStart) * 8);
+	return eeCycles - ((iopRegs.m_cycle - eeCycleStart) * 8);
 }
 
 static void recExecute()

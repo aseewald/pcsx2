@@ -1291,8 +1291,8 @@ static __forceinline void cdvdWrite07(u8 rt)		// BREAK
 	// Aborts any one of several CD commands:
 	// Pause, Seek, Read, Status, Standby, and Stop
 
-	iopEvtSys.CancelEvent( IopEvt_Cdvd );
-	iopEvtSys.CancelEvent( IopEvt_CdvdRead );
+	iopRegs.CancelEvent( IopEvt_Cdvd );
+	iopRegs.CancelEvent( IopEvt_CdvdRead );
 	//iopRegs.interrupt &= ~( (1<<IopEvt_Cdvd) | (1<<IopEvt_CdvdRead) );
 
 	cdvd.Action = cdvdAction_Break;
@@ -1330,7 +1330,7 @@ static __forceinline void cdvdWrite14(u8 rt) { // PS1 MODE??
 	iopReset();
 	psxHu32(HW_ICFG)	= 0x8;
 	psxHu32(HW_ICTRL)	= 1;
-	iopRegs._cycle		= cycle;
+	iopRegs.m_cycle		= cycle;
 }
 
 static __forceinline void fail_pol_cal()

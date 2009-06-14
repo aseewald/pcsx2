@@ -21,6 +21,59 @@
 
 using namespace R3000A;
 
+using IopCounters::IopCntEvt_Target;
+using IopCounters::IopCntEvt_Overflow;
+using IopCounters::IopCntEvt_RescheduleTarget;
+using IopCounters::IopCntEvt_RescheduleOverflow;
+
+
+template< uint cntidx, IopCounters::EventType evttype >
+static void _cnt_update()
+{
+	IopCounters::OnEvent( cntidx, evttype );
+}
+
+typedef void IopEventCallbackFn();
+
+struct UpdateHandlerContainer
+{
+	IopEventCallbackFn* handler;
+};
+
+static const UpdateHandlerContainer tbl_update_handlers[4][6] =
+{
+	{
+		{_cnt_update<0,IopCntEvt_Target>},
+		{_cnt_update<1,IopCntEvt_Target>},
+		{_cnt_update<2,IopCntEvt_Target>},
+		{_cnt_update<3,IopCntEvt_Target>},
+		{_cnt_update<4,IopCntEvt_Target>},
+		{_cnt_update<5,IopCntEvt_Target>}
+	},
+		
+	{
+		{_cnt_update<0,IopCntEvt_Overflow>},
+		{_cnt_update<1,IopCntEvt_Overflow>},
+		{_cnt_update<2,IopCntEvt_Overflow>},
+		{_cnt_update<3,IopCntEvt_Overflow>},
+		{_cnt_update<4,IopCntEvt_Overflow>},
+		{_cnt_update<5,IopCntEvt_Overflow>}
+	},
+	
+	{
+		{NULL}, {NULL}, {NULL},
+		{_cnt_update<3,IopCntEvt_RescheduleTarget>},
+		{_cnt_update<4,IopCntEvt_RescheduleTarget>},
+		{_cnt_update<5,IopCntEvt_RescheduleTarget>}
+	},
+
+	{	
+		{NULL}, {NULL}, {NULL},
+		{_cnt_update<3,IopCntEvt_RescheduleOverflow>},
+		{_cnt_update<4,IopCntEvt_RescheduleOverflow>},
+		{_cnt_update<5,IopCntEvt_RescheduleOverflow>}
+	}
+};
 
 // ------------------------------------------------------------------------
 // Fixed bit constants for the IOP's counter rates [needed for the IOP's pixel clock].
@@ -86,18 +139,6 @@ struct IopGateFlags_t
 
 static IopGateFlags_t iopGateFlags;
 
-enum IopCntEventType
-{
-	IopCntEvt_Target,
-	IopCntEvt_Overflow,
-	
-	// Special event types for when the overflow that's been scheduled
-	// is too far into the future for the delta to fit within the context
-	// of an s32.
-	IopCntEvt_RescheduleTarget,
-	IopCntEvt_RescheduleOverflow
-};
-
 //////////////////////////////////////////////////////////////////////////////////////////
 // IopCounterType
 //
@@ -108,6 +149,8 @@ enum IopCntEventType
 template< typename CntType, typename IntMathType >
 class IopCounterType
 {
+	friend class SaveState;
+
 public:
 	// ------------------------------------------------------------------------
 	// Variable Members section -->
@@ -127,6 +170,11 @@ public:
 
 	CntType Count;
 	CntType Target;
+
+protected:
+	// count of cycles which have passed since the event was originally scheduled.
+	// This value is updated everytime the iopRegs cycle tracking is updated.
+	IntMathType m_cyclepass;
 
 	// rate of counting (cycles per counter increment), typically a cached value based
 	// on counter index and mode flags.
@@ -153,6 +201,7 @@ public:
 	,	IsFutureTarget( true )
 	,	Count( 0 )
 	,	Target( 0 )
+	,	m_cyclepass( 0 )
 	,	m_rate( 1 << IopRate_FixedBits )
 	,	m_mode( 0x400 )
 	{
@@ -166,21 +215,14 @@ public:
 		return (IopEventType)(IopEvt_Counter0 + Index);
 	}
 
-	const IopEventSystem::ScheduleInfo& GetEvtInfo() const
+	void AdvanceCycles( s32 delta )
 	{
-		return iopEvtSys.GetInfo( GetEventId() );
+		m_cyclepass += delta;
 	}
 
-	__forceinline IopEventType GetEventType() const
+	const CpuEventType& GetEvtInfo() const
 	{
-		IopEventType retval( (IopEventType)GetEvtInfo().ModeType );
-
-		if( Is16Bit() )
-			DevAssume( retval <= IopCntEvt_Overflow, "IopCounterEvent Error: Invalid IopEventType specified on 16-bit counter." );
-		else
-			DevAssume( retval <= IopCntEvt_RescheduleOverflow, "IopCounterEvent Error: Invalid IopEventType specified on 32-bit counter." );
-
-		return retval;
+		return iopRegs.GetEventInfo( GetEventId() );
 	}
 
 	CntType ReadCount() const;
@@ -196,16 +238,18 @@ public:
 	void Reschedule();
 	void ResetCount( CntType newcnt );
 
-	void OnEvent();
-	
-	void ScheduleTarget() const;
-	void ScheduleOverflow() const;
+	void OnEvent_Overflow();
+	void OnEvent_Target();
+
+	void ScheduleTarget();
+	void ScheduleOverflow();
 	void Freeze( SaveState& state );
 
-protected:
 	// ------------------------------------------------------------------------
 	// Internal / Protected Methods:
-	
+
+protected:
+
 	void _writeMode16( u32 newmode );
 	void _writeMode32( u32 newmode );
 	
@@ -221,25 +265,23 @@ protected:
 
 	// ------------------------------------------------------------------------
 	// Important: If you call this function, you must also call Reschedule() or
-	// iopEvtSys.CancelEvent!  Failing to do so results in unpredictable event
+	// iopRegs.CancelEvent!  Failing to do so results in unpredictable event
 	// scheduling.
 	//
 	__releaseinline void _update_counted_timepass()
 	{
-		if( GetEvtInfo().IsEnabled )
+		if( GetEvtInfo().IsActive() )
 		{
-			if( IsDevBuild )
-			{
-				u64 test = Count + GetEvtInfo().GetTimepass() + iopRegs.GetPendingCycles();
-				DevAssume( Count < (Is16Bit() ? 0x10000 : 0x100000000), "IopCounter Logic Error : Rescheduled timer exceeds overflow value." );
-			}
-			Count += GetEvtInfo().GetTimepass();
+			IntMathType pendingCycles = m_cyclepass + iopRegs.GetPendingCycles();
+			s32 delta = (pendingCycles << IopRate_FixedBits) / m_rate;
+			Count += delta;
+			DevAssume( Count < (Is16Bit() ? 0x10000 : 0x100000000), "IopCounter Logic Error : Rescheduled timer exceeds overflow value." );
 		}
 	}
 
 	// ------------------------------------------------------------------------
 	//
-	__releaseinline void _schedule_helper( IntMathType evtDelta, IopCntEventType etype ) const
+	__releaseinline void _schedule_helper( IntMathType evtDelta, IopCounters::EventType etype )
 	{
 		if( !Is16Bit() && (evtDelta > 0x40000000) )
 		{
@@ -254,8 +296,8 @@ protected:
 				jNO_DEFAULT;
 			}
 		}
-		iopEvtSys.ScheduleEvent( GetEventId(), (s32)evtDelta );
-		iopEvtSys.SetEventModeType( GetEventId(), (int)etype );
+		iopRegs.ScheduleEvent( GetEventId(), (s32)evtDelta, tbl_update_handlers[etype][Index].handler );
+		m_cyclepass = 0;
 	}
 };
 
@@ -266,7 +308,7 @@ static IopCounterType16 iopCounters16[3];
 static IopCounterType32 iopCounters32[3];
 
 // Macro is set up in this specific way as it allows Visual Assist X to resolve class member intellisense. :)
-#define IopCounterMethod( return_type ) template< typename CntType, typename MathType > __forceinline return_type
+#define IopCounterMethod( return_type ) template< typename CntType, typename MathType > __releaseinline return_type
 #define ICT IopCounterType<CntType,MathType>
 
 // ------------------------------------------------------------------------
@@ -274,11 +316,11 @@ IopCounterMethod(void) ICT::Stop()
 {
 	_update_counted_timepass();
 	IsCounting	= false;
-	iopEvtSys.CancelEvent( GetEventId() );
+	iopRegs.CancelEvent( GetEventId() );
 }
 
 // ------------------------------------------------------------------------
-IopCounterMethod(void) ICT::ScheduleOverflow() const
+IopCounterMethod(void) ICT::ScheduleOverflow()
 {
 	if( Is16Bit() )
 		_schedule_helper( ScaleByRate(0x10000 - Count), IopCntEvt_Overflow );
@@ -287,7 +329,7 @@ IopCounterMethod(void) ICT::ScheduleOverflow() const
 }
 
 // ------------------------------------------------------------------------
-IopCounterMethod(void) ICT::ScheduleTarget() const
+IopCounterMethod(void) ICT::ScheduleTarget()
 {
 	DevAssume( Target >= Count, "IopCounter Logic Error: ScheduleTarget called when target is already past." );
 
@@ -320,7 +362,7 @@ IopCounterMethod(void) ICT::ResetCount( CntType newcnt )
 	if( IsCounting )
 		Reschedule();
 	else
-		iopEvtSys.CancelEvent( GetEventId() );
+		iopRegs.CancelEvent( GetEventId() );
 }
 
 // ------------------------------------------------------------------------
@@ -330,7 +372,7 @@ IopCounterMethod(CntType) ICT::ReadCount() const
 
 	if( IsCounting )
 	{
-		MathType pendingCycles = (MathType)GetEvtInfo().GetTimepass() + iopRegs.GetPendingCycles();
+		MathType pendingCycles = m_cyclepass + iopRegs.GetPendingCycles();
 		s32 delta = (pendingCycles << IopRate_FixedBits) / m_rate;
 		retval += delta;
 	}
@@ -484,99 +526,76 @@ IopCounterMethod(void) ICT::WriteMode( u32 newmode )
 }
 
 // ------------------------------------------------------------------------
-IopCounterMethod(void) ICT::OnEvent()
+// OnOverflow - Wrap counter to 0 and schedule the target if target enabled.
+// (otherwise schedule the next overflow)
+//
+IopCounterMethod(void) ICT::OnEvent_Overflow()
 {
-	// disabled counters shouldn't have events scheduled
-	jASSUME( IsCounting );
+	PSXCNT_LOG( "IOP Counter[%d] Overflow Reached", Index, Target );
 
-	// HBLANK counters update on the v/hsyncs, not the event system.
-	//jASSUME( Rate != PSXHBLANK );
-	
-	// Event is "guaranteed" to happen at the scheduled IOP cycle, so no need
-	// to do an complicated logic to account for remainder cycles or whatever.
+	Count = 0;
+	IsFutureTarget = false;
 
-	switch( GetEventType() ) 
+	if( m_mode & IOPCNT_INT_OVERFLOW )
 	{
-		// OnTarget - Set counter to target and schedule the overflow.
-		// Note: Overflows always schedule regardless of the OverlowInterurpt flag, since
-		// the counter depends on the Overflow event to wrap the counter and schedule
-		// targets.
-		case IopCntEvt_Target:
-		{
-			PSXCNT_LOG( "IOP Counter[%d] Target Reached @ 0x%08x", Index, Target );
-
-			DevAssume( (m_mode & IOPCNT_INT_TARGET) || (m_mode & 0x08),
-				"IopCntUpdate Logic Error: Target event scheduled, but no target purpose is enabled."
-			);
-
-			if( IsFutureTarget )
-			{
-				// [TODO] : remove this log/check once code is confirmed unbuggy. :)
-				Console::Notice( "IopCntUpdate Logic Warning: Target event scheduled on Future Target (event ignored)" );
-			}
-
-			Count = Target;
-
-			if( !IsFutureTarget )	// remove this check when code is confirmed unbuggy
-			{
-				if( m_mode & IOPCNT_INT_TARGET )
-				{
-					if( m_mode & 0x80 )
-						m_mode &= ~0x0400; // Interrupt flag
-					m_mode |= 0x0800; // Target flag
-
-					iopRegs.RaiseExtInt( Interrupt );
-				}
-				
-				if( m_mode & 0x08 )
-				{
-					// Reset on target
-					Count = 0;
-					if(!(m_mode & 0x40))
-					{
-						Console::Notice( "Counter %x repeat intr not set on zero ret, ignoring target", params Index );
-						IsFutureTarget = true;
-					}
-				}
-				else
-					IsFutureTarget = true;
-			}
-
-			ScheduleOverflow();
-		}
-		break;
-
-		// OnOverflow - Wrap counter to 0 and schedule the target if target enabled.
-		// (otherwise schedule the next overflow)
-		case IopCntEvt_Overflow:
-		{
-			PSXCNT_LOG( "IOP Counter[%d] Overflow Reached", Index, Target );
-
-			Count = 0;
-			IsFutureTarget = false;
-
-			if( m_mode & IOPCNT_INT_OVERFLOW )
-			{
-				// Overflow interrupt
-				iopRegs.RaiseExtInt( Interrupt );
-				m_mode |= 0x1000; // Overflow flag
-				if(m_mode & 0x80)
-					m_mode &= ~0x0400; // Interrupt flag
-			}
-			ScheduleTarget();
-		}
-		break;
-		
-		case IopCntEvt_RescheduleTarget:
-			ScheduleTarget();
-		break;
-
-		case IopCntEvt_RescheduleOverflow:
-			ScheduleOverflow();
-		break;
+		// Overflow interrupt
+		iopRegs.RaiseExtInt( Interrupt );
+		m_mode |= 0x1000; // Overflow flag
+		if(m_mode & 0x80)
+			m_mode &= ~0x0400; // Interrupt flag
 	}
+	ScheduleTarget();
 }
 
+// ------------------------------------------------------------------------
+// OnTarget - Set counter to target and schedule the overflow.
+// Note: Overflows always schedule regardless of the OverlowInterurpt flag, since
+// the counter depends on the Overflow event to wrap the counter and schedule
+// targets.
+//
+IopCounterMethod(void) ICT::OnEvent_Target()
+{
+	PSXCNT_LOG( "IOP Counter[%d] Target Reached @ 0x%08x", Index, Target );
+
+	DevAssume( (m_mode & IOPCNT_INT_TARGET) || (m_mode & 0x08),
+		"IopCntUpdate Logic Error: Target event scheduled, but no target purpose is enabled."
+		);
+
+	if( IsFutureTarget )
+	{
+		// [TODO] : remove this log/check once code is confirmed unbuggy. :)
+		Console::Notice( "IopCntUpdate Logic Warning: Target event scheduled on Future Target (event ignored)" );
+	}
+
+	Count = Target;
+
+	if( !IsFutureTarget )	// remove this check when code is confirmed unbuggy
+	{
+		if( m_mode & IOPCNT_INT_TARGET )
+		{
+			if( m_mode & 0x80 )
+				m_mode &= ~0x0400; // Interrupt flag
+			m_mode |= 0x0800; // Target flag
+
+			iopRegs.RaiseExtInt( Interrupt );
+		}
+
+		if( m_mode & 0x08 )
+		{
+			// Reset on target
+			Count = 0;
+			if(!(m_mode & 0x40))
+			{
+				Console::Notice( "Counter %x repeat intr not set on zero ret, ignoring target", params Index );
+				IsFutureTarget = true;
+			}
+		}
+		else
+			IsFutureTarget = true;
+	}
+
+	ScheduleOverflow();
+}
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // The IOP Does Sci-Fi: How?  Gate Travel!
@@ -792,16 +811,45 @@ __releaseinline void IopCounters::VBlankEnd()
 	if( iopGateFlags.vBlank3 ) iopCounters32[0].CheckEndGate();
 }
 
-__releaseinline void IopCounters::Update( uint cntidx )
+__releaseinline void IopCounters::OnEvent( uint cntidx, EventType evttype )
 {
-	if( cntidx < 3 )
-		iopCounters16[cntidx].OnEvent();
+	switch( evttype )
+	{
+		case IopCntEvt_Overflow:
+			if( cntidx < 3 )
+				iopCounters16[cntidx].OnEvent_Overflow();
 
-	else if( cntidx < 6 )
-		iopCounters32[cntidx-3].OnEvent();
+			else if( cntidx < 6 )
+				iopCounters32[cntidx-3].OnEvent_Overflow();
+		break;
 
-	else
-		throw Exception::LogicError( "Invalid counter index passed to IopCounters::Update." );
+		case IopCntEvt_Target:
+			if( cntidx < 3 )
+				iopCounters16[cntidx].OnEvent_Target();
+
+			else if( cntidx < 6 )
+				iopCounters32[cntidx-3].OnEvent_Target();
+		break;
+
+		case IopCntEvt_RescheduleOverflow:
+			DevAssume( cntidx >= 3, "IopCounterEvent Error: Invalid IopEventType specified on 16-bit counter." );
+			iopCounters32[cntidx-3].ScheduleOverflow();
+		break;
+
+		case IopCntEvt_RescheduleTarget:
+			DevAssume( cntidx >= 3, "IopCounterEvent Error: Invalid IopEventType specified on 16-bit counter." );
+			iopCounters32[cntidx-3].ScheduleTarget();
+		break;
+	}
+}
+
+__releaseinline void IopCounters::AdvanceCycles( s32 delta )
+{
+	for( uint i=0; i<3; ++i )
+	{
+		iopCounters16[i].AdvanceCycles( delta );
+		iopCounters32[i].AdvanceCycles( delta );
+	}
 }
 
 __releaseinline void IopCounters::CheckStartGate0()
@@ -816,13 +864,6 @@ __releaseinline void IopCounters::CheckEndGate0()
 		iopCounters16[0].CheckEndGate();
 }
 
-static void _setGates()
-{
-	iopGateFlags.hBlank0 = (iopCounters16[0].m_mode & IOPCNT_ENABLE_GATE);
-	iopGateFlags.vBlank1 = (iopCounters16[1].m_mode & IOPCNT_ENABLE_GATE);
-	iopGateFlags.vBlank3 = (iopCounters32[0].m_mode & IOPCNT_ENABLE_GATE);
-}
-
 void SaveState::psxRcntFreeze()
 {
 	FreezeTag( "iopCounters" );
@@ -834,5 +875,9 @@ void SaveState::psxRcntFreeze()
 	}
 
 	if( IsLoading() )
-		_setGates();
+	{
+		iopGateFlags.hBlank0 = (iopCounters16[0].m_mode & IOPCNT_ENABLE_GATE);
+		iopGateFlags.vBlank1 = (iopCounters16[1].m_mode & IOPCNT_ENABLE_GATE);
+		iopGateFlags.vBlank3 = (iopCounters32[0].m_mode & IOPCNT_ENABLE_GATE);
+	}
 }

@@ -215,7 +215,6 @@ static void _DynGen_EventTest()
 }
 
 Registers s_intRegsResult;
-IopEventSystem s_intEventsResult;
 
 // ------------------------------------------------------------------------
 // Self-checking against the interpreter!  [Clever and slow]
@@ -225,26 +224,18 @@ IopEventSystem s_intEventsResult;
 static void _SelfCheckInterp_Setup()
 {
 	Registers savedRegs = iopRegs;
-	IopEventSystem savedEvts = iopEvtSys;
 	recIR_Block();
 
 	s_intRegsResult = iopRegs;
-	s_intEventsResult = iopEvtSys;
 
 	// Restore state for the recompiler pass.
 	iopRegs = savedRegs;
-	iopEvtSys = savedEvts;
 }
 
 // ------------------------------------------------------------------------
 static void _SelfCheckInterp_Assert()
 {
 	if( memcmp(&s_intRegsResult, &iopRegs, sizeof( iopRegs )) != 0 )
-	{
-		assert( false );
-	}
-	
-	if( memcmp(&s_intEventsResult, &iopEvtSys, sizeof( iopEvtSys )) != 0 )
 	{
 		assert( false );
 	}

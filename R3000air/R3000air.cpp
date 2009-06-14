@@ -27,7 +27,6 @@
 bool iopBranchAction = false;
 
 PCSX2_ALIGNED16(R3000A::Registers iopRegs);
-IopEventSystem iopEvtSys;
 
 R3000Acpu *psxCpu;
 
@@ -49,7 +48,7 @@ void iopReset()
 	iopRegs.evtCycleCountdown	= 32;
 	iopRegs.evtCycleDuration	= 32;
 
-	iopEvtSys.Reset();
+	iopRegs.ResetEvents();
 
 	psxHwReset();
 	psxBiosInit();
@@ -133,7 +132,7 @@ void iopException(u32 code, u32 bd)
 void R3000A::Registers::StopExecution()
 {
 	if( !IsExecuting ) return;
-	iopEvtSys.ScheduleEvent( IopEvt_BreakForEE, 0 );
+	iopRegs.ScheduleEvent( IopEvt_BreakForEE, 0 );
 }
 
 void R3000A::Registers::RaiseExtInt( uint irq )
@@ -148,7 +147,7 @@ void iopTestIntc()
 	if( psxHu32(0x1078) == 0 ) return;
 	if( (psxHu32(0x1070) & psxHu32(0x1074)) == 0 ) return;
 
-	iopEvtSys.RaiseException();
+	iopRegs.RaiseException();
 }
 
 void psxHwReset() {
@@ -158,7 +157,7 @@ void psxHwReset() {
 	cdvdReset();
 
 	IopCounters::Reset();
-	iopEvtSys.ScheduleEvent( IopEvt_SPU2, 768*8 );
+	iopRegs.ScheduleEvent( IopEvt_SPU2, 768*8 );
 
 	sioInit();
 	//sio2Reset();

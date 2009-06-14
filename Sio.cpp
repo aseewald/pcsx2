@@ -35,7 +35,7 @@ static int m_PostSavestateCards[2] = { 0, 0 };
 
 __forceinline void SIO_INT()
 {
-	if( !iopEvtSys.GetInfo( IopEvt_SIO ).IsEnabled )
+	if( !iopRegs.GetEventInfo( IopEvt_SIO ).IsActive() )
 		PSX_INT( IopEvt_SIO, 64 ); // PSXCLK/250000);
 }
 #define SIO_FORCEINLINE __forceinline
@@ -641,7 +641,7 @@ void sioWriteCtrl16(u16 value) {
 	{
 		sio.mtapst = 0; sio.padst = 0; sio.mcdst = 0; sio.parp = 0;
 		sio.StatReg = TX_RDY | TX_EMPTY;
-		iopEvtSys.CancelEvent( IopEvt_SIO );
+		iopRegs.CancelEvent( IopEvt_SIO );
 		//iopRegs.interrupt &= ~(1<<IopEvt_SIO);
 	}
 }

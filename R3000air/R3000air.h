@@ -22,6 +22,45 @@
 
 #define __instinline __forceinline		// MSVC still fails to inline as much as it should
 
+// ------------------------------------------------------------------------
+//
+enum IopEventType
+{
+	IopEvt_Counter0 = 0,
+	IopEvt_Counter1,
+	IopEvt_Counter2,
+	IopEvt_Counter3,
+	IopEvt_Counter4,
+	IopEvt_Counter5,
+	IopEvt_Exception,
+	IopEvt_SIF0,
+	IopEvt_SIF1,
+	IopEvt_SIO,
+	IopEvt_SIO2_Dma11,
+	IopEvt_SIO2_Dma12,
+
+	IopEvt_Cdvd,
+	IopEvt_CdvdRead,
+	IopEvt_Cdrom,
+	IopEvt_CdromRead,
+	IopEvt_SPU2_Dma4,	// Core 0 DMA
+	IopEvt_SPU2_Dma7,	// Core 1 DMA
+	IopEvt_SPU2,		// SPU command/event processor
+	IopEvt_DEV9,
+	IopEvt_USB,
+
+	IopEvt_BreakForEE,
+
+	IopEvt_CountNonIdle,
+
+	// Idle state, no events scheduled.  Placed at -1 since it has no actual
+	// entry in the Event System's event schedule table.
+	IopEvt_Idle = IopEvt_CountNonIdle,
+
+	IopEvt_CountAll		// total number of schedulable event types in the Iop
+};
+
+// ------------------------------------------------------------------------
 union IntSign32
 {
 	s32 SL;
@@ -34,6 +73,7 @@ union IntSign32
 	u8 UB[4];
 };
 
+// ------------------------------------------------------------------------
 enum MipsGPRs_t
 {
 	GPR_Invalid = -1,
@@ -102,6 +142,23 @@ union CP0Regs
 	IntSign32 r[32];
 };
 
+// ------------------------------------------------------------------------
+//
+struct CpuEventType
+{
+	CpuEventType* next;	// link the list?!
+	void (*Execute)();
+
+	s32 OrigDelta;		// original delta time of the scheduled event
+	s32 RelativeDelta;	// delta relative to the scheduled item in front of it
+
+	bool IsActive() const
+	{
+		return next != NULL;
+	}
+};
+
+
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 struct Registers
@@ -113,15 +170,8 @@ struct Registers
 	u32 MysteryRegAt_FFFE0140;
 	u32 MysteryRegAt_FFFE0144;
 
-	// Indexer for the IOP's GPRs, using the MipsGPRs_t enumeration.
-	__forceinline IntSign32& operator[]( MipsGPRs_t gpr )				{ return GPR[(uint)gpr]; }
-	__forceinline const IntSign32& operator[]( MipsGPRs_t gpr ) const	{ return GPR[(uint)gpr]; }
-
 	u32 pc;					// Program counter for the next instruction fetch
 	u32 VectorPC;			// pc to vector to after the next instruction fetch
-
-	// Internal cycle counter.  Depending on the type of event system used to manage
-	u32 _cycle;
 
 	// marks the original duration of time for the current pending event.  This is
 	// typically used to determine the amount of time passed since the last update
@@ -143,11 +193,37 @@ struct Registers
 	bool IsDelaySlot;
 	bool IsExecuting;
 
-	void StopExecution();
+	// ------------------------------------------------------------------------
+	// Internal Storage Section (Protected members which aren't protected since
+	//                     this isn't a class type)
+	// ------------------------------------------------------------------------
+
+	// Internal cycle counter.  Depending on the type of event system used to manage
+	u32 m_cycle;
+
+	// Countdown value for each event known to the IOP scheduler.
+	CpuEventType m_Events[IopEvt_CountAll];
+
+	// list of pending events, in sorted order from nearest to furthest.
+	CpuEventType* m_ActiveEvents;
+
+	// ------------------------------------------------------------------------
+	//                    Accessors and Properties Section
+	// ------------------------------------------------------------------------
+
+	// Indexer for the IOP's GPRs, using the MipsGPRs_t enumeration.
+	__forceinline IntSign32& operator[]( MipsGPRs_t gpr )				{ return GPR[(uint)gpr]; }
+	__forceinline const IntSign32& operator[]( MipsGPRs_t gpr ) const	{ return GPR[(uint)gpr]; }
+
+	// [TODO] : Make an accessor array for this one?
+	const CpuEventType& GetEventInfo( IopEventType evt ) const
+	{
+		return m_Events[evt];
+	}
 
 	u32 GetCycle() const
 	{
-		return _cycle + ( evtCycleDuration - evtCycleCountdown );
+		return m_cycle + ( evtCycleDuration - evtCycleCountdown );
 	}
 	
 	s32 GetPendingCycles() const
@@ -155,12 +231,19 @@ struct Registers
 		return evtCycleDuration - evtCycleCountdown;
 	}
 	
+	// ------------------------------------------------------------------------
+	//            General Methods Section (modify struct contents)
+	// ------------------------------------------------------------------------
+	
+	void StopExecution();
+
 	void AddCycles( int amount )
 	{
 		evtCycleCountdown	-= amount;
 		DivUnitCycles		-= amount;
 	}
 
+	// ------------------------------------------------------------------------
 	// Sets a new PC in "abrupt" fashion (without consideration for delay slot).
 	// Effectively cancels the delay slot instruction, making this ideal for use
 	// in raising exceptions.
@@ -194,6 +277,35 @@ struct Registers
 	}
 	
 	void RaiseExtInt( uint irq );
+	
+	// ------------------------------------------------------------------------
+	//                        Event System Section
+	// ------------------------------------------------------------------------
+
+	void ResetEvents();
+
+	void RescheduleEvent( CpuEventType& evt, s32 delta );
+	void ScheduleEvent( IopEventType evt, s32 delta );
+	void ScheduleEvent( IopEventType evt, s32 delta, void (*execute)() );
+	void RaiseException();
+	void Dispatch( IopEventType evt );
+	void ExecutePendingEvents();
+	void IdleEventHandler();
+
+	void CancelEvent( IopEventType evt );
+	void CancelEvent( CpuEventType& evt );
+
+	// ------------------------------------------------------------------------
+	// RescheduleEvent - Used to re-schedule events which are *known* to be currently
+	// unscheduled.  Calling this function on an event which is currently scheduled
+	// is an invalid action, and will cause an exception in devel/debug builds.
+	//
+	void RescheduleEvent( IopEventType evt, s32 delta )
+	{
+		jASSUME( evt < IopEvt_CountNonIdle );
+		CpuEventType& thisevt( m_Events[evt] );
+		RescheduleEvent( thisevt, delta );
+	}
 };
 
 PCSX2_ALIGNED16_EXTERN(Registers iopRegs);
@@ -536,20 +648,14 @@ protected:
 	const IntSign32 LoValue() const { return iopRegs[GPR_lo]; }
 	const IntSign32 FsValue() const { return iopRegs.CP0.r[_Rd_]; }
 
-	// HiLo are always written as unsigned.
-	void SetHiLo( u32 hi, u32 lo ) { SetLo_UL( lo ); SetHi_UL( hi ); }
-
 	// ------------------------------------------------------------------------
 	// Begin Virtual API
+	// All succeeding methods are intended for use in the instruction interpretation
+	// process, and are overridden in derived classes to collect optimization info.
 
-	virtual u32 GetSa()		{ return _Opcode_.Sa(); }
-	// Sign-extended immediate
-	virtual s32 GetImm()	{ return _Opcode_.Imm(); }
-	// Zero-extended immediate
-	virtual u32 GetImmU()	{ return _Opcode_.ImmU(); }
+	// HiLo are always written as unsigned.
+	virtual void SetHiLo( u32 hi, u32 lo ) { SetLo_UL( lo ); SetHi_UL( hi ); }
 
-	virtual u32  GetPC() { return _Pc_; }
-	
 	virtual s32 GetRt_SL() { return iopRegs[_Rt_].SL; }
 	virtual s32 GetRs_SL() { return iopRegs[_Rs_].SL; }
 	virtual s32 GetHi_SL() { return iopRegs[GPR_hi].SL; }
@@ -570,7 +676,6 @@ protected:
 	virtual void SetHi_SL( s32 src ) { iopRegs[GPR_hi].SL = src; }
 	virtual void SetLo_SL( s32 src ) { iopRegs[GPR_lo].SL = src; }
 	virtual void SetFs_SL( s32 src ) { iopRegs.CP0.r[_Rd_].SL = src; }
-	virtual void SetLink( u32 addr ) { iopRegs[GPR_ra].UL = addr; }
 
 	virtual void SetRd_UL( u32 src ) { if(!_Rd_) return; iopRegs[_Rd_].UL = src; }
 	virtual void SetRt_UL( u32 src ) { if(!_Rt_) return; iopRegs[_Rt_].UL = src; }
@@ -578,6 +683,19 @@ protected:
 	virtual void SetLo_UL( u32 src ) { iopRegs[GPR_lo].UL = src; }
 	virtual void SetFs_UL( u32 src ) { iopRegs.CP0.r[_Rd_].UL = src; }
 
+	virtual void DoConditionalBranch( bool cond );
+	virtual void RaiseException( uint code );
+	virtual bool ConditionalException( uint code, bool cond );
+
+	virtual u32 GetSa()		{ return _Opcode_.Sa(); }
+	// Sign-extended immediate
+	virtual s32 GetImm()	{ return _Opcode_.Imm(); }
+	// Zero-extended immediate
+	virtual u32 GetImmU()	{ return _Opcode_.ImmU(); }
+
+	virtual u32 GetPC() { return _Pc_; }
+
+	virtual void SetLink( u32 addr ) { iopRegs[GPR_ra].UL = addr; }
 	virtual void SetNextPC( u32 addr ) { m_NextPC = addr; }
 
 	virtual u8  MemoryRead8( u32 addr );
@@ -587,11 +705,6 @@ protected:
 	virtual void MemoryWrite8( u32 addr, u8 val );
 	virtual void MemoryWrite16( u32 addr, u16 val );
 	virtual void MemoryWrite32( u32 addr, u32 val );
-
-	virtual void DoConditionalBranch( bool cond );
-
-	virtual void RaiseException( uint code );
-	virtual bool ConditionalException( uint code, bool cond );
 	
 	// used to flag instructions which have a "critical" side effect elsewhere in emulation-
 	// land -- such as modifying COP0 registers, or other functions which cannot be safely
@@ -747,8 +860,8 @@ protected:
 	virtual u32 GetLo_UL() { m_ReadsGPR.Lo = true; m_SignExtRead = false; return iopRegs[GPR_lo].UL; }
 	virtual u32 GetFs_UL() { m_ReadsGPR.Fs = true; m_SignExtRead = false; return iopRegs.CP0.r[_Rd_].UL; }
 
-	virtual u16 GetRt_US( int idx=0 ) { m_ReadsGPR.Rt = true; m_SignExtRead = false; return iopRegs[_Rt_].US[idx]; }
-	virtual u8  GetRt_UB( int idx=0 ) { m_ReadsGPR.Rt = true; m_SignExtRead = false; return iopRegs[_Rt_].UB[idx]; }
+	u16 GetRt_US( int idx=0 ) { m_ReadsGPR.Rt = true; m_SignExtRead = false; return iopRegs[_Rt_].US[idx]; }
+	u8  GetRt_UB( int idx=0 ) { m_ReadsGPR.Rt = true; m_SignExtRead = false; return iopRegs[_Rt_].UB[idx]; }
 
 	virtual void SetRd_SL( s32 src ) { if(!_Rd_) return; m_WritesGPR.Rd = true; m_SignExtWrite = true; iopRegs[_Rd_].SL = src; }
 	virtual void SetRt_SL( s32 src ) { if(!_Rt_) return; m_WritesGPR.Rt = true; m_SignExtWrite = true; iopRegs[_Rt_].SL = src; }
@@ -859,6 +972,11 @@ protected:
 
 extern const char* Diag_GetGprName( MipsGPRs_t gpr );
 
-
-
 }
+
+static __forceinline void PSX_INT( IopEventType evt, int deltaCycles )
+{
+	R3000A::iopRegs.ScheduleEvent( evt, deltaCycles );
+}
+
+extern void iopExecutePendingEvents();

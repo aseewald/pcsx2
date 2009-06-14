@@ -86,8 +86,8 @@ u8 Test23[] = { 0x43, 0x58, 0x44, 0x32, 0x39 ,0x34, 0x30, 0x51 };
 //#define cdReadTime ((PSXCLK / 75) / BIAS)
 u32 cdReadTime;// = ((PSXCLK / 75) / BIAS);
 
-#define CDR_INT(eCycle)    iopEvtSys.ScheduleEvent( IopEvt_Cdrom, eCycle )
-#define CDREAD_INT(eCycle) iopEvtSys.ScheduleEvent( IopEvt_CdromRead, eCycle )
+#define CDR_INT(eCycle)    iopRegs.ScheduleEvent( IopEvt_Cdrom, eCycle )
+#define CDREAD_INT(eCycle) iopRegs.ScheduleEvent( IopEvt_CdromRead, eCycle )
 
 
 static void AddIrqQueue(u8 irq, u32 ecycle);
@@ -102,7 +102,7 @@ static __forceinline void StartReading(u32 type) {
 static __forceinline void StopReading() {
 	if (cdr.Reading) {
 		cdr.Reading = 0;
-		iopEvtSys.CancelEvent( IopEvt_CdromRead );
+		iopRegs.CancelEvent( IopEvt_CdromRead );
 		//iopRegs.interrupt &= ~(1<<IopEvt_CdromRead);
 	}
 }
@@ -159,7 +159,7 @@ static void AddIrqQueue(u8 irq, u32 ecycle) {
 	if (cdr.Stat) {
 		cdr.eCycle = ecycle;
 	} else {
-		iopEvtSys.ScheduleEvent( IopEvt_Cdrom, ecycle );
+		iopRegs.ScheduleEvent( IopEvt_Cdrom, ecycle );
 	}
 }
 

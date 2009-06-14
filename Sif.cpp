@@ -154,7 +154,7 @@ __forceinline void SIF0Dma()
 					
 					// +1 here improves FFXII boot but doesn't fix it outright.  Can' find any other games
 					// that have issue with the new event system other than FFXII here.
-					PSX_INT(IopEvt_SIF0, psxCycles+1);
+					PSX_INT(IopEvt_SIF0, psxCycles);
 
 					sif0.sifData.data = 0;
 					done = TRUE;
@@ -435,19 +435,19 @@ __releaseinline void  sif1Interrupt()
 	psxDmaInterrupt2(3);
 }
 
-__forceinline void  EEsif0Interrupt()
+__releaseinline void  EEsif0Interrupt()
 {
 	sif0dma->chcr &= ~0x100;
 	hwDmacIrq(DMAC_SIF0);
 }
 
-__forceinline void  EEsif1Interrupt()
+__releaseinline void  EEsif1Interrupt()
 {
-	hwDmacIrq(DMAC_SIF1);
 	sif1dma->chcr &= ~0x100;
+	hwDmacIrq(DMAC_SIF1);
 }
 
-__forceinline void dmaSIF0()
+__releaseinline void dmaSIF0()
 {
 	SIF_LOG("EE: dmaSIF0 chcr = %lx, madr = %lx, qwc  = %lx, tadr = %lx",
 	        sif0dma->chcr, sif0dma->madr, sif0dma->qwc, sif0dma->tadr);
@@ -470,7 +470,7 @@ __forceinline void dmaSIF0()
 	}
 }
 
-__forceinline void dmaSIF1()
+__releaseinline void dmaSIF1()
 {
 	SIF_LOG("EE: dmaSIF1 chcr = %lx, madr = %lx, qwc  = %lx, tadr = %lx",
 	        sif1dma->chcr, sif1dma->madr, sif1dma->qwc, sif1dma->tadr);
@@ -494,7 +494,7 @@ __forceinline void dmaSIF1()
 
 }
 
-__forceinline void dmaSIF2()
+__releaseinline void dmaSIF2()
 {
 	SIF_LOG("dmaSIF2 chcr = %lx, madr = %lx, qwc  = %lx",
 	        sif2dma->chcr, sif2dma->madr, sif2dma->qwc);

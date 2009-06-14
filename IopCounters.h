@@ -20,6 +20,18 @@
 
 namespace IopCounters
 {
+	enum EventType
+	{
+		IopCntEvt_Target,
+		IopCntEvt_Overflow,
+
+		// Special event types for when the overflow that's been scheduled
+		// is too far into the future for the delta to fit within the context
+		// of an s32.
+		IopCntEvt_RescheduleTarget,
+		IopCntEvt_RescheduleOverflow
+	};
+
 	extern void Reset();
 
 	extern u16 ReadCount16( uint cntidx );
@@ -34,12 +46,11 @@ namespace IopCounters
 	extern void WriteTarget32( uint cntidx, u32 target );
 	extern void WriteMode( uint cntidx, u32 mode );
 
-	extern void Update( uint cntidx );
+	extern void OnEvent( uint cntidx, EventType evttype );
+	extern void AdvanceCycles( s32 delta );
 
 	extern void VBlankStart();
 	extern void VBlankEnd();
 	extern void CheckStartGate0();
 	extern void CheckEndGate0();
 }
-
-

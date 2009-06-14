@@ -401,50 +401,15 @@ __forceinline bool _cpuBranchTest_Shared()
 		_cpuTestInterrupts();
 
 	// ---- IOP -------------
-	// * It's important to run a iopEventTest before calling ExecuteBlock. This
-	//   is because the IOP does not always perform branch tests before returning
-	//   (during the prev branch) and also so it can act on the state the EE has
-	//   given it before executing any code.
-	//
 	// * The IOP cannot always be run.  If we run IOP code every time through the
 	//   cpuBranchTest, the IOP generally starts to run way ahead of the EE.
-
-	//iopEventTest();
 
 	if( iopBranchAction )
 	{
 		//if( EEsCycle < -450 )
 		//	Console::WriteLn( " IOP ahead by: %d cycles", params -EEsCycle );
 
-		// Experimental and Probably Unnecessary Logic -->
-		// Check if the EE already has an exception pending, and if so we shouldn't
-		// waste too much time updating the IOP.  Theory being that the EE and IOP should
-		// run closely in sync during raised exception events.  But in practice it didn't
-		// seem to make much of a difference.
-
-		// Note: The IOP is very good about chaining blocks together so it tends to
-		// run lots of cycles, even with only 32 (4 IOP) cycles specified here.  That's
-		// probably why it doesn't improve sync much.
-
-		/*bool eeExceptPending = cpuIntsEnabled() &&
-			//( cpuRegs.CP0.n.Status.b.EIE && cpuRegs.CP0.n.Status.b.IE && (cpuRegs.CP0.n.Status.b.ERL == 0) ) &&
-			//( (cpuRegs.CP0.n.Status.val & 0x10007) == 0x10001 ) &&
-			( (cpuRegs.interrupt & (3<<30)) != 0 );
-
-		if( eeExceptPending )
-		{
-			// ExecuteBlock returns a negative value, so subtract it from the cycle count
-			// specified to get the total cycles processed! :D
-			int cycleCount = std::min( EEsCycle, (s32)(eeWaitCycles>>4) );
-			int cyclesRun = cycleCount - psxCpu->ExecuteBlock( cycleCount );
-			EEsCycle -= cyclesRun;
-			//Console::Notice( "IOP Exception-Pending Execution -- EEsCycle: %d", params EEsCycle );
-		}
-		else*/
-		{
-			EEsCycle = psxCpu->ExecuteBlock( EEsCycle );
-		}
-
+		EEsCycle = psxCpu->ExecuteBlock( EEsCycle );
 		iopBranchAction = false;
 	}
 

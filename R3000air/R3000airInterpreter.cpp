@@ -85,8 +85,8 @@ static __releaseinline void intStep()
 		// NOPs are almost never issued in pairs, so changing the if() above into a while()
 		// actually decreases overall performance.
 
-		//if( iopRegs.GetCycle() > 0x00077560 ) //0x003b0a57 )
-		if( s_vsync_count >= 96 )
+		if( iopRegs.GetCycle() > 0x0046b200 ) //0x003b0a57 )
+		//if( s_vsync_count >= 96 )
 		//if( !bExecBIOS )
 			PSXCPU_LOG( "NOP", iopRegs.IsDelaySlot ? "\n" : "" );
 
@@ -107,7 +107,7 @@ static __releaseinline void intStep()
 	Instruction::Process( dudley );
 
 #ifdef PCSX2_DEVBUILD
-	if( (varLog & 0x00100000) && s_vsync_count >= 96 ) //&& (iopRegs.GetCycle() > 0x00077560 ) ) //0x003b0a57) )
+	if( (varLog & 0x00100000) && (iopRegs.GetCycle() > 0x0046b200 ) ) //0x003b0a57) )
 	//if( !bExecBIOS )
 	{
 		dudley.GetDisasm( m_disasm );
@@ -156,16 +156,16 @@ static s32 intExecuteBlock( s32 eeCycles )
 	iopRegs.IsExecuting = true;
 	u32 eeCycleStart = iopRegs.GetCycle();
 
-	iopEvtSys.ScheduleEvent( IopEvt_BreakForEE, (eeCycles/8)+1 );
+	iopRegs.RescheduleEvent( IopEvt_BreakForEE, eeCycles/8 );
 
 	do
 	{
+		if( iopRegs.evtCycleCountdown <= 0 )
+			iopRegs.ExecutePendingEvents();
+
 		intStep();
 
 		jASSUME( iopRegs.evtCycleCountdown <= iopRegs.evtCycleDuration );
-
-		if( iopRegs.evtCycleCountdown <= 0 )
-			iopEvtSys.ExecutePendingEvents();
 
 	} while( iopRegs.IsExecuting );
 

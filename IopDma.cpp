@@ -47,11 +47,11 @@ static void __fastcall psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore, _
 
 	if (SPU2async)
 	{
-		SPU2async( iopEvtSys.GetInfo( IopEvt_SPU2 ).GetTimepass() );
-		iopEvtSys.ScheduleEvent( IopEvt_SPU2, size * 3 );
+		SPU2async( iopRegs.GetEventInfo( IopEvt_SPU2 ).OrigDelta );
+		iopRegs.ScheduleEvent( IopEvt_SPU2, size * 3 );
 
-		//iopEvtSys.CancelEvent( IopEvt_SPU2 );
-		//iopEvtSys.ScheduleEvent( spuCore ? IopEvt_SPU2_Dma7 : IopEvt_SPU2_Dma4, size * 3 );
+		//iopRegs.CancelEvent( IopEvt_SPU2 );
+		//iopRegs.ScheduleEvent( spuCore ? IopEvt_SPU2_Dma7 : IopEvt_SPU2_Dma4, size * 3 );
 	}
 
 	switch (chcr)
