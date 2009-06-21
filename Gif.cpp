@@ -57,6 +57,12 @@ __forceinline void gsInterrupt() {
 		//Console::WriteLn("Eh? why are you still interrupting! chcr %x, qwc %x, done = %x", params gif->chcr, gif->qwc, done);
 		return;
 	}
+
+	if((vif1.cmd & 0x7f) == 0x51)
+	{
+		if(Path3progress != 0)vif1Regs->stat &= ~VIF1_STAT_VGW;
+	}
+
 	if(Path3progress == 2) psHu32(GIF_STAT)&= ~(GIF_STAT_APATH3 | GIF_STAT_OPH); // OPH=0 | APATH=0
 
 	if (gif->qwc > 0 || gspath3done == 0) {
@@ -122,7 +128,7 @@ static u32 WRITERING_DMA(u32 *pMem, u32 qwc)
 
 int  _GIFchain() {
 
-	u32 qwc = ((psHu32(GIF_MODE) & 0x4) || vif1Regs->mskpath3) ? min(8, (int)gif->qwc) : min( gifsplit, (int)gif->qwc );
+	u32 qwc = /*((psHu32(GIF_MODE) & 0x4) || vif1Regs->mskpath3) ? min(8, (int)gif->qwc) :*/ min( gifsplit, (int)gif->qwc );
 	u32 *pMem;
 
 	pMem = (u32*)dmaGetAddr(gif->madr);
@@ -160,10 +166,7 @@ static __forceinline void dmaGIFend()
 // not to do the gif->qwc != 0 check. --arcum42
 static __forceinline void GIFdmaEnd()
 {
-	//if (psHu32(GIF_MODE) & 0x4)
 		CPU_INT(2, gscycles * BIAS);
-	/*else
-		CPU_INT(2, min( gifsplit, (int)gif->qwc ) * BIAS);*/
 }
 
 void GIFdma() 
@@ -178,7 +181,6 @@ void GIFdma()
 		return;
 	}
 
-	
 	if ((psHu32(DMAC_CTRL) & 0xC0) == 0x80 && prevcycles != 0) { // STD == GIF
 		Console::WriteLn("GS Stall Control Source = %x, Drain = %x\n MADR = %x, STADR = %x", params (psHu32(0xe000) >> 4) & 0x3, (psHu32(0xe000) >> 6) & 0x3, gif->madr, psHu32(DMAC_STADR));
 
@@ -197,14 +199,14 @@ void GIFdma()
 
 	if(((psHu32(GIF_STAT) & 0x100) || (vif1.cmd & 0x7f) == 0x50) && (psHu32(GIF_MODE) & 0x4) && Path3progress == 0) //Path2 gets priority in intermittent mode
 	{
-		//GIF_LOG("Waiting VU %x, PATH2 %x, GIFMODE %x Progress %x", psHu32(GIF_STAT) & 0x100, (vif1.cmd & 0x7f), psHu32(GIF_MODE), Path3progress);
+		GIF_LOG("Waiting VU %x, PATH2 %x, GIFMODE %x Progress %x", psHu32(GIF_STAT) & 0x100, (vif1.cmd & 0x7f), psHu32(GIF_MODE), Path3progress);
 		dmaGIFend();
 		return;
 	}
 
 	if (vif1Regs->mskpath3 || (psHu32(GIF_MODE) & 0x1)) {
 		if(gif->qwc == 0) {
-			if((gif->chcr & 0x10e) == 0x104) {
+			if((gif->chcr & 0x10c) == 0x104) {
 				ptag = (u32*)dmaGetAddr(gif->tadr);  //Set memory pointer to TADR
 
 				if (ptag == NULL) {					 //Is ptag empty?
@@ -227,10 +229,10 @@ void GIFdma()
 			}
 		} 
 		 
-		if(Path3progress == 2/* && gif->qwc != 0*/)
+		if(Path3progress == 2 /*|| (vif1Regs->stat |= VIF1_STAT_VGW) == 0*/)
 		{
 			vif1Regs->stat &= ~VIF1_STAT_VGW;
-			dmaGIFend();
+			if(gif->qwc == 0)dmaGIFend();
 			return;
 		}
 
@@ -247,14 +249,9 @@ void GIFdma()
 		}
 
 		GIFchain();	//Transfers the data set by the switch
-		
-		if (((gif->qwc == 0) && (gif->chcr & 0xc) == 0)) 
-			gspath3done = 1;
-		else if(gif->qwc > 0 || gscycles)
-		{
-			GIFdmaEnd();
-			return;		
-		}
+				 
+		GIFdmaEnd();
+		return;	
 	}
 	if ((gif->chcr & 0xc) == 0x4 && gspath3done == 0)
 	{
@@ -291,7 +288,7 @@ void GIFdma()
 					return;
 				}
 			}
-			GIFchain();	//Transfers the data set by the switch
+			//GIFchain();	//Transfers the data set by the switch
 
 			if ((gif->chcr & 0x80) && (ptag[0] >> 31)) { //Check TIE bit of CHCR and IRQ bit of tag
 				GIF_LOG("dmaIrq Set");
@@ -324,8 +321,8 @@ void GIFdma()
 }
 
 void dmaGIF() {
-	 //We used to addd wait time for the buffer to fill here, fixing some timing problems in path 3 masking
-	//It takes the time of 24 QW for the BUS to become ready - The Punisher, And1 Streetball
+	 //We used to add wait time for the buffer to fill here, fixing some timing problems in path 3 masking
+	//It takes the time of 24 QW for the BUS to become ready - The Punisher And Streetball
 	GIF_LOG("dmaGIFstart chcr = %lx, madr = %lx, qwc  = %lx\n tadr = %lx, asr0 = %lx, asr1 = %lx", gif->chcr, gif->madr, gif->qwc, gif->tadr, gif->asr0, gif->asr1);
 
 	Path3progress = 2;
@@ -371,8 +368,7 @@ void dmaGIF() {
 
 // called from only one location, so forceinline it:
 static __forceinline int mfifoGIFrbTransfer() {
-	u32 qwc = (psHu32(GIF_MODE) & 0x4 || vif1Regs->mskpath3) ? min(8, (int)gif->qwc) : gif->qwc;
-	int mfifoqwc = min(gifqwc, qwc);
+	u32 mfifoqwc = min(gifqwc, (u32)gif->qwc);
 	u32 *src;
 
 	/* Check if the transfer should wrap around the ring buffer */
@@ -430,11 +426,11 @@ static __forceinline int mfifoGIFchain() {
 	} 
 	else 
 	{
-		int mfifoqwc = (psHu32(GIF_MODE) & 0x4 || vif1Regs->mskpath3) ? min(8, (int)gif->qwc) : gif->qwc;
+		int mfifoqwc = gif->qwc;
 		u32 *pMem = (u32*)dmaGetAddr(gif->madr);
 		if (pMem == NULL) return -1;
 
-		WRITERING_DMA(pMem, mfifoqwc);
+		mfifoqwc = WRITERING_DMA(pMem, mfifoqwc);
 		//gif->madr += mfifoqwc*16;
 		//gif->qwc -= mfifoqwc;
 		mfifocycles += (mfifoqwc) * 2; /* guessing */
@@ -462,8 +458,8 @@ void mfifoGIFtransfer(int qwc) {
 	if (gif->qwc == 0) {
 		if (gif->tadr == spr0->madr) {
 			//if( gifqwc > 1 ) DevCon::WriteLn("gif mfifo tadr==madr but qwc = %d", params gifqwc);
-			//hwDmacIrq(14);
-			
+			hwDmacIrq(14);
+			gifstate |= GIF_STATE_EMPTY;			
 			return;
 		}
 		gif->tadr = psHu32(DMAC_RBOR) + (gif->tadr & psHu32(DMAC_RBSR));
@@ -539,6 +535,12 @@ void gifMFIFOInterrupt()
 	mfifocycles = 0;
 	if(Path3progress == 2) psHu32(GIF_STAT)&= ~(GIF_STAT_APATH3 | GIF_STAT_OPH); // OPH=0 | APATH=0
 
+	if((spr0->chcr & 0x100) && spr0->qwc == 0)
+	{
+		spr0->chcr &= ~0x100;
+		hwDmacIrq(DMAC_FROM_SPR);
+	}
+
 	if (!(gif->chcr & 0x100)) { 
 		Console::WriteLn("WTF GIFMFIFO");
 		cpuRegs.interrupt &= ~(1 << 11); 
@@ -550,13 +552,7 @@ void gifMFIFOInterrupt()
 		//GIF_LOG("Waiting VU %x, PATH2 %x, GIFMODE %x Progress %x", psHu32(GIF_STAT) & 0x100, (vif1.cmd & 0x7f), psHu32(GIF_MODE), Path3progress);
 		CPU_INT(11,mfifocycles);
 		return;
-	}
-
-	if((spr0->chcr & 0x100) && spr0->qwc == 0)
-	{
-		spr0->chcr &= ~0x100;
-		hwDmacIrq(8);
-	}
+	}	
 	
 	if(gifstate != GIF_STATE_STALL) {
 		if(gifqwc <= 0) {

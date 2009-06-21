@@ -18,13 +18,10 @@
 
 #include "PrecompiledHeader.h"
 
-#include <float.h>
-
 #include "Common.h"
-#include "R5900OpcodeTables.h"
 #include "iR5900.h"
 #include "VUmicro.h"
-#include "iVUzerorec.h"
+#include "sVU_zerorec.h"
 
 #define useMVU1 CHECK_MICROVU1
 
@@ -83,7 +80,7 @@ void VUtestPause() {
 void VUtestPause() {}
 #endif
 
-#ifdef _DEBUG
+#ifdef PCSX2_DEBUG
 extern u32 vudump;
 #endif
 

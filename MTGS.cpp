@@ -32,10 +32,6 @@
 // Uncomment this to enable profiling of the GS RingBufferCopy function.
 //#define PCSX2_GSRING_SAMPLING_STATS
 
-#ifdef PCSX2_GSRING_TX_STATS
-#include <intrin.h>
-#endif
-
 using namespace Threading;
 using namespace std;
 
@@ -137,27 +133,32 @@ void SaveState::mtgsFreeze()
 
 static void RegHandlerSIGNAL(const u32* data)
 {
-	MTGS_LOG("MTGS SIGNAL data %x_%x CSRw %x\n",data[0], data[1], CSRw);
+	MTGS_LOG("MTGS SIGNAL data %x_%x CSRw %x IMR %x CSRr\n",data[0], data[1], CSRw, GSIMR, GSCSRr);
 
 	GSSIGLBLID->SIGID = (GSSIGLBLID->SIGID&~data[1])|(data[0]&data[1]);
 	
-	if ((CSRw & 0x1)) 
+	if ((CSRw & 0x1))
+	{
+		if (!(GSIMR&0x100) )  
+		{
+			gsIrq();
+		}
+
 		GSCSRr |= 1; // signal
-			
-	if (!(GSIMR&0x100) ) 
-		gsIrq();
+	}
 }
 
 static void RegHandlerFINISH(const u32* data)
 {
-	MTGS_LOG("MTGS FINISH data %x_%x CSRw %x\n",data[0], data[1], CSRw);
+	MTGS_LOG("MTGS FINISH data %x_%x CSRw %x\n", params data[0], data[1], CSRw);
 
-	if ((CSRw & 0x2)) 
+	if ((CSRw & 0x2))
+	{
+		if (!(GSIMR&0x200))
+			gsIrq();
+
 		GSCSRr |= 2; // finish
-		
-	if (!(GSIMR&0x200) )
-		gsIrq();
-	
+	}
 }
 
 static void RegHandlerLABEL(const u32* data)
@@ -178,7 +179,7 @@ mtgsThreadObject* mtgsThread = NULL;
 std::list<uint> ringposStack;
 #endif
 
-#ifdef _DEBUG
+#ifdef PCSX2_DEBUG
 // debug variable used to check for bad code bits where copies are started
 // but never closed, or closed without having been started.  (GSRingBufCopy calls
 // should always be followed by a call to GSRINGBUF_DONECOPY)
@@ -511,7 +512,7 @@ int mtgsThreadObject::Callback()
 {
 	Console::WriteLn("MTGS > Thread Started, Opening GS Plugin...");
 
-	memcpy_aligned( m_gsMem, PS2MEM_GS, sizeof(m_gsMem) );
+	memcpy_aligned( m_gsMem, PS2MEM_GS, sizeof(PS2MEM_GS) );
 	GSsetBaseMem( m_gsMem );
 	GSirqCallback( NULL );
 	
@@ -526,7 +527,7 @@ int mtgsThreadObject::Callback()
 	
 	Console::WriteLn( "MTGS > GSopen Finished, return code: 0x%x", params m_returncode );
 
-	GSCSRr = 0x551B400F; // 0x55190000
+	GSCSRr = 0x551B4000; // 0x55190000
 	m_post_InitDone.Post();
 	if (m_returncode != 0) { return m_returncode; }		// error msg will be issued to the user by Plugins.c
 
@@ -756,24 +757,25 @@ void mtgsThreadObject::SendDataPacket()
 	jASSUME( temp <= m_RingBufferSize );
 	temp &= m_RingBufferMask;
 
-#ifdef _DEBUG
-	if( m_packet_ringpos + m_packet_size < m_RingBufferSize )
+	if( IsDebugBuild )
 	{
-		uint readpos = volatize(m_RingPos);
-		if( readpos != m_WritePos )
+		if( m_packet_ringpos + m_packet_size < m_RingBufferSize )
 		{
-			// The writepos should never leapfrog the readpos
-			// since that indicates a bad write.
-			if( m_packet_ringpos < readpos )
-				assert( temp < readpos );
-		}
+			uint readpos = volatize(m_RingPos);
+			if( readpos != m_WritePos )
+			{
+				// The writepos should never leapfrog the readpos
+				// since that indicates a bad write.
+				if( m_packet_ringpos < readpos )
+					assert( temp < readpos );
+			}
 
-		// Updating the writepos should never make it equal the readpos, since
-		// that would stop the buffer prematurely (and indicates bad code in the
-		// ringbuffer manager)
-		assert( readpos != temp );
+			// Updating the writepos should never make it equal the readpos, since
+			// that would stop the buffer prematurely (and indicates bad code in the
+			// ringbuffer manager)
+			assert( readpos != temp );
+		}
 	}
-#endif
 
 	AtomicExchange( m_WritePos, temp );
 

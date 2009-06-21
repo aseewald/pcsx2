@@ -22,7 +22,7 @@
 			Name="Debug|Win32"
 			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="1"
-			InheritedPropertySheets=".\vsprops\common.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\3rdpartyDeps.vsprops;.\vsprops\debug.vsprops;.\vsprops\devbuild.vsprops;..\..\..\common\vsprops\pthreads.vsprops;..\..\..\common\vsprops\IncrementalLinking.vsprops"
+			InheritedPropertySheets=".\vsprops\common.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\3rdpartyDeps.vsprops;..\..\..\common\vsprops\pthreads.vsprops;.\vsprops\devbuild.vsprops;..\..\..\common\vsprops\CodeGen_Debug.vsprops;..\..\..\common\vsprops\IncrementalLinking.vsprops"
 			UseOfMFC="0"
 			ATLMinimizesCRunTimeLibraryUsage="false"
 			CharacterSet="2"
@@ -54,7 +54,6 @@
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories=""
 				ExceptionHandling="2"
-				SmallerTypeCheck="false"
 				UsePrecompiledHeader="2"
 				PrecompiledHeaderThrough="PrecompiledHeader.h"
 				PrecompiledHeaderFile="$(IntDir)\$(TargetName).pch"
@@ -99,8 +98,9 @@
 		</Configuration>
 		<Configuration
 			Name="Devel|Win32"
+			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="1"
-			InheritedPropertySheets=".\vsprops\common.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\3rdpartyDeps.vsprops;.\vsprops\devbuild.vsprops;..\..\..\common\vsprops\pthreads.vsprops;..\..\..\common\vsprops\IncrementalLinking.vsprops"
+			InheritedPropertySheets=".\vsprops\common.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\3rdpartyDeps.vsprops;.\vsprops\devbuild.vsprops;..\..\..\common\vsprops\pthreads.vsprops;..\..\..\common\vsprops\CodeGen_Devel.vsprops;..\..\..\common\vsprops\IncrementalLinking.vsprops"
 			UseOfMFC="0"
 			ATLMinimizesCRunTimeLibraryUsage="false"
 			CharacterSet="2"
@@ -131,19 +131,13 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				Optimization="3"
-				FavorSizeOrSpeed="1"
 				AdditionalIncludeDirectories=""
 				PreprocessorDefinitions="NDEBUG"
 				ExceptionHandling="2"
-				SmallerTypeCheck="false"
-				BufferSecurityCheck="false"
 				UsePrecompiledHeader="2"
 				PrecompiledHeaderThrough="PrecompiledHeader.h"
 				PrecompiledHeaderFile="$(IntDir)\$(TargetName).pch"
 				WarningLevel="3"
-				SuppressStartupBanner="true"
-				DebugInformationFormat="3"
 				CompileAs="2"
 			/>
 			<Tool
@@ -185,8 +179,9 @@
 		</Configuration>
 		<Configuration
 			Name="Release|Win32"
+			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="1"
-			InheritedPropertySheets=".\vsprops\common.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\3rdpartyDeps.vsprops;..\..\..\common\vsprops\pthreads.vsprops;..\..\..\common\vsprops\GlobalLinking.vsprops"
+			InheritedPropertySheets=".\vsprops\common.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\3rdpartyDeps.vsprops;..\..\..\common\vsprops\pthreads.vsprops;..\..\..\common\vsprops\CodeGen_Release.vsprops"
 			UseOfMFC="0"
 			ATLMinimizesCRunTimeLibraryUsage="false"
 			CharacterSet="2"
@@ -217,12 +212,9 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				EnableFiberSafeOptimizations="true"
 				AdditionalIncludeDirectories=""
 				PreprocessorDefinitions="NDEBUG"
 				ExceptionHandling="2"
-				SmallerTypeCheck="false"
-				BufferSecurityCheck="false"
 				EnableEnhancedInstructionSet="0"
 				UsePrecompiledHeader="2"
 				PrecompiledHeaderThrough="PrecompiledHeader.h"
@@ -922,6 +914,10 @@
 				</File>
 				<File
 					RelativePath="..\ps2_silver.bmp"
+					>
+				</File>
+				<File
+					RelativePath="..\uninstall.ico"
 					>
 				</File>
 			</Filter>
@@ -1905,34 +1901,6 @@
 						Name="Dynarec"
 						>
 						<File
-							RelativePath="..\..\x86\iR3000A.cpp"
-							>
-							<FileConfiguration
-								Name="Debug|Win32"
-								ExcludedFromBuild="true"
-								>
-								<Tool
-									Name="VCCLCompilerTool"
-								/>
-							</FileConfiguration>
-							<FileConfiguration
-								Name="Devel|Win32"
-								ExcludedFromBuild="true"
-								>
-								<Tool
-									Name="VCCLCompilerTool"
-								/>
-							</FileConfiguration>
-							<FileConfiguration
-								Name="Release|Win32"
-								ExcludedFromBuild="true"
-								>
-								<Tool
-									Name="VCCLCompilerTool"
-								/>
-							</FileConfiguration>
-						</File>
-						<File
 							RelativePath="..\..\x86\iR3000A.h"
 							>
 							<FileConfiguration
@@ -2233,7 +2201,6 @@
 							>
 							<Tool
 								Name="VCCLCompilerTool"
-								RuntimeLibrary="0"
 								AssemblerOutput="4"
 							/>
 						</FileConfiguration>
@@ -2511,23 +2478,7 @@
 						>
 					</File>
 					<File
-						RelativePath="..\..\VU0microInterp.cpp"
-						>
-					</File>
-					<File
 						RelativePath="..\..\VU1micro.cpp"
-						>
-					</File>
-					<File
-						RelativePath="..\..\VU1microInterp.cpp"
-						>
-					</File>
-					<File
-						RelativePath="..\..\VUflags.cpp"
-						>
-					</File>
-					<File
-						RelativePath="..\..\VUflags.h"
 						>
 					</File>
 					<File
@@ -2536,14 +2487,6 @@
 					</File>
 					<File
 						RelativePath="..\..\VUmicroMem.cpp"
-						>
-					</File>
-					<File
-						RelativePath="..\..\VUops.cpp"
-						>
-					</File>
-					<File
-						RelativePath="..\..\VUops.h"
 						>
 					</File>
 					<Filter
@@ -2555,34 +2498,6 @@
 						</File>
 						<File
 							RelativePath="..\..\x86\iVU1micro.cpp"
-							>
-						</File>
-						<File
-							RelativePath="..\..\x86\iVUmicro.cpp"
-							>
-						</File>
-						<File
-							RelativePath="..\..\x86\iVUmicro.h"
-							>
-						</File>
-						<File
-							RelativePath="..\..\x86\iVUmicroLower.cpp"
-							>
-						</File>
-						<File
-							RelativePath="..\..\x86\iVUmicroUpper.cpp"
-							>
-						</File>
-						<File
-							RelativePath="..\..\x86\iVUops.h"
-							>
-						</File>
-						<File
-							RelativePath="..\..\x86\iVUzerorec.cpp"
-							>
-						</File>
-						<File
-							RelativePath="..\..\x86\iVUzerorec.h"
 							>
 						</File>
 						<Filter
@@ -2645,6 +2560,66 @@
 								>
 							</File>
 						</Filter>
+						<Filter
+							Name="Super VU"
+							>
+							<File
+								RelativePath="..\..\x86\sVU_Debug.h"
+								>
+							</File>
+							<File
+								RelativePath="..\..\x86\sVU_Lower.cpp"
+								>
+							</File>
+							<File
+								RelativePath="..\..\x86\sVU_Micro.cpp"
+								>
+							</File>
+							<File
+								RelativePath="..\..\x86\sVU_Micro.h"
+								>
+							</File>
+							<File
+								RelativePath="..\..\x86\sVU_Upper.cpp"
+								>
+							</File>
+							<File
+								RelativePath="..\..\x86\sVU_zerorec.cpp"
+								>
+							</File>
+							<File
+								RelativePath="..\..\x86\sVU_zerorec.h"
+								>
+							</File>
+						</Filter>
+					</Filter>
+					<Filter
+						Name="Interpreter"
+						>
+						<File
+							RelativePath="..\..\VU0microInterp.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\VU1microInterp.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\VUflags.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\VUflags.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\VUops.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\VUops.h"
+							>
+						</File>
 					</Filter>
 				</Filter>
 				<Filter

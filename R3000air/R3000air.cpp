@@ -157,7 +157,7 @@ void psxHwReset() {
 	cdvdReset();
 
 	IopCounters::Reset();
-	iopRegs.ScheduleEvent( IopEvt_SPU2, 768*8 );
+	iopRegs.ScheduleEvent( IopEvt_SPU2, 768*4 );
 
 	sioInit();
 	//sio2Reset();

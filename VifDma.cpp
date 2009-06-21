@@ -328,6 +328,10 @@ static void ProcessMemSkip(int size, unsigned int unpackType, const unsigned int
 		VIFUNPACK_LOG("addr aligned to %x", vif->tag.addr);
 		vif->tag.addr = (vif->tag.addr & ~0xf) + (vifRegs->offset * 4);
 	}
+	if(vif->tag.addr >= (u32)(VIFdmanum ? 0x4000 : 0x1000)) 
+	{
+		vif->tag.addr &= (u32)(VIFdmanum ? 0x3fff : 0xfff);
+	}
 	
 }
 
@@ -340,7 +344,7 @@ static int VIFalign(u32 *data, vifCode *v, unsigned int size, const unsigned int
 	VURegs * VU;
 	u8 *cdata = (u8*)data;
 
-#ifdef _DEBUG
+#ifdef PCSX2_DEBUG
 	u32 memsize = VIFdmanum ? 0x4000 : 0x1000;
 #endif
 
@@ -375,7 +379,7 @@ static int VIFalign(u32 *data, vifCode *v, unsigned int size, const unsigned int
 
 	size <<= 2;
 	
-#ifdef _DEBUG
+#ifdef PCSX2_DEBUG
 	memsize = size;
 #endif
 	
@@ -391,14 +395,11 @@ static int VIFalign(u32 *data, vifCode *v, unsigned int size, const unsigned int
 
 		VIFUNPACK_LOG("Aligning packet size = %d offset %d addr %x", size, vifRegs->offset, vif->tag.addr);
 
-		if(((size / ft->dsize) + vifRegs->offset) < (u32)ft->qsize)
-			VIFUNPACK_LOG("Warning! Size needed to align %x size chunks available %x offset %x", ft->qsize - ((size / ft->dsize) + vifRegs->offset), vifRegs->offset);
-		
 		if (((u32)size / (u32)ft->dsize) < ((u32)ft->qsize - vifRegs->offset))
 		{
 				DevCon::Error("Wasn't enough left size/dsize = %x left to write %x", params(size / ft->dsize), (ft->qsize - vifRegs->offset));
 		}
-			unpacksize = min(((u32)size / (u32)ft->dsize), ((u32)ft->qsize - vifRegs->offset));
+			unpacksize = min((size / ft->dsize), (ft->qsize - vifRegs->offset));
 		
 
 		VIFUNPACK_LOG("Increasing dest by %x from offset %x", (4 - ft->qsize) + unpacksize, vifRegs->offset);
@@ -406,8 +407,17 @@ static int VIFalign(u32 *data, vifCode *v, unsigned int size, const unsigned int
 		func(dest, (u32*)cdata, unpacksize);
 		size -= unpacksize * ft->dsize;
 		
-		vifRegs->num--;
-		++vif->cl;
+		if(vifRegs->offset == 0)
+		{
+			vifRegs->num--;
+			++vif->cl;
+		}
+		else
+		{
+			DevCon::Notice("Offset = %x", params vifRegs->offset);
+			vif->tag.addr += unpacksize * 4;
+			return size>>2;
+		}
 
 		if (vif->cl == vifRegs->cycle.wl)
 		{
@@ -455,7 +465,7 @@ static int VIFalign(u32 *data, vifCode *v, unsigned int size, const unsigned int
 	if (vif->cl != 0 || (size & 0xf))  //Check alignment for SSE unpacks
 	{
 
-#ifdef _DEBUG
+#ifdef PCSX2_DEBUG
 		static int s_count = 0;
 #endif
 
@@ -552,7 +562,7 @@ static void VIFunpack(u32 *data, vifCode *v, unsigned int size, const unsigned i
 	u32 tempsize = 0;
 	const u32 memlimit = (VIFdmanum ? 0x4000 : 0x1000);
 	
-#ifdef _DEBUG
+#ifdef PCSX2_DEBUG
 	u32 memsize = memlimit;
 #endif
 
@@ -595,14 +605,14 @@ static void VIFunpack(u32 *data, vifCode *v, unsigned int size, const unsigned i
 
 	size <<= 2;
 	
-#ifdef _DEBUG
+#ifdef PCSX2_DEBUG
 	memsize = size;
 #endif
 	
 	if (vifRegs->cycle.cl >= vifRegs->cycle.wl)   // skipping write
 	{
 
-#ifdef _DEBUG
+#ifdef PCSX2_DEBUG
 		static int s_count = 0;
 #endif
 		if (v->addr >= memlimit) 
@@ -612,16 +622,21 @@ static void VIFunpack(u32 *data, vifCode *v, unsigned int size, const unsigned i
 			dest = (u32*)(VU->Mem + v->addr);
 		}
 
-		tempsize = min(vifRegs->num, (size / ft->gsize));
-		tempsize = (vif->tag.addr + (size / (ft->gsize * vifRegs->cycle.wl)) * 
-			((vifRegs->cycle.cl - vifRegs->cycle.wl) * 16)) + (tempsize * 16);
+		size = min(size, (int)vifRegs->num * ft->gsize); //size will always be the same or smaller
 
+		tempsize = vif->tag.addr + ((((vifRegs->num-1) / vifRegs->cycle.wl) * 
+			(vifRegs->cycle.cl - vifRegs->cycle.wl)) * 16) + (vifRegs->num * 16);
+
+		/*tempsize = vif->tag.addr + (((size / (ft->gsize * vifRegs->cycle.wl)) * 
+			(vifRegs->cycle.cl - vifRegs->cycle.wl)) * 16) + (vifRegs->num * 16);*/
+
+		
 		//Sanity Check (memory overflow)
 		if (tempsize > memlimit) 
 		{
 			if (((vifRegs->cycle.cl != vifRegs->cycle.wl) && 
-			       (memlimit + ((vifRegs->cycle.cl - vifRegs->cycle.wl) * 16)) == tempsize) || 
-			       (tempsize == memlimit))
+			       ((memlimit + (vifRegs->cycle.cl - vifRegs->cycle.wl) * 16) == tempsize) || 
+			       (tempsize == memlimit)))
 			{
 				//Its a red herring! so ignore it! SSE unpacks will be much quicker
 				tempsize = 0;
@@ -635,7 +650,9 @@ static void VIFunpack(u32 *data, vifCode *v, unsigned int size, const unsigned i
 		} 
 		else 
 		{
-			tempsize = 0;
+			tempsize = 0;  //Commenting out this then
+			//tempsize = size; // -\_uncommenting these Two enables non-SSE unpacks
+			//size = 0;		 // -/  
 		}
 
 		if (size >= ft->gsize)
@@ -679,8 +696,6 @@ static void VIFunpack(u32 *data, vifCode *v, unsigned int size, const unsigned i
 				vifRegs->cycle.cl = vifRegs->cycle.wl = 1;
 			}
 			
-			size = min(size, (int)vifRegs->num * ft->gsize); //size will always be the same or smaller
-
 			pfn = vif->usn ? VIFfuncTableSSE[unpackType].funcU : VIFfuncTableSSE[unpackType].funcS;
 			writemask = VIFdmanum ? g_vif1HasMask3[min(vifRegs->cycle.wl,(u8)3)] : g_vif0HasMask3[min(vifRegs->cycle.wl,(u8)3)];
 			writemask = pfn[(((vifRegs->code & 0x10000000)>>28)<<writemask)*3+vifRegs->mode](dest, (u32*)cdata, size);
@@ -709,7 +724,7 @@ static void VIFunpack(u32 *data, vifCode *v, unsigned int size, const unsigned i
 
 				if (size >= ft->dsize && vifRegs->num > 0)
 				{
-					//VIF_LOG("warning, end with size = %d", size);
+					VIF_LOG("warning, end with size = %d", size);
 
 					/* unpack one qword */
 					//vif->tag.addr += (size / ft->dsize) * 4;
@@ -739,6 +754,7 @@ static void VIFunpack(u32 *data, vifCode *v, unsigned int size, const unsigned i
 		{
 			int incdest = ((vifRegs->cycle.cl - vifRegs->cycle.wl) << 2) + 4;
 			size = 0;
+			int addrstart = v->addr;
 			if((tempsize >> 2) != vif->tag.size) DevCon::Notice("split when size != tagsize");
 			
 			VIFUNPACK_LOG("sorting tempsize :p, size %d, vifnum %d, addr %x", tempsize, vifRegs->num, vif->tag.addr);
@@ -747,6 +763,7 @@ static void VIFunpack(u32 *data, vifCode *v, unsigned int size, const unsigned i
 			{
 				if(v->addr >= memlimit) 
 				{
+					DevCon::Notice("Mem limit ovf");
 					v->addr &= (memlimit - 1);
 					dest = (u32*)(VU->Mem + v->addr);
 				}
@@ -783,12 +800,13 @@ static void VIFunpack(u32 *data, vifCode *v, unsigned int size, const unsigned i
 					v->addr &= (memlimit - 1);
 					dest = (u32*)(VU->Mem + v->addr);
 				}
+			v->addr = addrstart;
 			if(tempsize > 0) size = tempsize;
 
 		}
 		if (size >= ft->dsize && vifRegs->num > 0) //Else write what we do have
 		{
-			//VIF_LOG("warning, end with size = %d", size);
+			VIF_LOG("warning, end with size = %d", size);
 
 			/* unpack one qword */
 			//vif->tag.addr += (size / ft->dsize) * 4;
@@ -915,8 +933,6 @@ void vif0Init()
 static __forceinline void vif0UNPACK(u32 *data)
 {
 	int vifNum;
-	int vl, vn;
-	int len;
 
 	if (vif0Regs->cycle.wl == 0 && vif0Regs->cycle.wl < vif0Regs->cycle.cl)
 	{
@@ -927,9 +943,7 @@ static __forceinline void vif0UNPACK(u32 *data)
 
 	vif0FLUSH();
 
-	vl = (vif0.cmd) & 0x3;
-	vn = (vif0.cmd >> 2) & 0x3;
-	vif0.tag.addr = (vif0Regs->code & 0x3ff) << 4;
+	vif0.tag.addr = (vif0Regs->code & 0xff) << 4;
 	vif0.usn = (vif0Regs->code >> 14) & 0x1;
 	vifNum = (vif0Regs->code >> 16) & 0xff;
 	if (vifNum == 0) vifNum = 256;
@@ -937,20 +951,18 @@ static __forceinline void vif0UNPACK(u32 *data)
 
 	if (vif0Regs->cycle.wl <= vif0Regs->cycle.cl)
 	{
-		len = (((32 >> vl) * (vn + 1)) * vifNum + 31) >> 5;
+		vif0.tag.size = ((vifNum * VIFfuncTable[ vif0.cmd & 0xf ].gsize) + 3) >> 2;
 	}
 	else
 	{
 		int n = vif0Regs->cycle.cl * (vifNum / vif0Regs->cycle.wl) +
 		        _limit(vifNum % vif0Regs->cycle.wl, vif0Regs->cycle.cl);
 
-		len = ((((32 >> vl) * (vn + 1)) * n) + 31) >> 5;
+		vif0.tag.size = ((n * VIFfuncTable[ vif0.cmd & 0xf ].gsize) + 3) >> 2;
 	}
 
 	vif0.cl = 0;
 	vif0.tag.cmd  = vif0.cmd;
-	vif0.tag.addr &= 0xfff;
-	vif0.tag.size = len;
 	vif0Regs->offset = 0;
 
 	
@@ -1348,7 +1360,13 @@ int  _VIF0chain()
 	if ((vif0ch->qwc == 0) && !vif0.vifstalled) return 0;
 
 	pMem = (u32*)dmaGetAddr(vif0ch->madr);
-	if (pMem == NULL) return -1;
+	if (pMem == NULL)
+	{
+		vif0.cmd = 0;
+		vif0.tag.size = 0;
+		vif0ch->qwc = 0;
+		return 0;
+	}
 
 	if (vif0.vifstalled)
 		ret = VIF0transfer(pMem + vif0.irqoffset, vif0ch->qwc * 4 - vif0.irqoffset, 0);
@@ -1687,7 +1705,6 @@ void vif1Init()
 static __forceinline void vif1UNPACK(u32 *data)
 {
 	int vifNum;
-	int vl, vn;
 
 	if (vif1Regs->cycle.wl == 0)
 	{
@@ -1700,9 +1717,6 @@ static __forceinline void vif1UNPACK(u32 *data)
 	}
 	//vif1FLUSH();
 
-	vl = (vif1.cmd) & 0x3;
-	vn = (vif1.cmd >> 2) & 0x3;
-
 	vif1.usn = (vif1Regs->code >> 14) & 0x1;
 	vifNum = (vif1Regs->code >> 16) & 0xff;
 
@@ -1711,14 +1725,16 @@ static __forceinline void vif1UNPACK(u32 *data)
 
 	if (vif1Regs->cycle.wl <= vif1Regs->cycle.cl)
 	{
-		vif1.tag.size = (((32 >> vl) * (vn + 1)) * vifNum + 31) >> 5;
+		vif1.tag.size = ((vifNum * VIFfuncTable[ vif1.cmd & 0xf ].gsize) + 3) >> 2;
 	}
 	else
 	{
 		int n = vif1Regs->cycle.cl * (vifNum / vif1Regs->cycle.wl) +
 		        _limit(vifNum % vif1Regs->cycle.wl, vif1Regs->cycle.cl);
-		vif1.tag.size = ((((32 >> vl) * (vn + 1)) * n) + 31) >> 5;
-	}
+
+		vif1.tag.size = ((n * VIFfuncTable[ vif1.cmd & 0xf ].gsize) + 3) >> 2;		
+	}	
+	
 	if ((vif1Regs->code >> 15) & 0x1)
 		vif1.tag.addr = (vif1Regs->code + vif1Regs->tops) & 0x3ff;
 	else
@@ -1856,6 +1872,17 @@ static int __fastcall Vif1TransMPG(u32 *data)
 static int __fastcall Vif1TransDirectHL(u32 *data)
 {
 	int ret = 0;
+
+	if((vif1.cmd & 0x7f) == 0x51)
+	{
+		if(gif->chcr & 0x100 && (!vif1Regs->mskpath3 && Path3progress == 0)) //PATH3 is in image mode, so wait for end of transfer
+		{
+			vif1Regs->stat |= VIF1_STAT_VGW;
+			return 0;
+		}			
+	}
+
+	psHu32(GIF_STAT) |= (GIF_STAT_APATH2 | GIF_STAT_OPH);
 
 	if (splitptr > 0)  //Leftover data from the last packet, filling the rest and sending to the GS
 	{
@@ -2032,12 +2059,14 @@ static void Vif1CMDSTMod()  // STMOD
 	vif1.cmd &= ~0x7f;
 }
 
-static void Vif1CMDMskPath3()  // MSKPATH3
+u8 schedulepath3msk = 0;
+
+void Vif1MskPath3()  // MSKPATH3
 {
-	vif1Regs->mskpath3 = (vif1Regs->code >> 15) & 0x1;
+	vif1Regs->mskpath3 = schedulepath3msk & 0x1;
 	//Console::WriteLn("VIF MSKPATH3 %x", params vif1Regs->mskpath3);
 
-	if ((vif1Regs->code >> 15) & 0x1)
+	if (vif1Regs->mskpath3)
 	{
 		psHu32(GIF_STAT) |= 0x2;
 	}
@@ -2045,9 +2074,26 @@ static void Vif1CMDMskPath3()  // MSKPATH3
 	{
 		Path3progress = 1; //Let the Gif know it can transfer again (making sure any vif stall isnt unset prematurely)
 		psHu32(GIF_STAT) &= ~0x2;
+		CPU_INT(2, 4);		
+	}
+	
+	schedulepath3msk = 0;
+}
+static void Vif1CMDMskPath3()  // MSKPATH3
+{
+	if(vif1ch->chcr & 0x100)
+	{
+		schedulepath3msk = 0x10 | ((vif1Regs->code >> 15) & 0x1);
+		vif1.vifstalled = true;
+	}
+	else 
+	{
+		schedulepath3msk = (vif1Regs->code >> 15) & 0x1;
+		Vif1MskPath3();
 	}
 	vif1.cmd &= ~0x7f;
 }
+
 
 static void Vif1CMDMark()  // MARK
 {
@@ -2064,7 +2110,8 @@ static void Vif1CMDFlush()  // FLUSH/E/A
 	{
 		if((Path3progress != 2 || !vif1Regs->mskpath3) && gif->chcr & 0x100) // Gif is already transferring so wait for it.
 		{	
-			vif1Regs->stat |= VIF1_STAT_VGW;			
+			vif1Regs->stat |= VIF1_STAT_VGW;	
+			CPU_INT(2, 4);
 		}
 	}
 
@@ -2116,19 +2163,6 @@ static void Vif1CMDDirectHL()  // DIRECT/HL
 		vif1.tag.size = 65536 << 2;
 	else
 		vif1.tag.size = vifImm << 2;
-
-	//FIXME: This should have timing in both cases, see note below.
-	if((vif1.cmd & 0x7f) == 0x51)
-	{
-		if(gif->chcr & 0x100 && (!vif1Regs->mskpath3 || Path3progress != 2)) //PATH3 is in image mode, so wait for end of transfer
-		{
-			//DevCon::Notice("DirectHL gif chcr %x gif qwc %x mskpth3 %x", params gif->chcr, gif->qwc, vif1Regs->mskpath3);
-			/*if(vif1Regs->mskpath3)*/vif1Regs->stat |= VIF1_STAT_VGW;
-			//else while(gif->chcr & 0x100) gsInterrupt(); //Hacky as hell (no timing) but Soul Calibur 3 doesnt want timing :(
-		}
-		
-	}
-	psHu32(GIF_STAT) |= (GIF_STAT_APATH2 | GIF_STAT_OPH);
 }
 
 static void Vif1CMDNull()  // invalid opcode
@@ -2199,18 +2233,7 @@ int VIF1transfer(u32 *data, int size, int istag)
 	vif1.vifpacketsize = size;
 
 	while (vif1.vifpacketsize > 0)
-	{
-		if((vif1.cmd & 0x7f) == 0x51)
-		{
-			if(gif->chcr & 0x100 && (!vif1Regs->mskpath3 || Path3progress != 2)) //PATH3 is in image mode, so wait for end of transfer
-			{
-				//DevCon::Notice("DirectHL gif chcr %x gif qwc %x mskpth3 %x", params gif->chcr, gif->qwc, vif1Regs->mskpath3);
-				/*if(vif1Regs->mskpath3)*/vif1Regs->stat |= VIF1_STAT_VGW;
-				//else while(gif->chcr & 0x100) gsInterrupt(); //Hacky as hell (no timing) but Soul Calibur 3 doesnt want timing :(
-			}
-			
-		}
-		
+	{		
 		if(vif1Regs->stat & VIF1_STAT_VGW) break;
 		
 		if (vif1.cmd)
@@ -2271,9 +2294,10 @@ int VIF1transfer(u32 *data, int size, int istag)
 				if (vif1.tag.size == 0) break;
 			}
 		}
-	if(!vif1.cmd) vif1Regs->stat &= ~VIF1_STAT_VPS_D;
 
-	if(vif1Regs->stat & VIF1_STAT_VGW) break;
+		if(!vif1.cmd) vif1Regs->stat &= ~VIF1_STAT_VPS_D;
+
+		if((vif1Regs->stat & VIF1_STAT_VGW) || vif1.vifstalled == true) break;
 	} // End of Transfer loop
 
 	transferred += size - vif1.vifpacketsize;
@@ -2287,7 +2311,7 @@ int VIF1transfer(u32 *data, int size, int istag)
 		if (((vif1Regs->code >> 24) & 0x7f) != 0x7) vif1Regs->stat |= VIF1_STAT_VIS; // Note: commenting this out fixes WALL-E
 
 		if (vif1ch->qwc == 0 && (vif1.irqoffset == 0 || istag == 1))
-			vif1.inprogress = 0;
+			vif1.inprogress &= ~0x1;
 		
 		// spiderman doesn't break on qw boundaries
 		if (istag) return -2;
@@ -2314,14 +2338,13 @@ int VIF1transfer(u32 *data, int size, int istag)
 	if(vif1Regs->stat & VIF1_STAT_VGW)
 	{
 		vif1.vifstalled = true;
-		return -1;
 	}
 	
 
 	if (vif1ch->qwc == 0 && (vif1.irqoffset == 0 || istag == 1))
-		vif1.inprogress = 0;
+		vif1.inprogress &= ~0x1;
 
-	return 0;
+	return vif1.vifstalled ? -2 : 0;
 }
 
 void vif1TransferFromMemory()
@@ -2398,7 +2421,13 @@ int  _VIF1chain()
 	}
 
 	pMem = (u32*)dmaGetAddr(vif1ch->madr);
-	if (pMem == NULL) return -1;
+	if (pMem == NULL) 
+	{
+		vif1.cmd = 0;
+		vif1.tag.size = 0;
+		vif1ch->qwc = 0;
+		return 0;
+	}
 
 	VIF_LOG("VIF1chain size=%d, madr=%lx, tadr=%lx",
 	        vif1ch->qwc, vif1ch->madr, vif1ch->tadr);
@@ -2501,11 +2530,13 @@ __forceinline void vif1Interrupt()
 
 	g_vifCycles = 0;
 
+	if(schedulepath3msk) Vif1MskPath3();
+
 	if((vif1Regs->stat & VIF1_STAT_VGW))
 	{
 		if(gif->chcr & 0x100)
 		{			
-			CPU_INT(1, 16);
+			CPU_INT(1, gif->qwc * BIAS);
 			return;
 		} 
 		else vif1Regs->stat &= ~VIF1_STAT_VGW;
@@ -2572,7 +2603,12 @@ __forceinline void vif1Interrupt()
 	vif1ch->chcr &= ~0x100;
 	g_vifCycles = 0;
 	hwDmacIrq(DMAC_VIF1);
-	if(vif1ch->chcr & 0x1)vif1Regs->stat &= ~0x1F000000; // FQC=0
+
+	//Im not totally sure why Path3 Masking makes it want to see stuff in the fifo 
+	//Games effected by setting, Fatal Frame, KH2, Shox, Crash N Burn, GT3/4 possibly
+	//Im guessing due to the full gs fifo before the reverse? (Refraction)
+	//Note also this is only the condition for reverse fifo mode, normal direction clears it as normal
+	if(!vif1Regs->mskpath3 || (vif1ch->chcr & 0x1))vif1Regs->stat &= ~0x1F000000; // FQC=0
 }
 
 void dmaVIF1()
@@ -2650,6 +2686,12 @@ void vif1Write32(u32 mem, u32 value)
 				psHu64(VIF1_FIFO) = 0;
 				psHu64(0x10005008) = 0; // VIF1_FIFO + 8
 				vif1.done = true;
+				if(vif1Regs->mskpath3)
+				{
+					vif1Regs->mskpath3 = 0;
+					psHu32(GIF_STAT) &= ~0x2;
+					if(gif->chcr & 0x100) CPU_INT(2, 4);	
+				}
 				vif1Regs->err = 0;
 				vif1.inprogress = 0;
 				vif1Regs->stat &= ~(0x1F800000 | VIF1_STAT_INT | VIF1_STAT_VSS | VIF1_STAT_VIS | VIF1_STAT_VFS | VIF1_STAT_VPS); // FQC=0

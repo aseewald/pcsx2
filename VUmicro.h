@@ -16,9 +16,7 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
-#ifndef __VUMICRO_H__
-#define __VUMICRO_H__
-
+#pragma once
 #include "VU.h"
 
 struct VUmicroCpu
@@ -78,9 +76,9 @@ void vuMicroCpuReset();
 extern void initVUrec(VURegs* vuRegs, const int vuIndex);
 extern void closeVUrec(const int vuIndex);
 extern void resetVUrec(const int vuIndex);
-extern void clearVUrec(u32 addr, u32 size, const int vuIndex);
-extern void runVUrec(u32 startPC, u32 cycles, const int vuIndex);
 extern void vsyncVUrec(const int vuIndex);
+extern void __fastcall clearVUrec(u32 addr, u32 size, const int vuIndex);
+extern void __fastcall runVUrec(u32 startPC, u32 cycles, const int vuIndex);
 
 /////////////////////////////////////////////////////////////////
 // Everything else does stuff on a per-VU basis.
@@ -1315,6 +1313,3 @@ void (*PREFIX##_LOWER_OPCODE[128])(_VURegsNum *VUregsn) = { \
 #endif
 
 #include "VUops.h"
-
-#endif
-

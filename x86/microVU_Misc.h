@@ -66,6 +66,7 @@ declareAllVariables
 //------------------------------------------------------------------
 // Helper Macros
 //------------------------------------------------------------------
+
 #define _Ft_ ((mVU->code >> 16) & 0x1F)  // The ft part of the instruction register 
 #define _Fs_ ((mVU->code >> 11) & 0x1F)  // The fs part of the instruction register 
 #define _Fd_ ((mVU->code >>  6) & 0x1F)  // The fd part of the instruction register
@@ -93,7 +94,7 @@ declareAllVariables
 #define _Ftf_	((mVU->code >> 23) & 0x03)
 
 #define _Imm5_	(s16)(((mVU->code & 0x400) ? 0xfff0 : 0) | ((mVU->code >> 6) & 0xf))
-#define _Imm11_	(s32)((mVU->code & 0x400) ? (0xfffffc00 | (mVU->code & 0x3ff)) : mVU->code & 0x3ff)
+#define _Imm11_	(s32)((mVU->code & 0x400) ? (0xfffffc00 | (mVU->code & 0x3ff)) : (mVU->code & 0x3ff))
 #define _Imm12_	(((mVU->code >> 21) & 0x1) << 11) | (mVU->code & 0x7ff)
 #define _Imm15_	(((mVU->code >> 10) & 0x7800) | (mVU->code & 0x7ff))
 #define _Imm24_	(u32)(mVU->code & 0xffffff)
@@ -160,6 +161,20 @@ declareAllVariables
 #define pass3 if (recPass == 2)
 #define pass4 if (recPass == 3)
 
+// Define mVUquickSearch
+#ifndef __LINUX__
+PCSX2_ALIGNED16_EXTERN( u8 mVUsearchXMM[0x1000] );
+typedef u32 (__fastcall *mVUCall)(void*, void*);
+#define mVUquickSearch(dest, src, size) ((((mVUCall)((void*)mVUsearchXMM))(dest, src)) == 0xf)
+#define mVUemitSearch() { mVUcustomSearch(); }
+#else
+// Note: GCC builds crash with custom search function, because
+// they're not guaranteeing 16-byte alignment on the structs :(
+// #define mVUquickSearch(dest, src, size) (!memcmp(dest, src, size))
+#define mVUquickSearch(dest, src, size) (!memcmp_mmx(dest, src, size))
+#define mVUemitSearch()
+#endif
+
 // Misc Macros...
 #define mVUprogI	 mVU->prog.prog[progIndex]
 #define mVUcurProg	 mVU->prog.prog[mVU->prog.cur]
@@ -188,10 +203,10 @@ declareAllVariables
 #define setCode()	 { mVU->code = curI; }
 #define incPC(x)	 { iPC = ((iPC + x) & (mVU->progSize-1)); setCode(); }
 #define incPC2(x)	 { iPC = ((iPC + x) & (mVU->progSize-1)); }
-#define incCycles(x) { mVUincCycles(mVU, x); }
 #define bSaveAddr	 (((xPC + (2 * 8)) & ((isVU1) ? 0x3ff8:0xff8)) / 8)
-#define branchAddr	 ((xPC + 8 + (_Imm11_ * 8)) & ((isVU1) ? 0x3ff8 : 0xff8))
+#define branchAddr	 ((xPC + 8 + (_Imm11_ * 8)) & (mVU->microMemSize-8))
 #define shufflePQ	 (((mVU->p) ? 0xb0 : 0xe0) | ((mVU->q) ? 0x01 : 0x04))
+#define cmpOffset(x) (&(((u8*)x)[mVUprogI.range[0]]))
 #define Rmem		 (uptr)&mVU->regs->VI[REG_R].UL
 #define Roffset		 (uptr)&mVU->regs->VI[9].UL
 
@@ -260,8 +275,7 @@ declareAllVariables
 	uptr diff = ptr - start;																			\
 	if (diff >= limit) {																				\
 		Console::Error("microVU Error: Program went over its cache limit. Size = 0x%x", params diff);	\
-		if (!isVU1)	mVUreset<0>();																		\
-		else		mVUreset<1>();																		\
+		mVUreset(mVU);																					\
 	}																									\
 }
 

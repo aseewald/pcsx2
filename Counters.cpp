@@ -332,8 +332,16 @@ static __forceinline void VSyncStart(u32 sCycle)
 	EECNT_LOG( "/////////  EE COUNTER VSYNC START  \\\\\\\\\\\\\\\\\\\\  (frame: %d)", iFrame );
 	vSyncDebugStuff( iFrame ); // EE Profiling and Debug code
 
-	if ((CSRw & 0x8)) GSCSRr|= 0x8;
-	if (!(GSIMR&0x800)) gsIrq();
+	if ((CSRw & 0x8)) 
+	{
+		
+		
+		if (!(GSIMR&0x800)) 
+		{
+			gsIrq();
+		}
+		GSCSRr|= 0x8;
+	}
 
 	hwIntcIrq(INTC_VBLANK_S);
 	IopCounters::VBlankStart();
@@ -400,8 +408,16 @@ __forceinline void rcntUpdate_hScanline()
 		hsyncCounter.Mode = MODE_HRENDER;
 	}
 	else { //HBLANK END / HRENDER Begin
-		if (CSRw & 0x4) GSCSRr |= 4; // signal
-		if (!(GSIMR&0x400)) gsIrq();
+		if (CSRw & 0x4) 
+		{
+			
+			
+			if (!(GSIMR&0x400)) 
+			{
+				gsIrq();
+			}
+			GSCSRr |= 4; // signal
+		}
 		if (gates) rcntEndGate(false, hsyncCounter.sCycle);
 		IopCounters::CheckEndGate0();
 

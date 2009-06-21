@@ -60,7 +60,7 @@ void mVUclamp2(int reg, int regT1, int xyzw) {
 }
 
 //------------------------------------------------------------------
-// Micro VU - Misc Functions
+// Micro VU - Reg Loading/Saving/Shuffling/Unpacking/Merging...
 //------------------------------------------------------------------
 
 void mVUunpack_xyzw(int dstreg, int srcreg, int xyzw) {
@@ -261,6 +261,10 @@ void mVUmergeRegs(int dest, int src, int xyzw) {
 	}
 }
 
+//------------------------------------------------------------------
+// Micro VU - Misc Functions
+//------------------------------------------------------------------
+
 // Transforms the Address in gprReg to valid VU0/VU1 Address
 microVUt(void) mVUaddrFix(mV, int gprReg) {
 	if (mVU == &microVU1) {
@@ -294,6 +298,10 @@ microVUt(void) mVUrestoreRegs(mV) {
 	SSE_MOVAPS_M128_to_XMM(xmmMin, (uptr)mVU_minvals);
 	MOV32ItoR(gprR, Roffset); // Restore gprR
 }
+
+//------------------------------------------------------------------
+// Micro VU - Custom SSE Instructions
+//------------------------------------------------------------------
 
 static const u32 PCSX2_ALIGNED16(MIN_MAX_MASK1[4]) = {0xffffffff, 0x80000000, 0xffffffff, 0x80000000};
 static const u32 PCSX2_ALIGNED16(MIN_MAX_MASK2[4]) = {0x00000000, 0x40000000, 0x00000000, 0x40000000};
@@ -424,4 +432,62 @@ void SSE_ADD2SS_XMM_to_XMM(x86SSERegType to, x86SSERegType from) {
 // Note: Wrapper function, Tri-Ace Games just need the SS implementation
 void SSE_ADD2PS_XMM_to_XMM(x86SSERegType to, x86SSERegType from) {
 	SSE_ADDPS_XMM_to_XMM(to, from);
+}
+
+//------------------------------------------------------------------
+// Micro VU - Custom Quick Search
+//------------------------------------------------------------------
+
+PCSX2_ALIGNED(0x1000, static u8 mVUsearchXMM[0x1000]);
+
+// Generates a custom optimized block-search function 
+// Note: Structs must be 16-byte aligned! (GCC doesn't guarantee this)
+void mVUcustomSearch() {
+	using namespace x86Emitter;
+	HostSys::MemProtect(mVUsearchXMM, 0x1000, Protect_ReadWrite, false);
+	memset_8<0xcc,0x1000>(mVUsearchXMM);
+	xSetPtr(mVUsearchXMM);
+
+	xMOVAPS  (xmm0, ptr32[ecx]);
+	xPCMP.EQD(xmm0, ptr32[edx]);
+	xMOVAPS  (xmm1, ptr32[ecx + 0x10]);
+	xPCMP.EQD(xmm1, ptr32[edx + 0x10]);
+	xPAND	 (xmm0, xmm1);
+
+	xMOVMSKPS(eax, xmm0);
+	xCMP	 (eax, 0xf);
+	xForwardJL8 exitPoint;
+
+	xMOVAPS  (xmm0, ptr32[ecx + 0x20]);
+	xPCMP.EQD(xmm0, ptr32[edx + 0x20]);
+	xMOVAPS	 (xmm1, ptr32[ecx + 0x30]);
+	xPCMP.EQD(xmm1, ptr32[edx + 0x30]);
+	xPAND	 (xmm0, xmm1);
+
+	xMOVAPS  (xmm2, ptr32[ecx + 0x40]);
+	xPCMP.EQD(xmm2, ptr32[edx + 0x40]);
+	xMOVAPS  (xmm3, ptr32[ecx + 0x50]);
+	xPCMP.EQD(xmm3, ptr32[edx + 0x50]);
+	xPAND	 (xmm2, xmm3);
+
+	xMOVAPS	 (xmm4, ptr32[ecx + 0x60]);
+	xPCMP.EQD(xmm4, ptr32[edx + 0x60]);
+	xMOVAPS	 (xmm5, ptr32[ecx + 0x70]);
+	xPCMP.EQD(xmm5, ptr32[edx + 0x70]);
+	xPAND	 (xmm4, xmm5);
+
+	xMOVAPS  (xmm6, ptr32[ecx + 0x80]);
+	xPCMP.EQD(xmm6, ptr32[edx + 0x80]);
+	xMOVAPS  (xmm7, ptr32[ecx + 0x90]);
+	xPCMP.EQD(xmm7, ptr32[edx + 0x90]);
+	xPAND	 (xmm6, xmm7);
+
+	xPAND (xmm0, xmm2);
+	xPAND (xmm4, xmm6);
+	xPAND (xmm0, xmm4);
+	xMOVMSKPS(eax, xmm0);
+
+	exitPoint.SetTarget();
+	xRET();
+	HostSys::MemProtect(mVUsearchXMM, 0x1000, Protect_ReadOnly, true );
 }

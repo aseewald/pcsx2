@@ -226,7 +226,7 @@ using Console::Color_White;
 #	define DevMsg 
 #endif
 
-#ifdef _DEBUG
+#ifdef PCSX2_DEBUG
 #	define DbgCon Console
 #else
 #	define DbgCon 0&&Console

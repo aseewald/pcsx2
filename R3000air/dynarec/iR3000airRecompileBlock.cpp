@@ -260,17 +260,6 @@ static void recIR_Flush( const IR& ir, xRegisterArray32<bool>& xIsDirty )
 	}
 }
 
-// ------------------------------------------------------------------------
-// returns the inverted conditional type for this Jcc condition.  Ie, JNS will become JS.
-JccComparisonType xInvertCond( JccComparisonType src )
-{
-	jASSUME( src != Jcc_Unknown );
-	if( Jcc_Unconditional == src ) return Jcc_Unconditional;
-
-	// x86 conditionals are clever!  To invert conditional types, just invert the lower bit:
-	return (JccComparisonType)((int)src ^ 1);
-}
-
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 void recIR_Pass3( uint numinsts )
