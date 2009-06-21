@@ -210,7 +210,7 @@ void SysAllocateDynarecs()
 	{
 		// R5900 and R3000a must be rec-enabled together for now so if either fails they both fail.
 		recCpu.Allocate();
-		psxRec.Allocate();
+		iopRec.Allocate();
 	}
 	catch( Exception::BaseException& ex )
 	{
@@ -224,7 +224,7 @@ void SysAllocateDynarecs()
 		g_Session.ForceDisableEErec = true;
 
 		recCpu.Shutdown();
-		psxRec.Shutdown();
+		iopRec.Shutdown();
 	}
 
 	try
@@ -288,7 +288,7 @@ void SysShutdownDynarecs()
 	// Special SuperVU "complete" terminator.
 	SuperVUDestroy( -1 );
 
-	psxRec.Shutdown();
+	iopRec.Shutdown();
 	recCpu.Shutdown();
 }
 
@@ -307,8 +307,8 @@ void SysClearExecutionCache()
 	if( CHECK_EEREC )
 	{
 		Cpu = &recCpu;
-		//psxCpu = &psxRec;
-		psxCpu = &iopInt;
+		psxCpu = &iopRec;
+		//psxCpu = &iopInt;
 	}
 	else
 	{

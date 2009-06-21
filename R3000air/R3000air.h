@@ -96,14 +96,6 @@ enum MipsGPRs_t
 	GPR_hi, GPR_lo
 };
 
-static __forceinline void DevAssume( bool condition, const char* msg, bool inReleaseMode=false )
-{
-	if( (inReleaseMode || IsDevBuild) && !condition )
-	{
-		throw Exception::LogicError( msg );
-	}
-}
-
 namespace R3000A
 {
 
@@ -194,8 +186,8 @@ struct Registers
 	bool IsExecuting;
 
 	// ------------------------------------------------------------------------
-	// Internal Storage Section (Protected members which aren't protected since
-	//                     this isn't a class type)
+	// Internal Storage Section (Protected-style members which aren't protected
+	//                  since this isn't a class type)
 	// ------------------------------------------------------------------------
 
 	// Internal cycle counter.  Depending on the type of event system used to manage
@@ -907,65 +899,6 @@ public:
 	void GetDisasm( string& dest ) const;
 	void GetValuesComment( string& dest ) const;
 };
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
-class InstructionConstOpt : public InstructionOptimizer
-{
-public:
-	// Actual const values of registers on input:
-	s32 ConstVal_Rd;
-	s32 ConstVal_Rt;
-	s32 ConstVal_Rs;
-	s32 ConstVal_Hi;
-	s32 ConstVal_Lo;
-
-	// fully qualified (absolute) target of this branch (valid for non-register jumps and
-	// branches only!)
-	u32 m_BranchTarget;
-	
-protected:
-	GprStatus m_IsConst;		// Const status of registers on input
-	bool m_IsConstException;	// flagged TRUE for instructions that cause exceptions with certainty.
-	bool m_IsConstPc;			// flagged TRUE for instructions that branch unconditionally (m_NextPC is a known const)
-
-public:
-	InstructionConstOpt() {}
-
-	InstructionConstOpt( const Opcode& opcode ) :
-		InstructionOptimizer( opcode )
-	,	m_IsConstException( false )
-	,	m_IsConstPc( true )
-	{
-		m_IsConst.Value = 0;
-	}
-
-	void Assign( const Opcode& opcode, bool constStatus[34] );
-
-public:
-	__releaseinline void Process()
-	{
-		Instruction::Process( *this );
-		jASSUME( !ReadsRd() );		// Rd should always be a target register.
-	}
-
-	__releaseinline bool UpdateConstStatus( bool gpr_IsConst[34] ) const;
-	
-	bool IsConstRs() const { return ReadsRs() && m_IsConst.Rs; }
-	bool IsConstRt() const { return ReadsRt() && m_IsConst.Rt; }
-	bool IsConstField( RegField_t field ) const;
-	bool IsConstPc() const { return m_IsConstPc; }
-	
-	bool CausesConstException() const { return m_IsConstException; }
-	
-	u32  GetBranchTarget() const { return m_BranchTarget; }
-	
-protected:
-	void DoConditionalBranch( bool cond );
-	void RaiseException( uint code );
-	bool ConditionalException( uint code, bool cond );
-};
-
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Diagnostic Functions

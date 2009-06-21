@@ -24,6 +24,7 @@
 #include "../R3000airInstruction.inl"
 #include "../R3000airOpcodeImpl.inl"
 #include "../R3000airOpcodeTables.inl"
+#include "../R3000airInstConstOpt.inl"
 
 using namespace x86Emitter;
 
@@ -197,7 +198,9 @@ void recIR_Block()
 	iopRegs.AddCycles( g_BlockState.BlockCycleAccum );
 }
 
+// ------------------------------------------------------------------------
 // TODO: Add the Const type to the parameters here, but I'm waiting for the wxWidgets merge.
+//
 void InstructionRecAPI::_const_error()
 {
 	assert( false );

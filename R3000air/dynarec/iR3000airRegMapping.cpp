@@ -210,7 +210,7 @@ void IR::UnmapReg( xDirectOrIndirect32 maparray[34], const xRegister32& reg )
 	// which operate on cases where Rs == Rt and such will tend to end up with multiple
 	// GPRs being mapped to a single x86reg.
 	
-	DynarecAssume( !reg.IsEmpty(), Inst, "Tried to unmap an empty register." );
+	DynarecAssert( !reg.IsEmpty(), "Tried to unmap an empty register." );
 
 	int unmap_count=0;		// analytic for number of gprs this reg was mapped to.
 	for( int i=0; i<34; ++i )
@@ -280,7 +280,7 @@ void recIR_PerformDynamicRegisterMapping( IR& cir )
 
 		// there should always be a free register, unless the regmap descriptor is malformed,
 		// such as an instruction which incorrectly tries to allocate too many regs.
-		DynarecAssume( freereg < freglen, cir.Inst, "Ran out of allocable x86 registers (possible malformed regmap descriptor)" );
+		cir.DynarecAssert( freereg < freglen, "Ran out of allocable x86 registers (possible malformed regmap descriptor)" );
 
 		const xRegister32& woot( m_mappableRegs[freereg] );	// translate from mappableRegs list to xRegInUse list.
 		cir.UnmapReg( cir.Src, woot );
@@ -335,7 +335,7 @@ void recIR_PerformDynamicRegisterMapping( IR& cir )
 
 			// assert: there should always be a free register, unless the regalloc descriptor is
 			// malformed, such as an instruction which incorrectly tries to allocate too many regs.
-			DynarecAssume( freereg < frlen, cir.Inst, "Ran out of allocable x86 registers (possible malformed regmap descriptor)" );
+			cir.DynarecAssert( freereg < frlen, "Ran out of allocable x86 registers (possible malformed regmap descriptor)" );
 		}
 
 		const xRegister32& woot( (m_mappableRegs[freereg]) );
@@ -499,8 +499,7 @@ void recIR_PerformStrictRegisterMapping_Exit( IR& cir )
 		// exit-mapped register must be a valid Written Field (assertion failure indicates
 		// ints/recs mismatch, ie a malformed regmap descriptor)
 		int f_gpr = cir.Inst.WritesField( ToRegField( exitmap ) );
-		DynarecAssume( f_gpr != -1, cir.Inst,
-			"Regmap descriptor specifies an invalid write-field." );
+		cir.DynarecAssert( f_gpr != -1, "Regmap descriptor specifies an invalid write-field." );
 
 		cir.UnmapReg( cir.Dest, xReg );
 		cir.Dest[f_gpr] = xReg;
@@ -673,8 +672,8 @@ void recIR_Pass2( const recBlockItem& irBlock )
 		
 		if( irBlock.GetInst(i).DelayedDependencyRd )
 		{
-			DynarecAssume( !fnew.m_EbpLoadMap, fnew.Inst, "DependencySlot is already reserved to a GPR." );
-			DynarecAssume( fnew.Inst.WritesField( RF_Rd ) != GPR_Invalid, fnew.Inst, "DependencySlot flag enabled on an instruction with no Rd writeback." );
+			fnew.DynarecAssert( !fnew.m_EbpLoadMap, "DependencySlot is already reserved to a GPR." );
+			fnew.DynarecAssert( fnew.Inst.WritesField( RF_Rd ) != GPR_Invalid, "DependencySlot flag enabled on an instruction with no Rd writeback." );
 			fnew.m_EbpLoadMap = fnew.Inst._Rd_;
 		}
 		else if( fnew.m_EbpReadMap != GPR_Invalid )

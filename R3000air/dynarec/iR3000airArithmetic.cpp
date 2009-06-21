@@ -157,9 +157,7 @@ namespace recDIV_ConstNone
 		// Make sure recompiler did it's job:
 		if( info.Inst._Rs_ != info.Inst._Rt_ )
 		{
-			DynarecAssume( (RegRs == ecx) && (RegRt == eax), info.Inst,
-				"Recompiler failed to prepare strict eax/ecx mappings."
-			);
+			info.DynarecAssert( (RegRs == ecx) && (RegRt == eax), "Recompiler failed to prepare strict eax/ecx mappings." );
 		}
 
 		xCMP( eax, 0 );
@@ -296,7 +294,7 @@ namespace recDIV_ConstRs
 		// Make sure recompiler did it's job:
 		if( info.Inst._Rs_ != info.Inst._Rt_ )
 		{
-			DynarecAssume( (RegRs == ecx) && (RegRt == eax), info.Inst,
+			info.DynarecAssert( (RegRs == ecx) && (RegRt == eax),
 				"Recompiler failed to prepare strict eax/ecx mappings [ConstRs form]." );
 		}
 

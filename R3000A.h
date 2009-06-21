@@ -38,7 +38,7 @@ struct R3000Acpu
 
 extern R3000Acpu *psxCpu;
 //extern R3000Acpu psxInt;
-extern R3000Acpu psxRec;
+extern R3000Acpu iopRec;
 extern R3000Acpu iopInt;
 
 using R3000A::iopRegs;

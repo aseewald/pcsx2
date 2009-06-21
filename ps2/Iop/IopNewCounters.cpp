@@ -275,7 +275,7 @@ protected:
 			IntMathType pendingCycles = m_cyclepass + iopRegs.GetPendingCycles();
 			s32 delta = (pendingCycles << IopRate_FixedBits) / m_rate;
 			Count += delta;
-			DevAssume( Count < (Is16Bit() ? 0x10000 : 0x100000000), "IopCounter Logic Error : Rescheduled timer exceeds overflow value." );
+			DevAssert( Count < (Is16Bit() ? 0x10000 : 0x100000000), "IopCounter Logic Error : Rescheduled timer exceeds overflow value." );
 		}
 	}
 
@@ -331,7 +331,7 @@ IopCounterMethod(void) ICT::ScheduleOverflow()
 // ------------------------------------------------------------------------
 IopCounterMethod(void) ICT::ScheduleTarget()
 {
-	DevAssume( Target >= Count, "IopCounter Logic Error: ScheduleTarget called when target is already past." );
+	DevAssert( Target >= Count, "IopCounter Logic Error: ScheduleTarget called when target is already past." );
 
 	// Schedule the target only if it's purposefully enabled.  Otherwise just bypass it
 	// and schedule the overflow.  No point in handling a dud target.
@@ -557,7 +557,7 @@ IopCounterMethod(void) ICT::OnEvent_Target()
 {
 	PSXCNT_LOG( "IOP Counter[%d] Target Reached @ 0x%08x", Index, Target );
 
-	DevAssume( (m_mode & IOPCNT_INT_TARGET) || (m_mode & 0x08),
+	DevAssert( (m_mode & IOPCNT_INT_TARGET) || (m_mode & 0x08),
 		"IopCntUpdate Logic Error: Target event scheduled, but no target purpose is enabled."
 		);
 
@@ -832,12 +832,12 @@ __releaseinline void IopCounters::OnEvent( uint cntidx, EventType evttype )
 		break;
 
 		case IopCntEvt_RescheduleOverflow:
-			DevAssume( cntidx >= 3, "IopCounterEvent Error: Invalid IopEventType specified on 16-bit counter." );
+			DevAssert( cntidx >= 3, "IopCounterEvent Error: Invalid IopEventType specified on 16-bit counter." );
 			iopCounters32[cntidx-3].ScheduleOverflow();
 		break;
 
 		case IopCntEvt_RescheduleTarget:
-			DevAssume( cntidx >= 3, "IopCounterEvent Error: Invalid IopEventType specified on 16-bit counter." );
+			DevAssert( cntidx >= 3, "IopCounterEvent Error: Invalid IopEventType specified on 16-bit counter." );
 			iopCounters32[cntidx-3].ScheduleTarget();
 		break;
 	}

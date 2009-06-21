@@ -21,6 +21,7 @@
 #include "ix86/ix86.h"
 #include <map>
 
+#include "../R3000airInstConstOpt.h"
 #include "iR3000airRegMapping.h"
 
 using namespace x86Emitter;
@@ -107,31 +108,6 @@ class IntermediateRepresentation;
 
 extern void __fastcall DivStallUpdater( int cycleAcc, int newstall );
 
-// Generates an exception if the given condition is not true.  Exception's description
-// contains "IOPrec assumption failed on instruction 'INST': [usr msg]".
-// inReleaseMode - Exception is generated in Devel and Debug builds only by default.
-//   Pass 'true' as the inReleaseMode parameter to enable exception checking in Release
-//   builds as well (ie, all builds).
-//
-static __forceinline void DynarecAssume( bool condition, const Instruction& inst, const char* msg, bool inReleaseMode=false )
-{
-	// [TODO]  Add a new exception type that allows specialized handling of dynarec-level
-	// exceptions, so that the exception handler can save the state of the emulation to
-	// a special savestate.  Such a savestate *should* be fully intact since dynarec errors
-	// occur during codegen, and prior to executing bad code.  Thus, once such bugs are
-	// fixed, the emergency savestate can be resumed successfully. :)
-	//
-	// [TODO]  Add a recompiler state/info dump to this, so that we can log PC, surrounding
-	// code, and other fun stuff!
-
-	if( (inReleaseMode || IsDevBuild) && !condition )
-	{
-		throw Exception::LogicError( fmt_string(
-			"IOPrec assumption failed on instruction '%s': %s", inst.GetName(), msg
-		) );
-	}
-}
-
 // ------------------------------------------------------------------------
 //
 struct InstructionEmitterAPI
@@ -193,6 +169,9 @@ struct InstructionRecAPI
 };
 
 // ------------------------------------------------------------------------
+// InstructionRecMess - This class is somply here to provide a templated interface
+// to the Recompiler functions (it's members override the interpreter functions with
+// rec functions that generate x86 code).
 //
 class InstructionRecMess : public InstructionConstOpt
 {
@@ -203,55 +182,15 @@ public:
 	InstructionRecMess() : InstructionConstOpt( Opcode( 0 ) ) {}
 
 	InstructionRecMess( const InstructionConstOpt& src ) :
-		InstructionConstOpt( src )
+	InstructionConstOpt( src )
 	{
 		// Default constructors should do everything we need.
 	}
-	
+
 	void GetRecInfo();
 
 public:
 	INSTRUCTION_API()
-};
-
-// ------------------------------------------------------------------------
-// Implementation note: I've separated the Gpr const info into two arrays to have an easier
-// time of bit-packing the IsConst array.
-//
-class InstConstInfoEx
-{
-public:
-	InstructionConstOpt	inst;
-
-	JccComparisonType BranchCompareType;
-
-	// Intermediate Representation dependency indexer, for each valid readable field.
-	// The values of this array are indexes for the instructions that the field being
-	// read is dependent on.  When re-ordering instructions, this instruction must be
-	// ordered *after* any instruction listed here.
-	// [not implemented yet]
-	int			iRepDep[RF_Count];
-
-	// Set true when the following instruction has a read dependency on the Rd gpr
-	// of this instruction.  The regmapper will map the value of Rd prior to instruction
-	// execution to a fixed register (and preserve it).  The next instruction in the 
-	// list will read Rs or Rt from the Dependency slot instead.
-	bool		DelayedDependencyRd;
-
-	//bool		isConstPC:1;
-	u8			m_IsConstBits[5];		// 5 bytes to contain 34 bits.
-
-	// Stores all constant status for this instruction.
-	// Note: I store all 34 GPRs on purpose, even tho the instruction itself will only
-	// need to know it's own regfields at dyngen time.  The rest are used for generating
-	// register state info for advanced exception handling and recovery.
-	u32			ConstVal[34];
-	u32			ConstPC;
-
-	bool IsConst( int gpridx ) const
-	{
-		return !!( m_IsConstBits[gpridx/8] & (1<<(gpridx&7)) );
-	}
 };
 
 // ------------------------------------------------------------------------
@@ -336,12 +275,16 @@ public:
 
 	IntermediateRepresentation( const xAddressReg& idxreg );
 	IntermediateRepresentation( const InstConstInfoEx& src );
-	
+
+	void DynarecAssert( bool condition, const char* msg, bool inReleaseMode=false ) const
+	{
+		Inst.DynarecAssert( condition, msg, inReleaseMode );
+	}
+
 	const xDirectOrIndirect32& SrcField( RegField_t field ) const
 	{
 		int gpr = Inst.ReadsField( field );
-		DynarecAssume( gpr != -1, Inst,
-			"Attempted to read from a field that is not a valid input field for this instruction." );
+		DynarecAssert( gpr != -1, "Attempted to read from a field that is not a valid input field for this instruction." );
 
 		return Src[gpr];
 	}
@@ -349,15 +292,14 @@ public:
 	const xDirectOrIndirect32& DestField( RegField_t field ) const
 	{
 		int gpr = Inst.WritesField( field );
-		DynarecAssume( gpr != -1, Inst,
-			"Attempted to write to a field that is not a valid outpt field for this instruction." );
+		DynarecAssert( gpr != -1, "Attempted to write to a field that is not a valid outpt field for this instruction." );
 		return Dest[gpr];
 	}
 
 	const xRegister32& TempReg( uint tempslot ) const
 	{
 		jASSUME( tempslot < 4 );
-		DynarecAssume( !m_TempReg[tempslot].IsEmpty(), Inst,
+		DynarecAssert( !m_TempReg[tempslot].IsEmpty(),
 			"Referenced an unallocated temp register slot.", true );
 		return m_TempReg[tempslot];
 	}
@@ -365,7 +307,7 @@ public:
 	const xRegister8& TempReg8( uint tempslot ) const
 	{
 		jASSUME( tempslot < 4 );
-		DynarecAssume( !m_TempReg[tempslot].IsEmpty(), Inst,
+		DynarecAssert( !m_TempReg[tempslot].IsEmpty(),
 			"Referenced an unallocated temp register slot.", true );
 		return m_TempReg8[tempslot];
 	}

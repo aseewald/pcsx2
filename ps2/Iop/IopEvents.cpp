@@ -45,7 +45,7 @@ __releaseinline void Registers::IdleEventHandler()
 {
 	// Note: the idle event handler should only be invoked at times when the full list of
 	// active/pending events is empty:
-	DevAssume( m_ActiveEvents == NULL, "IopEvtSched Logic Error: Idle event handler called with a non-empty Active list." );
+	DevAssert( m_ActiveEvents == NULL, "IopEvtSched Logic Error: Idle event handler called with a non-empty Active list." );
 	m_ActiveEvents = &m_Events[IopEvt_Idle];
 }
 
@@ -129,7 +129,7 @@ void Registers::ResetEvents()
 //
 __releaseinline void Registers::ExecutePendingEvents()
 {
-	DevAssume( evtCycleCountdown <= 0, "IopEvtSched Logic Error: ExecutePendingEvents called, but EventCycleCountdown didn't reach 0 yet." );
+	DevAssert( evtCycleCountdown <= 0, "IopEvtSched Logic Error: ExecutePendingEvents called, but EventCycleCountdown didn't reach 0 yet." );
 
 	while( true )
 	{
@@ -190,7 +190,7 @@ void Registers::CancelEvent( CpuEventType& thisevt )
 				break;
 			}
 			curEvt = curEvt->next;
-			DevAssume( curEvt != NULL, "IopEvtSched Logic Error: CancelEvent request cannot find the requested event on the Active list" );
+			DevAssert( curEvt != NULL, "IopEvtSched Logic Error: CancelEvent request cannot find the requested event on the Active list" );
 		}
 	}
 
@@ -208,7 +208,7 @@ void Registers::CancelEvent( IopEventType evt )
 //
 __releaseinline void Registers::RescheduleEvent( CpuEventType& thisevt, s32 delta )
 {
-	DevAssume( thisevt.next == NULL, "iopEvtSched Logic Error: Invalid object state; RescheduleEvent called on an event that is already scheduled." );
+	DevAssert( thisevt.next == NULL, "iopEvtSched Logic Error: Invalid object state; RescheduleEvent called on an event that is already scheduled." );
 	thisevt.OrigDelta = delta;
 
 	// Find the sorted insertion point into the list of active events:

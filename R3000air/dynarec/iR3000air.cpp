@@ -171,7 +171,7 @@ void DynGen_DivStallUpdate( int newstall, const xRegister32& tempreg=eax )
 //
 void recBlockItem::ReorderDelaySlots()
 {
-	DevAssume( !IR.IsDisposed(), "recBlockItem: Invalid object state when calling ReorderDelaySlots.  IR list is emptied." );
+	DevAssert( !IR.IsDisposed(), "recBlockItem: Invalid object state when calling ReorderDelaySlots.  IR list is emptied." );
 
 	// Note: ignore the last instruction, since if it's a branch it clearly doesn't have
 	// a delay slot (it's a NOP that was optimized away).
@@ -528,7 +528,7 @@ static void recClear( u32, u32 )
 
 }
 
-R3000Acpu psxRec = {
+R3000Acpu iopRec = {
 	R3000A::recAlloc,
 	R3000A::recReset,
 	R3000A::recExecute,

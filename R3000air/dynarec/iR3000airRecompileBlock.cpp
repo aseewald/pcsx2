@@ -85,9 +85,7 @@ static void _DynGen_MapStrictMultimap( const IR& ir )
 	{
 		const xRegister32& rsmap( ir.Src[gpr_rs].GetReg() );
 		const RegMapInfo_Strict& stro( ir.RegOpts.StatMap );
-		DynarecAssume( !rsmap.IsEmpty(), ir.Inst,
-			"Strict mapping failure on Rs==Rt case; Both input fields are unmapped.", true
-		);
+		ir.DynarecAssert( !rsmap.IsEmpty(), "Strict mapping failure on Rs==Rt case; Both input fields are unmapped.", true );
 		const xRegister32& destreg( (rsmap != stro.EntryMap[RF_Rs]) ? stro.EntryMap[RF_Rs] : stro.EntryMap[RF_Rt] );
 
 		// Sanity check: Make sure the instruction's requested mapping for
@@ -95,8 +93,7 @@ static void _DynGen_MapStrictMultimap( const IR& ir )
 		// fails to map both registers to the same GPR, it should still succeed
 		// in unmapping them from any other GPRs.
 
-		DynarecAssume( !ir.IsMappedReg( ir.Src, destreg ), ir.Inst,
-			"Strict mapper failed to unmap needed registers for Rs==Rt case.", true );
+		ir.DynarecAssert( !ir.IsMappedReg( ir.Src, destreg ), "Strict mapper failed to unmap needed registers for Rs==Rt case.", true );
 
 		if( rsmap != stro.EntryMap[RF_Rs] )
 			xMOV( stro.EntryMap[RF_Rs], rsmap );
@@ -336,7 +333,7 @@ void recIR_Pass3( uint numinsts )
 		
 		if( ir.m_constinfoex.BranchCompareType != Jcc_Unknown)
 		{
-			DynarecAssume( !ir.Inst.IsConstPc(), ir.Inst, "Branch conditional type specified for non-branching instruction (has const PC)." );
+			ir.DynarecAssert( !ir.Inst.IsConstPc(), "Branch conditional type specified for non-branching instruction (has const PC)." );
 
 			// [TODO] Note: Conditional branch instructions should *never* modify registers in
 			// a non-const fashion.  Check for that here and assert...

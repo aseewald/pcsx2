@@ -1986,6 +1986,18 @@
 						>
 					</File>
 					<File
+						RelativePath="..\..\R3000air\R3000airInstConstOpt.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\R3000air\R3000airInstConstOpt.inl"
+						>
+					</File>
+					<File
+						RelativePath="..\..\R3000air\R3000airInstruction.cpp"
+						>
+					</File>
+					<File
 						RelativePath="..\..\R3000air\R3000airInstruction.inl"
 						>
 					</File>

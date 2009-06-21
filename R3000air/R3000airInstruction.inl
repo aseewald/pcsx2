@@ -16,11 +16,19 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
+// r3000airInstruction.inl:  Implements inlinable method members of Instruction and 
+// InstructionOptimizer classes.
+//
+// Notes on .inl file use in R3000air and Pcsx2 in general: MSVC requires that
+// __forceinline members of classes must be implemented in the source files that use
+// them (some throwback mess to the pre-LTCG days, that's still in effect due to
+// either oversight, laziness, or raw asinine stupidity).   So in effect I have to
+// treat forceinline methods like they were templated functions, even though they're not.
+
 #pragma once 
 
 #include "R3000air.h"
 #include "IopMem.h"
-
 
 namespace R3000A {
 
@@ -141,108 +149,5 @@ namespace R3000A {
 		if( gpridx == GPR_ra && WritesLink() ) return RF_Link;
 		
 		return RF_Unused;
-	}
-	
-	//////////////////////////////////////////////////////////////////////////////////////////
-	// -- InstructionConstOpt -- Method Implementations
-
-	__instinline void InstructionConstOpt::DoConditionalBranch( bool cond )
-	{
-		m_IsConstPc = (!ReadsRt() || m_IsConst.Rt) && (!ReadsRs() || m_IsConst.Rs);
-		m_BranchTarget = BranchTarget();
-		Instruction::DoConditionalBranch( cond );
-	}
-
-	__instinline void InstructionConstOpt::RaiseException( uint code )
-	{
-		m_IsConstException = true;
-		iopException( code, iopRegs.IsDelaySlot );
-		SetNextPC( iopRegs.VectorPC + 4 );
-		SetSideEffects();
-	}
-
-	__instinline bool InstructionConstOpt::ConditionalException( uint code, bool cond )
-	{
-		// Only handle the exception if it *is* const.  Otherwise pretend like it didn't
-		// happen -- the recompiler will check for and handle it in recompiled code.
-		m_IsConstException = cond && (!ReadsRt() || m_IsConst.Rt) && (!ReadsRs() || m_IsConst.Rs);
-		return InstructionOptimizer::ConditionalException( code, m_IsConstException );
-	}
-
-	__instinline void InstructionConstOpt::Assign( const Opcode& opcode, bool constStatus[34] )
-	{
-		InstructionOptimizer::Assign( opcode );
-		
-		ConstVal_Rd = iopRegs[_Rd_].SL;
-		ConstVal_Rt = iopRegs[_Rt_].SL;
-		ConstVal_Rs = iopRegs[_Rs_].SL;
-		ConstVal_Hi = iopRegs[GPR_hi].SL;
-		ConstVal_Lo = iopRegs[GPR_lo].SL;
-
-		m_IsConst.Value = 0;
-		m_IsConst.Rd = constStatus[_Rd_];
-		m_IsConst.Rt = constStatus[_Rt_];
-		m_IsConst.Rs = constStatus[_Rs_];
-		m_IsConst.Hi = constStatus[GPR_hi];
-		m_IsConst.Lo = constStatus[GPR_lo];
-
-		m_IsConstPc			= true;
-		m_IsConstException	= false;
-	}
-	
-	// Updates the const status flags in the given array as according to the register
-	// modifications performed by this instruction.
-	__instinline bool InstructionConstOpt::UpdateConstStatus( bool gpr_IsConst[34] ) const
-	{
-		// if no regs are written then const status will be unchanged
-		if( !m_WritesGPR.Value )
-			return true;
-
-		// Update const status for registers.  The const status of all written registers is
-		// based on the const status of the read registers.  If the operation reads from
-		// memory or from an Fs register, then const status is always false.
-
-		bool constStatus;
-
-		if( ReadsMemory() || ReadsFs() )
-			constStatus = false;
-		else
-		{
-			constStatus = 
-				//(ReadsRd() ? gpr_IsConst[_Rd_] : true) &&		// Rd should never be read.
-				(ReadsRt() ? gpr_IsConst[_Rt_] : true) &&
-				(ReadsRs() ? gpr_IsConst[_Rs_] : true) &&
-				(ReadsHi() ? gpr_IsConst[GPR_hi] : true) &&
-				(ReadsLo() ? gpr_IsConst[GPR_lo] : true);
-		}
-
-		if( WritesRd() ) gpr_IsConst[_Rd_] = constStatus;
-		if( WritesRt() ) gpr_IsConst[_Rt_] = constStatus;
-		//if( WritesRs() ) gpr_IsConst[_Rs_] = constStatus;	// Rs should never be written
-
-		jASSUME( gpr_IsConst[0] == true );		// GPR 0 should *always* be const
-
-		if( WritesLink() ) gpr_IsConst[GPR_ra] = constStatus;
-		if( WritesHi() ) gpr_IsConst[GPR_hi] = constStatus;
-		if( WritesLo() ) gpr_IsConst[GPR_lo] = constStatus;
-
-		return constStatus;
-	}
-
-	__instinline bool InstructionConstOpt::IsConstField( RegField_t field ) const
-	{
-		switch( field )
-		{
-			case RF_Rd: return false;
-			case RF_Rt: return IsConstRt();
-			case RF_Rs: return IsConstRs();
-
-			case RF_Hi: return m_IsConst.Hi;
-			case RF_Lo: return m_IsConst.Lo;
-			
-			case RF_Link: return m_IsConst.Link;
-
-			jNO_DEFAULT
-		}
 	}
 }
