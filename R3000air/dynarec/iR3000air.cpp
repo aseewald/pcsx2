@@ -66,33 +66,19 @@ namespace DynFunc
 	u8* ExitRec = NULL;		// just a ret!
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
+// ------------------------------------------------------------------------
 //
-void recBlockItem::Assign( const recBlockItemTemp& src )
+void recBlockItem::Assign( const iopRec_FirstPassConstAnalysis& src )
 {
-	// Note: unchecked pages (ROM, ROM1, or other read-only non-RAM pages) specify a
-	// ramlen of 0.. so handle it accordingly:
-
-	/*if( src.ramlen != 0 )
-	{
-		ValidationCopy.ExactAlloc( src.ramlen );
-		memcpy( ValidationCopy.GetPtr(), src.ramcopy, src.ramlen*sizeof(u32) );
-	}
-	else
-		ValidationCopy.Dispose();*/
-
-	// Instruction / IL cache (which should never be zero)
-
 	if( src.instlen != 0 )
 	{
-		IR.ExactAlloc( src.instlen );
-		InstOrder.ExactAlloc( src.instlen );
-		memcpy( IR.GetPtr(), src.icex, src.instlen*sizeof(InstConstInfoEx) );
+		InstOptInfo.ExactAlloc( src.instlen );
+		memcpy( InstOptInfo.GetPtr(), src.icex, src.instlen*sizeof(IntermediateRepresentation) );
 	}
 	clears++;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
+// ------------------------------------------------------------------------
 //
 void xJumpLink::SetTarget( const void* target ) const 
 {
@@ -116,6 +102,8 @@ recBlockItem& xBlocksMap::_getItem( u32 pc )
 		return Blocks[blah->second];
 }
 
+// ------------------------------------------------------------------------
+//
 void xBlocksMap::AddLink( u32 pc, JccComparisonType cctype )
 {
 	recBlockItem& destItem( _getItem( pc ) );
@@ -166,57 +154,13 @@ void DynGen_DivStallUpdate( int newstall, const xRegister32& tempreg=eax )
 	}
 }
 
-// ------------------------------------------------------------------------
-// Reorders all delay slots with the branch instructions that follow them.
-//
-void recBlockItem::ReorderDelaySlots()
-{
-	DevAssert( !IR.IsDisposed(), "recBlockItem: Invalid object state when calling ReorderDelaySlots.  IR list is emptied." );
-
-	// Note: ignore the last instruction, since if it's a branch it clearly doesn't have
-	// a delay slot (it's a NOP that was optimized away).
-
-	const uint LengthOneLess( IR.GetLength()-1 );
-	for( uint i=0; i<LengthOneLess; ++i )
-	{
-		InstConstInfoEx& ir( IR[i] );
-
-		if( ir.inst.HasDelaySlot() && IR[i+1].inst.IsDelaySlot() )
-		{
-			InstConstInfoEx& delayslot( IR[i+1] );
-
-			// Check for branch dependency on Rd.
-			
-			bool isDependent = false;
-			if( delayslot.inst.WritesReg( ir.inst.ReadsField( RF_Rs ) ) != RF_Unused )
-				isDependent = true;
-			if( delayslot.inst.WritesReg( ir.inst.ReadsField( RF_Rt ) ) != RF_Unused )
-				isDependent = true;
-
-			delayslot.DelayedDependencyRd = isDependent;
-
-			// Reorder instructions :D
-			
-			InstOrder[i] = i+1;
-			InstOrder[i+1] = i;
-			++i;
-		}
-		else
-		{
-			InstOrder[i] = i;
-		}
-	}
-	
-	InstOrder[LengthOneLess] = LengthOneLess;
-}
-
 //////////////////////////////////////////////////////////////////////////////////////////
 // ROM pages, and optimizing for them:
 //
 // Typically the ROm is run only once, and very briefly at that.  Analysis counted 184 ROM
 // pages executed during a full startup, many of which were run only once.  Total ROM block
 // executions (recompiled) tallied 18204, which is like practically nothing.  This analysis
-// hlped me determine that there's no point in including special opts for ROM page re-
+// helped me determine that there's no point in including special opts for ROM page re-
 // compilation with the *possible* exception of just disabling recompilation for ROM pages
 // entirely (ie, running them through the high-speed interpreter).
 //
@@ -225,7 +169,7 @@ void recBlockItem::ReorderDelaySlots()
 //
 // As it turns out, the IOP has a fail-safe mechanism for detecting and handling block
 // invalidation.  In order for the R3000's cache to be cleared of any wrong-doing, the
-// IOP must perform a special Cache Clearing ritual after any and all modifucations of 
+// IOP must perform a special Cache Clearing ritual after any and all modifications of 
 // code pages.  This is detected by watching Bit 16 on the COP0's status register.  When
 // the bit goes high, the IOP is in cache clearing mode.  When the bit goes back low, the
 // IOP is returned to standard operation.
@@ -265,8 +209,9 @@ void recBlockItem::ReorderDelaySlots()
 //    the same speed or faster anyway.
 // 
 
-extern void recIR_Pass2( const recBlockItem& irBlock );
-extern void recIR_Pass3( uint numinsts );
+PCSX2_ALIGNED16( static iopRec_FirstPassConstAnalysis	m_blockspace );
+PCSX2_ALIGNED16( static iopRec_IntermediateState		m_tempIR );
+PCSX2_ALIGNED16( static iopRec_x86BlockState			m_x86blockstate );
 
 static void recRecompile()
 {
@@ -286,7 +231,7 @@ static void recRecompile()
 	if( blowme == g_PersState.xBlockMap.Map.end() )
 	{
 		//Console::WriteLn( "IOP First-pass block at PC: 0x%08x  (total blocks=%d)", params masked_pc, g_PersState.xBlockMap.Blocks.GetLength() );
-		recIR_Block();
+		recIR_FirstPassInterpreter();
 
 		jASSUME( iopRegs.evtCycleCountdown <= iopRegs.evtCycleDuration );
 		if( iopRegs.evtCycleCountdown <= 0 )
@@ -302,21 +247,19 @@ static void recRecompile()
 	{
 		recBlockItem& mess( g_PersState.xBlockMap.Blocks[blowme->second] );
 
-		if( !mess.IR.IsDisposed() )
+		if( !mess.InstOptInfo.IsDisposed() )
 		{
-			// Second Pass Time -- Compile to x86 code!
-			// ----------------------------------------
-
 			//Console::WriteLn( "IOP Second-pass block at PC: 0x%08x  (total blocks=%d)", params masked_pc, g_PersState.xBlockMap.Blocks.GetLength() );
 
-			// Integrity Verified... Generate X86.
-			
+			m_tempIR.GenerateIR( mess );
+			mess.InstOptInfo.Dispose();
+
+			m_x86blockstate.AssignBlock( m_tempIR );
+			m_x86blockstate.RegisterMapper();
+
 			g_BlockState.xBlockPtr = m_xBlock_CurPtr;
-			mess.ReorderDelaySlots();
-			recIR_Pass2( mess );			
-			recIR_Pass3( mess.IR.GetLength() );
+			m_x86blockstate.EmitSomeExecutableGoodness();
 			m_xBlock_CurPtr = xGetPtr();
-			mess.IR.Dispose();
 			
 			uptr temp = m_tbl_TranslatePC[masked_pc>>XlatePC_PageBitShift];
 			uptr* dispatch_ptr = (uptr*)(temp + (masked_pc & XlatePC_PageMask));
@@ -400,7 +343,7 @@ static void DynGen_Functions()
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
-void DynGen_BeginBranch( const IntermediateRepresentation& ir, recBlockItem& block )
+void DynGen_BeginBranch( const x86IntRep& ir, recBlockItem& block )
 {
 }
 

@@ -16,5 +16,38 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
-#include "PrecompiledHeader.h"
-#include "R3000a.h"
+#pragma once
+
+namespace R3000A
+{
+
+IMPL_RecPlacebo( NOP );
+
+IMPL_RecPlacebo( Exception );
+IMPL_RecPlacebo( RFE );
+
+IMPL_RecPlacebo( CTC0 );
+IMPL_RecPlacebo( CFC0 );
+IMPL_RecPlacebo( MFC0 );
+
+IMPL_RecPlacebo( Unknown );
+
+
+// ------------------------------------------------------------------------
+class recMTC0 : public x86IntRep
+{
+public:
+	recMTC0( const IntermediateRepresentation& src ) : x86IntRep( src )
+	{
+		RegMapInfo_Dynamic& dyn( RegOpts.UseDynMode() );
+		dyn.ForceDirect.Rt	= true;
+		dyn.ExitMap.Rt		= DynEM_Untouched;
+	}
+
+	void Emit()
+	{
+		xMOV( &iopRegs.CP0.r[Inst.MipsInst._Rd_], RegRt.GetReg() );
+	}
+};
+
+}

@@ -29,7 +29,7 @@
 
 namespace R3000A
 {
-typedef InstructionOptimizer InstDiag;		// makes life easier on the verboseness front.
+typedef InstructionDiagnostic InstDiag;		// makes life easier on the verboseness front.
 
 static const char *tbl_regname_gpr[34] =
 {
@@ -230,7 +230,7 @@ void InstDiag::GetParamValue( const InstParamType ptype, string& dest ) const
 // ------------------------------------------------------------------------
 //
 template< RegField_t field >
-InstParamType InstructionOptimizer::AssignFieldParam() const
+InstParamType InstructionDiagnostic::AssignFieldParam() const
 {
 	if( (ReadsField( field ) == GPR_Invalid) && (WritesField( field ) == GPR_Invalid) ) return Param_None;
 

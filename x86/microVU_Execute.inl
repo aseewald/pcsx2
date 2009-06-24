@@ -23,7 +23,7 @@
 //------------------------------------------------------------------
 
 // Generates the code for entering recompiled blocks
-microVUt(void) mVUdispatcherA(mV) {
+void mVUdispatcherA(mV) {
 	mVU->startFunct = x86Ptr;
 
 	// __fastcall = The first two DWORD or smaller arguments are passed in ECX and EDX registers; all other arguments are passed right to left.
@@ -84,7 +84,7 @@ microVUt(void) mVUdispatcherA(mV) {
 }
 
 // Generates the code to exit from recompiled blocks
-microVUt(void) mVUdispatcherB(mV) {
+void mVUdispatcherB(mV) {
 	mVU->exitFunct = x86Ptr;
 
 	// Load EE's MXCSR state

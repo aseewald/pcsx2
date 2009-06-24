@@ -20,76 +20,61 @@
 #include "IopCommon.h"
 
 #include "iR3000air.h"
+#include "R3000airIntermediate.h"
 
 #include "../R3000airInstruction.inl"
 #include "../R3000airOpcodeImpl.inl"
-#include "../R3000airOpcodeTables.inl"
-#include "../R3000airInstConstOpt.inl"
+#include "../R3000airOpcodeDispatcher.inl"
 
-using namespace x86Emitter;
-
-namespace R3000A {
-
-recBlockItemTemp m_blockspace;
+#include "R3000airIntermediate.inl"
 
 static string m_disasm;
 static string m_comment;
 
-// ------------------------------------------------------------------------
-// Reordering instructions simply involves moving instructions, when possible, so that
-// registers written are read back as soon as possible.  Typically this will allow the
-// register mapper to optimize things better, since registers will have a higher % of
-// reuse between instructions.
-//
-// Re-ordering non-const_address memory operations with other non-const_address memory
-// ops is expressly prohibited because reads from and writes to registers can cause 
-// changes in behavior.  Const memory operations can be re-ordered but only if they
-// are direct memory operations.
-//
-void _recIR_Reorder()
+namespace R3000A
 {
-
-}
 
 // ------------------------------------------------------------------------
 // Adds this instruction to the IntRep list -- but *only* if it's non-const.  If the inputs
 // and result are const then we can just skip the little bugger altogether.
 //
-__releaseinline bool _recIR_TestConst( InstructionConstOpt& inst, bool gpr_IsConst[34] )
+__releaseinline bool _recIR_TestConst( InstructionConstOptimizer& inst, GprConstStatus& gpr_IsConst )
 {
 	// Test and update const status -- return now if the instruction is full const
 	// (optimized away to nothing)
-	bool isConstWrite = inst.UpdateConstStatus( gpr_IsConst );
+	bool isConstWrite = inst.UpdateExternalConstStatus( gpr_IsConst );
 	if( isConstWrite && !inst.WritesMemory() && !inst.HasSideEffects() && inst.IsConstPc() ) return true;
 
-	InstConstInfoEx& hunnypie( (m_blockspace.icex[m_blockspace.instlen]) );
-	for( int i=0; i<34; ++i )
-	{
-		if( gpr_IsConst[i] )
-		{
-			hunnypie.m_IsConstBits[i/8]	|= 1 << (i&7);
-			hunnypie.ConstVal[i]		 = iopRegs[(MipsGPRs_t)i].UL;
-		}
-		else
-			hunnypie.m_IsConstBits[i/8]	&= ~(1 << (i&7));
-	}
-
-	hunnypie.DelayedDependencyRd = false;
-	m_blockspace.instlen++;
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// Generates IR for an entire block of code.
+// ------------------------------------------------------------------------
 //
-void recIR_Block()
+__releaseinline void InstructionConstOptimizer::Process()
+{
+	OpcodeDispatcher( *this );
+	jASSUME( !ReadsRd() );		// Rd should always be a target register.
+	jASSUME( !WritesRs() );		// Rs should always be a source register.
+
+	// Const Exceptions and Const PCs can never be true at the same time.
+	jASSUME( !m_IsConstException || !m_IsConstPc );
+}
+
+
+// ------------------------------------------------------------------------
+// Executes the current block of code using the InstructionConstOpt decoder, which collects
+// optimization information and propagates constants while executing instructions.  Results
+// of the code execution are recorded into m_blockspace, and transferred into a heap alloc
+// buffer for later reference.
+//
+void iopRec_FirstPassConstAnalysis::InterpretBlock()
 {
 	bool termBlock = false;
 	bool skipTerm = false;		// used to skip termination of const branches
 
-	m_blockspace.instlen = 0;
+	instlen = 0;
 
-	bool gpr_IsConst[34] = { true, false };	// GPR0 is always const!
+	GprConstStatus gpr_IsConst;
 	int gpr_DepIndex[34] = { 0 };
 
 	do 
@@ -109,7 +94,7 @@ void recIR_Block()
 		}
 		else
 		{
-			InstructionConstOpt& inst( m_blockspace.icex[m_blockspace.instlen].inst );
+			InstructionConstOptimizer& inst( icex[instlen] );
 			inst.Assign( opcode, gpr_IsConst );
 			inst.Process();
 
@@ -136,6 +121,7 @@ void recIR_Block()
 			// Requirements: We only want to follow const branches if the "reward" outweighs the
 			// cost.  Typically this should be a function of const optimization benefits against
 			// the actual number of IR instructions being generated.
+
 			if( inst.IsConstBranch() )
 			{
 				if( inst.GetVectorPC() == iopRegs.pc )
@@ -154,6 +140,8 @@ void recIR_Block()
 			}
 
 			bool isConstOptimised = _recIR_TestConst( inst, gpr_IsConst );
+			if( !isConstOptimised )
+				instlen++;
 			
 			if( (varLog & 0x00100000) ) //&& (iopRegs.cycle > 0x470000) )
 			{
@@ -191,31 +179,11 @@ void recIR_Block()
 
 		g_BlockState.IncCycleAccum();
 
-		if( m_blockspace.instlen >= MaxInstructionsPerBlock ) break;
+		if( instlen >= MaxInstructionsPerBlock ) break;
 
 	} while( !termBlock && (g_BlockState.BlockCycleAccum < MaxCyclesPerBlock) );
 
 	iopRegs.AddCycles( g_BlockState.BlockCycleAccum );
-}
-
-// ------------------------------------------------------------------------
-// TODO: Add the Const type to the parameters here, but I'm waiting for the wxWidgets merge.
-//
-void InstructionRecAPI::_const_error()
-{
-	assert( false );
-	throw Exception::LogicError( "R3000A Recompiler Logic Error: invalid const form for this instruction." );
-}
-
-void InstructionRecAPI::Error_ConstNone( InstructionEmitterAPI& api )	{ _const_error(); }
-void InstructionRecAPI::Error_ConstRs( InstructionEmitterAPI& api )		{ _const_error(); }
-void InstructionRecAPI::Error_ConstRt( InstructionEmitterAPI& api )		{ _const_error(); }
-void InstructionRecAPI::Error_ConstRsRt( InstructionEmitterAPI& api )	{ _const_error(); }
-
-void InstructionRecMess::GetRecInfo()
-{
-	API.Reset();
-	Instruction::Process( *this );
 }
 
 }

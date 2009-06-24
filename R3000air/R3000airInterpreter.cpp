@@ -23,7 +23,7 @@
 
 #include "R3000airInstruction.inl"
 #include "R3000airOpcodeImpl.inl"
-#include "R3000airOpcodeTables.inl"
+#include "R3000airOpcodeDispatcher.inl"
 
 #include "DebugTools/Debug.h"
 
@@ -99,12 +99,12 @@ static __releaseinline void intStep()
 	}
 
 #ifdef PCSX2_DEVBUILD
-	InstructionOptimizer dudley( opcode );
+	InstructionDiagnostic dudley( opcode );
 #else
 	Instruction dudley( opcode );
 #endif
 
-	Instruction::Process( dudley );
+	OpcodeDispatcher( dudley );
 
 #ifdef PCSX2_DEVBUILD
 	if( (varLog & 0x00100000) && (iopRegs.GetCycle() > 0x0046b200 ) ) //0x003b0a57) )

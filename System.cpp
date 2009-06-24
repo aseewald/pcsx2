@@ -307,8 +307,8 @@ void SysClearExecutionCache()
 	if( CHECK_EEREC )
 	{
 		Cpu = &recCpu;
-		psxCpu = &iopRec;
-		//psxCpu = &iopInt;
+		//psxCpu = &iopRec;
+		psxCpu = &iopInt;
 	}
 	else
 	{

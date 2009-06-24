@@ -1986,14 +1986,6 @@
 						>
 					</File>
 					<File
-						RelativePath="..\..\R3000air\R3000airInstConstOpt.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\R3000air\R3000airInstConstOpt.inl"
-						>
-					</File>
-					<File
 						RelativePath="..\..\R3000air\R3000airInstruction.cpp"
 						>
 					</File>
@@ -2002,7 +1994,7 @@
 						>
 					</File>
 					<File
-						RelativePath="..\..\R3000air\R3000airOpcodeTables.inl"
+						RelativePath="..\..\R3000air\R3000airOpcodeDispatcher.inl"
 						>
 					</File>
 					<Filter
@@ -2033,30 +2025,6 @@
 							>
 						</File>
 						<File
-							RelativePath="..\..\R3000air\dynarec\iR3000airArithmetic.cpp"
-							>
-						</File>
-						<File
-							RelativePath="..\..\R3000air\dynarec\iR3000airBranch.cpp"
-							>
-						</File>
-						<File
-							RelativePath="..\..\R3000air\dynarec\iR3000airIntermediate.cpp"
-							>
-						</File>
-						<File
-							RelativePath="..\..\R3000air\dynarec\iR3000airLogic.cpp"
-							>
-						</File>
-						<File
-							RelativePath="..\..\R3000air\dynarec\iR3000airMemory.cpp"
-							>
-						</File>
-						<File
-							RelativePath="..\..\R3000air\dynarec\iR3000airMisc.cpp"
-							>
-						</File>
-						<File
 							RelativePath="..\..\R3000air\dynarec\iR3000airRecompileBlock.cpp"
 							>
 						</File>
@@ -2069,6 +2037,22 @@
 							>
 						</File>
 						<File
+							RelativePath="..\..\R3000air\dynarec\R3000airFirstPass.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\dynarec\R3000airIntermediate.cpp"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\dynarec\R3000airIntermediate.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\R3000air\dynarec\R3000airIntermediate.inl"
+							>
+						</File>
+						<File
 							RelativePath="..\..\R3000air\dynarec\RegMap_Dynamic.h"
 							>
 						</File>
@@ -2076,6 +2060,34 @@
 							RelativePath="..\..\R3000air\dynarec\RegMap_Strict.h"
 							>
 						</File>
+						<Filter
+							Name="x86"
+							>
+							<File
+								RelativePath="..\..\R3000air\dynarec\x86\R3000airArithmetic.inl"
+								>
+							</File>
+							<File
+								RelativePath="..\..\R3000air\dynarec\x86\R3000airBranch.inl"
+								>
+							</File>
+							<File
+								RelativePath="..\..\R3000air\dynarec\x86\R3000airDyngen86.cpp"
+								>
+							</File>
+							<File
+								RelativePath="..\..\R3000air\dynarec\x86\R3000airLogic.inl"
+								>
+							</File>
+							<File
+								RelativePath="..\..\R3000air\dynarec\x86\R3000airMemory.inl"
+								>
+							</File>
+							<File
+								RelativePath="..\..\R3000air\dynarec\x86\R3000airMisc.inl"
+								>
+							</File>
+						</Filter>
 					</Filter>
 				</Filter>
 			</Filter>

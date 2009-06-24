@@ -21,7 +21,7 @@
 #include "ix86/ix86.h"
 #include <map>
 
-#include "../R3000airInstConstOpt.h"
+#include "R3000airIntermediate.h"
 #include "iR3000airRegMapping.h"
 
 using namespace x86Emitter;
@@ -45,23 +45,12 @@ using namespace x86Emitter;
 	}
 
 // Some helpers for placebos (unimplemented ops)	
-#define IMPL_RecInstAPI( name ) \
-	void InstAPI::name() \
-	{ \
-		API.ConstNone	= rec##name##_ConstNone::GetInterface; \
-		API.ConstRt		= rec##name##_ConstNone::GetInterface; \
-		API.ConstRs		= rec##name##_ConstNone::GetInterface; \
-	}
-
-// Some helpers for placebos (unimplemented ops)	
 #define IMPL_RecPlacebo( name ) \
-	namespace rec##name##_ConstNone \
-	{ \
-		static void RegMapInfo( IntermediateRepresentation& info ) {	} \
-		static void Emit( const IntermediateRepresentation& info ) { } \
-		IMPL_GetInterface() \
-	} \
-	IMPL_RecInstAPI( name );
+class rec##name : public x86IntRep { \
+public: \
+	rec##name( const IntermediateRepresentation& src ) : x86IntRep( src ) {} \
+	void Emit() const {} \
+}
 
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -104,120 +93,36 @@ struct xAnyOperand
 namespace R3000A {
 
 using namespace x86Emitter;
-class IntermediateRepresentation;
+class x86IntRep;
 
 extern void __fastcall DivStallUpdater( int cycleAcc, int newstall );
 
 // ------------------------------------------------------------------------
-//
-struct InstructionEmitterAPI
-{
-	// Optimizations - Optional implementation -
-	// Allows a recompiled function to specify optimization hints to the recompiler, and also
-	// to force certain behaviors if they are needed for correct instruction generations (such
-	// as forcing Rs or Rt to a register, for example).
-	//
-	// Remarks:
-	//   If your instruction uses a GPR (like Rs), but the recompiled version clobbers all
-	//   registers early on, then leave the GPR unmapped and load it when needed using
-	//   info.MoveRsTo( reg ).  The recompiler will flush the reg to memory and then re-
-	//   load it when requested.
-	//
-	void (*RegMapInfo)( IntermediateRepresentation& info );
-	
-	// Emits code for an instruction.
-	// The instruction should assume that the register mappings specified in MapRegisters.inmaps
-	// are assigned on function entry.  Results should be written back to GPRs using functions
-	// info.MoveToRt(), info.MoveToRd(), or info.MoveToHiLo() -- and need not match the opti-
-	// mization hints given in MapRegister.outmaps.
-	void (*Emit)( const IntermediateRepresentation& info );
-};
-
-
-// ------------------------------------------------------------------------
-//
-struct InstructionRecAPI
-{
-	// fully non-const emitter.
-	void (*ConstNone)( InstructionEmitterAPI& api );
-
-	// const status on Rt, Rs is non-const
-	void (*ConstRt)( InstructionEmitterAPI& api );
-
-	// const status on Rs, Rt is non-const
-	void (*ConstRs)( InstructionEmitterAPI& api );
-
-	// fully const (provided for Memory Write ops only, all others should optimize away)
-	void (*ConstRsRt)( InstructionEmitterAPI& api );
-	
-	static void Error_ConstNone( InstructionEmitterAPI& api );
-	static void Error_ConstRsRt( InstructionEmitterAPI& api );
-	static void Error_ConstRs( InstructionEmitterAPI& api );
-	static void Error_ConstRt( InstructionEmitterAPI& api );
-
-	static void _const_error();
-	
-	// Clears the contents of the structure to the default values, which in this case
-	// map to handlers that throw exceptions (LogicError)
-	void Reset()
-	{
-		ConstNone	= Error_ConstNone;
-		ConstRt		= Error_ConstRt;
-		ConstRs		= Error_ConstRs;
-		ConstRsRt	= Error_ConstRsRt;
-	}
-};
-
-// ------------------------------------------------------------------------
-// InstructionRecMess - This class is somply here to provide a templated interface
-// to the Recompiler functions (it's members override the interpreter functions with
-// rec functions that generate x86 code).
-//
-class InstructionRecMess : public InstructionConstOpt
-{
-public:
-	InstructionRecAPI API;
-
-public:
-	InstructionRecMess() : InstructionConstOpt( Opcode( 0 ) ) {}
-
-	InstructionRecMess( const InstructionConstOpt& src ) :
-	InstructionConstOpt( src )
-	{
-		// Default constructors should do everything we need.
-	}
-
-	void GetRecInfo();
-
-public:
-	INSTRUCTION_API()
-};
-
-// ------------------------------------------------------------------------
 // Temporary register from slot zero (32-bit variety)
-#define tmp0reg info.TempReg(0)
-#define tmp1reg info.TempReg(1)		// temp 32-bit register from slot 1
-#define tmp2reg info.TempReg(2)		// temp 32-bit register from slot 2
-#define tmp3reg info.TempReg(3)		// temp 32-bit register from slot 3
+//
+#define tmp0reg TempReg(0)
+#define tmp1reg TempReg(1)		// temp 32-bit register from slot 1
+#define tmp2reg TempReg(2)		// temp 32-bit register from slot 2
+#define tmp3reg TempReg(3)		// temp 32-bit register from slot 3
 
 // Temporary register from slot zero (8-bit variety)
 // Note: this is the *lo* register, such as AL, BL, etc.
-#define tmp0reg8 info.TempReg8(0)
-#define tmp1reg8 info.TempReg8(1)		// temp 8-bit register from slot 1
-#define tmp2reg8 info.TempReg8(2)		// temp 8-bit register from slot 2
-#define tmp3reg8 info.TempReg8(3)		// temp 8-bit register from slot 3
+#define tmp0reg8 TempReg8(0)
+#define tmp1reg8 TempReg8(1)		// temp 8-bit register from slot 1
+#define tmp2reg8 TempReg8(2)		// temp 8-bit register from slot 2
+#define tmp3reg8 TempReg8(3)		// temp 8-bit register from slot 3
 
-#define RegRs info.SrcField(RF_Rs)
-#define RegRt info.SrcField(RF_Rt)
+#define RegRs SrcField(RF_Rs)
+#define RegRt SrcField(RF_Rt)
 
-#define DestRegRd info.DestField(RF_Rd)
-#define DestRegRt info.DestField(RF_Rt)
+#define DestRegRd DestField(RF_Rd)
+#define DestRegRt DestField(RF_Rt)
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Contains information about each instruction of the original MIPS code in a sort of
 // "halfway house" status -- with partial x86 register mapping.
 //
-class IntermediateRepresentation
+class x86IntRep
 {
 public:
 	// Mapping State of the GPRs upon entry to the recompiled instruction code generator.
@@ -245,8 +150,7 @@ public:
 	// unable to find it currently.
 	xTempRegsArray32<bool> xForceFlush;
 
-	InstructionRecMess Inst;		// raw instruction information.
-	InstructionEmitterAPI Emitface;
+	IntermediateRepresentation& Inst;
 	RegisterMappingOptions RegOpts;
 	s32 ixImm;
 	
@@ -256,8 +160,6 @@ public:
 	// the conditional accordingly.
 	bool IsSwappedSources;
 	
-	const InstConstInfoEx& m_constinfoex;
-
 	// Special dependency slot mapping of EBP.  When mapped, EBP is a *read only* register
 	// which is not flushed to memory.
 	MipsGPRs_t m_EbpLoadMap;
@@ -269,12 +171,12 @@ protected:
 
 
 public:
-	IntermediateRepresentation() :
-		m_constinfoex( (InstConstInfoEx&)*(InstConstInfoEx*)0 )		// One of the more evil hacks you'll ever see?
+	x86IntRep() :
+		Inst( *(IntermediateRepresentation*)0 )		// One of the more evil hacks you'll ever see?
 	{}
 
-	IntermediateRepresentation( const xAddressReg& idxreg );
-	IntermediateRepresentation( const InstConstInfoEx& src );
+	x86IntRep( const xAddressReg& idxreg );
+	x86IntRep( const IntermediateRepresentation& src );
 
 	void DynarecAssert( bool condition, const char* msg, bool inReleaseMode=false ) const
 	{
@@ -332,31 +234,41 @@ public:
 	bool IsMappedReg( const xDirectOrIndirect32 maparray[34], const xRegister32& reg ) const;
 	xRegister32 FindFreeTempReg( xDirectOrIndirect32 maparray[34] ) const;
 
+	void _DynGen_MapStrictMultimap() const;
+
 public:
 	s32 GetImm() const { return ixImm; }
 
-	bool SignExtendsResult() const { return Inst.SignExtendResult(); }
+	bool SignExtendsResult() const { return Inst.MipsInst.SignExtendResult(); }
 
-	bool IsConstRs() const { return Inst.IsConstRs(); }
-	bool IsConstRt() const { return Inst.IsConstRt(); }
+	bool IsConstRs() const { return Inst.MipsInst.IsConstRs(); }
+	bool IsConstRt() const { return Inst.MipsInst.IsConstRt(); }
 
 	int GetConstRs() const
 	{
-		jASSUME( Inst.IsConstRs() );
-		return Inst.ConstVal_Rs;
+		return Inst.GetConstRs();
 	}
 
 	int GetConstRt() const
 	{
-		jASSUME( Inst.IsConstRt() );
-		return Inst.ConstVal_Rt;
+		return Inst.GetConstRt();
+	}
+	
+	bool IsConst( MipsGPRs_t gpr ) const
+	{
+		return Inst.MipsInst.IsConstGpr[gpr];
+	}
+	
+	int GetConstVal( MipsGPRs_t gpr ) const
+	{
+		return Inst.MipsInst.ConstVal[gpr];
 	}
 
 	// ------------------------------------------------------------------------
 	void MoveRsTo( const xRegister32& destreg ) const 
 	{
 		if( IsConstRs() )
-			xMOV( destreg, Inst.ConstVal_Rs );
+			xMOV( destreg, GetConstRs() );
 		else
 			xMOV( destreg, SrcField( RF_Rs ) );
 	}
@@ -364,7 +276,7 @@ public:
 	void MoveRtTo( const xRegister32& destreg ) const 
 	{
 		if( IsConstRt() )
-			xMOV( destreg, Inst.ConstVal_Rt );
+			xMOV( destreg, GetConstRt() );
 		else
 			xMOV( destreg, SrcField( RF_Rt ) );	
 	}
@@ -373,7 +285,7 @@ public:
 	template< typename T >
 	void SignExtendedMove( const xRegister32& dest, const ModSibStrict<T>& src ) const
 	{
-		if( Inst.SignExtendResult() )
+		if( SignExtendsResult() )
 			xMOVSX( dest, src );
 		else
 			xMOVZX( dest, src );
@@ -407,23 +319,26 @@ public:
 	// Do nothing for 32-bit sign extension.
 	template<> void SignExtendEax<u32>() const { }
 
+	// ------------------------------------------------------------------------
 	// Important!  You should generally use this instead of the expanded Dest, as you
 	// must be careful to check for instances of the zero register.
+	//
 	void MoveToRt( const xDirectOrIndirect32& src ) const
 	{
-		if( Inst._Rt_ == 0 ) return;
+		if( Inst.MipsInst._Rt_ == 0 ) return;
 		xMOV( DestField(RF_Rt), src );
 	}
 
 	void MoveToRd( const xDirectOrIndirect32& src ) const
 	{
-		if( Inst._Rd_ == 0 ) return;
+		if( Inst.MipsInst._Rd_ == 0 ) return;
 		xMOV( DestField(RF_Rd), src );
 	}
 	
 	// ------------------------------------------------------------------------
 	void MoveToHiLo( const xRegister32& hireg, const xRegister32& loreg ) const
 	{
+		// [TODO] : Add liveness checks for Hi/Lo status.
 		xMOV( DestField(RF_Hi), hireg );
 		xMOV( DestField(RF_Lo), loreg );
 	}
@@ -431,9 +346,19 @@ public:
 	// loads lo with a register, and loads hi with zero.
 	void MoveToHiLo( const xRegister32& loreg ) const
 	{
+		// [TODO] : Add liveness checks for Hi/Lo status.
 		xMOV( DestField(RF_Hi), 0 );
 		xMOV( DestField(RF_Lo), loreg );
 	}
+
+	// Emit -- Emits code for an instruction.
+	// The instruction should assume that the register mappings specified in MapRegisters.inmaps
+	// are assigned on function entry.  Results should be written back to GPRs using functions
+	// info.MoveToRt(), info.MoveToRd(), or info.MoveToHiLo() -- and need not match the opti-
+	// mization hints given in MapRegister.outmaps.
+	virtual void Emit() const;
+	
+	static void PlacementNew( u8** dest, const IntermediateRepresentation& src );
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -466,13 +391,15 @@ static const int MaxCyclesPerBlock			= 64;
 static const int MaxInstructionsPerBlock	= 128;
 
 //////////////////////////////////////////////////////////////////////////////////////////
-// recBlockItemTemp - Temporary workspace buffer used to reduce the number of heap allocations
+// iopRec_FirstPassConstAnalysis - Temporary workspace buffer used to reduce the number of heap allocations
 // required during block recompilation.
 //
-struct recBlockItemTemp
+struct iopRec_FirstPassConstAnalysis
 {
-	InstConstInfoEx	icex[MaxInstructionsPerBlock];
+	InstructionConstOptimizer icex[MaxInstructionsPerBlock];
 	int instlen;
+
+	void InterpretBlock();
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -482,11 +409,10 @@ struct recBlockItem : public NoncopyableObject
 	uint x86len;	// length of the recompiled block
 	uint clears;	// number of times this block has been cleared and recompiled
 	
-	// Intermediate language allocation.  If size is non-zero, then we're on our second pass
-	// and the IL should be recompiled into x86 code for direct execution.
-	SafeArray<InstConstInfoEx> IR;
-	SafeArray<int> InstOrder;			// instruction execution order
-
+	// First-pass result allocation.  If size is non-zero, then we're on our second pass
+	// and this data should be recompiled into x86 code for direct execution.
+	SafeArray<InstructionConstOptimizer> InstOptInfo;
+	
 	// A list of all block links dependent on this block.  If this block moves, then all links
 	// in this list need to have their x86 jump instructions rewritten.
 	SafeList<xJumpLink> DependentLinks;
@@ -494,26 +420,51 @@ struct recBlockItem : public NoncopyableObject
 	recBlockItem() :
 		x86len( 0 )
 	,	clears( 0 )
-	,	IR( "IntermediateBlock::IR" )
-	,	InstOrder( "IntermediateBlock::InstOrder" )
+	,	InstOptInfo( "recBlockItem::InstOptInfo" )
 	,	DependentLinks( 4, "recBlockItem::DependentLinks" )
 	{
-		IR.ChunkSize = 32;
-		InstOrder.ChunkSize = 32;
+		InstOptInfo.ChunkSize = 32;
 		DependentLinks.ChunkSize = 8;
 	}
 	
-	const InstConstInfoEx& GetInst( uint idx ) const
+	void Assign( const iopRec_FirstPassConstAnalysis& src );
+};
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+class iopRec_IntermediateState
+{
+public:
+	SafeList<IntermediateRepresentation> inst;
+
+	// instruction execution order, used to re-order delay slots (may be used for more
+	// advanced reordering later)
+	SafeList<int> InstOrder;
+
+public:
+	iopRec_IntermediateState() :
+		inst( "IntermediateBlock::inst" )
 	{
-		return IR[InstOrder[idx]];
+		inst.ChunkSize = 32;
+		InstOrder.ChunkSize = 32;
 	}
 
-	InstConstInfoEx& GetInst( uint idx )
+	void GenerateIR( const recBlockItem& block );
+	int GetLength() const { return inst.GetLength(); }
+
+	const IntermediateRepresentation& GetInst( uint idx ) const
 	{
-		return IR[InstOrder[idx]];
+		jASSUME( (idx < (uint)GetLength()) && (InstOrder[idx] < GetLength()) );
+		return inst[InstOrder[idx]];
 	}
 
-	void Assign( const recBlockItemTemp& src );
+	IntermediateRepresentation& GetInst( uint idx )
+	{
+		jASSUME( (idx < (uint)GetLength()) && (InstOrder[idx] < GetLength()) );
+		return inst[InstOrder[idx]];
+	}
+
+protected:
 	void ReorderDelaySlots();
 };
 
@@ -609,32 +560,6 @@ struct iopRec_BlockState
 	u32 pc;				// pc for the currently recompiling/emitting instruction
 	u8* xBlockPtr;		// base address of the current block being generated (pointer to the recBlock array)
 
-	int gpr_map_edi;	// block-wide mapping of EDI to a GPR (-1 for no mapping)
-
-	// -------------------------------------------------------------------
-	bool HasMappedEdi() const
-	{
-		return gpr_map_edi != -1;
-	}
-
-	void SetMapEdi( const GPR_UsePair& high )
-	{
-		gpr_map_edi = ( high.used < 1 || high.gpr == 0 ) ? -1 : high.gpr;
-	}
-	
-	bool IsEdiMappedTo( uint gpr ) const
-	{
-		return gpr == gpr_map_edi;
-	}
-
-	// Generates x86 code for loading block-scoped register mappings.
-	// (currently only Edi, may include Ebp at a later date).
-	void DynGen_InitMappedRegs() const
-	{
-		if( gpr_map_edi > 0 )
-			xMOV( edi, IntermediateRepresentation::GetMemIndexer( gpr_map_edi ) );
-	}
-	
 	// -------------------------------------------------------------------
 	int GetScaledBlockCycles() const
 	{
@@ -642,11 +567,13 @@ struct iopRec_BlockState
 		return BlockCycleAccum * 1;
 	}
 
+	// ------------------------------------------------------------------------
 	int GetScaledDivCycles() const
 	{
 		return DivCycleAccum * 1;
 	}
-	
+
+	// ------------------------------------------------------------------------
 	__releaseinline void IncCycleAccum()
 	{
 		BlockCycleAccum++;
@@ -654,11 +581,67 @@ struct iopRec_BlockState
 	}
 };
 
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+class iopRec_x86BlockState
+{
+public:
+	SafeList< x86IntRep > m_xir;
+	
+protected:
+	int gpr_map_edi;	// block-wide mapping of EDI to a GPR (-1 for no mapping)
+
+public:
+	void AssignBlock( const iopRec_IntermediateState& irBlock );
+	void RegisterMapper();
+	void EmitSomeExecutableGoodness();
+
+protected:
+	void MapBlockWideRegisters( const iopRec_IntermediateState& irBlock );
+
+	// -------------------------------------------------------------------
+	bool HasMappedEdi() const
+	{
+		return gpr_map_edi != -1;
+	}
+
+	// -------------------------------------------------------------------
+	void SetMapEdi( const GPR_UsePair& high )
+	{
+		gpr_map_edi = ( high.used < 1 || high.gpr == 0 ) ? -1 : high.gpr;
+	}
+
+	// -------------------------------------------------------------------
+	bool IsEdiMappedTo( uint gpr ) const
+	{
+		return gpr == gpr_map_edi;
+	}
+
+	// -------------------------------------------------------------------
+	// Generates x86 code for loading block-scoped register mappings.
+	// (currently only Edi, may include Ebp at a later date).
+	void DynGen_InitMappedRegs() const
+	{
+		if( gpr_map_edi > 0 )
+			xMOV( edi, x86IntRep::GetMemIndexer( gpr_map_edi ) );
+	}
+
+	const xRegister32& GetMappableReg( uint idx ) const;
+	const int GetMappableRegsLength() const { return HasMappedEdi() ? 5 : 4; }
+
+	void PerformDynamicRegisterMapping( x86IntRep& cir );
+	void PerformDynamicRegisterMapping_Exit( x86IntRep& cir );
+	void PerformStrictRegisterMapping( x86IntRep& cir );
+	void PerformStrictRegisterMapping_Exit( x86IntRep& cir );
+	void ForceDestFlushes( x86IntRep& cir );
+	
+	void _DynGen_PreInstructionFlush( const x86IntRep& ir, xRegisterArray32<bool>& xIsDirty );
+	void _DynGen_MapRegisters( const x86IntRep& ir, const x86IntRep& previr, xRegisterArray32<bool>& xIsDirty );
+};
+
 
 //////////////////////////////////////////////////////////////////////////////////////////
 
-
-extern recBlockItemTemp			m_blockspace;
 extern iopRec_PersistentState	g_PersState;
 extern iopRec_BlockState		g_BlockState;
 
@@ -670,7 +653,8 @@ namespace DynFunc
 	extern u8* ExitRec;		// just a ret!
 }
 
+extern JccComparisonType BccToJcc( BccComparisonType bcc, bool swapCond=false );
 
-extern void recIR_Block();
+extern void recIR_FirstPassInterpreter();
 
 }

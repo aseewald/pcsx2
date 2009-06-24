@@ -16,8 +16,7 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
-#ifndef __SAFEARRAY_H__
-#define __SAFEARRAY_H__
+#pragma once
 
 extern void* __fastcall pcsx2_aligned_malloc(size_t size, size_t align);
 extern void* __fastcall pcsx2_aligned_realloc(void* handle, size_t size, size_t align);
@@ -219,7 +218,14 @@ protected:
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
+// SafeList - Simple growable container without all the mess or hassle of std containers.
 //
+// This container is intended for reasonably simple class types only.  Things which this
+// container does not handle with desired robustness:
+//
+//  * Classes with non-trivial constructors (such that construction creates much overhead)
+//  * Classes with copy constructors (copying is done using performance memcpy)
+//  * Classes with destructors (they're not called, sorry!)
 //
 template< typename T >
 class SafeList : public NoncopyableObject
@@ -318,11 +324,14 @@ public:
 			{
 				new (&m_ptr[m_allocsize]) T();
 			}
-
-			//m_allocsize = newalloc;
 		}
 	}
-	
+
+	void GrowBy( int items )
+	{
+		MakeRoomFor( m_length + ChunkSize + items + 1 );
+	}
+
 	// Sets the item length to zero.  Does not free memory allocations.
 	void Clear()
 	{
@@ -343,6 +352,9 @@ public:
 
 	T* GetPtr()				{ return m_ptr; }
 	const T* GetPtr() const	{ return m_ptr; }
+
+	T& GetLast()			{ return m_ptr[m_length-1]; }
+	const T& GetLast() const{ return m_ptr[m_length-1]; }
 
 	int Add( const T& src )
 	{
@@ -452,5 +464,3 @@ public:
 		return retval;
 	}
 };
-
-#endif

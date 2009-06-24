@@ -21,15 +21,14 @@
 #include "iR3000air.h"
 
 // ------------------------------------------------------------------------
-__instinline void R3000A::InstructionConstOpt::DoConditionalBranch( bool cond )
+__instinline void R3000A::InstructionConstOptimizer::DoConditionalBranch( bool cond )
 {
-	m_IsConstPc = (!ReadsRt() || m_IsConst.Rt) && (!ReadsRs() || m_IsConst.Rs);
-	m_BranchTarget = BranchTarget();
+	m_IsConstPc = (!ReadsRt() || IsConstGpr[_Rt_]) && (!ReadsRs() || IsConstGpr[_Rs_]);
 	Instruction::DoConditionalBranch( cond );
 }
 
 // ------------------------------------------------------------------------
-__instinline void R3000A::InstructionConstOpt::RaiseException( uint code )
+__instinline void R3000A::InstructionConstOptimizer::RaiseException( uint code )
 {
 	m_IsConstException = true;
 	iopException( code, iopRegs.IsDelaySlot );
@@ -38,31 +37,22 @@ __instinline void R3000A::InstructionConstOpt::RaiseException( uint code )
 }
 
 // ------------------------------------------------------------------------
-__instinline bool R3000A::InstructionConstOpt::ConditionalException( uint code, bool cond )
+__instinline bool R3000A::InstructionConstOptimizer::ConditionalException( uint code, bool cond )
 {
 	// Only handle the exception if it *is* const.  Otherwise pretend like it didn't
 	// happen -- the recompiler will check for and handle it in recompiled code.
-	m_IsConstException = cond && (!ReadsRt() || m_IsConst.Rt) && (!ReadsRs() || m_IsConst.Rs);
-	return InstructionOptimizer::ConditionalException( code, m_IsConstException );
+	m_IsConstException = cond && (!ReadsRt() || IsConstGpr[_Rt_]) && (!ReadsRs() || IsConstGpr[_Rs_]);
+	m_IsConstPc = false;
+
+	return InstructionDiagnostic::ConditionalException( code, m_IsConstException );
 }
 
 // ------------------------------------------------------------------------
-__instinline void R3000A::InstructionConstOpt::Assign( const Opcode& opcode, bool constStatus[34] )
+__instinline void R3000A::InstructionConstOptimizer::Assign( const Opcode& opcode, const GprConstStatus& constStatus )
 {
-	InstructionOptimizer::Assign( opcode );
-	
-	ConstVal_Rd = iopRegs[_Rd_].SL;
-	ConstVal_Rt = iopRegs[_Rt_].SL;
-	ConstVal_Rs = iopRegs[_Rs_].SL;
-	ConstVal_Hi = iopRegs[GPR_hi].SL;
-	ConstVal_Lo = iopRegs[GPR_lo].SL;
+	InstructionDiagnostic::Assign( opcode );
 
-	m_IsConst.Value = 0;
-	m_IsConst.Rd = constStatus[_Rd_];
-	m_IsConst.Rt = constStatus[_Rt_];
-	m_IsConst.Rs = constStatus[_Rs_];
-	m_IsConst.Hi = constStatus[GPR_hi];
-	m_IsConst.Lo = constStatus[GPR_lo];
+	IsConstGpr = constStatus;
 
 	m_IsConstPc			= true;
 	m_IsConstException	= false;
@@ -72,7 +62,7 @@ __instinline void R3000A::InstructionConstOpt::Assign( const Opcode& opcode, boo
 // Updates the const status flags in the given array as according to the register
 // modifications performed by this instruction.
 //
-__instinline bool R3000A::InstructionConstOpt::UpdateConstStatus( bool gpr_IsConst[34] ) const
+__instinline bool R3000A::InstructionConstOptimizer::UpdateExternalConstStatus( GprConstStatus& gpr_IsConst ) const
 {
 	// if no regs are written then const status will be unchanged
 	if( !m_WritesGPR.Value )
@@ -80,7 +70,8 @@ __instinline bool R3000A::InstructionConstOpt::UpdateConstStatus( bool gpr_IsCon
 
 	// Update const status for registers.  The const status of all written registers is
 	// based on the const status of the read registers.  If the operation reads from
-	// memory or from an Fs register, then const status is always false.
+	// memory or from an Fs register, then const status is always false, since status of
+	// those sources is not tracked (and thusly considered non-const at all times)
 
 	bool constStatus;
 
@@ -89,22 +80,20 @@ __instinline bool R3000A::InstructionConstOpt::UpdateConstStatus( bool gpr_IsCon
 	else
 	{
 		constStatus = 
-			//(ReadsRd() ? gpr_IsConst[_Rd_] : true) &&		// Rd should never be read.
 			(ReadsRt() ? gpr_IsConst[_Rt_] : true) &&
 			(ReadsRs() ? gpr_IsConst[_Rs_] : true) &&
 			(ReadsHi() ? gpr_IsConst[GPR_hi] : true) &&
 			(ReadsLo() ? gpr_IsConst[GPR_lo] : true);
 	}
 
-	if( WritesRd() ) gpr_IsConst[_Rd_] = constStatus;
-	if( WritesRt() ) gpr_IsConst[_Rt_] = constStatus;
-	//if( WritesRs() ) gpr_IsConst[_Rs_] = constStatus;	// Rs should never be written
+	jASSUME( gpr_IsConst[GPR_r0] );		// GPR 0 should *always* be const
 
-	jASSUME( gpr_IsConst[0] == true );		// GPR 0 should *always* be const
+	if( WritesRd() )	gpr_IsConst.Set(_Rd_, constStatus);
+	if( WritesRt() )	gpr_IsConst.Set(_Rt_, constStatus);
 
-	if( WritesLink() ) gpr_IsConst[GPR_ra] = constStatus;
-	if( WritesHi() ) gpr_IsConst[GPR_hi] = constStatus;
-	if( WritesLo() ) gpr_IsConst[GPR_lo] = constStatus;
+	if( WritesLink() )	gpr_IsConst.Set(GPR_ra, constStatus);
+	if( WritesHi() )	gpr_IsConst.Set(GPR_hi, constStatus);
+	if( WritesLo() )	gpr_IsConst.Set(GPR_lo, constStatus);
 
 	return constStatus;
 }

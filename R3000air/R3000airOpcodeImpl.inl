@@ -59,7 +59,6 @@ __instinline void Inst::BLEZ()	// Branch if Rs <= 0
 
 __instinline void Inst::BLTZ()	// Branch if Rs <  0
 {
-	
 	DoConditionalBranch( GetRs_SL() < 0 );
 }
 

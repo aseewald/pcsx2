@@ -488,8 +488,8 @@ struct Opcode
 			case RF_Rd: return Rd();
 			case RF_Rt: return Rt();
 			case RF_Rs: return Rs();
-			case RF_Hi: return 32;
-			case RF_Lo: return 33;
+			case RF_Hi: return GPR_hi;
+			case RF_Lo: return GPR_lo;
 			
 			jNO_DEFAULT
 		}
@@ -560,8 +560,6 @@ public:
 	// ------------------------------------------------------------------------
 	// Public Instances Methods and Functions
 
-	template< typename T> static void Process( T& Inst );
-
 	// Returns true if this instruction is a branch/jump type (which means it
 	// will have a delay slot which should execute prior to the jump but *after*
 	// the branch instruction's target has been calculated).
@@ -612,6 +610,12 @@ public:
 		return -1;
 	}
 
+	// Sets the name of the instruction.
+	void SetName( const char* name )
+	{
+		m_Name = name;
+	}
+
 	INSTRUCTION_API()
 
 protected:
@@ -620,12 +624,6 @@ protected:
 
 	void SetLink();
 	void SetLinkRd();
-
-	// Sets the name of the instruction.
-	void SetName( const char* name )
-	{
-		m_Name = name;
-	}
 
 	// ------------------------------------------------------------------------
 	// Register value retrieval methods.  Use these to read/write the registers
@@ -707,24 +705,15 @@ protected:
 	// Instructions which can cause exceptions should always generate x86 code, regardless
 	// of the const status of read and written registers.
 	virtual void SetCausesExceptions()	{ }
-
-	// -------------------------------------------------------------------------
-	// Helpers used to parse the MIPS opcode fields, dispatch instructions, and
-	// subsequently initialize this object's state.
-
-	template< typename T > static void _dispatch_SPECIAL( T& Inst );
-	template< typename T > static void _dispatch_REGIMM( T& Inst );
-	template< typename T > static void _dispatch_COP0( T& Inst );
-	template< typename T > static void _dispatch_COP2( T& Inst );
-	
 };
 
 
 //////////////////////////////////////////////////////////////////////////////////////////
-// This version of the instruction interprets the instruction and propagates optimization
-// and const status along the way.
+// This version of the instruction interprets the instruction and collects diagnostic
+// information along the way (some info is also useful for first pass recompiler optimizations,
+// however InstructionOptimizer of the R3000A's recompiler namespace is more complete).
 //
-class InstructionOptimizer : public Instruction
+class InstructionDiagnostic : public Instruction
 {
 protected:
 	bool m_HasSideEffects:1;
@@ -744,9 +733,9 @@ protected:
 	GprStatus m_WritesGPR;
 
 public:
-	InstructionOptimizer() {}
+	InstructionDiagnostic() {}
 
-	InstructionOptimizer( const Opcode& opcode ) :
+	InstructionDiagnostic( const Opcode& opcode ) :
 		Instruction( opcode )
 	,	m_HasSideEffects( false )
 	,	m_CanCauseExceptions( false )
@@ -833,7 +822,7 @@ protected:
 	// Optimization / Const propagation API.
 	// This API is not implemented to any functionality by default, so that the standard
 	// interpreter won't have to do more work than is needed.  To enable the extended optimization
-	// information, use an InstructionOptimizer instead.
+	// information, use an InstructionDiagnostic instead.
 
 	virtual u32 GetSa()		{ m_ReadsSa = true; return _Opcode_.Sa(); }
 	virtual s32 GetImm()	{ m_ReadsImm = true; m_SignExtImm = false; return _Opcode_.Imm(); }

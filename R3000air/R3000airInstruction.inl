@@ -17,7 +17,7 @@
  */
 
 // r3000airInstruction.inl:  Implements inlinable method members of Instruction and 
-// InstructionOptimizer classes.
+// InstructionDiagnostic classes.
 //
 // Notes on .inl file use in R3000air and Pcsx2 in general: MSVC requires that
 // __forceinline members of classes must be implemented in the source files that use
@@ -78,19 +78,19 @@ namespace R3000A {
 	__instinline void Instruction::MemoryWrite16( u32 addr, u16 val ) { iopMemWrite16( addr, val ); }
 	__instinline void Instruction::MemoryWrite32( u32 addr, u32 val ) { iopMemWrite32( addr, val ); }
 
-	__instinline u8  InstructionOptimizer::MemoryRead8( u32 addr )  { m_ReadsGPR.Memory = true; return iopMemRead8( addr ); }
-	__instinline u16 InstructionOptimizer::MemoryRead16( u32 addr ) { m_ReadsGPR.Memory = true; return iopMemRead16( addr ); }
-	__instinline u32 InstructionOptimizer::MemoryRead32( u32 addr ) { m_ReadsGPR.Memory = true; return iopMemRead32( addr ); }
+	__instinline u8  InstructionDiagnostic::MemoryRead8( u32 addr )  { m_ReadsGPR.Memory = true; return iopMemRead8( addr ); }
+	__instinline u16 InstructionDiagnostic::MemoryRead16( u32 addr ) { m_ReadsGPR.Memory = true; return iopMemRead16( addr ); }
+	__instinline u32 InstructionDiagnostic::MemoryRead32( u32 addr ) { m_ReadsGPR.Memory = true; return iopMemRead32( addr ); }
 
-	__instinline void InstructionOptimizer::MemoryWrite8( u32 addr, u8 val )   { m_WritesGPR.Memory = true; iopMemWrite8( addr, val ); }
-	__instinline void InstructionOptimizer::MemoryWrite16( u32 addr, u16 val ) { m_WritesGPR.Memory = true; iopMemWrite16( addr, val ); }
-	__instinline void InstructionOptimizer::MemoryWrite32( u32 addr, u32 val ) { m_WritesGPR.Memory = true; iopMemWrite32( addr, val ); }
+	__instinline void InstructionDiagnostic::MemoryWrite8( u32 addr, u8 val )   { m_WritesGPR.Memory = true; iopMemWrite8( addr, val ); }
+	__instinline void InstructionDiagnostic::MemoryWrite16( u32 addr, u16 val ) { m_WritesGPR.Memory = true; iopMemWrite16( addr, val ); }
+	__instinline void InstructionDiagnostic::MemoryWrite32( u32 addr, u32 val ) { m_WritesGPR.Memory = true; iopMemWrite32( addr, val ); }
 
 	
 	//////////////////////////////////////////////////////////////////////////////////////////
-	// -- InstructionOptimizer -- Method Implementations
+	// -- InstructionDiagnostic -- Method Implementations
 
-	__instinline bool InstructionOptimizer::ConditionalException( uint code, bool cond )
+	__instinline bool InstructionDiagnostic::ConditionalException( uint code, bool cond )
 	{
 		m_CanCauseExceptions = true;
 		return Instruction::ConditionalException( code, cond );
@@ -98,7 +98,7 @@ namespace R3000A {
 
 	// returns the index of the GPR for the given field, or -1 if the field is not read
 	// by this instruction.
-	__instinline MipsGPRs_t InstructionOptimizer::ReadsField( RegField_t field ) const
+	__instinline MipsGPRs_t InstructionDiagnostic::ReadsField( RegField_t field ) const
 	{
 		switch( field )
 		{
@@ -117,7 +117,7 @@ namespace R3000A {
 
 	// returns the index of the GPR for the given field, or -1 if the field is not written
 	// by this instruction.
-	__instinline MipsGPRs_t InstructionOptimizer::WritesField( RegField_t field ) const
+	__instinline MipsGPRs_t InstructionDiagnostic::WritesField( RegField_t field ) const
 	{
 		switch( field )
 		{
@@ -137,7 +137,7 @@ namespace R3000A {
 	// gpridx - index of a MIPS general purpose register (0 thru 33) [32/33 are hi/lo]
 	// Returns the field the GPR is mapped to, or RF_Unused if the given register is
 	// not written to by this opcode.
-	__instinline RegField_t InstructionOptimizer::WritesReg( int gpridx ) const
+	__instinline RegField_t InstructionDiagnostic::WritesReg( int gpridx ) const
 	{
 		if( gpridx == _Rd_ && WritesRd() ) return RF_Rd;
 		if( gpridx == _Rt_ && WritesRt() ) return RF_Rt;

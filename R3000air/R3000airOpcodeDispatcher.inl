@@ -56,71 +56,76 @@ namespace R3000A
 #undef null
 
 #define ex(func) case (__COUNTER__-baseval): inst.SetName(#func); inst.func(); return;
-#define su(func) case (__COUNTER__-baseval): Instruction::_dispatch_##func(inst); return;
+#define su(func) case (__COUNTER__-baseval): _dispatch_##func(inst); return;
 #define null() case (__COUNTER__-baseval): break;
 
-template< typename T > __forceinline 
-void Instruction::_dispatch_SPECIAL( T& inst )
+namespace OpcodeDispatchPrivate
 {
-	static const int baseval = __COUNTER__ + 1;
-
-	switch( inst.Funct() )
+	template< typename T > __forceinline 
+	void _dispatch_SPECIAL( T& inst )
 	{
-		ex(SLL)    null()     ex(SRL)   ex(SRA)     ex(SLLV)    null()    ex(SRLV)  ex(SRAV)
-		ex(JR)     ex(JALR)   null()    null()      ex(SYSCALL) ex(BREAK) null()    null()
-		ex(MFHI)   ex(MTHI)   ex(MFLO)  ex(MTLO)    null()      null()    null()    null()
-		ex(MULT)   ex(MULTU)  ex(DIV)   ex(DIVU)    null()      null()    null()    null()
-		ex(ADD)    ex(ADDU)   ex(SUB)   ex(SUBU)    ex(AND)     ex(OR)    ex(XOR)   ex(NOR)
-		null()     null()     ex(SLT)   ex(SLTU)    null()      null()    null()    null()
-		
-		// R3000A is MIPSI, and does not support TRAP instructions.
+		static const int baseval = __COUNTER__ + 1;
+
+		switch( inst.Funct() )
+		{
+			ex(SLL)    null()     ex(SRL)   ex(SRA)     ex(SLLV)    null()    ex(SRLV)  ex(SRAV)
+			ex(JR)     ex(JALR)   null()    null()      ex(SYSCALL) ex(BREAK) null()    null()
+			ex(MFHI)   ex(MTHI)   ex(MFLO)  ex(MTLO)    null()      null()    null()    null()
+			ex(MULT)   ex(MULTU)  ex(DIV)   ex(DIVU)    null()      null()    null()    null()
+			ex(ADD)    ex(ADDU)   ex(SUB)   ex(SUBU)    ex(AND)     ex(OR)    ex(XOR)   ex(NOR)
+			null()     null()     ex(SLT)   ex(SLTU)    null()      null()    null()    null()
+			
+			// R3000A is MIPSI, and does not support TRAP instructions.
+		}
+		inst.Unknown();
 	}
-	inst.Unknown();
-}
 
-template< typename T > __forceinline 
-void Instruction::_dispatch_REGIMM( T& inst )
-{
-	static const int baseval = __COUNTER__ + 1;
-
-	switch( inst._Rt_ )
+	template< typename T > __forceinline 
+	void _dispatch_REGIMM( T& inst )
 	{
-		ex(BLTZ)    ex(BGEZ)    null()     null()     null()     null()     null()     null()
-		null()      null()      null()     null()     null()     null()     null()     null()
-		ex(BLTZAL)  ex(BGEZAL)  null()     null()     null()     null()     null()     null()
+		static const int baseval = __COUNTER__ + 1;
+
+		switch( inst._Rt_ )
+		{
+			ex(BLTZ)    ex(BGEZ)    null()     null()     null()     null()     null()     null()
+			null()      null()      null()     null()     null()     null()     null()     null()
+			ex(BLTZAL)  ex(BGEZAL)  null()     null()     null()     null()     null()     null()
+		}
+		inst.Unknown();
 	}
-	inst.Unknown();
-}
 
-template< typename T > __forceinline 
-void Instruction::_dispatch_COP0( T& inst )
-{
-	static const int baseval = __COUNTER__ + 1;
-
-	switch( inst._Rs_ )
+	template< typename T > __forceinline 
+	void _dispatch_COP0( T& inst )
 	{
-		case 0x00: inst.SetName("MFC0"); inst.MFC0(); return;
-		case 0x02: inst.SetName("CFC0"); inst.CFC0(); return;
-		case 0x04: inst.SetName("MTC0"); inst.MTC0(); return;
-		case 0x06: inst.SetName("CTC0"); inst.CTC0(); return;
-		case 0x10: inst.SetName("RFE"); inst.RFE(); return;
+		static const int baseval = __COUNTER__ + 1;
+
+		switch( inst._Rs_ )
+		{
+			case 0x00: inst.SetName("MFC0"); inst.MFC0(); return;
+			case 0x02: inst.SetName("CFC0"); inst.CFC0(); return;
+			case 0x04: inst.SetName("MTC0"); inst.MTC0(); return;
+			case 0x06: inst.SetName("CTC0"); inst.CTC0(); return;
+			case 0x10: inst.SetName("RFE"); inst.RFE(); return;
+		}
+		inst.Unknown();
 	}
-	inst.Unknown();
+
+	template< typename T > __forceinline 
+	void _dispatch_COP2( T& inst )
+	{
+		// _Funct_ is the opcode type.  Opcode 0 references the CP0BASIC table.
+		// But!  No COP2 instructions are valid in our emulator, since we don't
+		// emulate the PSX's GPU .. so nothing to do here for now :D
+
+		inst.Unknown();
+	}
 }
 
-template< typename T > __forceinline 
-void Instruction::_dispatch_COP2( T& inst )
-{
-	// _Funct_ is the opcode type.  Opcode 0 references the CP0BASIC table.
-	// But!  No COP2 instructions are valid in our emulator, since we don't
-	// emulate the PSX's GPU .. so nothing to do here for now :D
-
-	inst.Unknown();
-}
-
+// ------------------------------------------------------------------------
 template< typename T > __forceinline
-void Instruction::Process( T& inst )
+void OpcodeDispatcher( T& inst )
 {
+	using namespace OpcodeDispatchPrivate;
 	static const int baseval = __COUNTER__ + 1;
 
 	switch( inst.Basecode() )
@@ -136,5 +141,11 @@ void Instruction::Process( T& inst )
 	}
 	inst.Unknown();
 }
+
+// cleanup the preprocessor namespace:
+
+#undef su
+#undef ex
+#undef null
 
 }
