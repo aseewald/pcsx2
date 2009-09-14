@@ -878,7 +878,7 @@ bool OpenCDVD( const char* pTitleFilename )
 
 	// hack to fix the new cdvd system, to ensure the plugin is always initialized when it's manually
 	// opened separately from the rest.
-	if( InitPlugins() == -1 ) return -1;
+	if( InitPlugins() == -1 ) return true;
 
 	// Don't repetitively open the CDVD plugin if directly loading an elf file and open failed once already.
 	if (!OpenStatus.CDVD)
