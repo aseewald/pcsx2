@@ -62,7 +62,7 @@ static const unsigned int VIF1dmanum = 1;
 int g_vifCycles = 0;
 Path3Modes Path3progress = STOPPED_MODE; 
 
-u32 splittransfer[4];
+static PCSX2_ALIGNED16( u32 splittransfer[4] );
 u32 splitptr = 0;
 
 typedef void (__fastcall *UNPACKFUNCTYPE)(u32 *dest, u32 *data, int size);
@@ -1857,6 +1857,9 @@ static int __fastcall Vif1TransMPG(u32 *data)
 	}
 }
 
+// Dummy GIF-TAG Packet to Guarantee Count = 1
+PCSX2_ALIGNED16_EXTERN(u32 nloop0_packet[4]);
+
 static int __fastcall Vif1TransDirectHL(u32 *data)
 {
 	int ret = 0;
@@ -1889,8 +1892,7 @@ static int __fastcall Vif1TransDirectHL(u32 *data)
 		{
 			// copy 16 bytes the fast way:
 			const u64* src = (u64*)splittransfer[0];
-			const uint count = mtgsThread->PrepDataPacket(GIF_PATH_2, src, 1);
-			jASSUME(count == 1);
+			const uint count = mtgsThread->PrepDataPacket(GIF_PATH_2, nloop0_packet, 1);
 			u64* dst = (u64*)mtgsThread->GetDataPacketPtr();
 			dst[0] = src[0];
 			dst[1] = src[1];
