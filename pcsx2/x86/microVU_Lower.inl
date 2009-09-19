@@ -1116,13 +1116,13 @@ void __fastcall mVU_XGKICK_(u32 addr) {
 		// fixme: one of these days the following *16's will get cleaned up when we introduce
 		// a special qwc/simd16 optimized version of memcpy_aligned. :)
 		//DevCon::Status("XGkick Wrap!");
-		memcpy_aligned(pDest, microVU1.regs->Mem + addr, diff*16);
+		memcpy_aligned(pDest, microVU1.regs->Mem + (addr*16), diff*16);
 		size  -= diff;
 		pDest += diff*16;
 		memcpy_aligned(pDest, microVU1.regs->Mem, size*16);
 	}
 	else {
-		memcpy_aligned(pDest, microVU1.regs->Mem + addr, size*16);
+		memcpy_aligned(pDest, microVU1.regs->Mem + (addr*16), size*16);
 	}
 	mtgsThread->SendDataPacket();
 }
