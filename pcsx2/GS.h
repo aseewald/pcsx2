@@ -86,6 +86,8 @@ struct GIFTAG
 	u32 flg : 2;
 	u32 nreg : 4;
 	u32 regs[2];
+	
+	GIFTAG() {}
 };
 
 struct GIFPath
@@ -95,8 +97,26 @@ struct GIFPath
 	u32 _pad[3];
 	u8 regs[16];
 
+	GIFPath();
+
 	__forceinline void PrepRegs(bool doPrep);
 	__forceinline void SetTag(const void* mem);
+
+	__forceinline bool StepReg()
+	{
+		u32 numRegs = ((tag.nreg-1)&0xf)+1;
+		if ((++curreg & 0xf) == numRegs) {
+			curreg = 0; 
+			if (--tag.nloop == 0) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	__forceinline u8 GetReg() {
+		return regs[curreg&0xf];
+	}
 };
 
 
@@ -192,9 +212,6 @@ protected:
 #ifdef RINGBUF_DEBUG_STACK
 	Threading::MutexLock m_lock_Stack;
 #endif
-
-	// the MTGS "dummy" GIFtag info!
-	GIFPath m_path[3];
 
 	// contains aligned memory allocations for gs and Ringbuffer.
 	SafeAlignedArray<u128,16> m_RingBuffer;
