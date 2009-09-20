@@ -56,46 +56,44 @@ using namespace std;
 //
 // Yeah, it's a lot of work, but the performance gains are huge, even on HT cpus.
 
-
-// the MTGS "dummy" GIFtag info!
-// fixme: The real PS2 has a single internal PATH and 3 logical sources, not 3 entirely
-// separate paths.  But for that to work properly we need also interlocked path sources.
-// That is, when the GIF selects a source, it sticks to that source until an EOP.  Currently
-// this is not emulated!
-PCSX2_ALIGNED16( static GIFPath s_path[3] );
-
-GIFPath::GIFPath()
+// unpack the registers
+// registers are stored as a sequence of 4 bit values in the
+// upper 64 bits of the GIFTAG.  That sucks for us, so we unpack
+// them into an 8 bit array.
+__forceinline void GIFPath::PrepRegs()
 {
-	memzero_obj( *this );
-}
-
-// unpack the registers - registers are stored as a sequence of 4 bit values in the
-// upper 64 bits of the GIFTAG.  That sucks for us when handling partialized GIF packets
-// coming in from paths 2 and 3, so we unpack them into an 8 bit array here.
-//
-__forceinline void GIFPath::PrepPackedRegs()
-{
-	// Only unpack registers if we're starting a new pack.  Otherwise the unpacked
-	// array should have already been initialized by a previous partial transfer.
-
-	if( curreg != 0 ) return;
-
-	int loopEnd = ((tag.NREG-1)&0xf) + 1;
-	u32 tempreg = tag.REGS[0];
-
-	for (int i = 0; i < loopEnd; i++) {
-		if (i == 8) tempreg = tag.REGS[1];
-		regs[i] = tempreg & 0xf;
-		tempreg >>= 4;
+	if( tag.nreg == 0 )
+	{
+		u32 tempreg = tag.regs[0];
+		for(u32 i=0; i<16; ++i, tempreg >>= 4)
+		{
+			if( i == 8 ) tempreg = tag.regs[1];
+			assert( (tempreg&0xf) < 0x64 );
+			regs[i] = tempreg & 0xf;
+		}
+	}
+	else
+	{
+		u32 tempreg = tag.regs[0];
+		for(u32 i=0; i<tag.nreg; ++i, tempreg >>= 4)
+		{
+			assert( (tempreg&0xf) < 0x64 );
+			regs[i] = tempreg & 0xf;
+		}
 	}
 }
 
-__forceinline void GIFPath::SetTag(const void* mem)
+void GIFPath::SetTag(const void* mem)
 {
-	const_cast<GIFTAG&>(tag) = *((GIFTAG*)mem);
+	tag = *((GIFTAG*)mem);
+	curreg = 0;
 
-	nloop	= tag.NLOOP;
-	curreg	= 0;
+	PrepRegs();
+}
+
+u32 GIFPath::GetReg() 
+{
+	return regs[curreg];
 }
 
 static void _mtgsFreezeGIF( SaveState& state, GIFPath (&paths)[3] )
@@ -215,6 +213,7 @@ mtgsThreadObject::mtgsThreadObject() :
 ,	m_RingBuffer( m_RingBufferSize + (Ps2MemSize::GSregs/sizeof(u128)) )
 ,	m_gsMem( (u8*)m_RingBuffer.GetPtr( m_RingBufferSize ) )
 {
+	memzero_obj( m_path );
 }
 
 void mtgsThreadObject::Start()
@@ -256,119 +255,23 @@ void mtgsThreadObject::Reset()
 	SendSimplePacket( GS_RINGTYPE_RESET, 0, 0, 0 );
 	SendSimplePacket( GS_RINGTYPE_FRAMESKIP, 0, 0, 0 );
 
-	memzero_obj( s_path );
-}
-
-#define incTag(x, y) do {											 \
-	pMem += (x);												 \
-	size -= (y);												 \
-	if ((pathidx==GIF_PATH_1)&&(pMem>=vuMemEnd)) pMem -= 0x4000; \
-} while(false)
-
-#define aMin(x, y)   ((x < y) ? (x)   : (y))
-#define subVal(x, y) ((x > y) ? (x-y) :  0 )
-
-__forceinline void gsHandler(const u8* pMem) {
-	const int handler = pMem[8];
-	if (handler >= 0x60 && handler < 0x63) {
-		//DevCon::Status("GIF Tag Interrupt");
-		s_GSHandlers[handler&0x3]((const u32*)pMem);
-	}
-}
-
-// Parameters:
-//   size  - max size of incoming data stream, in qwc (simd128)
-__forceinline int mtgsThreadObject::_gifTransferDummy(GIF_PATH pathidx, const u8* pMem, u32 size)
-{
-	GIFPath&	path	  =  s_path[pathidx];	// Current Path
-	const u8*	vuMemEnd  =  pMem + (size<<4);	// End of VU1 Mem
-	if (pathidx==GIF_PATH_1) size = 0x400;		// VU1 mem size
-	u32			startSize =  size;				// Start Size
-
-	while (size > 0) {
-		if (!path.nloop) {
-
-			path.SetTag(pMem);
-			incTag(16, 1);
-		
-			if (pathidx == GIF_PATH_3) {			
-				if (path.tag.FLG&2) Path3progress = IMAGE_MODE;
-				else				Path3progress = TRANSFER_MODE;
-			}
-		}
-		else {
-			switch(path.tag.FLG) {
-				case GIF_FLG_PACKED:
-					path.PrepPackedRegs();
-					do {
-						if (path.GetReg() == 0xe) {
-							gsHandler(pMem);
-						}
-						incTag(16, 1);
-					} while(path.StepReg() && size > 0);
-				break;
-				case GIF_FLG_REGLIST:
-				{
-					u32 numRegs = (((path.tag.NREG-1)&0xf)+2)/2;
-					if((numRegs * path.nloop) <= size) {
-						u32 temp1 = (numRegs - path.curreg);
-						u32 temp2 = (numRegs * subVal(path.nloop, 1));
-						incTag((temp1*16), temp1);
-						incTag((temp2*16), temp2);
-						path.nloop = 0;
-					}
-					else {
-						size *= 2;
-						do { incTag(8, 1); }
-						while(path.StepReg() && size > 0);
-
-						if (size & 1) { incTag(8, 1); }
-						size /= 2;
-					}
-				}
-				break;
-				case GIF_FLG_IMAGE:
-				case GIF_FLG_IMAGE2:
-				{
-					int len = aMin(size, path.nloop);
-					incTag((len * 16), len);
-					path.nloop -=  len;
-				}
-				break;
-			}
-		}
-		
-		if (path.tag.EOP && !path.nloop) {
-			if (pathidx != GIF_PATH_2) {				
-				break;
-			}
-		} 
-	}
-
-	size = (startSize - size);
-
-	if (pathidx == GIF_PATH_3) {
-		if (path.tag.EOP && !path.nloop) {
-			Path3progress = STOPPED_MODE;	
-		}
-		gif->madr += size * 16;
-		gif->qwc  -= size;
-	}
-
-	return size;
+	memzero_obj( m_path );
 }
 
 // Processes a GIFtag & packet, and throws out some gsIRQs as needed.
 // Used to keep interrupts in sync with the EE, while the GS itself
 // runs potentially several frames behind.
-// Parameters:
-//   size  - max size of incoming data stream, in qwc (simd128)
-__forceinline int mtgsThreadObject::gifTransferDummy(GIF_PATH pathidx, const u8* pMem, u32 size)
+// size - size of the packet in simd128's
+__forceinline int mtgsThreadObject::_gifTransferDummy( GIF_PATH pathidx, const u8* pMem, u32 size )
 {
+	GIFPath& path = m_path[pathidx];
+  /*	bool path1loop = false;
+	int startval = size;*/
 #ifdef PCSX2_GSRING_SAMPLING_STATS
 	static uptr profStartPtr = 0;
 	static uptr profEndPtr = 0;
-	if (profStartPtr == 0) {
+	if( profStartPtr == 0 )
+	{
 		__asm 
 		{ 
 	__beginfunc:
@@ -379,16 +282,197 @@ __forceinline int mtgsThreadObject::gifTransferDummy(GIF_PATH pathidx, const u8*
 	}
 #endif
 
-	int retSize = _gifTransferDummy(pathidx, pMem, size);
+	while(size > 0)
+	{
+		if (path.tag.nloop == 0)
+		{
+			path.SetTag( pMem );
 
+			pMem += sizeof(GIFTAG);
+			--size;
+
+			if (pathidx == 2)
+			{			
+				if (path.tag.flg != GIF_FLG_IMAGE) 
+					Path3progress = TRANSFER_MODE; //Other mode (but not stopped, I guess?)
+				else  
+					Path3progress = IMAGE_MODE; //IMAGE mode
+				//if(pathidx == 2) GIF_LOG("Set Giftag NLoop %d EOP %x Mode %d Path3msk %x Path3progress %x ", path.tag.nloop, path.tag.eop, path.tag.flg, vif1Regs->mskpath3, Path3progress);
+			}
+
+			if (pathidx == 0) 
+			{                       
+			//	int transize = 0;
+				// hack: if too much data for VU1, just ignore.
+
+				// The GIF is evil : if nreg is 0, it's really 16.  Otherwise it's the value in nreg.
+				/*const int numregs = path.tag.nreg ? path.tag.nreg : 16;
+				if(path.tag.flg < 2)
+				{
+					transize = (path.tag.nloop * numregs);
+				}
+				else transize = path.tag.nloop;
+
+				if(transize > (path.tag.flg == 1 ? 0x800 : 0x400))
+				{
+					//DevCon::Notice("Too much data");
+					path.tag.nloop = 0;
+					if(path1loop == true)return ++size - 0x400;
+					else return ++size;
+				}*/
+				const int numregs = ((path.tag.nreg-1)&15)+1;
+
+				if((path.tag.nloop * numregs) > (size * ((path.tag.flg == 1) ? 2 : 1)))
+				{
+					path.tag.nloop = 0;
+					return ++size;
+				}
+			}
+		}
+		else
+		{
+			// NOTE: size > 0 => do {} while(size > 0); should be faster than while(size > 0) {}
+		
+			//if(pathidx == 2) GIF_LOG("PATH3 NLoop %d EOP %x Mode %d Path3msk %x Path3progress %x ", path.tag.nloop, path.tag.eop, path.tag.flg, vif1Regs->mskpath3, Path3progress);
+			switch(path.tag.flg)
+			{
+			case GIF_FLG_PACKED:
+
+				do
+				{
+					if( path.GetReg() == 0xe )
+					{
+						const int handler = pMem[8];
+						if(handler >= 0x60 && handler < 0x63)
+							s_GSHandlers[handler&0x3]((const u32*)pMem);
+					}
+
+					size--;
+					pMem += 16; // 128 bits! //sizeof(GIFPackedReg);
+				}
+				while(path.StepReg() && size > 0);
+
+			break;
+
+			case GIF_FLG_REGLIST:
+
+				size *= 2;
+
+				do
+				{
+					const int handler = path.GetReg();
+					if(handler >= 0x60 && handler < 0x63)
+						s_GSHandlers[handler&0x3]((const u32*)pMem);
+
+					size--;
+					pMem += 8; //sizeof(GIFReg); -- 64 bits!
+				}
+				while(path.StepReg() && size > 0);
+			
+				if(size & 1) pMem += 8; //sizeof(GIFReg);
+
+				size /= 2;
+
+			break;
+
+			case GIF_FLG_IMAGE2: // hmmm
+				assert(0);
+				path.tag.nloop = 0;
+
+			break;
+
+			case GIF_FLG_IMAGE:
+			{
+				int len = (int)min(size, path.tag.nloop);
+
+				pMem += len * 16;
+				path.tag.nloop -= len;
+				size -= len;
+			}
+			break;
+
+			jNO_DEFAULT;
+
+			}
+		}
+		
+		if(path.tag.nloop == 0)
+		{
+			if(path.tag.eop)
+			{
+				if(pathidx != 1)
+				{				
+					break;
+				}
+				/*if((path.tag.nloop > 0 || (!path.tag.eop && path.tag.nloop == 0)) && size == 0)
+				{
+					if(path1loop == true) return size - 0x400;
+					//DevCon::Notice("Looping Nloop %x, Eop %x, FLG %x", params path.tag.nloop, path.tag.eop, path.tag.flg);
+					size = 0x400;
+					pMem -= 0x4000;
+					path1loop = true;
+				}*/
+			} 
+			/*else if(size == 0 && pathidx == 0)
+			{
+				if(path1loop == true) return size - 0x400;
+				//DevCon::Notice("Looping Nloop %x, Eop %x, FLG %x", params path.tag.nloop, path.tag.eop, path.tag.flg);
+				size = 0x400;
+				pMem -= 0x4000;
+				path1loop = true;
+			}*/
+		} 
+		/*else if(size == 0 && pathidx == 0)
+		{
+			if(path1loop == true) return size - 0x400;
+			//DevCon::Notice("Looping Nloop %x, Eop %x, FLG %x", params path.tag.nloop, path.tag.eop, path.tag.flg);
+			size = 0x400;
+			pMem -= 0x4000;
+			path1loop = true;
+		}*/
+	}
+
+	if(pathidx == 0)
+	{
+		//If the XGKick has spun around the VU memory end address, we need to INCREASE the size sent.
+		/*if(path1loop == true)
+		{
+			return (size - 0x400); //This will cause a negative making eg. size(20) - retval(-30) = 50;
+		}*/
+		if(size == 0 && path.tag.nloop > 0)
+		{
+			path.tag.nloop = 0;
+			DevCon::Write( "path1 hack! " );
+
+			// This means that the giftag data got screwly somewhere
+			// along the way (often means curreg was in a bad state or something)
+		}
+	}
+
+	
+	if(pathidx == 2)
+		{
+			if(path.tag.nloop == 0 )
+			{
+				//DevCon::Notice("Finishing Giftag NLoop %d EOP %x Mode %d nregs %d Path3progress %d Vifstat VGW %x", 
+					//params path.tag.nloop, path.tag.eop, path.tag.flg, path.tag.nreg, Path3progress, vif1Regs->stat & VIF1_STAT_VGW);
+				if(path.tag.eop)
+				{
+					Path3progress = STOPPED_MODE;	
+					//GIF_LOG("Set progress NLoop %d EOP %x Mode %d Path3msk %x Path3progress %x ", path.tag.nloop, path.tag.eop, path.tag.flg, vif1Regs->mskpath3, Path3progress);
+				}
+				
+			}
+		
+		}
 #ifdef PCSX2_GSRING_SAMPLING_STATS
-	__asm 
+	__asm
 	{
 		__endfunc:
 				nop;
 	}
 #endif
-	return retSize;
+	return size;
 }
 
 void mtgsThreadObject::PostVsyncEnd( bool updategs )
@@ -722,6 +806,11 @@ void mtgsThreadObject::SendDataPacket()
 	//m_PacketLocker.Unlock();
 }
 
+int mtgsThreadObject::PrepDataPacket( GIF_PATH pathidx, const u64* srcdata, u32 size )
+{
+	return PrepDataPacket( pathidx, (u8*)srcdata, size );
+}
+
 int mtgsThreadObject::PrepDataPacket( GIF_PATH pathidx, const u32* srcdata, u32 size )
 {
 	return PrepDataPacket( pathidx, (u8*)srcdata, size );
@@ -816,8 +905,19 @@ int mtgsThreadObject::PrepDataPacket( GIF_PATH pathidx, const u8* srcdata, u32 s
 		size = (size+15)&(~15);
 	}*/
 
-	m_packet_size = gifTransferDummy(pathidx, srcdata, size);
-	size		  = m_packet_size + 1; // takes into account our command qword.
+	// retval has the amount of data *not* processed, so we only need to reserve
+	// enough room for size - retval:
+	int retval = _gifTransferDummy( pathidx, srcdata, size );
+
+	if(pathidx == 2)
+	{
+		gif->madr += (size - retval) * 16;
+		gif->qwc -= size - retval;
+	}
+	//if(retval < 0) DevCon::Notice("Increasing size from %x to %x path %x", params size, size-retval, pathidx+1);
+	size = size - retval;
+	m_packet_size = size;
+	size++;			// takes into account our command qword.
 
 	if( writepos + size < m_RingBufferSize )
 	{
@@ -1023,9 +1123,9 @@ bool mtgsOpen()
 
 void mtgsThreadObject::GIFSoftReset( int mask )
 {
-	if(mask & 1) memzero_obj(s_path[0]);
-	if(mask & 2) memzero_obj(s_path[1]);
-	if(mask & 4) memzero_obj(s_path[2]);
+	if(mask & 1) memzero_obj(m_path[0]);
+	if(mask & 2) memzero_obj(m_path[1]);
+	if(mask & 4) memzero_obj(m_path[2]);
 
 	if( GSgifSoftReset == NULL ) return;
 
@@ -1035,7 +1135,7 @@ void mtgsThreadObject::GIFSoftReset( int mask )
 
 void mtgsThreadObject::Freeze( SaveState& state )
 {
-	_mtgsFreezeGIF( state, s_path );
+	_mtgsFreezeGIF( state, this->m_path );
 }
 
 // this function is needed because of recompiled calls from iGS.cpp

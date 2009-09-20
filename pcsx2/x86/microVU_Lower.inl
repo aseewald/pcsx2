@@ -1106,24 +1106,21 @@ mVUop(mVU_XITOP) {
 //------------------------------------------------------------------
 
 void __fastcall mVU_XGKICK_(u32 addr) {
-	addr &= 0x3ff;
-	u8* data  = microVU1.regs->Mem + (addr*16);
-	u32 diff  = 0x400 - addr;
-	u32 size  = mtgsThread->PrepDataPacket(GIF_PATH_1, data, diff);
-	u8* pDest = mtgsThread->GetDataPacketPtr();
-	
-	if(size > diff) {
-		// fixme: one of these days the following *16's will get cleaned up when we introduce
-		// a special qwc/simd16 optimized version of memcpy_aligned. :)
-		//DevCon::Status("XGkick Wrap!");
-		memcpy_aligned(pDest, microVU1.regs->Mem + (addr*16), diff*16);
-		size  -= diff;
-		pDest += diff*16;
-		memcpy_aligned(pDest, microVU1.regs->Mem, size*16);
+	addr = (addr<<4) & 0x3fff; // Multiply addr by 16 to get real address
+	u32 *data = (u32*)(microVU1.regs->Mem + addr);
+	u32  size = mtgsThread->PrepDataPacket(GIF_PATH_1, data, (0x4000-addr) >> 4);
+	u8 *pDest = mtgsThread->GetDataPacketPtr();
+/*	if((size << 4) > (0x4000-(addr&0x3fff))) {
+		//DevCon::Notice("addr + Size = 0x%x, transferring %x then doing %x", params (addr&0x3fff) + (size << 4), (0x4000-(addr&0x3fff)) >> 4, size - ((0x4000-(addr&0x3fff)) >> 4));
+		memcpy_aligned(pDest, microVU1.regs->Mem + addr, 0x4000-(addr&0x3fff));
+		size -= (0x4000-(addr&0x3fff)) >> 4;
+		//DevCon::Notice("Size left %x", params size);
+		pDest += 0x4000-(addr&0x3fff);
+		memcpy_aligned(pDest, microVU1.regs->Mem, size<<4);
 	}
-	else {
-		memcpy_aligned(pDest, microVU1.regs->Mem + (addr*16), size*16);
-	}
+	else { */
+		memcpy_aligned(pDest, microVU1.regs->Mem + addr, size<<4);
+//	}
 	mtgsThread->SendDataPacket();
 }
 
@@ -1133,9 +1130,10 @@ void __fastcall mVU_XGKICK__(u32 addr) {
 
 microVUt(void) mVU_XGKICK_DELAY(mV, bool memVI) {
 	mVUbackupRegs(mVU);
-	if (memVI)	MOV32MtoR(gprT2, (uptr)&mVU->VIxgkick);
-	else		mVUallocVIa(mVU, gprT2, _Is_);
-	CALLFunc((uptr)mVU_XGKICK_);
+	if (memVI)		MOV32MtoR(gprT2, (uptr)&mVU->VIxgkick);
+	else			mVUallocVIa(mVU, gprT2, _Is_);
+	if (mtgsThread)	CALLFunc((uptr)mVU_XGKICK_);
+	else			CALLFunc((uptr)mVU_XGKICK__);
 	mVUrestoreRegs(mVU);
 }
 
