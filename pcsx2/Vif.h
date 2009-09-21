@@ -190,6 +190,7 @@ static __forceinline u32 getVifRowRegs(u32 reg)
 			break;
 			jNO_DEFAULT;
 	}
+	return 0;	// unreachable...
 }
 
 static __forceinline u32 setVifColRegs(u32 reg, u32 data)
@@ -231,6 +232,7 @@ static __forceinline u32 getVifColRegs(u32 reg)
 			break;
 			jNO_DEFAULT;
 	}
+	return 0;	// unreachable...
 }
 
 #define vif0Regs ((VIFregisters*)&PS2MEM_HW[0x3800])
