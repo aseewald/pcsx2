@@ -489,7 +489,8 @@ void ElfApplyPatches()
 	ssprintf( filename, "%8.8x", ElfCRC );
 
 	// if patches found the following status msg will be overwritten
-	Console::SetTitle( fmt_string( "Game running [CRC=%hs]", &filename ) );
+	if (hacksEnabled)	Console::SetTitle( fmt_string( "! Speedhacks ! Game running [CRC=%hs]", &filename ) );
+	else				Console::SetTitle( fmt_string( "Game running [CRC=%hs]", &filename ) );
 
 	if( !Config.Patch ) return;
 

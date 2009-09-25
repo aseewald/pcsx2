@@ -27,6 +27,7 @@
 
 static bool sinit = false;
 bool nDisableSC = false; // screensaver
+bool hacksEnabled = false;
 
 // This instance is not modified by command line overrides so
 // that command line plugins and stuff won't be saved into the
@@ -435,6 +436,19 @@ namespace HostGui
 		// ... and hide the window.  Ugly thing.
 		ShowWindow( gApp.hWnd, SW_HIDE );
 		timeBeginPeriod( 1 );		// improves multithreaded responsiveness
+		if (Config.Hacks.EECycleRate > 0 || Config.Hacks.IdleLoopFF == true 
+			|| Config.Hacks.INTCSTATSlow == true || Config.Hacks.IOPCycleDouble == true
+			|| Config.Hacks.VUCycleSteal > 0 || Config.Hacks.vuFlagHack == true
+			|| Config.Hacks.vuMinMax == true )
+		{
+			hacksEnabled = true;
+			Console::Error("Speedhacks are enabled, the game might be unstable.");
+			ElfApplyPatches(); //To get the console title changed, bit ugly :p
+		}
+		else {
+			hacksEnabled = false;
+			ElfApplyPatches(); //In case of resuming emulation, when hacks got disabled
+		}
 
 		try
 		{

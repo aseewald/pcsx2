@@ -35,6 +35,7 @@ extern uptr pDsp;	//Used in  GS, MTGS, Plugins, Misc
 u32 GetBiosVersion(); // Used in Misc, Memory
 extern u32 BiosVersion;  //  Used in Memory, Misc, CDVD
 int GetPS2ElfName(char*); // Used in Misc, System, Linux, CDVD
+extern bool hacksEnabled; // Used to set Console title to warn of speedhacks usage
 
 // Not sure what header these should go in. Probably not this one.
 void SetCPUState(u32 sseMXCSR, u32 sseVUMXCSR);
