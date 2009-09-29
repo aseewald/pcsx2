@@ -121,6 +121,7 @@ static const uint tbl_ContigiousSeekDelta[3] =
 //Fixme ( voodoocycles ): 
 //The current CD mode gives a too low transfer rate. HDloader reports 900kb/s, while the theoretical max is 3600kb/s
 //Silent Hill 2 videos starve of data and stall.
+//Same thing for CDDA using the BIOS player (mount an audio disk and use peops cdvd, then enter the BIOS.)
 //So let's double that until the cause of the slow data rate is known.
 
 static const uint PSX_CD_READSPEED = 153600 * 2;   // 1 Byte Time @ x1 (150KB = cd x 1)

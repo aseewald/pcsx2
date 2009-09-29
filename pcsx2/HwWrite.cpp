@@ -344,7 +344,7 @@ void hwWrite8(u32 mem, u8 value)
 				default:
 					psHu8(mem) = value;
 			}
-			HW_LOG("Unknown Hardware write 8 at %x with value %x", mem, value);
+			DevCon::Notice("Unknown Hardware write 8 at %x with value %x", params mem, value);
 			break;
 	}
 }
@@ -660,7 +660,7 @@ __forceinline void hwWrite16(u32 mem, u16 value)
 
 		default:
 			psHu16(mem) = value;
-			HW_LOG("Unknown Hardware write 16 at %x with value %x",mem,value);
+			DevCon::Notice("Unknown Hardware write 16 at %x with value %x", params mem,value);
 	}
 }
 
@@ -1047,6 +1047,20 @@ void __fastcall hwWrite32_generic( u32 mem, u32 value )
 /////////////////////////////////////////////////////////////////////////
 // HW Write 64 bit
 
+// Page 0 of HW memory houses registers for Counters 0 and 1
+void __fastcall hwWrite64_page_00( u32 mem, const mem64_t* srcval )
+{
+	hwWrite32_page_00( mem, (u32)*srcval );		// just ignore upper 32 bits.
+	*((u64*)&PS2MEM_HW[mem]) = *srcval;
+}
+
+// Page 1 of HW memory houses registers for Counters 2 and 3
+void __fastcall hwWrite64_page_01( u32 mem, const mem64_t* srcval )
+{
+	hwWrite32_page_01( mem, (u32)*srcval );		// just ignore upper 32 bits.
+	*((u64*)&PS2MEM_HW[mem]) = *srcval;
+}
+
 void __fastcall hwWrite64_page_02( u32 mem, const mem64_t* srcval )
 {
 	//hwWrite64( mem, *srcval );  return;
@@ -1176,7 +1190,7 @@ void __fastcall hwWrite64_generic( u32 mem, const mem64_t* srcval )
 
 		default:
 			psHu64(mem) = value;
-			HW_LOG("Unknown Hardware write 64 at %x with value %x (status=%x)",mem,value, cpuRegs.CP0.n.Status.val);
+			DevCon::Notice ("Unknown Hardware write 64 at %x with value %x (status=%x)",params mem,value, cpuRegs.CP0.n.Status.val);
 		break;
 	}
 }
@@ -1216,7 +1230,7 @@ void __fastcall hwWrite128_generic(u32 mem, const mem128_t *srcval)
 			psHu64(mem  ) = srcval[0];
 			psHu64(mem+8) = srcval[1];
 
-			HW_LOG("Unknown Hardware write 128 at %x with value %x_%x (status=%x)", mem, srcval[1], srcval[0], cpuRegs.CP0.n.Status.val);
+			DevCon::Notice ("Unknown Hardware write 128 at %x with value %x_%x (status=%x)", params mem, srcval[1], srcval[0], cpuRegs.CP0.n.Status.val);
 		break;
 	}
 }
