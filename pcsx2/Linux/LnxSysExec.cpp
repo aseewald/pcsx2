@@ -25,6 +25,7 @@ GtkWidget *FileSel;
 static uptr current_offset = 0;
 static uptr offset_counter = 0;
 bool Slots[5] = { false, false, false, false, false };
+bool hacksEnabled = false;
 
 __noinline void InstallLinuxExceptionHandler()
 {
@@ -526,7 +527,22 @@ namespace HostGui
 		// Destroy the window.  Ugly thing.
 		gtk_widget_destroy(MainWindow);
 		gtk_main_quit();
-
+		
+		if (Config.Hacks.EECycleRate > 0 || Config.Hacks.IdleLoopFF == true
+		|| Config.Hacks.INTCSTATSlow == true || Config.Hacks.IOPCycleDouble == true
+		|| Config.Hacks.VUCycleSteal > 0 || Config.Hacks.vuFlagHack == true
+		|| Config.Hacks.vuMinMax == true )
+		{
+			hacksEnabled = true;
+			Console::Error("Speedhacks are enabled, the game might be unstable.");
+			ElfApplyPatches(); //To get the console title changed, bit ugly :p}
+		}
+		else 
+		{
+			hacksEnabled = false;
+			ElfApplyPatches(); //In case of resuming emulation, when hacks got disabled
+		}
+		
 		while (gtk_events_pending()) gtk_main_iteration();
 
 		signal(SIGINT, SignalExit);
