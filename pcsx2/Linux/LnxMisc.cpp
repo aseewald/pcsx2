@@ -24,6 +24,11 @@
 
 #include "CDVD.h"
 
+// Note: we assign these to 0 as it ensures the linker creates an instance of them for
+// reference from linux .S asm files.
+extern "C" PCSX2_ALIGNED16( u8 _xmm_backup[16*2] ) = {0};
+extern "C" PCSX2_ALIGNED16( u8 _mmx_backup[8*4] ) = {0};
+
 void InitCPUTicks()
 {
 }

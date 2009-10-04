@@ -314,15 +314,15 @@ __forceinline void xWrite( T val )
 		// Returns true if the register is the stack pointer: ESP.
 		bool IsStackPointer() const { return Id == 4; }
 
-		xAddressInfo operator+( const xAddressReg& right ) const;
-		xAddressInfo operator+( const xAddressInfo& right ) const;
-		xAddressInfo operator+( s32 right ) const;
-		xAddressInfo operator+( const void* right ) const;
+		inline xAddressInfo operator+( const xAddressReg& right ) const;
+		inline xAddressInfo operator+( const xAddressInfo& right ) const;
+		inline xAddressInfo operator+( s32 right ) const;
+		inline xAddressInfo operator+( const void* right ) const;
 
-		xAddressInfo operator*( u32 factor ) const;
-		xAddressInfo operator<<( u32 shift ) const;
+		inline xAddressInfo operator*( u32 factor ) const;
+		inline xAddressInfo operator<<( u32 shift ) const;
 		
-		xAddressReg& operator=( const xRegister32& src )
+		inline xAddressReg& operator=( const xRegister32& src )
 		{
 			Id = src.Id;
 			return *this;
@@ -364,7 +364,7 @@ __forceinline void xWrite( T val )
 		{
 		}
 		
-		static xAddressInfo FromIndexReg( const xAddressReg& index, int scale=0, s32 displacement=0 );
+		//static xAddressInfo FromIndexReg( const xAddressReg& index, int scale=0, s32 displacement=0 );
 
 	public:
 		bool IsByteSizeDisp() const { return is_s8( Displacement ); }
@@ -375,8 +375,8 @@ __forceinline void xWrite( T val )
 			return *this;
 		}
 		
-		__forceinline xAddressInfo& Add( const xAddressReg& src );
-		__forceinline xAddressInfo& Add( const xAddressInfo& src );
+		inline xAddressInfo& Add( const xAddressReg& src );
+		inline xAddressInfo& Add( const xAddressInfo& src );
 
 		__forceinline xAddressInfo operator+( const xAddressReg& right ) const { return xAddressInfo( *this ).Add( right ); }
 		__forceinline xAddressInfo operator+( const xAddressInfo& right ) const { return xAddressInfo( *this ).Add( right ); }
@@ -428,9 +428,9 @@ __forceinline void xWrite( T val )
 		s32 Displacement;		// offset applied to the Base/Index registers.
 
 	public:
-		explicit ModSibBase( const xAddressInfo& src );
-		explicit ModSibBase( s32 disp );
-		ModSibBase( xAddressReg base, xAddressReg index, int scale=0, s32 displacement=0 );
+		explicit inline ModSibBase( const xAddressInfo& src );
+		explicit inline ModSibBase( s32 disp );
+		inline ModSibBase( xAddressReg base, xAddressReg index, int scale=0, s32 displacement=0 );
 		
 		bool IsByteSizeDisp() const { return is_s8( Displacement ); }
 
@@ -676,12 +676,12 @@ __forceinline void xWrite( T val )
 
 		// The jump instruction is emitted at the point of object construction.  The conditional
 		// type must be valid (Jcc_Unknown generates an assertion).
-		xForwardJump( JccComparisonType cctype = Jcc_Unconditional );
+		inline xForwardJump( JccComparisonType cctype = Jcc_Unconditional );
 		
 		// Sets the jump target by writing back the current x86Ptr to the jump instruction.
 		// This method can be called multiple times, re-writing the jump instruction's target
 		// in each case. (the the last call is the one that takes effect).
-		void SetTarget() const;
+		inline void SetTarget() const;
 	};
 	
 	//////////////////////////////////////////////////////////////////////////////////////////
