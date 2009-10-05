@@ -21,7 +21,7 @@
 #include "HostGui.h"
 
 static bool sinit = false;
-GtkWidget *FileSel;
+extern GtkWidget *FileSel;
 static uptr current_offset = 0;
 static uptr offset_counter = 0;
 bool Slots[5] = { false, false, false, false, false };

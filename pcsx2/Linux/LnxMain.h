@@ -45,7 +45,7 @@ extern void SysClose();
 GtkWidget *MainWindow, *Status_Box;
 GtkWidget *pStatusBar = NULL;
 GtkWidget *CmdLine, *widgetCmdLine;
-GtkWidget *LogDlg, *MemDlg;
+GtkWidget *LogDlg;
 GtkAccelGroup *AccelGroup;
 
 typedef struct

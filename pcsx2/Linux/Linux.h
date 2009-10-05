@@ -59,7 +59,7 @@ extern int Pcsx2Configure();
 
 extern GtkWidget *MainWindow;
 
-char cfgfile[g_MaxPath];
+extern char cfgfile[g_MaxPath];
 
 #define is_checked(main_widget, widget_name) (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(lookup_widget(main_widget, widget_name))))
 #define set_checked(main_widget,widget_name, state) gtk_toggle_button_set_state(GTK_TOGGLE_BUTTON(lookup_widget(main_widget, widget_name)), state)
@@ -67,7 +67,7 @@ char cfgfile[g_MaxPath];
 #define set_flag(v, flag, value) if (value == TRUE) v |= flag; else v &= flag;
 #define get_flag(v,flag) ((v & (1 << flag)) != 0)
 
-char ee_log_names[17][32] =
+/*char ee_log_names[17][32] =
 {
 	"Cpu Log",
 	"Mem Log",
@@ -99,23 +99,8 @@ char iop_log_names[9][32] =
 	"Gte Log",
 	"Cdr Log",
 	"GPU Log"
-};
+};*/
 
-char vu_stealing_labels[5][256] = 
-{
-	"0: No speedup.",
-	"1: Slight speedup, should work with most games.",
-	"2: Moderate speedup, should work with most games with minor problems.",
-	"3: Large speedup, may break many games and make others skip frames.",
-	"4: Very large speedup, will break games in interesting ways."
-};
-
-char ee_cycle_labels[3][256] = 
-{
-	"Default Cycle Rate: Most compatible option - recommended for everyone with high-end machines.",
-	"x1.5 Cycle Rate: Moderate speedup, and works well with most games.",
-	"x2 Cycle Rate: Big speedup! Works well with many games."
-};
 //Tri-Ace - IDC_GAMEFIX2
 #define FLAG_VU_ADD_SUB 0x1
 // Persona3/4  - IDC_GAMEFIX4

@@ -20,6 +20,7 @@
 
 FILE *pref_file;
 char *data;
+char cfgfile[g_MaxPath];
 
 static void SetValue(const char *name, char *var)
 {

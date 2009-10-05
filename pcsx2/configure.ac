@@ -155,9 +155,9 @@ dnl Anything higher then -O0 seem to cause issues with GCC 4.4.0.
    NORMAL_FLAGS+=" -O0 "
  fi
   
- CFLAGS+=" ${NORMAL_FLAGS} -Xlinker -zmuldefs -m32 "
- CXXFLAGS+=" ${NORMAL_FLAGS} -fpermissive -Xlinker -zmuldefs -m32 "
- CCASFLAGS+=" ${NORMAL_FLAGS}  -m32 "
+ CFLAGS+=" ${NORMAL_FLAGS} -m32 " #  -Xlinker -zmuldefs
+ CXXFLAGS+=" ${NORMAL_FLAGS} -fpermissive -m32 " # -Xlinker -zmuldefs 
+ CCASFLAGS+=" ${NORMAL_FLAGS}  -m32 " #
 
 if test "x$debug" == "xyes"
 then

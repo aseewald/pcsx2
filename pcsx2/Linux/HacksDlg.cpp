@@ -17,7 +17,8 @@
  */
  
  #include "Linux.h"
- 
+ #include "HacksDlg.h"
+
 GtkWidget *GameFixDlg, *SpeedHacksDlg;
  
  void on_Game_Fixes(GtkMenuItem *menuitem, gpointer user_data)
