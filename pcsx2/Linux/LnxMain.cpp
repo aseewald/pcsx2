@@ -44,7 +44,8 @@ int main(int argc, const char *argv[])
 	// Note: Config.Paths.Inis won't do anything till we set up windows and the plugins to use it.
 #ifndef LOCAL_PLUGIN_INIS
 	mkdir(DEFAULT_INIS_DIR, 0755);
-	Config.Paths.Inis = Config.Paths.Working + "/" + string(DEFAULT_INIS_DIR) + "/";
+	Config.Paths.Inis = Path::Combine(Config.Paths.Working, string(DEFAULT_INIS_DIR));
+	strcpy(cfgfile, Path::Combine( Config.Paths.Inis, "pcsx2.cfg" ).c_str());
 	sprintf(cfgfile, "%s/pcsx2.cfg", Config.Paths.Inis.c_str());
 #else
 	Path::CreateDirectory("~/.pcsx2");
@@ -494,7 +495,16 @@ void OnFile_Exit(GtkMenuItem *menuitem, gpointer user_data)
 
 void OnEmu_Run(GtkMenuItem *menuitem, gpointer user_data)
 {
-	SysPrepareExecution(NULL, true);	// boots bios if no savestate is to be recovered
+	// Execute without reset -- resumes existing states or runs the BIOS if
+	// the state is cleared/reset.  If the CDVD is NULL (system reset), then
+	// assume the cdvd plugin as the source. (retains legacy behavior)
+
+	if( CDVD == NULL )
+	{
+		CDVDsys_ChangeSource( CDVDsrc_Plugin );
+		if( !OpenCDVD( NULL ) ) break;
+	}
+	SysPrepareExecution(NULL, true);
 }
 
 void OnEmu_Reset(GtkMenuItem *menuitem, gpointer user_data)

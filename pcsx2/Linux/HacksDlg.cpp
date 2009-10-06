@@ -17,10 +17,26 @@
  */
  
  #include "Linux.h"
- #include "HacksDlg.h"
-
-GtkWidget *GameFixDlg, *SpeedHacksDlg;
  
+static GtkWidget *GameFixDlg, *SpeedHacksDlg;
+
+static char vu_stealing_labels[5][256] = 
+{
+	"0: No speedup.",
+	"1: Slight speedup, should work with most games.",
+	"2: Moderate speedup, should work with most games with minor problems.",
+	"3: Large speedup, may break many games and make others skip frames.",
+	"4: Very large speedup, will break games in interesting ways."
+};
+
+static char ee_cycle_labels[3][256] = 
+{
+	"Default Cycle Rate: Most compatible option - recommended for everyone with high-end machines.",
+	"x1.5 Cycle Rate: Moderate speedup, and works well with most games.",
+	"x2 Cycle Rate: Big speedup! Works well with many games."
+};
+
+
  void on_Game_Fixes(GtkMenuItem *menuitem, gpointer user_data)
 {
 	GameFixDlg = create_GameFixDlg();

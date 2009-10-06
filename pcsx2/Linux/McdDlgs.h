@@ -21,6 +21,6 @@
 
 #include "Linux.h"
 
-GtkWidget *MemDlg;
+extern GtkWidget *MemDlg;
 
 #endif

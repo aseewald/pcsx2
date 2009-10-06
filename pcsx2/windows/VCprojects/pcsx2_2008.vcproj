@@ -2842,6 +2842,34 @@
 					</FileConfiguration>
 				</File>
 				<File
+					RelativePath="..\..\Linux\McdDlgs.cpp"
+					>
+					<FileConfiguration
+						Name="Debug|Win32"
+						ExcludedFromBuild="true"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+						/>
+					</FileConfiguration>
+					<FileConfiguration
+						Name="Devel|Win32"
+						ExcludedFromBuild="true"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+						/>
+					</FileConfiguration>
+					<FileConfiguration
+						Name="Release|Win32"
+						ExcludedFromBuild="true"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+						/>
+					</FileConfiguration>
+				</File>
+				<File
 					RelativePath="..\..\Linux\Pref.cpp"
 					>
 					<FileConfiguration
@@ -2917,7 +2945,15 @@
 						>
 					</File>
 					<File
+						RelativePath="..\..\Linux\McdDlgs.h"
+						>
+					</File>
+					<File
 						RelativePath="..\..\Linux\memzero.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\Linux\support.h"
 						>
 					</File>
 				</Filter>
