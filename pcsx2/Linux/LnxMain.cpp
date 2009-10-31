@@ -502,7 +502,7 @@ void OnEmu_Run(GtkMenuItem *menuitem, gpointer user_data)
 	if( CDVD == NULL )
 	{
 		CDVDsys_ChangeSource( CDVDsrc_Plugin );
-		if( !OpenCDVD( NULL ) ) break;
+		if( !OpenCDVD( NULL ) ) return;
 	}
 	SysPrepareExecution(NULL, true);
 }
