@@ -18,6 +18,8 @@
 
 #include "McdDlgs.h"
 
+GtkWidget* MemDlg = NULL;
+
 void OnConf_Memcards(GtkMenuItem *menuitem, gpointer user_data) 
 {
 	string file;
