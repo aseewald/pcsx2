@@ -402,9 +402,10 @@ __forceinline void SIF1Dma()
 					iopsifbusy[1] = 0;
 					
 					//Fixme ( voodoocycles ): 
-					//The *50 are needed for ecco the dolphin (CDVD hangs) and silver surfer (Pad not detected)
+					//The *28 are needed for ecco the dolphin (CDVD hangs) and silver surfer (Pad not detected)
+					//Greater than *35 break rebooting when trying to play Tekken5 arcade history
+					PSX_INT(IopEvt_SIF1, psxCycles * 28);
 
-					PSX_INT(IopEvt_SIF1, psxCycles * 50);
 					sif1.tagMode = 0;
 					done = true;
 				}

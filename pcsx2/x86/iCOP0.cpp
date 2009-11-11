@@ -107,12 +107,6 @@ void recEI()
 void recDI()
 {
 	// No need to branch after disabling interrupts...
-
-	iFlushCall(0);
-
-	MOV32MtoR( EAX, (uptr)&cpuRegs.cycle );
-	MOV32RtoM( (uptr)&g_nextBranchCycle, EAX );
-
 	CALLFunc( (uptr)Interp::DI );
 }
 

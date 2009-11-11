@@ -283,14 +283,11 @@ void frameLimitReset()
 	m_iStart = GetCPUTicks();
 }
 
-// Framelimiter - Measures the delta time between calls and stalls until a
-// certain amount of time passes if such time hasn't passed yet.
-// See the GS FrameSkip function for details on why this is here and not in the GS.
 static __forceinline void frameLimit()
 {
 	if( CHECK_FRAMELIMIT == PCSX2_FRAMELIMIT_NORMAL ) return;
 	if( Config.CustomFps >= 999 ) return;	// means the user would rather just have framelimiting turned off...
-	
+
 	s64 sDeltaTime;
 	u64 uExpectedEnd;
 	u64 iEnd;
@@ -303,7 +300,7 @@ static __forceinline void frameLimit()
 	// If the framerate drops too low, reset the expected value.  This avoids
 	// excessive amounts of "fast forward" syndrome which would occur if we
 	// tried to catch up too much.
-	
+        
 	if( sDeltaTime > m_iTicks*8 )
 	{
 		m_iStart = iEnd - m_iTicks;
@@ -323,13 +320,26 @@ static __forceinline void frameLimit()
 
 	m_iStart = uExpectedEnd;
 
-	while( sDeltaTime < 0 )
+	// Shortcut for cases where no waiting is needed (they're running slow already,
+	// so don't bog 'em down with extra math...)
+	if( sDeltaTime >= 0 ) return;
+        
+	// If we're way ahead then we can afford to sleep the thread a bit.
+	s32 msec = (int)((sDeltaTime*-1000) / (s64)GetTickFrequency());
+	if( msec > 1 ){
+		Threading::Sleep( msec );
+	}
+        
+	//Agressively idle loop the remainer
+	while( true )
 	{
-		Timeslice();
 		iEnd = GetCPUTicks();
 		sDeltaTime = iEnd - uExpectedEnd;
+		if( sDeltaTime >= 0 ) break;
+		Timeslice();
 	}
 }
+
 
 static __forceinline void VSyncStart(u32 sCycle)
 {
