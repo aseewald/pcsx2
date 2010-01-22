@@ -5,17 +5,20 @@
 	Name="PcsxBaseProperties"
 	OutputDirectory="$(SolutionDir)\bin\$(PcsxSubsection)"
 	IntermediateDirectory="$(PlatformName)\$(ConfigurationName)"
+	DeleteExtensionsOnClean="*.bsc;*.idb;*.sbr;*.res;*.pch;*.pdb;*.obj;*.tlb;*.tli;*.tlh;*.tmp;*.rsp;*.pgc;*.pgd;*.meta;$(TargetPath)"
 	>
 	<Tool
 		Name="VCCLCompilerTool"
 		EnableIntrinsicFunctions="true"
-		AdditionalIncludeDirectories="&quot;$(SvnRootDir)\common\include&quot;"
+		AdditionalIncludeDirectories="&quot;$(SvnRootDir)\common\include&quot;;&quot;$(SvnRootDir)\3rdparty\wxWidgets\include&quot;"
 		PreprocessorDefinitions="__WIN32__;WIN32;_WINDOWS;_CRT_SECURE_NO_WARNINGS;_CRT_SECURE_NO_DEPRECATE"
 		StructMemberAlignment="5"
+		EnableFunctionLevelLinking="true"
 		RuntimeTypeInfo="false"
 		WarningLevel="3"
 		DebugInformationFormat="3"
 		CompileAs="0"
+		DisableSpecificWarnings="4063;4100"
 	/>
 	<Tool
 		Name="VCLinkerTool"

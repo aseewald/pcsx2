@@ -1,25 +1,20 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2008  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
  
 #ifndef __PCSX2TYPES_H__
 #define __PCSX2TYPES_H__
-
-// Note; this header is experamental, and will be a shifting target. Only use this if you are willing to repeatedly fix breakage.
 
 /*
  *  Based on PS2E Definitions by
@@ -45,17 +40,21 @@ typedef unsigned __int32 u32;
 typedef unsigned __int64 u64;
 
 typedef unsigned int uint;
-typedef u32 uptr;
-typedef s32 sptr;
 
-#else // _MSC_VER
+#else // _MSC_VER*/
 
- #ifdef __LINUX__
+#ifdef __LINUX__
 
 #ifdef HAVE_STDINT_H
 #include "stdint.h"
 
-typedef int8_t s8;
+// note: char and int8_t are not interchangable types on gcc, because int8_t apparently
+// maps to 'signed char' which (due to 1's compliment or something) is its own unique
+// type.  This creates cross-compiler inconsistencies, in addition to being entirely
+// unexpected behavior to any sane programmer, so we typecast s8 to char instead. :)
+
+//typedef int8_t s8;
+typedef char s8;
 typedef int16_t s16;
 typedef int32_t s32;
 typedef int64_t s64;
@@ -80,9 +79,6 @@ typedef unsigned short u16;
 typedef unsigned int u32;
 typedef unsigned long long u64;
 
-typedef u32 uptr;
-typedef s32 sptr;
-
 #endif // HAVE_STDINT_H
 
 typedef unsigned int uint;
@@ -96,24 +92,43 @@ typedef union _LARGE_INTEGER
 #endif // __LINUX__
 #endif //_MSC_VER
 
+#if !defined(__LINUX__) || !defined(HAVE_STDINT_H)
+#if defined(__x86_64__)
+typedef u64 uptr;
+typedef s64 sptr;
+#else
+typedef u32 uptr;
+typedef s32 sptr;
+#endif
+#endif
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // A rough-and-ready cross platform 128-bit datatype, Non-SSE style.
+//
+// Note: These structs don't provide any additional constructors because C++ doesn't allow
+// the use of datatypes with constructors in unions (and since unions aren't the primary
+// uses of these types, that means we can't have constructors). Embedded functions for
+// performing explicit conversion from 64 and 32 bit values are provided instead.
+//
 #ifdef __cplusplus
 struct u128
 {
 	u64 lo;
 	u64 hi;
 
-	// Implicit conversion from u64
-	u128( u64 src ) :
-		lo( src )
-	,	hi( 0 ) {}
+	// Explicit conversion from u64
+	static u128 From64( u64 src )
+	{
+		u128 retval = { src, 0 };
+		return retval;
+	}
 
-	// Implicit conversion from u32
-	u128( u32 src ) :
-		lo( src )
-	,	hi( 0 ) {}
+	// Explicit conversion from u32
+	static u128 From32( u32 src )
+	{
+		u128 retval = { src, 0 };
+		return retval;
+	}
 };
 
 struct s128
@@ -121,15 +136,19 @@ struct s128
 	s64 lo;
 	s64 hi;
 
-	// Implicit conversion from u64
-	s128( s64 src ) :
-		lo( src )
-	,	hi( 0 ) {}
+	// explicit conversion from s64, with sign extension.
+	static s128 From64( s64 src )
+	{
+		s128 retval = { src, (src < 0) ? -1 : 0 };
+		return retval;
+	}
 
-	// Implicit conversion from u32
-	s128( s32 src ) :
-		lo( src )
-	,	hi( 0 ) {}
+	// explicit conversion from s32, with sign extension.
+	static s128 From64( s32 src )
+	{
+		s128 retval = { src, (src < 0) ? -1 : 0 };
+		return retval;
+	}
 };
 
 #else
@@ -148,4 +167,4 @@ typedef union _s128_t
 
 #endif
 
- #endif
+#endif
