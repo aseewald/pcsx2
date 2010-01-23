@@ -30,6 +30,11 @@ public:
 		MetalSlug6,
 		TomoyoAfter,
 		Clannad,
+		Lamune,
+		KyuuketsuKitanMoonties,
+		PiaCarroteYoukosoGPGakuenPrincess,
+		KazokuKeikakuKokoroNoKizuna,
+		DuelSaviorDestiny,
 		FFX,
 		FFX2,
 		FFXII,
@@ -43,6 +48,7 @@ public:
 		BullyCC,
 		SoTC,
 		OnePieceGrandAdventure,
+		OnePieceGrandBattle,
 		ICO,
 		GT4,
 		WildArms5,
@@ -63,7 +69,16 @@ public:
 		Onimusha3,
 		MajokkoALaMode2,
 		TalesOfAbyss,
-		TitleCount
+		SonicUnleashed,
+		SimpsonsGame,
+		Genji,
+		StarOcean3,
+		ValkyrieProfile2,
+		RadiataStories,
+		SMTNocturne,
+		SMTDDS1,
+		RozenMaidenGebetGarden,
+		TitleCount,
 	};
 
 	enum Region 
@@ -78,20 +93,28 @@ public:
 		DE,
 		IT,
 		ES,
-		ASIA
+		ASIA,
+		RegionCount,
+	};
+
+	enum Flags
+	{
+		PointListPalette = 1,
+		ZWriteMustNotClear = 2,
 	};
 
 	struct Game 
 	{
-		DWORD crc; 
-		Title title; 
+		uint32 crc;
+		Title title;
 		Region region;
+		uint32 flags;
 	};
 
 private:
 	static Game m_games[];
-	static CAtlMap<DWORD, Game*> m_map;
+	static hash_map<uint32, Game*> m_map;
 
 public:
-	static Game Lookup(DWORD crc);
+	static Game Lookup(uint32 crc);
 };

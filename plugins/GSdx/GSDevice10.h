@@ -21,59 +21,54 @@
 
 #pragma once
 
-#include "GSDevice.h"
+#include "GSDeviceDX.h"
 #include "GSTexture10.h"
 
-class GSDevice10 : public GSDevice<GSTexture10>
+class GSDevice10 : public GSDeviceDX
 {
-public:
-	typedef GSTexture10 Texture;
+	GSTexture* Create(int type, int w, int h, bool msaa, int format);
 
-private:
-	// state cache
-
-	ID3D10Buffer* m_vb;
-	UINT m_vb_count;
-	UINT m_vb_stride;
-	ID3D10InputLayout* m_layout;
-	D3D10_PRIMITIVE_TOPOLOGY m_topology;
-	ID3D10VertexShader* m_vs;
-	ID3D10Buffer* m_vs_cb;
-	ID3D10GeometryShader* m_gs;
-	ID3D10ShaderResourceView* m_ps_srv[2];
-	ID3D10PixelShader* m_ps;
-	ID3D10Buffer* m_ps_cb;
-	ID3D10SamplerState* m_ps_ss[2];
-	CSize m_viewport;
-	CRect m_scissor;
-	ID3D10DepthStencilState* m_dss;
-	UINT m_sref;
-	ID3D10BlendState* m_bs;
-	float m_bf;
-	ID3D10RenderTargetView* m_rtv;
-	ID3D10DepthStencilView* m_dsv;
+	void DoMerge(GSTexture* st[2], GSVector4* sr, GSVector4* dr, GSTexture* dt, bool slbg, bool mmod, const GSVector4& c);
+	void DoInterlace(GSTexture* st, GSTexture* dt, int shader, bool linear, float yoffset = 0);
 
 	//
 
-	bool Create(int type, Texture& t, int w, int h, int format);
-	void DoMerge(Texture* st, GSVector4* sr, GSVector4* dr, Texture& dt, bool slbg, bool mmod, GSVector4& c);
-	void DoInterlace(Texture& st, Texture& dt, int shader, bool linear, float yoffset = 0);
-
-	//
-
-	CComPtr<ID3D10Device> m_dev;
+	CComPtr<ID3D10Device1> m_dev;
 	CComPtr<IDXGISwapChain> m_swapchain;
-	CComPtr<ID3DX10Font> m_font;
+	CComPtr<ID3D10Buffer> m_vb;
+	CComPtr<ID3D10Buffer> m_vb_old;
+
+	struct
+	{
+		ID3D10Buffer* vb;
+		size_t vb_stride;
+		ID3D10InputLayout* layout;
+		D3D10_PRIMITIVE_TOPOLOGY topology;
+		ID3D10VertexShader* vs;
+		ID3D10Buffer* vs_cb;
+		ID3D10GeometryShader* gs;
+		ID3D10ShaderResourceView* ps_srv[2];
+		ID3D10PixelShader* ps;
+		ID3D10Buffer* ps_cb;
+		ID3D10SamplerState* ps_ss[2];
+		GSVector2i viewport;
+		GSVector4i scissor;
+		ID3D10DepthStencilState* dss;
+		uint8 sref;
+		ID3D10BlendState* bs;
+		float bf;
+		ID3D10RenderTargetView* rtv;
+		ID3D10DepthStencilView* dsv;
+	} m_state;
 
 public: // TODO
 	CComPtr<ID3D10RasterizerState> m_rs;
 
 	struct
 	{
-		CComPtr<ID3D10Buffer> vb;
 		CComPtr<ID3D10InputLayout> il;
 		CComPtr<ID3D10VertexShader> vs;
-		CComPtr<ID3D10PixelShader> ps[5];
+		CComPtr<ID3D10PixelShader> ps[7];
 		CComPtr<ID3D10SamplerState> ln;
 		CComPtr<ID3D10SamplerState> pt;
 		CComPtr<ID3D10DepthStencilState> dss;
@@ -93,55 +88,85 @@ public: // TODO
 		CComPtr<ID3D10Buffer> cb;
 	} m_interlace;
 
+	struct
+	{
+		CComPtr<ID3D10DepthStencilState> dss;
+		CComPtr<ID3D10BlendState> bs;
+	} m_date;
+
+	void SetupDATE(GSTexture* rt, GSTexture* ds, const GSVertexPT1 (&iaVertices)[4], bool datm);
+
+	CComPtr<ID3D10InputLayout> m_il;
+	hash_map<uint32, CComPtr<ID3D10VertexShader> > m_vs;
+	CComPtr<ID3D10Buffer> m_vs_cb;
+	hash_map<uint32, CComPtr<ID3D10GeometryShader> > m_gs;
+	hash_map<uint32, CComPtr<ID3D10PixelShader> > m_ps;
+	CComPtr<ID3D10Buffer> m_ps_cb;
+	hash_map<uint32, CComPtr<ID3D10SamplerState> > m_ps_ss;
+	CComPtr<ID3D10SamplerState> m_palette_ss;
+	// hash_map<uint32, CComPtr<ID3D10DepthStencilState> > m_om_dss;
+	CComPtr<ID3D10DepthStencilState> m_om_dss[32];
+	hash_map<uint32, CComPtr<ID3D10BlendState> > m_om_bs;
+
+	VSConstantBuffer m_vs_cb_cache;
+	PSConstantBuffer m_ps_cb_cache;
+
 public:
 	GSDevice10();
 	virtual ~GSDevice10();
 
-	bool Create(HWND hWnd, bool vsync);
-	bool Reset(int w, int h, bool fs);
-	bool IsLost() {return false;}
-	void Present(const CRect& r);
-	void BeginScene();
-	void EndScene();
-	void Draw(LPCTSTR str);
-	bool CopyOffscreen(Texture& src, const GSVector4& sr, Texture& dst, int w, int h, int format = 0);
+	void SetExclusive(bool isExcl);
 
-	void ClearRenderTarget(Texture& t, const GSVector4& c);
-	void ClearRenderTarget(Texture& t, DWORD c);
-	void ClearDepth(Texture& t, float c);
-	void ClearStencil(Texture& t, BYTE c);
+	bool Create(GSWnd* wnd);
+	bool CreateTextureFX();
+	bool Reset(int w, int h);
+	void Flip();
 
-	bool CreateRenderTarget(Texture& t, int w, int h, int format = 0);
-	bool CreateDepthStencil(Texture& t, int w, int h, int format = 0);
-	bool CreateTexture(Texture& t, int w, int h, int format = 0);
-	bool CreateOffscreen(Texture& t, int w, int h, int format = 0);
+	void DrawPrimitive();
 
-	ID3D10Device* operator->() {return m_dev;}
-	operator ID3D10Device*() {return m_dev;}
+	void ClearRenderTarget(GSTexture* t, const GSVector4& c);
+	void ClearRenderTarget(GSTexture* t, uint32 c);
+	void ClearDepth(GSTexture* t, float c);
+	void ClearStencil(GSTexture* t, uint8 c);
 
-	void IASetVertexBuffer(ID3D10Buffer* vb, UINT stride);
+	GSTexture* CreateRenderTarget(int w, int h, bool msaa, int format = 0);
+	GSTexture* CreateDepthStencil(int w, int h, bool msaa, int format = 0);
+	GSTexture* CreateTexture(int w, int h, int format = 0);
+	GSTexture* CreateOffscreen(int w, int h, int format = 0);
+
+	GSTexture* Resolve(GSTexture* t);
+
+	GSTexture* CopyOffscreen(GSTexture* src, const GSVector4& sr, int w, int h, int format = 0);
+
+	void CopyRect(GSTexture* st, GSTexture* dt, const GSVector4i& r);
+
+	void StretchRect(GSTexture* st, const GSVector4& sr, GSTexture* dt, const GSVector4& dr, int shader = 0, bool linear = true);
+	void StretchRect(GSTexture* st, const GSVector4& sr, GSTexture* dt, const GSVector4& dr, ID3D10PixelShader* ps, ID3D10Buffer* ps_cb, bool linear = true);
+	void StretchRect(GSTexture* st, const GSVector4& sr, GSTexture* dt, const GSVector4& dr, ID3D10PixelShader* ps, ID3D10Buffer* ps_cb, ID3D10BlendState* bs, bool linear = true);
+
+	void IASetVertexBuffer(const void* vertices, size_t stride, size_t count);
+	void IASetVertexBuffer(ID3D10Buffer* vb, size_t stride);
 	void IASetInputLayout(ID3D10InputLayout* layout);
 	void IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY topology);
 	void VSSetShader(ID3D10VertexShader* vs, ID3D10Buffer* vs_cb);
 	void GSSetShader(ID3D10GeometryShader* gs);
-	void PSSetShaderResources(ID3D10ShaderResourceView* srv0, ID3D10ShaderResourceView* srv1);
+	void PSSetShaderResources(GSTexture* sr0, GSTexture* sr1);
 	void PSSetShader(ID3D10PixelShader* ps, ID3D10Buffer* ps_cb);
 	void PSSetSamplerState(ID3D10SamplerState* ss0, ID3D10SamplerState* ss1);
-	void RSSet(int width, int height, const RECT* scissor = NULL);
-	void OMSetDepthStencilState(ID3D10DepthStencilState* dss, UINT sref);
+	void OMSetDepthStencilState(ID3D10DepthStencilState* dss, uint8 sref);
 	void OMSetBlendState(ID3D10BlendState* bs, float bf);
-	void OMSetRenderTargets(ID3D10RenderTargetView* rtv, ID3D10DepthStencilView* dsv);
-	void DrawPrimitive(UINT count, UINT start = 0);
+	void OMSetRenderTargets(GSTexture* rt, GSTexture* ds, const GSVector4i* scissor = NULL);
 
-	void StretchRect(Texture& st, Texture& dt, const GSVector4& dr, bool linear = true);
-	void StretchRect(Texture& st, const GSVector4& sr, Texture& dt, const GSVector4& dr, bool linear = true);
-	void StretchRect(Texture& st, const GSVector4& sr, Texture& dt, const GSVector4& dr, ID3D10PixelShader* ps, ID3D10Buffer* ps_cb, bool linear = true);
-	void StretchRect(Texture& st, const GSVector4& sr, Texture& dt, const GSVector4& dr, ID3D10PixelShader* ps, ID3D10Buffer* ps_cb, ID3D10BlendState* bs, bool linear = true);
+	void SetupIA(const void* vertices, int count, int prim);
+	void SetupVS(VSSelector sel, const VSConstantBuffer* cb);
+	void SetupGS(GSSelector sel);
+	void SetupPS(PSSelector sel, const PSConstantBuffer* cb, PSSamplerSelector ssel);
+	void SetupOM(OMDepthStencilSelector dssel, OMBlendSelector bsel, uint8 afix);
 
-	HRESULT CompileShader(UINT id, LPCSTR entry, D3D10_SHADER_MACRO* macro, ID3D10VertexShader** vs, D3D10_INPUT_ELEMENT_DESC* layout, int count, ID3D10InputLayout** il);
-	HRESULT CompileShader(UINT id, LPCSTR entry, D3D10_SHADER_MACRO* macro, ID3D10GeometryShader** gs);
-	HRESULT CompileShader(UINT id, LPCSTR entry, D3D10_SHADER_MACRO* macro, ID3D10PixelShader** ps);
+	ID3D10Device* operator->() {return m_dev;}
+	operator ID3D10Device*() {return m_dev;}
 
-	// TODO
-	bool SaveToFileD32S8X24(ID3D10Texture2D* ds, LPCTSTR fn);
+	HRESULT CompileShader(uint32 id, const string& entry, D3D10_SHADER_MACRO* macro, ID3D10VertexShader** vs, D3D10_INPUT_ELEMENT_DESC* layout, int count, ID3D10InputLayout** il);
+	HRESULT CompileShader(uint32 id, const string& entry, D3D10_SHADER_MACRO* macro, ID3D10GeometryShader** gs);
+	HRESULT CompileShader(uint32 id, const string& entry, D3D10_SHADER_MACRO* macro, ID3D10PixelShader** ps);
 };

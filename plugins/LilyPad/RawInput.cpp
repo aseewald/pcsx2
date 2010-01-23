@@ -1,4 +1,5 @@
 #include "Global.h"
+#include "InputManager.h"
 #include "WindowsMessaging.h"
 #include "VKey.h"
 #include "DeviceEnumerator.h"
@@ -6,7 +7,6 @@
 #include "WindowsKeyboard.h"
 #include "WindowsMouse.h"
 
-#include "Config.h"
 
 typedef BOOL (CALLBACK *_RegisterRawInputDevices)(PCRAWINPUTDEVICE pRawInputDevices, UINT uiNumDevices, UINT cbSize);
 typedef UINT (CALLBACK *_GetRawInputDeviceInfo)(HANDLE hDevice, UINT uiCommand, LPVOID pData, PUINT pcbSize);
@@ -69,29 +69,26 @@ static int rawMouseActivatedCount = 0;
 class RawInputKeyboard : public WindowsKeyboard {
 public:
 	HANDLE hDevice;
-
+	
 	RawInputKeyboard(HANDLE hDevice, wchar_t *name, wchar_t *instanceID=0) : WindowsKeyboard(RAW, name, instanceID) {
 		this->hDevice = hDevice;
 	}
 
-	int Activate(void *d) {
-		InitInfo *info = (InitInfo*)d;
+	int Activate(InitInfo *initInfo) {
 		Deactivate();
-		HWND hWnd = info->hWnd;
-		if (info->hWndButton) {
-			hWnd = info->hWndButton;
-		}
+
+		hWndProc = initInfo->hWndProc;
+
 		active = 1;
 		if (!rawKeyboardActivatedCount++) {
-			if (!rawMouseActivatedCount && !EatWndProc(hWnd, RawInputWndProc, EATPROC_NO_UPDATE_WHILE_UPDATING_DEVICES)) {
+			if (!rawMouseActivatedCount)
+				hWndProc->Eat(RawInputWndProc, EATPROC_NO_UPDATE_WHILE_UPDATING_DEVICES);
+
+			if (!GetRawKeyboards(hWndProc->hWndEaten)) {
 				Deactivate();
 				return 0;
 			}
-			if (!GetRawKeyboards(hWnd)) {
-				Deactivate();
-				return 0;
 			}
-		}
 
 		InitState();
 		return 1;
@@ -105,7 +102,7 @@ public:
 			if (!rawKeyboardActivatedCount) {
 				ReleaseRawKeyboards();
 				if (!rawMouseActivatedCount)
-					ReleaseExtraProc(RawInputWndProc);
+					hWndProc->ReleaseExtraProc(RawInputWndProc);
 			}
 		}
 	}
@@ -119,13 +116,10 @@ public:
 		this->hDevice = hDevice;
 	}
 
-	int Activate(void *d) {
-		InitInfo *info = (InitInfo*)d;
+	int Activate(InitInfo *initInfo) {
 		Deactivate();
-		HWND hWnd = info->hWnd;
-		if (info->hWndButton) {
-			hWnd = info->hWndButton;
-		}
+
+		hWndProc = initInfo->hWndProc;
 
 		active = 1;
 
@@ -133,16 +127,15 @@ public:
 		// EatWndProc fail.  In all other cases, no unmatched initialization/cleanup
 		// lines.
 		if (!rawMouseActivatedCount++) {
-			GetMouseCapture(hWnd);
-			if (!rawKeyboardActivatedCount && !EatWndProc(hWnd, RawInputWndProc, EATPROC_NO_UPDATE_WHILE_UPDATING_DEVICES)) {
+			GetMouseCapture(hWndProc->hWndEaten);
+			if (!rawKeyboardActivatedCount)
+				hWndProc->Eat(RawInputWndProc, EATPROC_NO_UPDATE_WHILE_UPDATING_DEVICES);
+			
+			if (!GetRawMice(hWndProc->hWndEaten)) {
 				Deactivate();
 				return 0;
 			}
-			if (!GetRawMice(hWnd)) {
-				Deactivate();
-				return 0;
 			}
-		}
 
 		AllocState();
 		return 1;
@@ -157,7 +150,7 @@ public:
 				ReleaseRawMice();
 				ReleaseMouseCapture();
 				if (!rawKeyboardActivatedCount) {
-					ReleaseExtraProc(RawInputWndProc);
+					hWndProc->ReleaseExtraProc(RawInputWndProc);
 				}
 			}
 		}

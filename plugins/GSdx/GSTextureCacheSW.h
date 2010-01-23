@@ -23,28 +23,9 @@
 
 #include "GSRenderer.h"
 
-#define MAX_PAGES 512
-
 class GSTextureCacheSW
 {
 public:
-	class GSTexture;
-	class GSTexturePage;
-
-	class GSTexturePage
-	{
-	public:
-		GSTexture* t;
-		DWORD row, col;
-	};
-
-	class GSTexturePageEntry
-	{
-	public:
-		CAtlList<GSTexturePage*>* p2t;
-		POSITION pos;
-	};
-
 	class GSTexture
 	{
 	public:
@@ -52,32 +33,32 @@ public:
 		GIFRegTEX0 m_TEX0;
 		GIFRegTEXA m_TEXA;
 		void* m_buff;
-		DWORD m_tw;
-		DWORD m_valid[32];
-		DWORD m_maxpages;
-		DWORD m_pages;
-		CAtlList<GSTexturePageEntry*> m_p2te;
-		POSITION m_pos;
-		DWORD m_age;
+		uint32 m_tw;
+		uint32 m_valid[MAX_PAGES]; // each uint32 bits map to the 32 blocks of that page
+		uint32 m_age;
+		bool m_complete;
 
 		explicit GSTexture(GSState* state);
 		virtual ~GSTexture();
 
-		bool Update(const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA, const CRect* r = NULL);
+		bool Update(const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA, const GSVector4i& r);
 	};
 
 protected:
 	GSState* m_state;
-	CAtlList<GSTexture*> m_textures;
-	CAtlList<GSTexturePage*> m_p2t[MAX_PAGES];
+	hash_set<GSTexture*> m_textures;
+	list<GSTexture*> m_map[MAX_PAGES];
+	uint32 m_pages[16];
 
 public:
 	GSTextureCacheSW(GSState* state);
 	virtual ~GSTextureCacheSW();
 
-	const GSTexture* Lookup(const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA, const CRect* r = NULL);
+	const GSTexture* Lookup(const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA, const GSVector4i& r);
+
+	void InvalidateVideoMem(const GSOffset* o, const GSVector4i& r);
 
 	void RemoveAll();
+	void RemoveAt(GSTexture* t);
 	void IncAge();
-	void InvalidateVideoMem(const GIFRegBITBLTBUF& BITBLTBUF, const CRect& r);
 };

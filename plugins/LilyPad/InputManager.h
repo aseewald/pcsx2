@@ -9,12 +9,15 @@
 #define BASE_SENSITIVITY (1<<16)
 #define FULLY_DOWN (1<<16)
 
+#define DEFAULT_DEADZONE (BASE_SENSITIVITY * 201/1000)
 
 /* Idea is for this file and the associated cpp file to be Windows independent.
  * Still more effort than it's worth to port to Linux, however.
  */
 
-// Match DirectInput8 values.
+// Mostly match DirectInput8 values.  Note that these are for physical controls.
+// One physical axis maps to 3 virtual ones, and one physical POV control maps to
+// 4 virtual ones.
 enum ControlType {
 	NO_CONTROL = 0,
 	// Axes are ints.  Relative axes are for mice, mice wheels, etc,
@@ -34,16 +37,22 @@ enum ControlType {
 	// that range is treated as -1 (Though 36000-37000 is treated
 	// like 0 to 1000, just in case).
 	POV = 16,
+
+	// Pressure sensitive buttons.  Only a different type because
+	// they have configurable dead zones, unlike  push or toggle buttons.
+	PRESSURE_BTN = 32,
 };
 
 // Masks to determine button type.  Don't need one for POV.
-#define BUTTON 12
+#define BUTTON (PSHBTN | TGLBTN | PRESSURE_BTN)
+#define BINARY_BUTTON (PSHBTN | TGLBTN)
 #define AXIS 3
 
 struct Binding {
 	int controlIndex;
 	int command;
 	int sensitivity;
+	int deadZone;
 	unsigned char turbo;
 };
 
@@ -97,12 +106,13 @@ enum DeviceAPI {
 	WM = 2,
 	RAW = 3,
 	XINPUT = 4,
+	DS3 = 5,
 	// Not currently used.
-	LLHOOK = 5,
+	LLHOOK = 6,
 	// Not a real API, obviously.  Only used with keyboards,
 	// to ignore individual buttons.  Wrapper itself takes care
 	// of ignoring bound keys.  Otherwise, works normally.
-	IGNORE_KEYBOARD = 6,
+	IGNORE_KEYBOARD = 7,
 };
 
 enum DeviceType {
@@ -148,18 +158,11 @@ struct ForceFeedbackAxis {
 	int id;
 };
 
-// Note:  Unbound controls don't need to be listed, though they can be.
-// Nonexistent controls can be listed as well (Like listing 5 buttons
-// even for three button mice, as some APIs make it impossible to figure
-// out which buttons you really have).
-
 // Used both for active devices and for sets of settings for devices.
 // Way things work:
 // LoadSettings() will delete all device info, then load settings to get
 // one set of generic devices.  Then I enumerate all devices.  Then I merge
 // them, moving settings from the generic devices to the enumerated ones.
-
-// Can't refresh without loading settings.
 
 struct PadBindings {
 	Binding *bindings;
@@ -167,6 +170,23 @@ struct PadBindings {
 	ForceFeedbackBinding *ffBindings;
 	int numFFBindings;
 };
+
+class WndProcEater;
+
+struct InitInfo {
+	// 1 when binding key to ignore.
+	int bindingIgnore;
+	// 1 when binding.
+	int binding;
+
+	HWND hWndTop;
+
+	// For config screen, need to eat button's message handling.
+	//HWND hWndButton;
+	
+	WndProcEater* hWndProc;
+};
+
 
 // Mostly self-contained, but bindings are modified by config.cpp, to make
 // updating the ListView simpler.
@@ -178,6 +198,11 @@ public:
 	char attached;
 	// Based on input modes.
 	char enabled;
+
+	// Not all devices need to subclass the windproc, but most do so might as well
+	// put it here... --air
+	WndProcEater* hWndProc;
+
 	union {
 		// Allows for one loop to compare all 3 in order.
 		wchar_t *IDs[3];
@@ -245,8 +270,7 @@ public:
 
 	void CalcVirtualState();
 
-	// args are OS dependent.
-	inline virtual int Activate(void *args) {
+	virtual int Activate(InitInfo *args) {
 		return 0;
 	}
 
@@ -297,8 +321,8 @@ public:
 	~InputDeviceManager();
 
 	void AddDevice(Device *d);
-	Device *GetActiveDevice(void *info, unsigned int *uid, int *index, int *value);
-	void Update(void *attachInfo);
+	Device *GetActiveDevice(InitInfo *info, unsigned int *uid, int *index, int *value);
+	void Update(InitInfo *initInfo);
 
 	// Called after reading state, after Update().
 	void PostRead();

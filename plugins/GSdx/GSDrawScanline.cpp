@@ -46,18 +46,18 @@ void GSDrawScanline::BeginDraw(const GSRasterizerData* data, Functions* f)
 	m_sel = p->sel;
 
 	m_env.vm = p->vm;
-	m_env.fbr = p->fbo->row;
-	m_env.zbr = p->zbo->row;
-	m_env.fbc = p->fbo->col;
-	m_env.zbc = p->zbo->col;
+	m_env.fbr = p->fbo->pixel.row;
+	m_env.zbr = p->zbo->pixel.row;
+	m_env.fbc = p->fbo->pixel.col[0];
+	m_env.zbc = p->zbo->pixel.col[0];
 	m_env.fzbr = p->fzbo->row;
 	m_env.fzbc = p->fzbo->col;
 	m_env.fm = GSVector4i(p->fm);
 	m_env.zm = GSVector4i(p->zm);
 	m_env.aref = GSVector4i((int)context->TEST.AREF);
 	m_env.afix = GSVector4i((int)context->ALPHA.FIX << 7).xxzzlh();
-	m_env.frb = GSVector4i((int)env.FOGCOL.ai32[0] & 0x00ff00ff);
-	m_env.fga = GSVector4i((int)(env.FOGCOL.ai32[0] >> 8) & 0x00ff00ff);
+	m_env.frb = GSVector4i((int)env.FOGCOL.u32[0] & 0x00ff00ff);
+	m_env.fga = GSVector4i((int)(env.FOGCOL.u32[0] >> 8) & 0x00ff00ff);
 	m_env.dimx = env.dimx;
 
 	if(m_sel.fpsm == 1)
@@ -116,8 +116,8 @@ void GSDrawScanline::BeginDraw(const GSRasterizerData* data, Functions* f)
 			m_env.t.mask.u32[0] = 0; 
 			break;
 		case CLAMP_REGION_CLAMP: 
-			m_env.t.min.u16[0] = min(context->CLAMP.MINU, tw - 1);
-			m_env.t.max.u16[0] = min(context->CLAMP.MAXU, tw - 1);
+			m_env.t.min.u16[0] = std::min<int>(context->CLAMP.MINU, tw - 1);
+			m_env.t.max.u16[0] = std::min<int>(context->CLAMP.MAXU, tw - 1);
 			m_env.t.mask.u32[0] = 0; 
 			break;
 		case CLAMP_REGION_REPEAT: 
@@ -142,8 +142,8 @@ void GSDrawScanline::BeginDraw(const GSRasterizerData* data, Functions* f)
 			m_env.t.mask.u32[2] = 0; 
 			break;
 		case CLAMP_REGION_CLAMP: 
-			m_env.t.min.u16[4] = min(context->CLAMP.MINV, th - 1);
-			m_env.t.max.u16[4] = min(context->CLAMP.MAXV, th - 1); // ffx anima summon scene, when the anchor appears (th = 256, maxv > 256)
+			m_env.t.min.u16[4] = std::min<int>(context->CLAMP.MINV, th - 1);
+			m_env.t.max.u16[4] = std::min<int>(context->CLAMP.MAXV, th - 1); // ffx anima summon scene, when the anchor appears (th = 256, maxv > 256)
 			m_env.t.mask.u32[2] = 0; 
 			break;
 		case CLAMP_REGION_REPEAT: 
@@ -163,7 +163,7 @@ void GSDrawScanline::BeginDraw(const GSRasterizerData* data, Functions* f)
 
 	//
 
-	f->ssl = m_ds.Lookup(m_sel);
+	f->ssl = m_ds[m_sel];
 
 	if(m_sel.aa1)// && (m_state->m_perfmon.GetFrame() & 0x40))
 	{
@@ -173,7 +173,7 @@ void GSDrawScanline::BeginDraw(const GSRasterizerData* data, Functions* f)
 		sel.zwrite = 0;
 		sel.edge = 1;
 
-		f->ssle = m_ds.Lookup(sel);
+		f->ssle = m_ds[sel];
 	}
 
 	if(m_sel.IsSolidRect())
@@ -189,6 +189,7 @@ void GSDrawScanline::BeginDraw(const GSRasterizerData* data, Functions* f)
 
 	sel.iip = m_sel.iip;
 	sel.tfx = m_sel.tfx;
+	sel.tcc = m_sel.tcc;
 	sel.fst = m_sel.fst;
 	sel.fge = m_sel.fge;
 	sel.sprite = m_sel.sprite;
@@ -196,7 +197,7 @@ void GSDrawScanline::BeginDraw(const GSRasterizerData* data, Functions* f)
 	sel.zb = m_sel.zb;
 	sel.zoverflow = m_sel.zoverflow;
 
-	f->ssp = m_sp.Lookup(sel);
+	f->ssp = m_sp[sel];
 }
 
 void GSDrawScanline::EndDraw(const GSRasterizerStats& stats)
@@ -211,34 +212,34 @@ void GSDrawScanline::DrawSolidRect(const GSVector4i& r, const GSVertexSW& v)
 
 	// FIXME: sometimes the frame and z buffer may overlap, the outcome is undefined
 
-	DWORD m;
+	uint32 m;
 
 	m = m_env.zm.u32[0];
 
 	if(m != 0xffffffff)
 	{
-		DWORD z = (DWORD)(float)v.p.z;
+		uint32 z = (uint32)v.p.z;
 
 		if(m_sel.zpsm != 2)
 		{
 			if(m == 0)
 			{
-				DrawSolidRectT<DWORD, false>(m_env.zbr, m_env.zbc[0], r, z, m);
+				DrawSolidRectT<uint32, false>(m_env.zbr, m_env.zbc, r, z, m);
 			}
 			else
 			{
-				DrawSolidRectT<DWORD, true>(m_env.zbr, m_env.zbc[0], r, z, m);
+				DrawSolidRectT<uint32, true>(m_env.zbr, m_env.zbc, r, z, m);
 			}
 		}
 		else
 		{
 			if(m == 0)
 			{
-				DrawSolidRectT<WORD, false>(m_env.zbr, m_env.zbc[0], r, z, m);
+				DrawSolidRectT<uint16, false>(m_env.zbr, m_env.zbc, r, z, m);
 			}
 			else
 			{
-				DrawSolidRectT<WORD, true>(m_env.zbr, m_env.zbc[0], r, z, m);
+				DrawSolidRectT<uint16, true>(m_env.zbr, m_env.zbc, r, z, m);
 			}
 		}
 	}
@@ -247,7 +248,7 @@ void GSDrawScanline::DrawSolidRect(const GSVector4i& r, const GSVertexSW& v)
 
 	if(m != 0xffffffff)
 	{
-		DWORD c = (GSVector4i(v.c) >> 7).rgba32();
+		uint32 c = (GSVector4i(v.c) >> 7).rgba32();
 
 		if(m_state->m_context->FBA.FBA)
 		{
@@ -258,11 +259,11 @@ void GSDrawScanline::DrawSolidRect(const GSVector4i& r, const GSVertexSW& v)
 		{
 			if(m == 0)
 			{
-				DrawSolidRectT<DWORD, false>(m_env.fbr, m_env.fbc[0], r, c, m);
+				DrawSolidRectT<uint32, false>(m_env.fbr, m_env.fbc, r, c, m);
 			}
 			else
 			{
-				DrawSolidRectT<DWORD, true>(m_env.fbr, m_env.fbc[0], r, c, m);
+				DrawSolidRectT<uint32, true>(m_env.fbr, m_env.fbc, r, c, m);
 			}
 		}
 		else
@@ -271,25 +272,25 @@ void GSDrawScanline::DrawSolidRect(const GSVector4i& r, const GSVertexSW& v)
 
 			if(m == 0)
 			{
-				DrawSolidRectT<WORD, false>(m_env.fbr, m_env.fbc[0], r, c, m);
+				DrawSolidRectT<uint16, false>(m_env.fbr, m_env.fbc, r, c, m);
 			}
 			else
 			{
-				DrawSolidRectT<WORD, true>(m_env.fbr, m_env.fbc[0], r, c, m);
+				DrawSolidRectT<uint16, true>(m_env.fbr, m_env.fbc, r, c, m);
 			}
 		}
 	}
 }
 
 template<class T, bool masked> 
-void GSDrawScanline::DrawSolidRectT(const GSVector4i* row, int* col, const GSVector4i& r, DWORD c, DWORD m)
+void GSDrawScanline::DrawSolidRectT(const int* RESTRICT row, const int* RESTRICT col, const GSVector4i& r, uint32 c, uint32 m)
 {
 	if(m == 0xffffffff) return;
 
 	GSVector4i color((int)c);
 	GSVector4i mask((int)m);
 
-	if(sizeof(T) == sizeof(WORD))
+	if(sizeof(T) == sizeof(uint16))
 	{
 		color = color.xxzzlh();
 		mask = mask.xxzzlh();
@@ -297,9 +298,10 @@ void GSDrawScanline::DrawSolidRectT(const GSVector4i* row, int* col, const GSVec
 
 	color = color.andnot(mask);
 
-	GSVector4i bm(8 * 4 / sizeof(T) - 1, 8 - 1);
-	GSVector4i br = (r + bm).andnot(bm.xyxy());
+	GSVector4i br = r.ralign<GSVector4i::Inside>(GSVector2i(8 * 4 / sizeof(T), 8));
 
+	if(!br.rempty())
+	{
 	FillRect<T, masked>(row, col, GSVector4i(r.x, r.y, r.z, br.y), c, m);
 	FillRect<T, masked>(row, col, GSVector4i(r.x, br.w, r.z, r.w), c, m);
 
@@ -310,38 +312,41 @@ void GSDrawScanline::DrawSolidRectT(const GSVector4i* row, int* col, const GSVec
 	}
 
 	FillBlock<T, masked>(row, col, br, color, mask);
+	}
+	else
+	{
+		FillRect<T, masked>(row, col, r, c, m);
+	}
 }
 
 template<class T, bool masked> 
-void GSDrawScanline::FillRect(const GSVector4i* row, int* col, const GSVector4i& r, DWORD c, DWORD m)
+void GSDrawScanline::FillRect(const int* RESTRICT row, const int* RESTRICT col, const GSVector4i& r, uint32 c, uint32 m)
 {
 	if(r.x >= r.z) return;
 
 	for(int y = r.y; y < r.w; y++)
 	{
-		DWORD base = row[y].x;
+		T* RESTRICT d = &((T*)m_env.vm)[row[y]];
 
 		for(int x = r.x; x < r.z; x++)
 		{
-			T* p = &((T*)m_env.vm)[base + col[x]];
-
-			*p = (T)(!masked ? c : (c | (*p & m)));
+			d[col[x]] = (T)(!masked ? c : (c | (d[col[x]] & m)));
 		}
 	}
 }
 
 template<class T, bool masked> 
-void GSDrawScanline::FillBlock(const GSVector4i* row, int* col, const GSVector4i& r, const GSVector4i& c, const GSVector4i& m)
+void GSDrawScanline::FillBlock(const int* RESTRICT row, const int* RESTRICT col, const GSVector4i& r, const GSVector4i& c, const GSVector4i& m)
 {
 	if(r.x >= r.z) return;
 
 	for(int y = r.y; y < r.w; y += 8)
 	{
-		DWORD base = row[y].x;
+		T* RESTRICT d = &((T*)m_env.vm)[row[y]];
 
 		for(int x = r.x; x < r.z; x += 8 * 4 / sizeof(T))
 		{
-			GSVector4i* p = (GSVector4i*)&((T*)m_env.vm)[base + col[x]];
+			GSVector4i* RESTRICT p = (GSVector4i*)&d[col[x]];
 
 			for(int i = 0; i < 16; i += 4)
 			{
@@ -362,7 +367,7 @@ GSDrawScanline::GSSetupPrimMap::GSSetupPrimMap(GSScanlineEnvironment& env)
 {
 }
 
-GSSetupPrimCodeGenerator* GSDrawScanline::GSSetupPrimMap::Create(UINT64 key, void* ptr, size_t maxsize)
+GSSetupPrimCodeGenerator* GSDrawScanline::GSSetupPrimMap::Create(uint64 key, void* ptr, size_t maxsize)
 {
 	return new GSSetupPrimCodeGenerator(m_env, key, ptr, maxsize);
 }
@@ -375,7 +380,7 @@ GSDrawScanline::GSDrawScanlineMap::GSDrawScanlineMap(GSScanlineEnvironment& env)
 {
 }
 
-GSDrawScanlineCodeGenerator* GSDrawScanline::GSDrawScanlineMap::Create(UINT64 key, void* ptr, size_t maxsize)
+GSDrawScanlineCodeGenerator* GSDrawScanline::GSDrawScanlineMap::Create(uint64 key, void* ptr, size_t maxsize)
 {
 	return new GSDrawScanlineCodeGenerator(m_env, key, ptr, maxsize);
 }

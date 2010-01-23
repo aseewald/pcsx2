@@ -1056,147 +1056,7 @@ bool ZeroGS::Create(int _width, int _height)
 	}
 
 #else
-	XVisualInfo *vi;
-	Colormap cmap;
-	int dpyWidth, dpyHeight;
-	int glxMajorVersion, glxMinorVersion;
-	int vidModeMajorVersion, vidModeMinorVersion;
-	Atom wmDelete;
-	Window winDummy;
-	unsigned int borderDummy;
-	
-	// attributes for a single buffered visual in RGBA format with at least
-	// 8 bits per color and a 24 bit depth buffer
-	int attrListSgl[] = {GLX_RGBA, GLX_RED_SIZE, 8, 
-						 GLX_GREEN_SIZE, 8, 
-						 GLX_BLUE_SIZE, 8, 
-						 GLX_DEPTH_SIZE, 24,
-						 None};
-
-	// attributes for a double buffered visual in RGBA format with at least 
-	// 8 bits per color and a 24 bit depth buffer
-	int attrListDbl[] = { GLX_RGBA, GLX_DOUBLEBUFFER, 
-						  GLX_RED_SIZE, 8, 
-						  GLX_GREEN_SIZE, 8, 
-						  GLX_BLUE_SIZE, 8, 
-						  GLX_DEPTH_SIZE, 24,
-						  None };
-
-	GLWin.fs = !!(conf.options & GSOPTION_FULLSCREEN);
-	
-	/* get an appropriate visual */
-	vi = glXChooseVisual(GLWin.dpy, GLWin.screen, attrListDbl);
-	if (vi == NULL) {
-		vi = glXChooseVisual(GLWin.dpy, GLWin.screen, attrListSgl);
-		GLWin.doubleBuffered = False;
-		ERROR_LOG("Only Singlebuffered Visual!\n");
-	}
-	else {
-		GLWin.doubleBuffered = True;
-		ERROR_LOG("Got Doublebuffered Visual!\n");
-	}
-
-	glXQueryVersion(GLWin.dpy, &glxMajorVersion, &glxMinorVersion);
-	ERROR_LOG("glX-Version %d.%d\n", glxMajorVersion, glxMinorVersion);
-	/* create a GLX context */
-	GLWin.ctx = glXCreateContext(GLWin.dpy, vi, 0, GL_TRUE);
-	/* create a color map */
-	cmap = XCreateColormap(GLWin.dpy, RootWindow(GLWin.dpy, vi->screen),
-						   vi->visual, AllocNone);
-	GLWin.attr.colormap = cmap;
-	GLWin.attr.border_pixel = 0;
-
-	// get a connection
-	XF86VidModeQueryVersion(GLWin.dpy, &vidModeMajorVersion, &vidModeMinorVersion);
-
-	if (GLWin.fs) {
-		
-		XF86VidModeModeInfo **modes = NULL;
-		int modeNum = 0;
-		int bestMode = 0;
-
-		// set best mode to current
-		bestMode = 0;
-		ERROR_LOG("XF86VidModeExtension-Version %d.%d\n", vidModeMajorVersion, vidModeMinorVersion);
-		XF86VidModeGetAllModeLines(GLWin.dpy, GLWin.screen, &modeNum, &modes);
-		
-		if( modeNum > 0 && modes != NULL ) {
-			/* save desktop-resolution before switching modes */
-			GLWin.deskMode = *modes[0];
-			/* look for mode with requested resolution */
-			for (i = 0; i < modeNum; i++) {
-				if ((modes[i]->hdisplay == _width) && (modes[i]->vdisplay == _height)) {
-					bestMode = i;
-				}
-			}	
-
-			XF86VidModeSwitchToMode(GLWin.dpy, GLWin.screen, modes[bestMode]);
-			XF86VidModeSetViewPort(GLWin.dpy, GLWin.screen, 0, 0);
-			dpyWidth = modes[bestMode]->hdisplay;
-			dpyHeight = modes[bestMode]->vdisplay;
-			ERROR_LOG("Resolution %dx%d\n", dpyWidth, dpyHeight);
-			XFree(modes);
-			
-			/* create a fullscreen window */
-			GLWin.attr.override_redirect = True;
-			GLWin.attr.event_mask = ExposureMask | KeyPressMask | ButtonPressMask |
-				StructureNotifyMask;
-			GLWin.win = XCreateWindow(GLWin.dpy, RootWindow(GLWin.dpy, vi->screen),
-									  0, 0, dpyWidth, dpyHeight, 0, vi->depth, InputOutput, vi->visual,
-									  CWBorderPixel | CWColormap | CWEventMask | CWOverrideRedirect,
-									  &GLWin.attr);
-			XWarpPointer(GLWin.dpy, None, GLWin.win, 0, 0, 0, 0, 0, 0);
-			XMapRaised(GLWin.dpy, GLWin.win);
-			XGrabKeyboard(GLWin.dpy, GLWin.win, True, GrabModeAsync,
-						  GrabModeAsync, CurrentTime);
-			XGrabPointer(GLWin.dpy, GLWin.win, True, ButtonPressMask,
-						 GrabModeAsync, GrabModeAsync, GLWin.win, None, CurrentTime);
-		}
-		else {
-			ERROR_LOG("Failed to start fullscreen. If you received the \n"
-					  "\"XFree86-VidModeExtension\" extension is missing, add\n"
-					  "Load \"extmod\"\n"
-					  "to your X configuration file (under the Module Section)\n");
-			GLWin.fs = 0;
-		}
-	}
-	
-	
-	if( !GLWin.fs ) {
-
-		//XRootWindow(dpy,screen)
-		//int X = (rcdesktop.right-rcdesktop.left)/2 - (rc.right-rc.left)/2;
-		//int Y = (rcdesktop.bottom-rcdesktop.top)/2 - (rc.bottom-rc.top)/2;
-
-		// create a window in window mode
-		GLWin.attr.event_mask = ExposureMask | KeyPressMask | ButtonPressMask |
-			StructureNotifyMask;
-		GLWin.win = XCreateWindow(GLWin.dpy, RootWindow(GLWin.dpy, vi->screen),
-								  0, 0, _width, _height, 0, vi->depth, InputOutput, vi->visual,
-								  CWBorderPixel | CWColormap | CWEventMask, &GLWin.attr);
-		// only set window title and handle wm_delete_events if in windowed mode
-		wmDelete = XInternAtom(GLWin.dpy, "WM_DELETE_WINDOW", True);
-		XSetWMProtocols(GLWin.dpy, GLWin.win, &wmDelete, 1);
-		XSetStandardProperties(GLWin.dpy, GLWin.win, "ZeroGS",
-								   "ZeroGS", None, NULL, 0, NULL);
-		XMapRaised(GLWin.dpy, GLWin.win);
-	}	   
-
-	// connect the glx-context to the window
-	glXMakeCurrent(GLWin.dpy, GLWin.win, GLWin.ctx);
-	XGetGeometry(GLWin.dpy, GLWin.win, &winDummy, &GLWin.x, &GLWin.y,
-				 &GLWin.width, &GLWin.height, &borderDummy, &GLWin.depth);
-	ERROR_LOG("Depth %d\n", GLWin.depth);
-	if (glXIsDirect(GLWin.dpy, GLWin.ctx)) 
-		ERROR_LOG("you have Direct Rendering!\n");
-	else
-		ERROR_LOG("no Direct Rendering possible!\n");
-
-	// better for pad plugin key input (thc)
-	XSelectInput(GLWin.dpy, GLWin.win, ExposureMask | KeyPressMask | KeyReleaseMask | 
-				 ButtonPressMask | StructureNotifyMask | EnterWindowMask | LeaveWindowMask |
-				 FocusChangeMask );
-
+	GLWin.DisplayWindow(_width, _height);
 #endif
 
 	// fill the opengl extension map
@@ -1770,22 +1630,7 @@ void ZeroGS::Destroy(BOOL bD3D)
 		hDC=NULL;									   // Set DC To NULL
 	}
 #else // linux
-	if (GLWin.ctx)
-	{
-		if (!glXMakeCurrent(GLWin.dpy, None, NULL))
-		{
-			ERROR_LOG("Could not release drawing context.\n");
-		}
-		glXDestroyContext(GLWin.dpy, GLWin.ctx);
-		GLWin.ctx = NULL;
-	}
-	/* switch back to original desktop resolution if we were in fs */
-	if( GLWin.dpy != NULL ) {
-		if (GLWin.fs) {
-				XF86VidModeSwitchToMode(GLWin.dpy, GLWin.screen, &GLWin.deskMode);
-				XF86VidModeSetViewPort(GLWin.dpy, GLWin.screen, 0, 0);
-		}
-	}
+    GLWin.DestroyWindow();
 #endif
 
 	mapGLExtensions.clear();
@@ -3476,7 +3321,7 @@ void ZeroGS::RenderCustom(float fAlpha)
 #ifdef _WIN32
 		SwapBuffers(hDC);
 #else
-		glXSwapBuffers(GLWin.dpy, GLWin.win);
+		GLWin.SwapBuffers();
 #endif
 
 	glEnable(GL_SCISSOR_TEST);
@@ -3983,7 +3828,7 @@ void ZeroGS::RenderCRTC(int interlace)
 			lastswaptime = timeGetTime();
 		//}
 #else
-		glXSwapBuffers(GLWin.dpy, GLWin.win);
+		GLWin.SwapBuffers();
 #endif
 
 //	  if( glGetError() != GL_NO_ERROR) {
@@ -5263,9 +5108,6 @@ void ZeroGS::ExtWrite()
 ////////////
 // Caches //
 ////////////
-#ifdef __x86_64__
-extern "C" void TestClutChangeMMX(void* src, void* dst, int entries, void* pret);
-#endif
 
 bool ZeroGS::CheckChangeInClut(u32 highdword, u32 psm)
 {
@@ -5303,9 +5145,6 @@ bool ZeroGS::CheckChangeInClut(u32 highdword, u32 psm)
 	// do a fast test with MMX
 #ifdef _MSC_VER
 
-#ifdef __x86_64__
-	TestClutChangeMMX(dst, src, entries, &bRet);
-#else
 	int storeebx;
 	__asm {
 		mov storeebx, ebx
@@ -5370,63 +5209,9 @@ Return:
 		emms
 		mov ebx, storeebx
 	}
-#endif // __x86_64__
 
 #else // linux
 
-#ifdef __x86_64__
-	__asm__(
-		".intel_syntax\n"
-"Start:\n"
-		"movq %%mm0, [%%rcx]\n"
-		"movq %%mm1, [%%rcx+8]\n"
-		"pcmpeqd %%mm0, [%%rdx]\n"
-		"pcmpeqd %%mm1, [%%rdx+16]\n"
-		"movq %%mm2, [%%rcx+16]\n"
-		"movq %%mm3, [%%rcx+24]\n"
-		"pcmpeqd %%mm2, [%%rdx+32]\n"
-		"pcmpeqd %%mm3, [%%rdx+48]\n"
-		"pand %%mm0, %%mm1\n"
-		"pand %%mm2, %%mm3\n"
-		"movq %%mm4, [%%rcx+32]\n"
-		"movq %%mm5, [%%rcx+40]\n"
-		"pcmpeqd %%mm4, [%%rdx+8]\n"
-		"pcmpeqd %%mm5, [%%rdx+24]\n"
-		"pand %%mm0, %%mm2\n"
-		"pand %%mm4, %%mm5\n"
-		"movq %%mm6, [%%rcx+48]\n"
-		"movq %%mm7, [%%rcx+56]\n"
-		"pcmpeqd %%mm6, [%%rdx+40]\n"
-		"pcmpeqd %%mm7, [%%rdx+56]\n"
-		"pand %%mm0, %%mm4\n"
-		"pand %%mm6, %%mm7\n"
-		"pand %%mm0, %%mm6\n"
-		"pmovmskb %%eax, %%mm0\n"
-		"cmp %%eax, 0xff\n"
-		"je Continue\n"
-		".att_syntax\n"
-		"movb $1, %0\n"
-		".intel_syntax\n"
-		"jmp Return\n"
-"Continue:\n"
-		"cmp %%rbx, 16\n"
-		"jle Return\n"
-		"test %%rbx, 0x10\n"
-		"jz AddRcx\n"
-		"sub %%rdx, 448\n" // go back and down one column
-"AddRcx:\n"
-		"add %%rdx, 256\n" // go to the right block
-		"cmp %%rbx, 0x90\n"
-		"jne Continue1\n"
-		"add %%rdx, 256\n" // skip whole block
-"Continue1:\n"
-		"add %%rcx, 64\n"
-		"sub %%rbx, 16\n"
-		"jmp Start\n"
-"Return:\n"
-		"emms\n"
-		".att_syntax\n" : "=m"(bRet) : "c"(dst), "d"(src), "b"(entries) : "rax", "memory");// Breaks -fPIC
-#else
 	// do a fast test with MMX
 	__asm__(
 		".intel_syntax\n"
@@ -5478,8 +5263,7 @@ Return:
 		"jmp Start\n"
 "Return:\n"
 		"emms\n"
-		".att_syntax\n" : "=m"(bRet) : "c"(dst), "d"(src), "b"(entries) : "eax", "memory"); // Breaks -fPIC
-#endif // __x86_64__
+		".att_syntax\n" : "=m"(bRet) : "c"(dst), "d"(src), "S"(entries) : "eax", "memory"); // Breaks -fPIC
 
 #endif // _WIN32
 

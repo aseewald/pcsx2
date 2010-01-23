@@ -22,26 +22,25 @@
 #include "stdafx.h"
 #include "GSTexture7.h"
 
-GSTexture7::GSTexture7()
-	: m_type(GSTexture::None)
-{
-	memset(&m_desc, 0, sizeof(m_desc));
-}
-
 GSTexture7::GSTexture7(int type, IDirectDrawSurface7* system)
-	: m_type(type)
-	, m_system(system)
+	: m_system(system)
 {
 	memset(&m_desc, 0, sizeof(m_desc));
 
 	m_desc.dwSize = sizeof(m_desc);
 
 	system->GetSurfaceDesc(&m_desc);
+
+	m_size.x = (int)m_desc.dwWidth;
+	m_size.y = (int)m_desc.dwHeight;
+
+	m_type = type;
+
+	m_format = (int)m_desc.ddpfPixelFormat.dwFourCC;
 }
 
 GSTexture7::GSTexture7(int type, IDirectDrawSurface7* system, IDirectDrawSurface7* video)
-	: m_type(type)
-	, m_system(system)
+	: m_system(system)
 	, m_video(video)
 {
 	memset(&m_desc, 0, sizeof(m_desc));
@@ -49,42 +48,20 @@ GSTexture7::GSTexture7(int type, IDirectDrawSurface7* system, IDirectDrawSurface
 	m_desc.dwSize = sizeof(m_desc);
 
 	video->GetSurfaceDesc(&m_desc);
+
+	m_size.x = (int)m_desc.dwWidth;
+	m_size.y = (int)m_desc.dwHeight;
+
+	m_type = type;
+
+	m_format = (int)m_desc.ddpfPixelFormat.dwFourCC;
 }
 
-GSTexture7::~GSTexture7()
-{
-}
-
-GSTexture7::operator bool()
-{
-	return !!m_system;
-}
-
-int GSTexture7::GetType() const
-{
-	return m_type;
-}
-
-int GSTexture7::GetWidth() const 
-{
-	return m_desc.dwWidth;
-}
-
-int GSTexture7::GetHeight() const 
-{
-	return m_desc.dwHeight;
-}
-
-int GSTexture7::GetFormat() const 
-{
-	return (int)m_desc.ddpfPixelFormat.dwFourCC;
-}
-
-bool GSTexture7::Update(const CRect& r, const void* data, int pitch)
+bool GSTexture7::Update(const GSVector4i& r, const void* data, int pitch)
 {
 	HRESULT hr;
 
-	CRect r2 = r;
+	GSVector4i r2 = r;
 
 	DDSURFACEDESC2 desc;
 
@@ -92,14 +69,14 @@ bool GSTexture7::Update(const CRect& r, const void* data, int pitch)
 
 	desc.dwSize = sizeof(desc);
 
-	if(SUCCEEDED(hr = m_system->Lock(&r2, &desc, DDLOCK_WAIT | DDLOCK_SURFACEMEMORYPTR | DDLOCK_WRITEONLY, NULL)))
+	if(SUCCEEDED(hr = m_system->Lock(r2, &desc, DDLOCK_WAIT | DDLOCK_SURFACEMEMORYPTR | DDLOCK_WRITEONLY, NULL)))
 	{
-		BYTE* src = (BYTE*)data;
-		BYTE* dst = (BYTE*)desc.lpSurface;
+		uint8* src = (uint8*)data;
+		uint8* dst = (uint8*)desc.lpSurface;
 
-		int bytes = min(pitch, desc.lPitch);
+		int bytes = std::min<int>(pitch, desc.lPitch);
 
-		for(int i = 0, j = r.Height(); i < j; i++, src += pitch, dst += desc.lPitch)
+		for(int i = 0, j = r.height(); i < j; i++, src += pitch, dst += desc.lPitch)
 		{
 			// memcpy(dst, src, bytes);
 
@@ -120,11 +97,11 @@ bool GSTexture7::Update(const CRect& r, const void* data, int pitch)
 			}
 		}
 
-		hr = m_system->Unlock(&r2);
+		hr = m_system->Unlock(r2);
 
 		if(m_video)
 		{
-			hr = m_video->Blt(&r2, m_system, &r2, DDBLT_WAIT, NULL);
+			hr = m_video->Blt(r2, m_system, r2, DDBLT_WAIT, NULL);
 		}
 
 		return true;
@@ -133,20 +110,23 @@ bool GSTexture7::Update(const CRect& r, const void* data, int pitch)
 	return false;
 }
 
-bool GSTexture7::Map(BYTE** bits, int& pitch, const RECT* r)
+bool GSTexture7::Map(GSMap& m, const GSVector4i* r)
 {
 	HRESULT hr;
 
-	CRect r2 = r;
+	if(r != NULL)
+	{
+		// ASSERT(0); // not implemented
+
+		return false;
+	}
 
 	DDSURFACEDESC2 desc;
 
-	if(SUCCEEDED(hr = m_system->Lock(&r2, &desc, DDLOCK_WAIT | DDLOCK_SURFACEMEMORYPTR, NULL)))
+	if(SUCCEEDED(hr = m_system->Lock(NULL, &desc, DDLOCK_WAIT | DDLOCK_SURFACEMEMORYPTR, NULL)))
 	{
-		*bits = (BYTE*)desc.lpSurface;
-		pitch = (int)desc.lPitch;
-
-		m_lr = r;
+		m.bits = (uint8*)desc.lpSurface;
+		m.pitch = (int)desc.lPitch;
 
 		return true;
 	}
@@ -162,11 +142,11 @@ void GSTexture7::Unmap()
 
 	if(m_video)
 	{
-		hr = m_video->Blt(&m_lr, m_system, &m_lr, DDBLT_WAIT, NULL);
+		hr = m_video->Blt(NULL, m_system, NULL, DDBLT_WAIT, NULL);
 	}
 }
 
-bool GSTexture7::Save(CString fn, bool dds)
+bool GSTexture7::Save(const string& fn, bool dds)
 {
 	// TODO
 

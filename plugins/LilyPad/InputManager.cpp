@@ -1,7 +1,6 @@
-#include "InputManager.h"
 #include "Global.h"
+#include "InputManager.h"
 #include "KeyboardQueue.h"
-#include <math.h>
 
 InputDeviceManager *dm = 0;
 
@@ -37,6 +36,8 @@ Device::Device(DeviceAPI api, DeviceType d, const wchar_t *displayName, const wc
 	active = 0;
 	attached = 1;
 	enabled = 0;
+
+	hWndProc = 0;
 
 	virtualControls = 0;
 	numVirtualControls = 0;
@@ -112,14 +113,26 @@ void Device::AddFFAxis(const wchar_t *displayName, int id) {
 	ffAxes[numFFAxes].id = id;
 	ffAxes[numFFAxes].displayName = wcsdup(displayName);
 	numFFAxes++;
+	int bindingsExist = 0;
 	for (int port=0; port<2; port++) {
 		for (int slot=0; slot<4; slot++) {
 			for (int i=0; i<pads[port][slot].numFFBindings; i++) {
 				ForceFeedbackBinding *b = pads[port][slot].ffBindings+i;
 				b->axes = (AxisEffectInfo*) realloc(b->axes, sizeof(AxisEffectInfo) * (numFFAxes));
 				memset(b->axes + (numFFAxes-1), 0, sizeof(AxisEffectInfo));
+				bindingsExist = 1;
 			}
 		}
+	}
+	// Generally the case when not loading a binding file.
+	if (!bindingsExist) {
+		int i = numFFAxes-1;
+		ForceFeedbackAxis temp = ffAxes[i];
+		while (i && temp.id < ffAxes[i-1].id) {
+			ffAxes[i] = ffAxes[i-1];
+			i--;
+		}
+		ffAxes[i] = temp;
 	}
 }
 
@@ -145,22 +158,27 @@ void Device::CalcVirtualState() {
 		int val = physicalControlState[i];
 		if (c->type & BUTTON) {
 			virtualControlState[index] = val;
+			// DirectInput keyboard events only.
+			if (this->api == DI && this->type == KEYBOARD) {
 			if (!(virtualControlState[index]>>15) != !(oldVirtualControlState[index]>>15) && c->vkey) {
 				// Check for alt-F4 to avoid toggling skip mode incorrectly.
 				if (c->vkey == VK_F4) {
-					for (int i=0; i<numPhysicalControls; i++) {
+						int i;
+						for (i=0; i<numPhysicalControls; i++) {
 						if (virtualControlState[physicalControls[i].baseVirtualControlIndex] &&
 							(physicalControls[i].vkey == VK_MENU ||
 							 physicalControls[i].vkey == VK_RMENU ||
 							 physicalControls[i].vkey == VK_LMENU)) {
-								 return;
+									break;
 						}
 					}
+						if (i<numPhysicalControls) continue;
 				}
 				int event = KEYPRESS;
 				if (!(virtualControlState[index]>>15)) event = KEYRELEASE;
 				QueueKeyEvent(c->vkey, event);
 			}
+		}
 		}
 		else if (c->type & ABSAXIS) {
 			virtualControlState[index] = (val + FULLY_DOWN)/2;
@@ -336,7 +354,7 @@ void InputDeviceManager::AddDevice(Device *d) {
 	devices[numDevices++] = d;
 }
 
-void InputDeviceManager::Update(void *info) {
+void InputDeviceManager::Update(InitInfo *info) {
 	for (int i=0; i<numDevices; i++) {
 		if (devices[i]->enabled) {
 			if (!devices[i]->active) {
@@ -357,7 +375,7 @@ void InputDeviceManager::PostRead() {
 	}
 }
 
-Device *InputDeviceManager::GetActiveDevice(void *info, unsigned int *uid, int *index, int *value) {
+Device *InputDeviceManager::GetActiveDevice(InitInfo *info, unsigned int *uid, int *index, int *value) {
 	int i, j;
 	Update(info);
 	int bestDiff = FULLY_DOWN/2;
@@ -367,12 +385,8 @@ Device *InputDeviceManager::GetActiveDevice(void *info, unsigned int *uid, int *
 			for (j=0; j<devices[i]->numVirtualControls; j++) {
 				if (devices[i]->virtualControlState[j] == devices[i]->oldVirtualControlState[j]) continue;
 				if (devices[i]->virtualControls[j].uid & UID_POV) continue;
-				// Fix for two things:
-				// Releasing button used to click on bind button, and
-				// DirectInput not updating control state.
-				//Note:  Handling latter not great for pressure sensitive button handling, but should still work...
-				// with some effort.
-				if (!(devices[i]->virtualControls[j].uid & (POV|RELAXIS))) {
+				// Fix for releasing button used to click on bind button
+				if (!((devices[i]->virtualControls[j].uid>>16) & (POV|RELAXIS|ABSAXIS))) {
 					if (abs(devices[i]->oldVirtualControlState[j]) > abs(devices[i]->virtualControlState[j])) {
 						devices[i]->oldVirtualControlState[j] = 0;
 					}
@@ -382,14 +396,23 @@ Device *InputDeviceManager::GetActiveDevice(void *info, unsigned int *uid, int *
 				if (((devices[i]->virtualControls[j].uid>>16) & 0xFF) == RELAXIS) {
 					diff = diff/4+1;
 				}
+				// Less pressure needed to bind DS3 buttons.
+				if (devices[i]->api == DS3 && (((devices[i]->virtualControls[j].uid>>16) & 0xFF) & BUTTON)) {
+					diff *= 4;
+				}
 				if (diff > bestDiff) {
 					if (devices[i]->virtualControls[j].uid & UID_AXIS) {
 						if ((((devices[i]->virtualControls[j].uid>>16)&0xFF) != ABSAXIS)) continue;
 						// Very picky when binding entire axes.  Prefer binding half-axes.
-						if (!((devices[i]->oldVirtualControlState[j] < FULLY_DOWN/16 && devices[i]->virtualControlState[j] > FULLY_DOWN/8) ||
-							  (devices[i]->oldVirtualControlState[j] > 15*FULLY_DOWN/16 && devices[i]->virtualControlState[j] < 7*FULLY_DOWN/8)))
+						if (!((devices[i]->oldVirtualControlState[j] < FULLY_DOWN/32 && devices[i]->virtualControlState[j] > FULLY_DOWN/8) ||
+							  (devices[i]->oldVirtualControlState[j] > 31*FULLY_DOWN/32 && devices[i]->virtualControlState[j] < 7*FULLY_DOWN/8))) {
 									continue;
+						}
 						devices[i]->virtualControls[j].uid = devices[i]->virtualControls[j].uid;
+					}
+					else if ((((devices[i]->virtualControls[j].uid>>16)&0xFF) == ABSAXIS)) {
+						if (devices[i]->oldVirtualControlState[j] > 15*FULLY_DOWN/16)
+							continue;
 					}
 					bestDiff = diff;
 					*uid = devices[i]->virtualControls[j].uid;

@@ -22,29 +22,27 @@
 #include "stdafx.h"
 #include "GSDeviceNull.h"
 
-bool GSDeviceNull::Create(HWND hWnd, bool vsync)
+bool GSDeviceNull::Create(GSWnd* wnd)
 {
-	if(!__super::Create(hWnd, vsync))
+	if(!__super::Create(wnd))
 	{
 		return false;
 	}
 
-	Reset(1, 1, true);
+	Reset(1, 1);
 
 	return true;
 }
 
-bool GSDeviceNull::Reset(int w, int h, bool fs)
+bool GSDeviceNull::Reset(int w, int h)
 {
-	if(!__super::Reset(w, h, fs))
+	if(!__super::Reset(w, h))
 		return false;
 
 	return true;
 }
 
-bool GSDeviceNull::Create(int type, Texture& t, int w, int h, int format)
+GSTexture* GSDeviceNull::Create(int type, int w, int h, bool msaa, int format)
 {
-	t = Texture(type, w, h, format);
-
-	return true;
+	return new GSTextureNull(type, w, h, format);
 }

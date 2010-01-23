@@ -24,43 +24,13 @@
 #include "GSTextureCache.h"
 #include "GSDevice10.h"
 
-class GSTextureCache10 : public GSTextureCache<GSDevice10>
+class GSTextureCache10 : public GSTextureCache
 {
-	typedef GSDevice10::Texture Texture;
-
-	class GSRenderTargetHW10 : public GSRenderTarget
-	{
-	public:
-		explicit GSRenderTargetHW10(GSRenderer<GSDevice10>* renderer) : GSRenderTarget(renderer) {}
-
-		void Update();
-		void Read(CRect r);
-	};
-
-	class GSDepthStencilHW10 : public GSDepthStencil
-	{
-	public:
-		explicit GSDepthStencilHW10(GSRenderer<GSDevice10>* renderer) : GSDepthStencil(renderer) {}
-
-		void Update();
-	};
-
-	class GSTextureHW10 : public GSTexture
-	{
-	public:
-		explicit GSTextureHW10(GSRenderer<GSDevice10>* renderer) : GSTexture(renderer) {}
-
-		bool Create();
-		bool Create(GSRenderTarget* rt);
-		bool Create(GSDepthStencil* ds);
-		void Update();
-	};
-
 protected:
-	GSRenderTarget* CreateRenderTarget() {return new GSRenderTargetHW10(m_renderer);}
-	GSDepthStencil* CreateDepthStencil() {return new GSDepthStencilHW10(m_renderer);}
-	GSTexture* CreateTexture() {return new GSTextureHW10(m_renderer);}
+	int Get8bitFormat() {return DXGI_FORMAT_A8_UNORM;}
+
+	void Read(Target* t, const GSVector4i& r);
 
 public:
-	GSTextureCache10(GSRenderer<GSDevice10>* renderer);
+	GSTextureCache10(GSRenderer* r);
 };

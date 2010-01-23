@@ -1,9 +1,6 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#include "InputManager.h"
-#include "PS2Etypes.h"
-
 extern u8 ps2e;
 
 enum PadType {
@@ -39,11 +36,11 @@ public:
 			struct {
 				u8 directInput;
 				u8 xInput;
+				u8 dualShock3;
 			} gameApis;
 
 			u8 multitap[2];
 
-			u8 GSThreadUpdates;
 			u8 escapeFullscreenHack;
 			u8 disableScreenSaver;
 			u8 debug;
@@ -75,9 +72,8 @@ void SetVolume(int volume);
 
 int LoadSettings(int force = 0, wchar_t *file = 0);
 
-void CALLBACK PADconfigure();
-
 // Refreshes the set of enabled devices.
 void RefreshEnabledDevices(int updateDeviceList = 0);
 
+void Configure();
 #endif

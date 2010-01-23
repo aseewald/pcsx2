@@ -26,7 +26,7 @@
 
 #pragma pack(push, 1)
 
-__declspec(align(16)) class GSDrawingContext
+__aligned16 class GSDrawingContext
 {
 public:
 	GIFRegXYOFFSET	XYOFFSET;
@@ -43,7 +43,7 @@ public:
 	GIFRegFRAME		FRAME;
 	GIFRegZBUF		ZBUF;
 
-	__declspec(align(16)) struct
+	__aligned16 struct
 	{
 		GSVector4i dx10;
 		GSVector4 dx9;
@@ -51,8 +51,18 @@ public:
 		GSVector4 ex;
 	} scissor;
 
+	struct 
+	{
+		GSOffset* fb;
+		GSOffset* zb;
+		GSOffset* tex;
+		GSPixelOffset4* fzb;
+	} offset;
+
 	GSDrawingContext()
 	{
+		memset(&offset, 0, sizeof(offset));
+
 		Reset();
 	}
 
@@ -89,7 +99,7 @@ public:
 			(int)SCISSOR.SCAX1 + 1,
 			(int)SCISSOR.SCAY1 + 1);
 
-		scissor.ex = GSVector4i(
+		scissor.ex = GSVector4(
 			(int)SCISSOR.SCAX0,
 			(int)SCISSOR.SCAY0,
 			(int)SCISSOR.SCAX1,

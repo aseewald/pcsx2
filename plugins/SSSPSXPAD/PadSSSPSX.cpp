@@ -6,16 +6,46 @@
 #include <windowsx.h>
 #include <commctrl.h>
 #include <dinput.h>
+#include <string>
 
 #include "PadSSSPSX.h"
 
-static const char* LibraryName		= "SSSPSX PAD Plugin Pressure Mod";
+#ifdef _MSC_VER
+#	include "svnrev.h"
+#endif
+
 static const unsigned char version	= 0x0002;
 static const unsigned char revision	= 1;
-static const unsigned char build	= 6;
+static const unsigned char build	= 7;
+static const unsigned char buildfix	= 1;
 
 HMODULE hInstance;
 HWND hTargetWnd;
+
+static std::string s_strIniPath( "inis/" );
+
+static CRITICAL_SECTION update_lock;
+static CRITICAL_SECTION init_lock;
+
+struct EnterScopedSection
+{
+	CRITICAL_SECTION& m_cs;
+
+	EnterScopedSection( CRITICAL_SECTION& cs ) : m_cs( cs ) {
+		EnterCriticalSection( &m_cs );
+	}
+
+	~EnterScopedSection() {
+		LeaveCriticalSection( &m_cs );
+	}
+};
+
+
+static struct
+{
+	keyEvent ev;
+	u8 state[2][256];
+} save;
 
 static struct
 {
@@ -75,17 +105,15 @@ static bool ReleaseDirectInput (void)
 	int index = 4;
 	while (index--)
 	{
-		if (global.pDEffect[index][0])
+		int index2 = 2;
+		while (index2--)
 		{
-			global.pDEffect[index][0]->Unload();
-			global.pDEffect[index][0]->Release();
-			global.pDEffect[index][0] = NULL;
+			if (global.pDEffect[index][index2])
+		{
+				global.pDEffect[index][index2]->Unload();
+				global.pDEffect[index][index2]->Release();
+				global.pDEffect[index][index2] = NULL;
 		}
-		if (global.pDEffect[index][1])
-		{
-			global.pDEffect[index][1]->Unload();
-			global.pDEffect[index][1]->Release();
-			global.pDEffect[index][1] = NULL;
 		}
 		if (global.pDDevice[index])
 		{
@@ -111,6 +139,8 @@ static bool ReleaseDirectInput (void)
 
 static bool InitDirectInput (void)
 {
+	EnterScopedSection initlock( init_lock );
+	
 	if (global.pDInput)
 		return TRUE;
 	HRESULT result = DirectInput8Create (hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&global.pDInput, NULL);
@@ -212,18 +242,10 @@ static bool SetDeviceForceS (int pad, DWORD force)
 	InitDirectInput();
 	if (global.pDEffect[pad][0])
 	{
-		if ( force == 0) {
-			if (FAILED (global.pDEffect[pad][0]->Stop())) {
-				AcquireDevice (global.pDDevice[pad]);
-				if (FAILED (global.pDEffect[pad][0]->Stop()))
-					return ReleaseDirectInput();
-			}
-			return TRUE;
-		}
 		LONG rglDirection[2] = { 0, 0 };
 		DIPERIODIC per;
-		rglDirection[0] = force;
-		rglDirection[1] = force;
+		rglDirection[0] = 0;
+		rglDirection[1] = 1;
 		per.dwMagnitude = force;
 		per.dwPeriod = (DWORD) (0.01 * DI_SECONDS);
 		per.lOffset = 0;
@@ -238,6 +260,14 @@ static bool SetDeviceForceS (int pad, DWORD force)
 		eff.lpvTypeSpecificParams = &per;
 		if (FAILED (global.pDEffect[pad][0]->SetParameters (&eff, DIEP_DIRECTION | DIEP_TYPESPECIFICPARAMS | DIEP_START)))
 			return ReleaseDirectInput();
+		if (FAILED (global.pDEffect[pad][0]->Stop()))
+		{
+			AcquireDevice (global.pDDevice[pad]);
+			if (FAILED (global.pDEffect[pad][0]->Stop()))
+				return ReleaseDirectInput();
+		}
+		if (force == 0)
+			return TRUE;
 		if (FAILED (global.pDEffect[pad][0]->Start (1, 0)))
 		{
 			AcquireDevice (global.pDDevice[pad]);
@@ -254,18 +284,10 @@ static bool SetDeviceForceB (int pad, DWORD force)
 	InitDirectInput();
 	if (global.pDEffect[pad][1])
 	{
-		if ( force == 0) {
-			if (FAILED (global.pDEffect[pad][1]->Stop())) {
-				AcquireDevice (global.pDDevice[pad]);
-				if (FAILED (global.pDEffect[pad][1]->Stop()))
-					return ReleaseDirectInput();
-			}
-			return TRUE;
-		}
 		LONG rglDirection[2] = { 0, 0 };
 		DICONSTANTFORCE cf;
-		rglDirection[0] = force;
-		rglDirection[1] = force;
+		rglDirection[0] = 1;
+		rglDirection[1] = 0;
 		cf.lMagnitude = force;
 		DIEFFECT eff;
 		eff.dwSize = sizeof (DIEFFECT);
@@ -277,6 +299,14 @@ static bool SetDeviceForceB (int pad, DWORD force)
 		eff.lpvTypeSpecificParams = &cf;
 		if (FAILED (global.pDEffect[pad][1]->SetParameters (&eff, DIEP_DIRECTION | DIEP_TYPESPECIFICPARAMS | DIEP_START)))
 			return ReleaseDirectInput();
+		if (FAILED (global.pDEffect[pad][1]->Stop()))
+		{
+			AcquireDevice (global.pDDevice[pad]);
+			if (FAILED (global.pDEffect[pad][1]->Stop()))
+				return ReleaseDirectInput();
+		}
+		if (force == 0)
+			return TRUE;
 		if (FAILED (global.pDEffect[pad][1]->Start (1, 0)))
 		{
 			AcquireDevice (global.pDDevice[pad]);
@@ -315,17 +345,20 @@ static bool GetKeyState (u8* keyboard)
 	return TRUE;
 }
 
-static void MakeConfigFileName (char* fname)
+static std::string MakeConfigFileName()
 {
-	GetModuleFileName (hInstance, fname, 256);
-	strcpy (fname + strlen (fname) - 3, "cfg");
+	//GetModuleFileName (hInstance, fname, 256);
+	//strcpy (fname + strlen (fname) - 3, "cfg");
+	
+	return s_strIniPath + "PadSSSPSX.cfg";
 }
 
 static void SaveConfig (void)
 {
-	char fname[256];
-	MakeConfigFileName (fname);
-	HANDLE hFile = CreateFile (fname, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+	const std::string fname( MakeConfigFileName() );
+	CreateDirectory( s_strIniPath.c_str(), NULL );
+
+	HANDLE hFile = CreateFile (fname.c_str(), GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
 	if (hFile != INVALID_HANDLE_VALUE)
 	{
 		DWORD number_of_bytes;
@@ -336,9 +369,8 @@ static void SaveConfig (void)
 
 static void LoadConfig (void)
 {
-	char fname[256];
-	MakeConfigFileName (fname);
-	HANDLE hFile = CreateFile (fname, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+	const std::string fname( MakeConfigFileName() );
+	HANDLE hFile = CreateFile (fname.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
 	if (hFile != INVALID_HANDLE_VALUE)
 	{
 		DWORD number_of_bytes;
@@ -421,11 +453,11 @@ static void UpdateState (const int pad)
 				if (GetKeyState (keystate) == FALSE)
 					return;
 			}
-			KeyPress (pad, index, keystate[key] & 0x80);
+			KeyPress (pad, index, !!(keystate[key] & 0x80));
 		}
 		else
 		{
-			const int joypad = ((key & 0xfff) / 100);
+			const int joypad = ((key & 0xfff) / 0x100);
 			if (flag_joypad[joypad] == FALSE)
 			{
 				flag_joypad[joypad] = TRUE;
@@ -434,7 +466,7 @@ static void UpdateState (const int pad)
 			}
 			if (key < 0x2000)
 			{
-				KeyPress (pad, index, global.JoyState[joypad].rgbButtons[key & 0xff]);
+				KeyPress (pad, index, !!(global.JoyState[joypad].rgbButtons[key & 0xff]));
 			}
 			else if (key < 0x3000)
 			{
@@ -460,7 +492,7 @@ static void UpdateState (const int pad)
 	}
 
 	/* Small Motor */
-	const int vib0 = global.padVibF[pad][0] ? 10000 : 0;
+	const int vib0 = global.padVibF[pad][0] ? 2000 : 0;
 	if ((global.padVibF[pad][2] != vib0) && (global.padVibC[pad] >= 0))
 	{
 		global.padVibF[pad][2] = vib0;
@@ -644,6 +676,57 @@ static BOOL CALLBACK ConfigureDlgProc (const HWND hWnd, const UINT msg, const WP
 	return FALSE;
 }
 
+static char LibraryName[256];
+#define SSSPSX_NAME "SSSPSX PAD Pressure Mod"
+
+static void InitLibraryName()
+{
+#ifndef PCSX2_DEVBUILD
+
+	// Public Release!
+	// Output a simplified string that's just our name:
+
+	strcpy_s( LibraryName, SSSPSX_NAME );
+
+#else
+	#ifdef SVN_REV_UNKNOWN
+
+	// Unknown revision.
+	// Output a name that includes devbuild status but not
+	// subversion revision tags:
+
+	strcpy_s( LibraryName, SSSPSX_NAME
+	#ifdef PCSX2_DEBUG
+		"-Debug"
+	#elif defined( PCSX2_DEVBUILD )
+		"-Dev"
+	#else
+		""
+	#endif
+	);
+
+	#else
+
+	// Use TortoiseSVN's SubWCRev utility's output
+	// to label the specific revision:
+
+	sprintf_s( LibraryName, SSSPSX_NAME " r%d%s"
+	#ifdef PCSX2_DEBUG
+		"-Debug"
+	#elif defined( PCSX2_DEVBUILD )
+		"-Dev"
+	#else
+		""
+	#endif
+		,SVN_REV,
+		SVN_MODS ? "m" : ""
+	);
+	#endif
+#endif
+
+}
+
+
 u32 CALLBACK PS2EgetLibType (void)
 {
 	return 0x02;
@@ -651,12 +734,13 @@ u32 CALLBACK PS2EgetLibType (void)
 
 const char* CALLBACK PS2EgetLibName (void)
 {
+	InitLibraryName();
 	return LibraryName;
 }
 
 u32 CALLBACK PS2EgetLibVersion2 (u32 type)
 {
-	return (version << 16) | (revision << 8) | build;
+	return (version << 16) | (revision << 8) | build | (buildfix<<24);
 }
 
 u32 CALLBACK PSEgetLibType (void)
@@ -666,6 +750,7 @@ u32 CALLBACK PSEgetLibType (void)
 
 const char* CALLBACK PSEgetLibName (void)
 {
+	InitLibraryName();
 	return LibraryName;
 }
 
@@ -676,11 +761,15 @@ u32 CALLBACK PSEgetLibVersion (void)
 
 s32 CALLBACK PADinit (u32 flags)
 {
+	InitializeCriticalSection( &update_lock );
+	InitializeCriticalSection( &init_lock );
 	return 0;
 }
 
 void CALLBACK PADshutdown (void)
 {
+	DeleteCriticalSection( &update_lock );
+	DeleteCriticalSection( &init_lock );
 }
 
 static int n_open = 0;
@@ -772,12 +861,24 @@ static u8 get_analog (const int key)
 
 static u8 get_pressure (const DWORD now, const DWORD press)
 {
-	/*if (press == 0)
+	if (press == 0)
 		return 0;
-	return (u8)((now - press > 2550) ? 255 : (now - press) / 10);*/
-	return 255;
+	return (u8)((now - press > 2550) ? 255 : (now - press) / 10);
 }
 
+void CALLBACK PADupdate (int pad)
+{
+	// PADupdate should be called by the emulator from the thread that owns our hwnd, but
+	// older versions of PCSX2 don't always follow that rule.  I suspect this call was
+	// added to the PAD api because supposedly DInput is happiest called from the thread
+	// that owns the hwnd (although it doesn't seem to care in practice).
+
+	// [TODO] SSSPSX really should do all it's DInput pooling/updating here, instead of
+	// in PADpoll, just for the sake of obeying thread affinity suggested guidelines.
+	// I'm not quite sure how to do that and still have it work though. --air
+}
+
+// Called from the context of the EE thread.
 u8 CALLBACK PADpoll (const u8 value)
 {
 	const int pad = global.curPad;
@@ -799,10 +900,12 @@ u8 CALLBACK PADpoll (const u8 value)
 			return 0xf3;
 		case 0x42:
 		case 0x43:
+		{
+			//EnterScopedSection scoped_lock( update_lock );
 			if (value == 0x42) UpdateState (pad);
 			global.cmdLen = 2 + 2 * (global.padID[pad] & 0x0f);
 			buf[1] = global.padModeC[pad] ? 0x00 : 0x5a;
-			*(u16*)&buf[2] = global.padStat[pad];
+			(u16&)buf[2] = global.padStat[pad];
 			if (value == 0x43 && global.padModeE[pad])
 			{
 				buf[4] = 0;
@@ -836,6 +939,7 @@ u8 CALLBACK PADpoll (const u8 value)
 				return (u8)global.padID[pad];
 			}
 			break;
+		}
 		case 0x44:
 			global.cmdLen = sizeof (cmd44);
 			memcpy (buf, cmd44, sizeof (cmd44));
@@ -862,6 +966,8 @@ u8 CALLBACK PADpoll (const u8 value)
 			memcpy (buf, cmd4d, sizeof (cmd4d));
 			return 0xf3;
 		case 0x4f:
+		{
+			//EnterScopedSection scoped_lock( update_lock );
 			global.padID[pad] = 0x79;
 			global.padMode2[pad] = 1;
 			global.cmdLen = sizeof (cmd4f);
@@ -869,6 +975,10 @@ u8 CALLBACK PADpoll (const u8 value)
 			return 0xf3;
 		}
 	}
+	}
+
+	//EnterScopedSection scoped_lock( update_lock );
+
 	switch (global.curCmd)
 	{
 	case 0x42:
@@ -951,7 +1061,7 @@ typedef struct
 	unsigned char reserved[91];
 } PadDataS;
 
-long PADreadPort1 (PadDataS* pads)
+long CALLBACK PADreadPort1 (PadDataS* pads)
 {
 	memset (pads, 0, sizeof (PadDataS));
 	if ((global.padID[0] & 0xf0) == 0x40)
@@ -968,7 +1078,7 @@ long PADreadPort1 (PadDataS* pads)
 	return 0;
 }
 
-long PADreadPort2 (PadDataS* pads)
+long CALLBACK PADreadPort2 (PadDataS* pads)
 {
 	memset (pads, 0, sizeof (PadDataS));
 	if ((global.padID[1] & 0xf0) == 0x40)
@@ -987,19 +1097,18 @@ long PADreadPort2 (PadDataS* pads)
 
 keyEvent* CALLBACK PADkeyEvent (void)
 {
-	static keyEvent ev;
-	static u8 state[2][256];
 	if (n_open)
 	{
-		memcpy (state[0], state[1], sizeof (state[0]));
-		GetKeyState (state[1]);
+		memcpy (save.state[0], save.state[1], sizeof (save.state[0]));
+		GetKeyState (save.state[1]);
 		for (int cnt = 0; cnt < 256; cnt++)
 		{
-			if (~state[0][cnt] & state[1][cnt] & 0x80)
+			if ((~save.state[0][cnt] & save.state[1][cnt] & 0x80) ||
+				(save.state[0][cnt] & ~save.state[1][cnt] & 0x80))
 			{
-				ev.event = (state[1][cnt] & 0x80) ? 1 : 2;
-				ev.key = MapVirtualKey (cnt, 1);
-				return &ev;
+				save.ev.evt = (save.state[1][cnt] & 0x80) ? 1 : 2;
+				save.ev.key = MapVirtualKey (cnt, 1);
+				return &save.ev;
 			}
 		}
 	}
@@ -1019,23 +1128,47 @@ void CALLBACK PADconfigure (void)
 
 void CALLBACK PADabout (void)
 {
-	MessageBox (0, "Copyright (C) 2004-2005 Nagisa", "SSSPSX PAD plugin", 0);
+	MessageBox (GetActiveWindow(), "Copyright (C) 2004-2006 Nagisa\nVersion 1.7.1\n\nModified by Jake Stine for PCSX2 0.9.7 compatibility.",
+		"SSSPSX PAD plugin", MB_OK | MB_SETFOREGROUND);
 }
 
 s32 CALLBACK PADtest (void)
 {
 	return 0;
 }
-//#ifdef _WIN64
+
+void CALLBACK PADsetSettingsDir(const char* dir)
+{
+	s_strIniPath = (dir==NULL) ? "inis/" : dir;
+}
+
+// Returns 0 on success, -1 on error.
+s32 CALLBACK PADfreeze (int mode, freezeData *data)
+{
+	switch (mode)
+	{
+		case FREEZE_SIZE:
+			data->size = 0;
+		break;
+		
+		case FREEZE_LOAD:
+		break;
+		
+		case FREEZE_SAVE:
+		break;
+	}
+	
+	return 0;
+}
+
 BOOL APIENTRY DllMain(HMODULE hInst, DWORD dwReason, LPVOID lpReserved)
 {
 	hInstance = hInst;
 	return TRUE;
 }
-//#else
+
 BOOL APIENTRY EntryPoint (HMODULE hInst, DWORD dwReason, LPVOID lpReserved)
 {
 	hInstance = hInst;
 	return TRUE;
 }
-//#endif

@@ -1,5 +1,5 @@
 /*  ZeroSPU2
- *  Copyright (C) 2006-2007 zerofrog
+ *  Copyright (C) 2006-2010 zerofrog
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -30,46 +30,10 @@
 #include <unistd.h>
 
 #include <zerospu2.h>
+#include "Targets/SoundTargets.h"
 
 // Make it easier to check and set checkmarks in the gui
 #define is_checked(main_widget, widget_name) (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(lookup_widget(main_widget, widget_name)))) 
 #define set_checked(main_widget,widget_name, state) gtk_toggle_button_set_state(GTK_TOGGLE_BUTTON(lookup_widget(main_widget, widget_name)), state)
-
-// Alsa & OSS defines
-#ifdef ZEROSPU2_OSS
-
-#define OSS_MODE_STEREO	1
-#define SOUNDSIZE 76800
-
-// Pull in from OSS.cpp
-extern int OSSSetupSound();
-extern void OSSRemoveSound();
-extern int OSSSoundGetBytesBuffered();
-extern void OSSSoundFeedVoiceData(unsigned char* pSound,long lBytes);
-
-#else
-
-#define ALSA_PCM_NEW_HW_PARAMS_API
-#define ALSA_PCM_NEW_SW_PARAMS_API
-
-#ifdef ALSA_MEM_DEF
-#define ALSA_MEM_EXTERN
-#else
-#define ALSA_MEM_EXTERN extern
-#endif
-
-#define SOUNDSIZE 500000
-
-// Pull in from Alsa.cpp
-extern int AlsaSetupSound();
-extern void AlsaRemoveSound();
-extern int AlsaSoundGetBytesBuffered();
-extern void AlsaSoundFeedVoiceData(unsigned char* pSound,long lBytes);
-#endif
-
-extern int SetupSound();
-extern void RemoveSound();
-extern int SoundGetBytesBuffered();
-extern void SoundFeedVoiceData(unsigned char* pSound,long lBytes);
 
 #endif // __LINUX_H__

@@ -1,32 +1,41 @@
 #include "Global.h"
-#include <math.h>
-#include <Dbt.h>
-#include <stdio.h>
 
 // For escape timer, so as not to break GSDX+DX9.
 #include <time.h>
+#include "resource.h"
+#include "InputManager.h"
+#include "Config.h"
 
 #define PADdefs
-#include "PS2Etypes.h"
-#include "PS2Edefs.h"
 
-#include "Config.h"
-#include "InputManager.h"
 #include "DeviceEnumerator.h"
 #include "WndProcEater.h"
 #include "KeyboardQueue.h"
 #include "svnrev.h"
-#include "resource.h"
+#include "DualShock3.h"
+#include "HidDevice.h"
 
-#ifdef _DEBUG
-#include "crtdbg.h"
-#endif
+#define WMA_FORCE_UPDATE (WM_APP + 0x537)
+#define FORCE_UPDATE_WPARAM ((WPARAM)0x74328943)
+#define FORCE_UPDATE_LPARAM ((LPARAM)0x89437437)
 
 // LilyPad version.
 #define VERSION ((0<<8) | 10 | (0<<24))
 
 HINSTANCE hInst;
 HWND hWnd;
+HWND hWndTop;
+
+WndProcEater hWndGSProc;
+WndProcEater hWndTopProc;
+
+// ButtonProc is used mostly by the Config panel for eating the procedures of the
+// button with keyboard focus.
+WndProcEater hWndButtonProc;
+
+// Keeps the various sources for Update polling (PADpoll, PADupdate, etc) from wreaking
+// havoc on each other...
+CRITICAL_SECTION updateLock;
 
 // Used to toggle mouse listening.
 u8 miceEnabled;
@@ -35,10 +44,14 @@ u8 miceEnabled;
 int openCount = 0;
 
 int activeWindow = 0;
+int windowThreadId = 0;
+int updateQueued = 0;
 
 int bufSize = 0;
 unsigned char outBuf[50];
 unsigned char inBuf[50];
+
+//		windowThreadId = GetWindowThreadProcessId(hWnd, 0);
 
 #define MODE_DIGITAL 0x41
 #define MODE_ANALOG 0x73
@@ -122,6 +135,8 @@ struct ButtonSum {
 	Stick sticks[3];
 };
 
+#define PAD_SAVE_STATE_VERSION	2
+
 // Freeze data, for a single pad.  Basically has all pad state that
 // a PS2 can set.
 struct PadFreezeData {
@@ -138,6 +153,16 @@ struct PadFreezeData {
 
 	// Vibration indices.
 	u8 vibrateI[2];
+
+	// Last vibration value sent to controller.
+	// Only used so as not to call vibration
+	// functions when old and new values are both 0.
+	u8 currentVibrate[2];
+
+	// Next vibrate val to send to controller.  If next and current are
+	// both 0, nothing is sent to the controller.  Otherwise, it's sent
+	// on every update.
+	u8 nextVibrate[2];
 };
 
 class Pad : public PadFreezeData {
@@ -151,10 +176,6 @@ public:
 	// Flags for which controls (buttons or axes) are locked, if any.
 	DWORD lockedState;
 
-	// Last vibration value.  Only used so as not to call vibration
-	// functions when old and new values are both 0.
-	u8 vibrateVal[2];
-
 	// Used to keep track of which pads I'm running.
 	// Note that initialized pads *can* be disabled.
 	// I keep track of state of non-disabled non-initialized
@@ -163,7 +184,7 @@ public:
 
 	// Set to 1 if the state of this pad has been updated since its state
 	// was last queried.
-	u8 stateUpdated;
+	char stateUpdated;
 
 	// initialized and not disabled (and mtap state for slots > 0).
 	u8 enabled;
@@ -254,12 +275,17 @@ void UpdateEnabledDevices(int updateList = 0) {
 BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, void* lpvReserved) {
 	hInst = hInstance;
 	if (fdwReason == DLL_PROCESS_ATTACH) {
+		InitializeCriticalSection( &updateLock );
+
 		DisableThreadLibraryCalls(hInstance);
 	}
 	else if (fdwReason == DLL_PROCESS_DETACH) {
 		while (openCount)
 			PADclose();
 		PADshutdown();
+		UninitHid();
+		UninitLibUsb();
+		DeleteCriticalSection( &updateLock );
 	}
 	return 1;
 }
@@ -320,12 +346,15 @@ void AddForce(ButtonSum *sum, u8 cmd, int delta = 255) {
 }
 
 void ProcessButtonBinding(Binding *b, ButtonSum *sum, int value) {
+	if (value < b->deadZone || !value) return;
+
 	int sensitivity = b->sensitivity;
 	if (sensitivity < 0) {
 		sensitivity = -sensitivity;
 		value = (1<<16)-value;
 	}
-	if (value > 0) {
+	if (value < 0) return;
+
 		/* Note:  Value ranges of FULLY_DOWN, and sensitivity of
 		 *  BASE_SENSITIVITY corresponds to an axis/button being exactly fully down.
 		 *  Math in next line takes care of those two conditions, rounding as necessary.
@@ -333,8 +362,8 @@ void ProcessButtonBinding(Binding *b, ButtonSum *sum, int value) {
 		 *  sensitivity > BASE_SENSITIVITY and/or value > FULLY_DOWN.  Latter only happens
 		 *  for relative axis.
 		 */
-		AddForce(sum, b->command, (int)((((sensitivity*(255*(__int64)value)) + BASE_SENSITIVITY/2)/BASE_SENSITIVITY + FULLY_DOWN/2)/FULLY_DOWN));
-	}
+	int force = (int)((((sensitivity*(255*(__int64)value)) + BASE_SENSITIVITY/2)/BASE_SENSITIVITY + FULLY_DOWN/2)/FULLY_DOWN);
+	AddForce(sum, b->command, force);
 }
 
 // Restricts d-pad/analog stick values to be from -255 to 255 and button values to be from 0 to 255.
@@ -358,37 +387,63 @@ void CapSum(ButtonSum *sum) {
 // Only matters when GS thread updates is disabled (Just like summed pad values
 // for pads beyond the first slot).  Also, it's set to 4 and decremented by 1 on each read,
 // so it's less likely I'll control state on a PADkeyEvent call.
-u8 padReadKeyUpdated = 0;
+
+// Values, in order, correspond to PADkeyEvent, PADupdate(0), PADupdate(1), and
+// WndProc(WMA_FORCE_UPDATE).  Last is always 0.
+char padReadKeyUpdated[4] = {0, 0, 0, 0};
 
 #define LOCK_DIRECTION 2
 #define LOCK_BUTTONS 4
 #define LOCK_BOTH 1
 
-int deviceUpdateQueued = 0;
-void QueueDeviceUpdate(int updateList=0) {
-	deviceUpdateQueued = deviceUpdateQueued | 1 | (updateList<<1);
+struct EnterScopedSection
+{
+	CRITICAL_SECTION& m_cs;
+
+	EnterScopedSection( CRITICAL_SECTION& cs ) : m_cs( cs ) {
+		EnterCriticalSection( &m_cs );
+	}
+	
+	~EnterScopedSection() {
+		LeaveCriticalSection( &m_cs );
+	}
 };
 
-
 void Update(unsigned int port, unsigned int slot) {
-	if (deviceUpdateQueued) {
-		UpdateEnabledDevices((deviceUpdateQueued & 0x2)==0x2);
-		deviceUpdateQueued = 0;
-	}
-	if (port > 2) return;
-	u8 *stateUpdated;
-	if (port < 2)
+	char *stateUpdated;
+	if (port < 2) {
 		stateUpdated = &pads[port][slot].stateUpdated;
-	else
-		stateUpdated = &padReadKeyUpdated;
-	if (*stateUpdated) {
+	}
+	else if (port < 6) {
+		stateUpdated = padReadKeyUpdated+port-2;
+	}
+	else return;
+
+	if (*stateUpdated > 0) {
 		stateUpdated[0] --;
 		return;
 	}
 
+	// Lock prior to timecheck code to avoid pesky race conditions.
+	EnterScopedSection padlock( updateLock );
+
 	static unsigned int LastCheck = 0;
 	unsigned int t = timeGetTime();
-	if (t - LastCheck < 15) return;
+	if (t - LastCheck < 15 || !openCount) return;
+
+	if (windowThreadId != GetCurrentThreadId()) {
+		if (stateUpdated[0] < 0) {
+			if (!updateQueued) {
+				updateQueued = 1;
+				PostMessage(hWnd, WMA_FORCE_UPDATE, FORCE_UPDATE_WPARAM, FORCE_UPDATE_LPARAM);
+			}
+		} else
+		{
+			stateUpdated[0] --;
+		}
+		return;
+	}
+
 	LastCheck = t;
 
 	int i;
@@ -400,7 +455,7 @@ void Update(unsigned int port, unsigned int slot) {
 		s[i&1][i>>1] = pads[i&1][i>>1].lockedSum;
 	}
 	InitInfo info = {
-		0, hWnd, hWnd, 0
+		0, 0, hWndTop, &hWndGSProc
 	};
 
 	dm->Update(&info);
@@ -425,7 +480,7 @@ void Update(unsigned int port, unsigned int slot) {
 						else if ((state>>15) && !(dev->oldVirtualControlState[b->controlIndex]>>15)) {
 							if (cmd == 0x0F) {
 								miceEnabled = !miceEnabled;
-								QueueDeviceUpdate();
+								UpdateEnabledDevices();
 							}
 							else if (cmd == 0x0C) {
 								lockStateChanged[port][slot] |= LOCK_BUTTONS;
@@ -453,6 +508,18 @@ void Update(unsigned int port, unsigned int slot) {
 	dm->PostRead();
 
 	{
+		for (int port=0; port<2; port++) {
+			for (int slot=0; slot<4; slot++) {
+				for (int motor=0; motor<2; motor++) {
+					// TODO:  Probably be better to send all of these at once.
+					if (pads[port][slot].nextVibrate[motor] | pads[port][slot].currentVibrate[motor]) {
+						pads[port][slot].currentVibrate[motor] = pads[port][slot].nextVibrate[motor];
+						dm->SetEffect(port,slot, motor, pads[port][slot].nextVibrate[motor]);
+					}
+				}
+			}
+		}
+
 		for (int port=0; port<2; port++) {
 			for (int slot=0; slot<4; slot++) {
 				pads[port][slot].stateUpdated = 1;
@@ -497,12 +564,12 @@ void Update(unsigned int port, unsigned int slot) {
 				}
 
 				if (pads[port][slot].mode == 0x41) {
-					s[port][slot].sticks[0].horiz +=
-						s[port][slot].sticks[1].horiz +
-						s[port][slot].sticks[2].horiz;
-					s[port][slot].sticks[0].vert +=
-						s[port][slot].sticks[1].vert +
-						s[port][slot].sticks[2].vert;
+					for (int i=1; i<=2; i++) {
+						if (abs(s[port][slot].sticks[i].horiz) >= 100)
+							s[port][slot].sticks[0].horiz += s[port][slot].sticks[i].horiz;
+						if (abs(s[port][slot].sticks[i].vert) >= 100)
+							s[port][slot].sticks[0].vert += s[port][slot].sticks[i].vert;
+				}
 				}
 
 				CapSum(&s[port][slot]);
@@ -548,19 +615,19 @@ void Update(unsigned int port, unsigned int slot) {
 	for (i=0; i<8; i++) {
 		pads[i&1][i>>1].sum = s[i&1][i>>1];
 	}
-	pads[port][slot].stateUpdated--;
-	padReadKeyUpdated = 4;
+
+	padReadKeyUpdated[0] = padReadKeyUpdated[1] = padReadKeyUpdated[2] = 1;
+
+	if( stateUpdated[0] > 0 )
+		--stateUpdated[0];
 }
 
 void CALLBACK PADupdate(int port) {
-	if (config.GSThreadUpdates) Update(port, 0);
+	Update(port+3, 0);
 }
 
 inline void SetVibrate(int port, int slot, int motor, u8 val) {
-	if (val || pads[port][slot].vibrateVal[motor]) {
-		dm->SetEffect(port,slot, motor, val);
-		pads[port][slot].vibrateVal[motor] = val;
-	}
+	pads[port][slot].nextVibrate[motor] = val;
 }
 
 u32 CALLBACK PS2EgetLibType(void) {
@@ -577,27 +644,26 @@ u32 CALLBACK PS2EgetLibVersion2(u32 type) {
 
 // Used in about and config screens.
 void GetNameAndVersionString(wchar_t *out) {
-#ifdef _DEBUG
-	wsprintfW(out, L"LilyPad Debug %i.%i.%i (r%i)", (VERSION>>8)&0xFF, VERSION&0xFF, (VERSION>>24)&0xFF, SVN_REV);
-#elif (_MSC_VER != 1400)
-	wsprintfW(out, L"LilyPad svn %i.%i.%i (r%i)", (VERSION>>8)&0xFF, VERSION&0xFF, (VERSION>>24)&0xFF, SVN_REV);
-#else
+#ifdef NO_CRT
 	wsprintfW(out, L"LilyPad %i.%i.%i", (VERSION>>8)&0xFF, VERSION&0xFF, (VERSION>>24)&0xFF, SVN_REV);
+#elif defined(PCSX2_DEBUG)
+	wsprintfW(out, L"LilyPad Debug %i.%i.%i (r%i)", (VERSION>>8)&0xFF, VERSION&0xFF, (VERSION>>24)&0xFF, SVN_REV);
+#else
+	wsprintfW(out, L"LilyPad svn %i.%i.%i (r%i)", (VERSION>>8)&0xFF, VERSION&0xFF, (VERSION>>24)&0xFF, SVN_REV);
 #endif
 }
 
 char* CALLBACK PSEgetLibName() {
-#ifdef _DEBUG
+#ifdef NO_CRT
+	return "LilyPad";
+#elif defined(PCSX2_DEBUG)
 	static char version[50];
 	sprintf(version, "LilyPad Debug (r%i)", SVN_REV);
 	return version;
 #else
-	#if (_MSC_VER != 1400)
 		static char version[50];
 		sprintf(version, "LilyPad svn (r%i)", SVN_REV);
 		return version;
-	#endif
-	return "LilyPad";
 #endif
 }
 
@@ -680,9 +746,9 @@ s32 CALLBACK PADinit(u32 flags) {
 		return PADinit(2);
 	}
 
-	#ifdef _DEBUG
+	#ifdef PCSX2_DEBUG
 	int tmpFlag = _CrtSetDbgFlag( _CRTDBG_REPORT_FLAG );
-	tmpFlag |= _CRTDBG_LEAK_CHECK_DF;
+	tmpFlag |= _CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF;
 	_CrtSetDbgFlag( tmpFlag );
 	#endif
 
@@ -743,15 +809,15 @@ static const u8 queryMode[7] =		{0x5A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 static const u8 setNativeMode[7] =  {0x5A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x5A};
 
-// Implements a couple of the hacks, also responsible for monitoring device addition/removal and focus
-// changes.
-ExtraWndProcResult HackWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *output) {
+// Implements a couple of the hacks that affect whatever top-level window
+// the GS viewport belongs to (title, screensaver)
+ExtraWndProcResult TitleHackWndProc(HWND hWndTop, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *output) {
 	switch (uMsg) {
 		case WM_SETTEXT:
 			if (config.saveStateTitle) {
 				wchar_t text[200];
 				int len;
-				if (IsWindowUnicode(hWnd)) {
+				if (IsWindowUnicode(hWndTop)) {
 					len = wcslen((wchar_t*) lParam);
 					if (len < sizeof(text)/sizeof(wchar_t)) wcscpy(text, (wchar_t*) lParam);
 				}
@@ -760,22 +826,45 @@ ExtraWndProcResult HackWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 				}
 				if (len > 0 && len < 150 && !wcsstr(text, L" | State ")) {
 					wsprintfW(text+len, L" | State %i", saveStateIndex);
-					SetWindowText(hWnd, text);
+					SetWindowText(hWndTop, text);
 					return NO_WND_PROC;
 				}
 			}
 			break;
+		case WM_SYSCOMMAND:
+			if ((wParam == SC_SCREENSAVE || wParam == SC_MONITORPOWER) && config.disableScreenSaver)
+				return NO_WND_PROC;
+			break;
+		default:
+			break;
+	}
+	return CONTINUE_BLISSFULLY;
+}
+
+// responsible for monitoring device addition/removal, focus changes, and viewport closures.
+ExtraWndProcResult StatusWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *output) {
+	switch (uMsg) {
+		case WMA_FORCE_UPDATE:
+			if (wParam == FORCE_UPDATE_WPARAM && lParam == FORCE_UPDATE_LPARAM) {
+				if (updateQueued) {
+					updateQueued = 0;
+					Update(5, 0);
+				}
+				return NO_WND_PROC;
+			}
 		case WM_DEVICECHANGE:
 			if (wParam == DBT_DEVNODES_CHANGED) {
-				QueueDeviceUpdate(1);
+				UpdateEnabledDevices(1);
 			}
 			break;
-		case WM_ACTIVATEAPP:
+		case WM_ACTIVATE:
 			// Release any buttons PCSX2 may think are down when
 			// losing/gaining focus.
+			if (!wParam) {
 			ReleaseModifierKeys();
-			activeWindow = wParam != 0;
-			QueueDeviceUpdate();
+			}
+			activeWindow = (LOWORD(wParam) != WA_INACTIVE);
+			UpdateEnabledDevices();
 			break;
 		case WM_CLOSE:
 			if (config.closeHacks & 1) {
@@ -786,10 +875,6 @@ ExtraWndProcResult HackWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 				ExitProcess(0);
 				return NO_WND_PROC;
 			}
-			break;
-		case WM_SYSCOMMAND:
-			if ((wParam == SC_SCREENSAVE || wParam == SC_MONITORPOWER) && config.disableScreenSaver)
-				return NO_WND_PROC;
 			break;
 		case WM_DESTROY:
 			QueueKeyEvent(VK_ESCAPE, KEYPRESS);
@@ -819,12 +904,40 @@ DWORD WINAPI MaximizeWindowThreadProc(void *lpParameter) {
 	return 0;
 }
 
+void CALLBACK PADconfigure() {
+	if (openCount) {
+		return;
+	}
+	Configure();
+}
+
+
+DWORD WINAPI RenameWindowThreadProc(void *lpParameter) {
+	wchar_t newTitle[200];
+	if (hWndTop) {
+		int len = GetWindowTextW(hWndTop, newTitle, 200);
+		if (len > 0 && len < 199) {
+			wchar_t *end;
+			if (end = wcsstr(newTitle, L" | State ")) *end = 0;
+			SetWindowTextW(hWndTop, newTitle);
+		}
+	}
+	return 0;
+}
+
+void SaveStateChanged() {
+	if (config.saveStateTitle) {
+		// GSDX only checks its window's message queue at certain points or something, so
+		// have to do this in another thread to prevent deadlock.
+		HANDLE hThread = CreateThread(0, 0, RenameWindowThreadProc, 0, 0, 0);
+		if (hThread) CloseHandle(hThread);
+	}
+}
+
 s32 CALLBACK PADopen(void *pDsp) {
 	if (openCount++) return 0;
 	DEBUG_TEXT_OUT("LilyPad opened\n\n");
 
-	// Not really needed, shouldn't do anything.
-	if (LoadSettings()) return -1;
 	miceEnabled = !config.mouseUnfocus;
 	if (!hWnd) {
 		if (IsWindow((HWND)pDsp)) {
@@ -835,24 +948,50 @@ s32 CALLBACK PADopen(void *pDsp) {
 		}
 		else {
 			openCount = 0;
+			MessageBoxA(GetActiveWindow(),
+				"Invalid Window handle passed to LilyPad.\n"
+				"\n"
+				"Either your emulator or gs plugin is buggy,\n"
+				"Despite the fact the emulator is about to\n"
+				"blame LilyPad for failing to initialize.",
+				"Non-LilyPad Error", MB_OK | MB_ICONERROR);
 			return -1;
 		}
-		while (GetWindowLong (hWnd, GWL_STYLE) & WS_CHILD)
-			hWnd = GetParent (hWnd);
-		// Implements most hacks, as well as enabling/disabling mouse
-		// capture when focus changes.
-		if (!EatWndProc(hWnd, HackWndProc, 0)) {
+		hWndTop = hWnd;
+		while (GetWindowLong (hWndTop, GWL_STYLE) & WS_CHILD)
+			hWndTop = GetParent (hWndTop);
+
+		if (!hWndGSProc.SetWndHandle(hWnd)) {
 			openCount = 0;
 			return -1;
 		}
-		if (config.forceHide) {
-			EatWndProc(hWnd, HideCursorProc, 0);
+
+		// Implements most hacks, as well as enabling/disabling mouse
+		// capture when focus changes.
+		updateQueued = 0;
+		hWndGSProc.Eat(StatusWndProc, 0);
+
+		if(hWnd != hWndTop) {
+			if (!hWndTopProc.SetWndHandle(hWndTop)) {
+			openCount = 0;
+			return -1;
 		}
+			hWndTopProc.Eat(TitleHackWndProc, 0);
+		}
+		else
+			hWndGSProc.Eat(TitleHackWndProc, 0);
+
+		if (config.forceHide) {
+			hWndGSProc.Eat(HideCursorProc, 0);
+		}
+		SaveStateChanged();
+		
+		windowThreadId = GetWindowThreadProcessId(hWndTop, 0);
 	}
 
 	if (restoreFullScreen) {
-		if (!IsWindowMaximized(hWnd)) {
-			HANDLE hThread = CreateThread(0, 0, MaximizeWindowThreadProc, hWnd, 0, 0);
+		if (!IsWindowMaximized(hWndTop)) {
+			HANDLE hThread = CreateThread(0, 0, MaximizeWindowThreadProc, hWndTop, 0, 0);
 			if (hThread) CloseHandle(hThread);
 		}
 		restoreFullScreen = 0;
@@ -874,17 +1013,19 @@ s32 CALLBACK PADopen(void *pDsp) {
 
 	// activeWindow = (GetAncestor(hWnd, GA_ROOT) == GetAncestor(GetForegroundWindow(), GA_ROOT));
 	activeWindow = 1;
-	QueueDeviceUpdate();
+	UpdateEnabledDevices();
 	return 0;
 }
 
 void CALLBACK PADclose() {
 	if (openCount && !--openCount) {
 		DEBUG_TEXT_OUT("LilyPad closed\n\n");
-		deviceUpdateQueued = 0;
+		updateQueued = 0;
+		hWndGSProc.Release();
+		hWndTopProc.Release();
 		dm->ReleaseInput();
-		ReleaseEatenProc();
 		hWnd = 0;
+		hWndTop = 0;
 		ClearKeyQueue();
 	}
 }
@@ -931,19 +1072,7 @@ u8 CALLBACK PADpoll(u8 value) {
 		DEBUG_OUT(query.response[1+query.lastByte]);
 		return query.response[++query.lastByte];
 	}
-	/*
-	{
-		query.numBytes = 35;
-		u8 test[35] = {0xFF, 0x80, 0x5A,
-			0x73, 0x5A, 0xFF, 0xFF, 0x80, 0x80, 0x80, 0x80,
-			0x73, 0x5A, 0xFF, 0xFF, 0x80, 0x80, 0x80, 0x80,
-			0x73, 0x5A, 0xFF, 0xFF, 0x80, 0x80, 0x80, 0x80,
-			0x73, 0x5A, 0xFF, 0xFF, 0x80, 0x80, 0x80, 0x80
-		};
-		memcpy(query.response, test, sizeof(test));
-		DEBUG_OUT(query.response[1+query.lastByte]);
-		return query.response[++query.lastByte];
-	}//*/
+
 	int i;
 	Pad *pad = &pads[query.port][query.slot];
 	if (query.lastByte == 0) {
@@ -962,27 +1091,25 @@ u8 CALLBACK PADpoll(u8 value) {
 		case 0x42:
 			query.response[2] = 0x5A;
 			{
-				if (!config.GSThreadUpdates) {
 					Update(query.port, query.slot);
-				}
 				ButtonSum *sum = &pad->sum;
 
 				u8 b1 = 0xFF, b2 = 0xFF;
 				for (i = 0; i<4; i++) {
-					b1 -= (sum->buttons[i]>=128) << i;
+					b1 -= (sum->buttons[i]   > 0) << i;
 				}
 				for (i = 0; i<8; i++) {
-					b2 -= (sum->buttons[i+4]>=128) << i;
+					b2 -= (sum->buttons[i+4] > 0) << i;
 				}
 				if (config.padConfigs[query.port][query.slot].type == GuitarPad && !config.GH2) {
 					sum->sticks[0].horiz = -255;
 					// Not sure about this.  Forces wammy to be from 0 to 0x7F.
 					// if (sum->sticks[2].vert > 0) sum->sticks[2].vert = 0;
 				}
-				b1 -= ((sum->sticks[0].vert<=-128) << 4);
-				b1 -= ((sum->sticks[0].horiz>=128) << 5);
-				b1 -= ((sum->sticks[0].vert>=128) << 6);
-				b1 -= ((sum->sticks[0].horiz<=-128) << 7);
+				b1 -= ((sum->sticks[0].vert  < 0) << 4);
+				b1 -= ((sum->sticks[0].horiz > 0) << 5);
+				b1 -= ((sum->sticks[0].vert  > 0) << 6);
+				b1 -= ((sum->sticks[0].horiz < 0) << 7);
 				query.response[3] = b1;
 				query.response[4] = b2;
 
@@ -1196,9 +1323,6 @@ u32 CALLBACK PADquery() {
 	return 3;
 }
 
-//void CALLBACK PADgsDriverInfo(GSdriverInfo *info) {
-//}
-
 INT_PTR CALLBACK AboutDialogProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	if (uMsg == WM_INITDIALOG) {
 		wchar_t idString[100];
@@ -1221,19 +1345,6 @@ s32 CALLBACK PADtest() {
 	return 0;
 }
 
-DWORD WINAPI RenameWindowThreadProc(void *lpParameter) {
-	wchar_t newTitle[200];
-	if (hWnd) {
-		int len = GetWindowTextW(hWnd, newTitle, 200);
-		if (len > 0 && len < 199) {
-			wchar_t *end;
-			if (end = wcsstr(newTitle, L" | State ")) *end = 0;
-			SetWindowTextW(hWnd, newTitle);
-		}
-	}
-	return 0;
-}
-
 keyEvent* CALLBACK PADkeyEvent() {
 	// If running both pads, ignore every other call.  So if two keys pressed in same interval...
 	static char eventCount = 0;
@@ -1243,16 +1354,14 @@ keyEvent* CALLBACK PADkeyEvent() {
 	}
 	eventCount = 0;
 
-	if (!config.GSThreadUpdates) {
 		Update(2, 0);
-	}
 	static char shiftDown = 0;
 	static char altDown = 0;
 	static keyEvent ev;
 	if (!GetQueuedKeyEvent(&ev)) return 0;
 	if ((ev.key == VK_ESCAPE || (int)ev.key == -2) && ev.evt == KEYPRESS && config.escapeFullscreenHack) {
 		static int t;
-		if ((int)ev.key != -2 && IsWindowMaximized(hWnd)) {
+		if ((int)ev.key != -2 && IsWindowMaximized(hWndTop)) {
 			t = timeGetTime();
 			QueueKeyEvent(-2, KEYPRESS);
 			HANDLE hThread = CreateThread(0, 0, MaximizeWindowThreadProc, 0, 0, 0);
@@ -1272,13 +1381,8 @@ keyEvent* CALLBACK PADkeyEvent() {
 	if (ev.key == VK_F2 && ev.evt == KEYPRESS) {
 		saveStateIndex += 1 - 2*shiftDown;
 		saveStateIndex = (saveStateIndex+10)%10;
-		if (config.saveStateTitle) {
-			// GSDX only checks its window's message queue at certain points or something, so
-			// have to do this in another thread to prevent deadlock.
-			HANDLE hThread = CreateThread(0, 0, RenameWindowThreadProc, 0, 0, 0);
-			if (hThread) CloseHandle(hThread);
+		SaveStateChanged();
 		}
-	}
 
 	// So don't change skip mode on alt-F4.
 	if (ev.key == VK_F4 && altDown) {
@@ -1299,8 +1403,6 @@ keyEvent* CALLBACK PADkeyEvent() {
 	return &ev;
 }
 
-#define PAD_SAVE_STATE_VERSION	1
-
 struct PadPluginFreezeData {
 	char format[8];
 	// Currently all different versions are incompatible.
@@ -1311,7 +1413,6 @@ struct PadPluginFreezeData {
 	u8 port;
 	// active slot for port
 	u8 slot;
-	// Currently only use padData[0].  Save room for all 4 slots for simplicity.
 	PadFreezeData padData[4];
 	QueryInfo query;
 };
@@ -1393,18 +1494,6 @@ u32 CALLBACK PSEgetLibVersion() {
 	return (VERSION & 0xFFFFFF);
 }
 
-// Little funkiness to handle rounding floating points to ints without the C runtime.
-// Unfortunately, means I can't use /GL optimization option when NO_CRT is defined.
-#ifdef NO_CRT
-extern "C" long _cdecl _ftol();
-extern "C" long _cdecl _ftol2_sse() {
-	return _ftol();
-}
-extern "C" long _cdecl _ftol2() {
-	return _ftol();
-}
-#endif
-
 s32 CALLBACK PADqueryMtap(u8 port) {
 	port--;
 	if (port > 1) return 0;
@@ -1422,3 +1511,16 @@ s32 CALLBACK PADsetSlot(u8 port, u8 slot) {
 	// First slot always allowed.
 	return pads[port][slot].enabled | !slot;
 }
+
+// Little funkiness to handle rounding floating points to ints without the C runtime.
+// Unfortunately, means I can't use /GL optimization option when NO_CRT is defined.
+#ifdef NO_CRT
+extern "C" long _cdecl _ftol();
+extern "C" long _cdecl _ftol2_sse() {
+	return _ftol();
+}
+extern "C" long _cdecl _ftol2() {
+	return _ftol();
+}
+#endif
+

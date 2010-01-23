@@ -1,19 +1,14 @@
 #include "Global.h"
-#include <Dbt.h>
-#include <commctrl.h>
 
-#include "Config.h"
-#include "PS2Edefs.h"
-#include "Resource.h"
-#include "Diagnostics.h"
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <math.h>
-#include "DeviceEnumerator.h"
+#include "resource.h"
 #include "InputManager.h"
+#include "Config.h"
+
+#include "Diagnostics.h"
+#include "DeviceEnumerator.h"
 #include "KeyboardQueue.h"
 #include "WndProcEater.h"
+#include "DualShock3.h"
 
 // Needed to know if raw input is available.  It requires XP or higher.
 #include "RawInput.h"
@@ -28,6 +23,11 @@ u8 ps2e = 0;
 HWND hWndProp = 0;
 
 int selected = 0;
+
+// Older versions of PCSX2 don't always create the ini dir on startup, so LilyPad does it
+// for it.  But if PCSX2 sets the ini path with a call to setSettingsDir, then it means
+// we shouldn't make our own.
+bool createIniDir = true;
 
 HWND hWnds[2][4];
 HWND hWndGeneral = 0;
@@ -48,11 +48,11 @@ const GeneralSettingsBool BoolOptionsInfo[] = {
 
 	{L"DirectInput Game Devices", IDC_G_DI, 1},
 	{L"XInput", IDC_G_XI, 1},
+	{L"DualShock 3", IDC_G_DS3, 0},
 
 	{L"Multitap 1", IDC_MULTITAP1, 0},
 	{L"Multitap 2", IDC_MULTITAP2, 0},
 
-	{L"GS Thread Updates", IDC_GS_THREAD_INPUT, 1},
 	{L"Escape Fullscreen Hack", IDC_ESCAPE_FULLSCREEN_HACK, 1},
 	{L"Disable Screen Saver", IDC_DISABLE_SCREENSAVER, 1},
 	{L"Logging", IDC_DEBUG_FILE, 0},
@@ -104,6 +104,7 @@ void SetLogSliderVal(HWND hWnd, int id, HWND hWndText, int val) {
 	int sliderPos = 0;
 	wchar_t temp[30];
 	EnableWindow(hWndSlider, val != 0);
+	EnableWindow(hWndText, val != 0);
 	EnableWindow(GetDlgItem(hWnd, id+1), val != 0);
 	if (!val) val = BASE_SENSITIVITY;
 	CheckDlgButton(hWnd, id+1, BST_CHECKED * (val<0));
@@ -130,7 +131,11 @@ void SetLogSliderVal(HWND hWnd, int id, HWND hWndText, int val) {
 
 void RefreshEnabledDevices(int updateDeviceList) {
 	// Clears all device state.
-	if (updateDeviceList) EnumDevices();
+	static int lastXInputState = -1;
+	if (updateDeviceList || lastXInputState != config.gameApis.xInput) {
+		EnumDevices(config.gameApis.xInput);
+		lastXInputState = config.gameApis.xInput;
+	}
 
 	for (int i=0; i<dm->numDevices; i++) {
 		Device *dev = dm->devices[i];
@@ -147,11 +152,19 @@ void RefreshEnabledDevices(int updateDeviceList) {
 			(dev->type == MOUSE && dev->api == config.mouseApi) ||
 			(dev->type == OTHER &&
 				((dev->api == DI && config.gameApis.directInput) || 
+				 (dev->api == DS3 && config.gameApis.dualShock3) || 
 				 (dev->api == XINPUT && config.gameApis.xInput)))) {
+					if (config.gameApis.dualShock3 && dev->api == DI && dev->displayName &&
+						!wcsicmp(dev->displayName, L"DX PLAYSTATION(R)3 Controller")) {
+							dm->DisableDevice(i);
+					}
+					else {
 					dm->EnableDevice(i);
 		}
-		else
+		}
+		else {
 					dm->DisableDevice(i);
+	}
 	}
 }
 
@@ -259,12 +272,19 @@ wchar_t *GetCommandStringW(u8 command, int port, int slot) {
 	return L"";
 }
 
-inline void GetSettingsFileName(wchar_t *out) {
-	wcscpy(out, L"inis\\LilyPad.ini");
+static wchar_t iniFile[MAX_PATH*2] = L"inis\\LilyPad.ini";
+
+void CALLBACK PADsetSettingsDir( const char *dir )
+{
+	// emulator assures a trailing slash/backslash (yay!)
+	swprintf_s( iniFile, L"%S", (dir==NULL) ? "inis\\" : dir );
+	wcscat(iniFile, L"LilyPad.ini");
+
+	createIniDir = false;
 }
 
 int GetBinding(int port, int slot, int index, Device *&dev, Binding *&b, ForceFeedbackBinding *&ffb);
-int BindCommand(Device *dev, unsigned int uid, unsigned int port, unsigned int slot, int command, int sensitivity, int turbo);
+int BindCommand(Device *dev, unsigned int uid, unsigned int port, unsigned int slot, int command, int sensitivity, int turbo, int deadZone);
 
 int CreateEffectBinding(Device *dev, wchar_t *effectName, unsigned int port, unsigned int slot, unsigned int motor, ForceFeedbackBinding **binding);
 
@@ -279,6 +299,8 @@ void SelChanged(int port, int slot) {
 	// Second value is now turbo.
 	int turbo = -1;
 	int sensitivity = 0;
+	int deadZone = 0;
+	int nonButtons = 0;
 	// Set if sensitivity != 0, but need to disable flip anyways.
 	// Only used to relative axes.
 	int disableFlip = 0;
@@ -346,6 +368,10 @@ void SelChanged(int port, int slot) {
 							else {
 								sensitivity += b->sensitivity;
 							}
+							if (((control->uid >> 16)&0xFF) != PSHBTN && ((control->uid >> 16)&0xFF) != TGLBTN) {
+								deadZone += b->deadZone;
+								nonButtons++;
+						}
 						}
 						else disableFlip = 1;
 					}
@@ -356,6 +382,7 @@ void SelChanged(int port, int slot) {
 		if ((bFound && ffbFound) || ffbFound > 1) {
 			ffb = 0;
 			turbo = -1;
+			deadZone = 0;
 			sensitivity = 0;
 			disableFlip = 1;
 			bFound = ffbFound = 0;
@@ -363,6 +390,9 @@ void SelChanged(int port, int slot) {
 		else if (bFound) {
 			turbo++;
 			sensitivity /= bFound;
+			if (nonButtons) {
+				deadZone /= nonButtons;
+			}
 			if (bFound > 1) disableFlip = 1;
 			else if (flipped) {
 				sensitivity = -sensitivity;
@@ -413,8 +443,9 @@ void SelChanged(int port, int slot) {
 			ShowWindow(hWndTemp, enable);
 		}
 	}
-	if (!ffb) { 
+	if (!ffb) {
 		SetLogSliderVal(hWnd, IDC_SLIDER1, GetDlgItem(hWnd, IDC_AXIS_SENSITIVITY1), sensitivity);
+		SetLogSliderVal(hWnd, IDC_SLIDER_DEADZONE, GetDlgItem(hWnd, IDC_AXIS_DEADZONE), deadZone);
 
 		if (disableFlip) EnableWindow(GetDlgItem(hWnd, IDC_FLIP1), 0);
 
@@ -566,7 +597,7 @@ int ListBoundEffect(int port, int slot, Device *dev, ForceFeedbackBinding *b) {
 }
 
 // Only for use with control bindings.  Affects all highlighted bindings.
-void ChangeValue(int port, int slot, int *newSensitivity, int *turbo) {
+void ChangeValue(int port, int slot, int *newSensitivity, int *newTurbo, int *newDeadZone) {
 	if (!hWnds[port][slot]) return;
 	HWND hWndList = GetDlgItem(hWnds[port][slot], IDC_LIST);
 	int count = ListView_GetSelectedCount(hWndList);
@@ -586,8 +617,13 @@ void ChangeValue(int port, int slot, int *newSensitivity, int *turbo) {
 			else
 				b->sensitivity = *newSensitivity;
 		}
-		if (turbo) {
-			b->turbo = *turbo;
+		if (newDeadZone) {
+			if (b->deadZone) {
+				b->deadZone = *newDeadZone;
+		}
+	}
+		if (newTurbo) {
+			b->turbo = *newTurbo;
 		}
 	}
 	PropSheet_Changed(hWndProp, hWnds[port][slot]);
@@ -677,18 +713,14 @@ void SetVolume(int volume) {
 	for (int i=waveOutGetNumDevs()-1; i>=0; i--) {
 		waveOutSetVolume((HWAVEOUT)i, val);
 	}
-	wchar_t ini[MAX_PATH+20];
-	GetSettingsFileName(ini);
-	WritePrivateProfileInt(L"General Settings", L"Volume", config.volume, ini);
+	WritePrivateProfileInt(L"General Settings", L"Volume", config.volume, iniFile);
 }
 
 int SaveSettings(wchar_t *file=0) {
-	wchar_t ini[MAX_PATH+20];
 
 	// Need this either way for saving path.
-	GetSettingsFileName(ini);
 	if (!file) {
-		file = ini;
+		file = iniFile;
 	}
 	else {
 		wchar_t *c = wcsrchr(file, '\\');
@@ -701,8 +733,8 @@ int SaveSettings(wchar_t *file=0) {
 	}
 	DeleteFileW(file);
 
-	WritePrivateProfileStringW(L"General Settings", L"Last Config Path", config.lastSaveConfigPath, ini);
-	WritePrivateProfileStringW(L"General Settings", L"Last Config Name", config.lastSaveConfigFileName, ini);
+	WritePrivateProfileStringW(L"General Settings", L"Last Config Path", config.lastSaveConfigPath, iniFile);
+	WritePrivateProfileStringW(L"General Settings", L"Last Config Name", config.lastSaveConfigFileName, iniFile);
 
 	// Just check first, last, and all pad bindings.  Should be more than enough.  No real need to check
 	// config path.
@@ -754,7 +786,7 @@ int SaveSettings(wchar_t *file=0) {
 					Binding *b = dev->pads[port][slot].bindings+j;
 					VirtualControl *c = &dev->virtualControls[b->controlIndex];
 					wsprintfW(temp, L"Binding %i", bindingCount++);
-					wsprintfW(temp2, L"0x%08X, %i, %i, %i, %i, %i", c->uid, port, b->command, b->sensitivity, b->turbo, slot);
+					wsprintfW(temp2, L"0x%08X, %i, %i, %i, %i, %i, %i", c->uid, port, b->command, b->sensitivity, b->turbo, slot, b->deadZone);
 					noError &= WritePrivateProfileStringW(id, temp, temp2, file);
 				}
 				for (int j=0; j<dev->pads[port][slot].numFFBindings; j++) {
@@ -778,24 +810,26 @@ int SaveSettings(wchar_t *file=0) {
 	return !noError;
 }
 
-static int loaded = 0;
-
 u8 GetPrivateProfileBool(wchar_t *s1, wchar_t *s2, int def, wchar_t *ini) {
 	return (0!=GetPrivateProfileIntW(s1, s2, def, ini));
 }
 
 int LoadSettings(int force, wchar_t *file) {
-	if (loaded && !force) return 0;
+	if (dm && !force) return 0;
+	
+	if( createIniDir )
+	{
 	CreateDirectory(L"inis", 0);
+		createIniDir = false;
+	}
+
 	// Could just do ClearDevices() instead, but if I ever add any extra stuff,
 	// this will still work.
 	UnloadConfigs();
 	dm = new InputDeviceManager();
 
-	wchar_t ini[MAX_PATH+20];
-	GetSettingsFileName(ini);
 	if (!file) {
-		file = ini;
+		file = iniFile;
 		GetPrivateProfileStringW(L"General Settings", L"Last Config Path", L"inis", config.lastSaveConfigPath, sizeof(config.lastSaveConfigPath), file);
 		GetPrivateProfileStringW(L"General Settings", L"Last Config Name", L"LilyPad.lily", config.lastSaveConfigFileName, sizeof(config.lastSaveConfigFileName), file);
 	}
@@ -806,8 +840,8 @@ int LoadSettings(int force, wchar_t *file) {
 			wcscpy(config.lastSaveConfigPath, file);
 			wcscpy(config.lastSaveConfigFileName, c+1);
 			*c = '\\';
-			WritePrivateProfileStringW(L"General Settings", L"Last Config Path", config.lastSaveConfigPath, ini);
-			WritePrivateProfileStringW(L"General Settings", L"Last Config Name", config.lastSaveConfigFileName, ini);
+			WritePrivateProfileStringW(L"General Settings", L"Last Config Path", config.lastSaveConfigPath, iniFile);
+			WritePrivateProfileStringW(L"General Settings", L"Last Config Name", config.lastSaveConfigFileName, iniFile);
 		}
 	}
 
@@ -815,12 +849,11 @@ int LoadSettings(int force, wchar_t *file) {
 		config.bools[i] = GetPrivateProfileBool(L"General Settings", BoolOptionsInfo[i].name, BoolOptionsInfo[i].defaultValue, file);
 	}
 
-	if (!ps2e) config.GSThreadUpdates = 0;
-
 	config.closeHacks = (u8)GetPrivateProfileIntW(L"General Settings", L"Close Hacks", 0, file);
 	if (config.closeHacks&1) config.closeHacks &= ~2;
 
 	config.keyboardApi = (DeviceAPI)GetPrivateProfileIntW(L"General Settings", L"Keyboard Mode", WM, file);
+	if (!config.keyboardApi) config.keyboardApi = WM;
 	config.mouseApi = (DeviceAPI) GetPrivateProfileIntW(L"General Settings", L"Mouse Mode", 0, file);
 
 	config.volume = GetPrivateProfileInt(L"General Settings", L"Volume", 100, file);
@@ -852,8 +885,6 @@ int LoadSettings(int force, wchar_t *file) {
 			config.padConfigs[port][slot].autoAnalog = GetPrivateProfileBool(temp, L"Auto Analog", 0, file);
 		}
 	}
-
-	loaded = 1;
 
 	int i=0;
 	int multipleBinding = config.multipleBinding;
@@ -892,7 +923,7 @@ int LoadSettings(int force, wchar_t *file) {
 			}
 			last = 1;
 			unsigned int uid;
-			int port, command, sensitivity, turbo, slot = 0;
+			int port, command, sensitivity, turbo, slot = 0, deadZone = 0;
 			int w = 0;
 			char string[1000];
 			while (temp2[w]) {
@@ -900,12 +931,12 @@ int LoadSettings(int force, wchar_t *file) {
 				w++;
 			}
 			string[w] = 0;
-			int len = sscanf(string, " %i , %i , %i , %i , %i , %i", &uid, &port, &command, &sensitivity, &turbo, &slot);
+			int len = sscanf(string, " %i , %i , %i , %i , %i , %i , %i", &uid, &port, &command, &sensitivity, &turbo, &slot, &deadZone);
 			if (len >= 5 && type) {
 				VirtualControl *c = dev->GetVirtualControl(uid);
 				if (!c) c = dev->AddVirtualControl(uid, -1);
 				if (c) {
-					BindCommand(dev, uid, port, slot, command, sensitivity, turbo);
+					BindCommand(dev, uid, port, slot, command, sensitivity, turbo, deadZone);
 				}
 			}
 		}
@@ -1094,11 +1125,16 @@ int CreateEffectBinding(Device *dev, wchar_t *effectID, unsigned int port, unsig
 	if (port > 1 || slot>3 || motor > 1 || !dev->numFFEffectTypes) {
 		return -1;
 	}
-	if (!effectID) {
-		effectID = dev->ffEffectTypes[0].effectID;
+	ForceFeedbackEffectType *eff = 0;
+	if (effectID) {
+		eff = dev->GetForcefeedbackEffect(effectID);
 	}
-	ForceFeedbackEffectType *eff = dev->GetForcefeedbackEffect(effectID);
-	if (!eff) return -1;
+	if (!eff) {
+		eff = dev->ffEffectTypes;
+	}
+	if (!eff) {
+		return -1;
+	}
 	int effectIndex = eff - dev->ffEffectTypes;
 	dev->pads[port][slot].ffBindings = (ForceFeedbackBinding*) realloc(dev->pads[port][slot].ffBindings, (dev->pads[port][slot].numFFBindings+1) * sizeof(ForceFeedbackBinding));
 	int newIndex = dev->pads[port][slot].numFFBindings;
@@ -1115,12 +1151,23 @@ int CreateEffectBinding(Device *dev, wchar_t *effectID, unsigned int port, unsig
 	return ListBoundEffect(port, slot, dev, b);
 }
 
-int BindCommand(Device *dev, unsigned int uid, unsigned int port, unsigned int slot, int command, int sensitivity, int turbo) {
+int BindCommand(Device *dev, unsigned int uid, unsigned int port, unsigned int slot, int command, int sensitivity, int turbo, int deadZone) {
 	// Checks needed because I use this directly when loading bindings.
 	if (port > 1 || slot>3) {
 		return -1;
 	}
 	if (!sensitivity) sensitivity = BASE_SENSITIVITY;
+	if ((uid>>16) & (PSHBTN|TGLBTN)) {
+		deadZone = 0;
+	}
+	else if (!deadZone) {
+		if ((uid>>16) & PRESSURE_BTN) {
+			deadZone = 1;
+		}
+		else {
+			deadZone = DEFAULT_DEADZONE;
+		}
+	}
 	// Relative axes can have negative sensitivity.
 	else if (((uid>>16) & 0xFF) == RELAXIS) {
 		sensitivity = abs(sensitivity);
@@ -1142,6 +1189,7 @@ int BindCommand(Device *dev, unsigned int uid, unsigned int port, unsigned int s
 	b->controlIndex = controlIndex;
 	b->turbo = turbo;
 	b->sensitivity = sensitivity;
+	b->deadZone = deadZone;
 	// Where it appears in listview.
 	int count = ListBoundCommand(port, slot, dev, b);
 
@@ -1214,7 +1262,7 @@ void EndBinding(HWND hWnd) {
 
 		dm->ReleaseInput();
 		ClearKeyQueue();
-		ReleaseEatenProc();
+		hWndButtonProc.Release();
 
 		// Safest to do this last.
 		if (needRefreshDevices) {
@@ -1249,8 +1297,8 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM l
 			slot = (int)((PROPSHEETPAGE *)lParam)->lParam >> 1;
 			hWnds[port][slot] = hWnd;
 			SendMessage(hWndList, LVM_SETEXTENDEDLISTVIEWSTYLE, 0, LVS_EX_FULLROWSELECT);
-			HWND hWndSlider = GetDlgItem(hWnd, IDC_SLIDER1);
-			SetupLogSlider(hWndSlider);
+			SetupLogSlider(GetDlgItem(hWnd, IDC_SLIDER1));
+			SetupLogSlider(GetDlgItem(hWnd, IDC_SLIDER_DEADZONE));
 			if (port || slot)
 				EnableWindow(GetDlgItem(hWnd, ID_IGNORE), 0);
 
@@ -1264,6 +1312,9 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM l
 		}
 		break;
 	case WM_TIMER:
+		// ignore generic timer callback and handle the hwnd-specific one which comes later
+		if(hWnd == 0) return 0;
+
 		if (!selected || selected == 0xFF) {
 			// !selected is mostly for device added/removed when binding.
 			selected = 0xFF;
@@ -1272,7 +1323,15 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM l
 		else {
 			unsigned int uid;
 			int value;
-			InitInfo info = {selected==0x7F, hWndProp, hWnd, GetDlgItem(hWnd, selected)};
+
+			// The old code re-bound our button hWndProcEater to GetDlgItem(hWnd, selected).  But at best hWnd
+			// was null (WM_TIMER is passed twice, once with a null parameter, and a second time that is hWnd
+			// specific), and at worst 'selected' is a post-processed code "based" on cmd, so GetDlgItem
+			// *always* returned NULL anyway.  This resulted in hWndButton being null, which meant Device code
+			// used hWnd instead.  This may have caused odd behavior since the callbacks were still all eaten
+			// by the initial GetDlgItem(hWnd, cmd) selection made when the timer was initialized.
+			
+			InitInfo info = {selected==0x7F, 1, hWndProp, &hWndButtonProc};
 			Device *dev = dm->GetActiveDevice(&info, &uid, &index, &value);
 			if (dev) {
 				int command = selected;
@@ -1282,14 +1341,15 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM l
 				UnselectAll(hWndList);
 				int index = -1;
 				if (command == 0x7F && dev->api == IGNORE_KEYBOARD) {
-					index = BindCommand(dev, uid, 0, 0, command, BASE_SENSITIVITY, 0);
+					index = BindCommand(dev, uid, 0, 0, command, BASE_SENSITIVITY, 0, 0);
 				}
 				else if (command < 0x30) {
-					index = BindCommand(dev, uid, port, slot, command, BASE_SENSITIVITY, 0);
+					index = BindCommand(dev, uid, port, slot, command, BASE_SENSITIVITY, 0, 0);
 				}
 				if (index >= 0) {
 					PropSheet_Changed(hWndProp, hWnds[port][slot]);
 					ListView_SetItemState(hWndList, index, LVIS_SELECTED, LVIS_SELECTED);
+					ListView_EnsureVisible(hWndList, index, 0);
 				}
 			}
 		}
@@ -1344,8 +1404,6 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM l
 					SelChanged(port, slot);
 				}
 			}
-			// Stop binding when user does something else.
-			EndBinding(hWnd);
 		}
 		break;
 	case WM_HSCROLL:
@@ -1353,7 +1411,10 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM l
 			int id = GetDlgCtrlID((HWND)lParam);
 			int val = GetLogSliderVal(hWnd, id);
 			if (id == IDC_SLIDER1) {
-				ChangeValue(port, slot, &val, 0);
+				ChangeValue(port, slot, &val, 0, 0);
+			}
+			else if (id == IDC_SLIDER_DEADZONE) {
+				ChangeValue(port, slot, 0, 0, &val);
 			}
 			else {
 				ChangeEffect(port, slot, id, &val, 0);
@@ -1375,7 +1436,7 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM l
 						uid = (uid&0x00FFFFFF) | axisUIDs[cbsel];
 						Binding backup = *b;
 						DeleteSelected(port, slot);
-						int index = BindCommand(dev, uid, port, slot, backup.command, backup.sensitivity, backup.turbo);
+						int index = BindCommand(dev, uid, port, slot, backup.command, backup.sensitivity, backup.turbo, backup.deadZone);
 						ListView_SetItemState(hWndList, index, LVIS_SELECTED, LVIS_SELECTED);
 						PropSheet_Changed(hWndProp, hWnd);
 					}
@@ -1404,7 +1465,14 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM l
 					if (index < (unsigned int) dm->numDevices) {
 						Device *dev = dm->devices[index];
 						ForceFeedbackBinding *b;
-						int count = CreateEffectBinding(dev, 0, port, slot, cmd-ID_BIG_MOTOR, &b);
+						wchar_t *effectID = 0;
+						if (dev->api == DI) {
+							// Constant effect.
+							if (cmd == ID_BIG_MOTOR) effectID = L"13541C20-8E33-11D0-9AD0-00A0C9A06E35";
+							// Square.
+							else effectID = L"13541C22-8E33-11D0-9AD0-00A0C9A06E35";
+						}
+						int count = CreateEffectBinding(dev, effectID, port, slot, cmd-ID_BIG_MOTOR, &b);
 						if (b) {
 							int needSet = 1;
 							if (dev->api == XINPUT && dev->numFFAxes == 2) {
@@ -1416,9 +1484,17 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM l
 									b->axes[1].force = BASE_SENSITIVITY;
 								}
 							}
+							else if (dev->api == DS3 && dev->numFFAxes == 2) {
+								needSet = 0;
+								if (cmd == ID_BIG_MOTOR) {
+									b->axes[0].force = BASE_SENSITIVITY;
+								}
+								else {
+									b->axes[1].force = BASE_SENSITIVITY;
+								}
+							}
 							else if (dev->api == DI) {
 								int bigIndex=0, littleIndex=0;
-								int constantEffect = 0, squareEffect = 0;
 								int j;
 								for (j=0; j<dev->numFFAxes; j++) {
 									// DI object instance.  0 is x-axis, 1 is y-axis.
@@ -1430,20 +1506,14 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM l
 										littleIndex = j;
 									}
 								}
-								for (j=0; j<dev->numFFEffectTypes; j++) {
-									if (!wcsicmp(L"13541C20-8E33-11D0-9AD0-00A0C9A06E35", dev->ffEffectTypes[j].effectID)) constantEffect = j;
-									if (!wcsicmp(L"13541C22-8E33-11D0-9AD0-00A0C9A06E35", dev->ffEffectTypes[j].effectID)) squareEffect = j;
-								}
 								needSet = 0;
 								if (cmd == ID_BIG_MOTOR) {
 									b->axes[bigIndex].force = BASE_SENSITIVITY;
 									b->axes[littleIndex].force = 1;
-									b->effectIndex = constantEffect;
 								}
 								else {
 									b->axes[bigIndex].force = 1;
 									b->axes[littleIndex].force = BASE_SENSITIVITY;
-									b->effectIndex = squareEffect;
 								}
 							}
 							if (needSet) {
@@ -1453,6 +1523,7 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM l
 							}
 							UnselectAll(hWndList);
 							ListView_SetItemState(hWndList, count, LVIS_SELECTED, LVIS_SELECTED);
+							ListView_EnsureVisible(hWndList, count, 0);
 						}
 						PropSheet_Changed(hWndProp, hWnd);
 					}
@@ -1469,8 +1540,8 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM l
 				if (selIndex >= 0) {
 					if (GetBinding(port, slot, selIndex, dev, b, ffb)) {
 						selected = 0xFF;
-						InitInfo info = {0, hWndProp, hWnd, GetDlgItem(hWnd, cmd)};
-						EatWndProc(info.hWndButton, DoNothingWndProc, 0);
+						hWndButtonProc.SetWndHandle(GetDlgItem(hWnd, cmd));
+						InitInfo info = {0, 1, hWndProp, &hWndButtonProc};
 						for (int i=0; i<dm->numDevices; i++) {
 							if (dm->devices[i] != dev) {
 								dm->DisableDevice(i);
@@ -1479,6 +1550,8 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM l
 						dm->Update(&info);
 						dm->PostRead();
 						dev->SetEffect(ffb, 255);
+						Sleep(200);
+						dm->Update(&info);
 						SetTimer(hWnd, 1, 3000, 0);
 					}
 				}
@@ -1504,13 +1577,14 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM l
 					}
 				}
 
-				InitInfo info = {selected==0x7F, hWndProp, hWnd, GetDlgItem(hWnd, cmd)};
-				EatWndProc(info.hWndButton, DoNothingWndProc, 0);
+				hWndButtonProc.SetWndHandle(GetDlgItem(hWnd, cmd));
+				hWndButtonProc.Eat(DoNothingWndProc, 0);
+				InitInfo info = {selected==0x7F, 1, hWndProp, &hWndButtonProc};
 				int w = timeGetTime();
 				dm->Update(&info);
 				dm->PostRead();
 				// Workaround for things that return 0 on first poll and something else ever after.
-				Sleep(40);
+				Sleep(80);
 				dm->Update(&info);
 				dm->PostRead();
 				SetTimer(hWnd, 1, 30, 0);
@@ -1519,11 +1593,11 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM l
 				// Don't allow setting it back to indeterminate.
 				SendMessage(GetDlgItem(hWnd, IDC_TURBO), BM_SETSTYLE, BS_AUTOCHECKBOX, 0);
 				int turbo = (IsDlgButtonChecked(hWnd, IDC_TURBO) == BST_CHECKED);
-				ChangeValue(port, slot, 0, &turbo);
+				ChangeValue(port, slot, 0, &turbo, 0);
 			}
-			else if (cmd == IDC_FLIP1 || cmd == IDC_TURBO) {
+			else if (cmd == IDC_FLIP1) {
 				int val = GetLogSliderVal(hWnd, IDC_SLIDER1);
-				ChangeValue(port, slot, &val, 0);
+				ChangeValue(port, slot, &val, 0, 0);
 			}
 			else if (cmd >= IDC_FF_AXIS1_ENABLED && cmd < IDC_FF_AXIS8_ENABLED + 16) {
 				int index = (cmd - IDC_FF_AXIS1_ENABLED)/16;
@@ -1695,7 +1769,7 @@ INT_PTR CALLBACK GeneralDialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, L
 				selected = 0;
 				ListView_SetExtendedListViewStyleEx(hWndList, LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER, LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER);
 				SendMessage(hWndList, LVM_SETEXTENDEDLISTVIEWSTYLE, 0, LVS_EX_FULLROWSELECT);
-				SendMessage(hWndCombo, CB_ADDSTRING, 0, (LPARAM) L"Disabled");
+				SendMessage(hWndCombo, CB_ADDSTRING, 0, (LPARAM) L"Unplugged");
 				SendMessage(hWndCombo, CB_ADDSTRING, 0, (LPARAM) L"Dualshock 2");
 				SendMessage(hWndCombo, CB_ADDSTRING, 0, (LPARAM) L"Guitar");
 			}
@@ -1705,16 +1779,17 @@ INT_PTR CALLBACK GeneralDialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, L
 		RefreshEnabledDevicesAndDisplay(0, hWnd, 0);
 		UpdatePadList(hWnd);
 
+		if (!DualShock3Possible()) {
+			config.gameApis.dualShock3 = 0;
+			EnableWindow(GetDlgItem(hWnd, IDC_G_DS3), 0);
+		}
+
 		for (int j=0; j<sizeof(BoolOptionsInfo)/sizeof(BoolOptionsInfo[0]); j++) {
 			CheckDlgButton(hWnd, BoolOptionsInfo[j].ControlId, BST_CHECKED * config.bools[j]);
 		}
 
 		CheckDlgButton(hWnd, IDC_CLOSE_HACK1, BST_CHECKED * (config.closeHacks&1));
 		CheckDlgButton(hWnd, IDC_CLOSE_HACK2, BST_CHECKED * ((config.closeHacks&2)>>1));
-
-		if (!ps2e) {
-			EnableWindow(GetDlgItem(hWnd, IDC_GS_THREAD_INPUT), 0);
-		}
 
 		if (config.osVersion < 6) EnableWindow(GetDlgItem(hWnd, IDC_VISTA_VOLUME), 0);
 
@@ -1811,6 +1886,7 @@ INT_PTR CALLBACK GeneralDialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, L
 			}
 
 			int mtap = config.multitap[0] + 2*config.multitap[1];
+			int vistaVol = config.vistaVolume;
 
 			for (int j=0; j<sizeof(BoolOptionsInfo)/sizeof(BoolOptionsInfo[0]); j++) {
 				config.bools[j] = (IsDlgButtonChecked(hWnd, BoolOptionsInfo[j].ControlId) == BST_CHECKED);
@@ -1820,25 +1896,18 @@ INT_PTR CALLBACK GeneralDialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, L
 				((IsDlgButtonChecked(hWnd, IDC_CLOSE_HACK2) == BST_CHECKED)<<1);
 
 			if (!config.vistaVolume) {
+				if (vistaVol) {
+					// Restore volume if just disabled.  Don't touch, otherwise, just in case
+					// sound plugin plays with it.
 				SetVolume(100);
+			}
+				config.vistaVolume = 100;
 			}
 
 			for (i=0; i<4; i++) {
-				if (IsDlgButtonChecked(hWnd, IDC_KB_DISABLE+i) == BST_CHECKED) {
-					if (i != NO_API || config.keyboardApi == NO_API || IDOK == MessageBoxA(hWnd, 
-						"Disabling keyboard input will prevent LilyPad from passing any\n"
-						"keyboard input on to PCSX2.\n"
-						"\n"
-						"This is only meant to be used if you're using two different\n"
-						"pad plugins. If both pads are set to LilyPad, then GS and PCSX2   \n"
-						"keyboard shortcuts will not work.\n"
-						"\n"
-						"Are you sure you want to do this?", "Warning", MB_OKCANCEL | MB_ICONWARNING)) {
-						
+				if (i && IsDlgButtonChecked(hWnd, IDC_KB_DISABLE+i) == BST_CHECKED) {
 							config.keyboardApi = (DeviceAPI)i;
 					}
-					CheckRadioButton(hWnd, IDC_KB_DISABLE, IDC_KB_RAW, IDC_KB_DISABLE + config.keyboardApi);
-				}
 				if (IsDlgButtonChecked(hWnd, IDC_M_DISABLE+i) == BST_CHECKED) {
 					config.mouseApi = (DeviceAPI)i;
 				}
@@ -1959,12 +2028,12 @@ INT_PTR CALLBACK GeneralDialogProc(HWND hWnd, unsigned int msg, WPARAM wParam, L
 }
 
 int CALLBACK PropSheetProc(HWND hWnd, UINT msg, LPARAM lParam) {
-	hWndProp = hWnd;
+	if (hWnd) hWndProp = hWnd;
 	return 0;
 }
 
-void CALLBACK PADconfigure() {
-	// Can end up here without PadConfigure() being called first.
+void Configure() {
+	// Can end up here without PADinit() being called first.
 	LoadSettings();
 	// Can also end up here after running emulator a bit, and possibly
 	// disabling some devices due to focus changes, or releasing mouse.
@@ -2001,7 +2070,6 @@ void CALLBACK PADconfigure() {
 }
 
 void UnloadConfigs() {
-	loaded = 0;
 	if (dm) {
 		delete dm;
 		dm = 0;

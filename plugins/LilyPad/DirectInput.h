@@ -1,3 +1,1 @@
-#include "InputManager.h"
-
-void EnumDirectInputDevices();
+void EnumDirectInputDevices(int ignoreXInput);

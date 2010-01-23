@@ -21,17 +21,34 @@
 
 #pragma once
 
-class GSWnd : public CWnd
+#include "GSVector.h"
+
+class GSWnd
 {
-	DECLARE_MESSAGE_MAP()
+	HWND m_hWnd;
+	bool m_IsManaged;		// set true when we're attached to a 3rdparty window that's amanged by the emulator
+	bool m_HasFrame;
+
+	static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+	virtual LRESULT OnMessage(UINT message, WPARAM wParam, LPARAM lParam);
 
 public:
 	GSWnd();
 	virtual ~GSWnd();
 
-	virtual bool Create(LPCTSTR title);
+	bool Create(const string& title, int w, int h);
+	bool Attach(HWND hWnd, bool isManaged=true);
+	void Detach();
+	bool IsManaged() const { return m_IsManaged; }
+
+	void* GetHandle() {return m_hWnd;}
+
+	GSVector4i GetClientRect();
+
+	bool SetWindowText(const char* title);
 
 	void Show();
 	void Hide();
-	void OnClose();
+
+	void HideFrame();
 };

@@ -22,46 +22,22 @@
 #pragma once
 
 #include "GS.h"
+#include "GSLocalMemory.h"
 
 class GSUtil
 {
 public:
-	static GS_PRIM_CLASS GetPrimClass(DWORD prim);
+	static GS_PRIM_CLASS GetPrimClass(uint32 prim);
 
-	static bool HasSharedBits(DWORD spsm, DWORD dpsm);
-	static bool HasSharedBits(DWORD sbp, DWORD spsm, DWORD dbp, DWORD dpsm);
-	static bool HasCompatibleBits(DWORD spsm, DWORD dpsm);
-
-	static bool IsRectInRect(const CRect& inner, const CRect& outer);
-	static bool IsRectInRectH(const CRect& inner, const CRect& outer);
-	static bool IsRectInRectV(const CRect& inner, const CRect& outer);
-
-	static void FitRect(CRect& r, int aspectratio);
-	
-	static int EncodePSM(int psm)
-	{
-		switch(psm)
-		{
-		case PSM_PSMCT32: 
-		case PSM_PSMZ32: 
-			return 0;
-		case PSM_PSMCT24: 
-		case PSM_PSMZ24:
-			return 1;
-		case PSM_PSMCT16: 
-		case PSM_PSMCT16S: 
-		case PSM_PSMZ16:
-		case PSM_PSMZ16S:
-			return 2;
-		default:
-			return 3;
-		}
-	}
+	static bool HasSharedBits(uint32 spsm, uint32 dpsm);
+	static bool HasSharedBits(uint32 sbp, uint32 spsm, uint32 dbp, uint32 dpsm);
+	static bool HasCompatibleBits(uint32 spsm, uint32 dpsm);
 
 	static bool CheckDirectX();
 	static bool CheckSSE();
 
 	static bool IsDirect3D10Available();
+	static bool IsDirect3D11Available();
 
 	static char* GetLibName();
 };

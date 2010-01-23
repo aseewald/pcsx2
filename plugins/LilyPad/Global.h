@@ -3,8 +3,15 @@
 // dll size by over 100k while avoiding any dependencies on updated CRT dlls.
 #pragma once
 
+#define DIRECTINPUT_VERSION 0x0800
+
 #ifdef NO_CRT
 #define _CRT_ALLOCATION_DEFINED
+
+inline void * malloc(size_t size);
+inline void * calloc(size_t num, size_t size);
+inline void free(void * mem);
+inline void * realloc(void *mem, size_t size);
 #endif
 
 #define UNICODE
@@ -27,7 +34,24 @@
 
 
 #include <windows.h>
-#include "PS2Etypes.h"
+
+#ifdef PCSX2_DEBUG
+#define _CRTDBG_MAPALLOC
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+#else
+#include <stdlib.h>
+#endif
+
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+
+#include <commctrl.h>
+// Only needed for DBT_DEVNODES_CHANGED
+#include <Dbt.h>
+
 #include "PS2Edefs.h"
 
 extern HINSTANCE hInst;
@@ -67,6 +91,10 @@ EXPORT_C_(s32) PADsetSlot(u8 port, u8 slot);
 EXPORT_C_(s32) PADqueryMtap(u8 port);
 
 #ifdef NO_CRT
+
+#define wcsdup MyWcsdup
+#define wcsicmp MyWcsicmp
+
 inline void * malloc(size_t size) {
 	return HeapAlloc(GetProcessHeap(), 0, size);
 }
@@ -78,7 +106,7 @@ inline void * calloc(size_t num, size_t size) {
 	return out;
 }
 
-inline void free(__inout_opt void * mem) {
+inline void free(void * mem) {
 	if (mem) HeapFree(GetProcessHeap(), 0, mem);
 }
 
@@ -94,20 +122,20 @@ inline void * realloc(void *mem, size_t size) {
 	return HeapReAlloc(GetProcessHeap(), 0, mem, size);
 }
 
-inline wchar_t * __cdecl wcsdup(const wchar_t *in) {
-	size_t size = sizeof(wchar_t) * (1+wcslen(in));
-	wchar_t *out = (wchar_t*) malloc(size);
-	if (out)
-		memcpy(out, in, size);
-	return out;
-}
-
 inline void * __cdecl operator new(size_t lSize) {
 	return HeapAlloc(GetProcessHeap(), 0, lSize);
 }
 
 inline void __cdecl operator delete(void *pBlock) {
 	HeapFree(GetProcessHeap(), 0, pBlock);
+}
+
+inline wchar_t * __cdecl wcsdup(const wchar_t *in) {
+	size_t size = sizeof(wchar_t) * (1+wcslen(in));
+	wchar_t *out = (wchar_t*) malloc(size);
+	if (out)
+		memcpy(out, in, size);
+	return out;
 }
 
 inline int __cdecl wcsicmp(const wchar_t *s1, const wchar_t *s2) {

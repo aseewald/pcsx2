@@ -28,16 +28,16 @@
 
 class GSLocalMemory;
 
-__declspec(align(16)) class GSClut : public GSAlignedClass<16>
+__aligned16 class GSClut : public GSAlignedClass<16>
 {
-	const GSLocalMemory* m_mem;
+	GSLocalMemory* m_mem;
 
-	DWORD m_CBP[2];
-	WORD* m_clut;
-	DWORD* m_buff32;
-	UINT64* m_buff64;
+	uint32 m_CBP[2];
+	uint16* m_clut;
+	uint32* m_buff32;
+	uint64* m_buff64;
 
-	__declspec(align(16)) struct WriteState
+	__aligned16 struct WriteState
 	{
 		GIFRegTEX0 TEX0;
 		GIFRegTEXCLUT TEXCLUT;
@@ -45,7 +45,7 @@ __declspec(align(16)) class GSClut : public GSAlignedClass<16>
 		bool IsDirty(const GIFRegTEX0& TEX0, const GIFRegTEXCLUT& TEXCLUT);
 	} m_write;
 
-	__declspec(align(16)) struct ReadState
+	__aligned16 struct ReadState
 	{
 		GIFRegTEX0 TEX0;
 		GIFRegTEXA TEXA;
@@ -71,29 +71,29 @@ __declspec(align(16)) class GSClut : public GSAlignedClass<16>
 	template<int n> void WriteCLUT16_CSM2(const GIFRegTEX0& TEX0, const GIFRegTEXCLUT& TEXCLUT);
 	template<int n> void WriteCLUT16S_CSM2(const GIFRegTEX0& TEX0, const GIFRegTEXCLUT& TEXCLUT);
 
-	void WriteCLUT_NULL(const GIFRegTEX0& TEX0, const GIFRegTEXCLUT& TEXCLUT) {}
+	void WriteCLUT_NULL(const GIFRegTEX0& TEX0, const GIFRegTEXCLUT& TEXCLUT) {} // xenosaga 3, bios
 
-	static void WriteCLUT_T32_I8_CSM1(const DWORD* RESTRICT src, WORD* RESTRICT clut);
-	static void WriteCLUT_T32_I4_CSM1(const DWORD* RESTRICT src, WORD* RESTRICT clut);
-	static void WriteCLUT_T16_I8_CSM1(const WORD* RESTRICT src, WORD* RESTRICT clut);
-	static void WriteCLUT_T16_I4_CSM1(const WORD* RESTRICT src, WORD* RESTRICT clut);
-	static void ReadCLUT_T32_I8(const WORD* RESTRICT clut, DWORD* RESTRICT dst);
-	static void ReadCLUT_T32_I4(const WORD* RESTRICT clut, DWORD* RESTRICT dst);
-	static void ReadCLUT_T32_I4(const WORD* RESTRICT clut, DWORD* RESTRICT dst32, UINT64* RESTRICT dst64);
-	static void ReadCLUT_T16_I8(const WORD* RESTRICT clut, DWORD* RESTRICT dst);
-	static void ReadCLUT_T16_I4(const WORD* RESTRICT clut, DWORD* RESTRICT dst);
-	static void ReadCLUT_T16_I4(const WORD* RESTRICT clut, DWORD* RESTRICT dst32, UINT64* RESTRICT dst64);
-	static void ExpandCLUT64_T32_I8(const DWORD* RESTRICT src, UINT64* RESTRICT dst);
+	static void WriteCLUT_T32_I8_CSM1(const uint32* RESTRICT src, uint16* RESTRICT clut);
+	static void WriteCLUT_T32_I4_CSM1(const uint32* RESTRICT src, uint16* RESTRICT clut);
+	static void WriteCLUT_T16_I8_CSM1(const uint16* RESTRICT src, uint16* RESTRICT clut);
+	static void WriteCLUT_T16_I4_CSM1(const uint16* RESTRICT src, uint16* RESTRICT clut);
+	static void ReadCLUT_T32_I8(const uint16* RESTRICT clut, uint32* RESTRICT dst);
+	static void ReadCLUT_T32_I4(const uint16* RESTRICT clut, uint32* RESTRICT dst);
+	static void ReadCLUT_T32_I4(const uint16* RESTRICT clut, uint32* RESTRICT dst32, uint64* RESTRICT dst64);
+	static void ReadCLUT_T16_I8(const uint16* RESTRICT clut, uint32* RESTRICT dst);
+	static void ReadCLUT_T16_I4(const uint16* RESTRICT clut, uint32* RESTRICT dst);
+	static void ReadCLUT_T16_I4(const uint16* RESTRICT clut, uint32* RESTRICT dst32, uint64* RESTRICT dst64);
+	static void ExpandCLUT64_T32_I8(const uint32* RESTRICT src, uint64* RESTRICT dst);
 	static void ExpandCLUT64_T32(const GSVector4i& hi, const GSVector4i& lo0, const GSVector4i& lo1, const GSVector4i& lo2, const GSVector4i& lo3, GSVector4i* dst);
 	static void ExpandCLUT64_T32(const GSVector4i& hi, const GSVector4i& lo, GSVector4i* dst);
-	static void ExpandCLUT64_T16_I8(const DWORD* RESTRICT src, UINT64* RESTRICT dst);
+	static void ExpandCLUT64_T16_I8(const uint32* RESTRICT src, uint64* RESTRICT dst);
 	static void ExpandCLUT64_T16(const GSVector4i& hi, const GSVector4i& lo0, const GSVector4i& lo1, const GSVector4i& lo2, const GSVector4i& lo3, GSVector4i* dst);
 	static void ExpandCLUT64_T16(const GSVector4i& hi, const GSVector4i& lo, GSVector4i* dst);
 
-	static void Expand16(const WORD* RESTRICT src, DWORD* RESTRICT dst, int w, const GIFRegTEXA& TEXA);
+	static void Expand16(const uint16* RESTRICT src, uint32* RESTRICT dst, int w, const GIFRegTEXA& TEXA);
 
 public:
-	GSClut(const GSLocalMemory* mem);
+	GSClut(GSLocalMemory* mem);
 	virtual ~GSClut();
 
 	void Invalidate();
@@ -103,8 +103,8 @@ public:
 	void Read32(const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA);
 	void GetAlphaMinMax32(int& amin, int& amax);
 
-	DWORD operator [] (size_t i) const {return m_buff32[i];}
+	uint32 operator [] (size_t i) const {return m_buff32[i];}
 
-	operator const DWORD*() const  {return m_buff32;}
-	operator const UINT64*() const {return m_buff64;}
+	operator const uint32*() const  {return m_buff32;}
+	operator const uint64*() const {return m_buff64;}
 };

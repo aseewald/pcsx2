@@ -1,5 +1,5 @@
 /*  ZeroSPU2
- *  Copyright (C) 2006-2007 zerofrog
+ *  Copyright (C) 2006-2010 zerofrog
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -30,41 +30,6 @@ extern "C" {
 #include "zerospu2.h"
 
 extern char *libraryName;
-extern string s_strIniPath;
-
-// This is a bit ugly. I'll see if I can work out a better way to do this later.
-int SetupSound()
-{	
-#ifdef ZEROSPU2_OSS
-	return OSSSetupSound();
-#else
-	return AlsaSetupSound();
-#endif
-}
-void RemoveSound()
-{
-#ifdef ZEROSPU2_OSS
-	OSSRemoveSound();
-#else
-	AlsaRemoveSound();
-#endif
-}
-int SoundGetBytesBuffered()
-{
-#ifdef ZEROSPU2_OSS
-	return OSSSoundGetBytesBuffered();
-#else
-	return AlsaSoundGetBytesBuffered();
-#endif
-}
-void SoundFeedVoiceData(unsigned char* pSound,long lBytes)
-{
-#ifdef ZEROSPU2_OSS
-	OSSSoundFeedVoiceData(pSound, lBytes);
-#else
-	AlsaSoundFeedVoiceData(pSound, lBytes);
-#endif
-}
 
 GtkWidget *MsgDlg, *ConfDlg;
 
@@ -118,11 +83,6 @@ void SysMessage(char *fmt, ...)
 
 void CALLBACK SPU2configure() 
 {
-	char strcurdir[256];
-	getcwd(strcurdir, 256);
-	s_strIniPath = strcurdir;
-	s_strIniPath += "/inis/zerospu2.ini";
-	
 	LOG_CALLBACK("SPU2configure()\n");
 	ConfDlg = create_Config();
 	LoadConfig();
@@ -173,15 +133,12 @@ void CALLBACK SPU2about()
 
 void SaveConfig() 
 {
-	FILE *f;
-	char cfg[255];
-
-	strcpy(cfg, s_strIniPath.c_str());
+	string iniFile( s_strIniPath + "zerospu2.ini" );
 	
-	f = fopen(cfg,"w");
+	FILE* f = fopen(iniFile.c_str(),"w");
 	if (f == NULL) 
 	{
-		ERROR_LOG("Failed to open %s\n", s_strIniPath.c_str());
+		ERROR_LOG("Failed to open %s\n", iniFile.c_str());
 		return;
 	}
 	
@@ -196,20 +153,18 @@ void SaveConfig()
 	fclose(f);
 }
 
-void LoadConfig() 
+void LoadConfig()
 {
-	FILE *f;
-	char cfg[255];
 	int temp;
 
 	memset(&conf, 0, sizeof(conf));
 
-	strcpy(cfg, s_strIniPath.c_str());
+	string iniFile( s_strIniPath + "zerospu2.ini" );
 	
-	f = fopen(cfg, "r");
+	FILE* f = fopen(iniFile.c_str(), "r");
 	if (f == NULL) 
 	{
-		ERROR_LOG("Failed to open %s\n", s_strIniPath.c_str());
+		ERROR_LOG("Failed to open %s\n", iniFile.c_str());
 		conf.Log = 0;
 		conf.options = 0;
 		SaveConfig();//save and return

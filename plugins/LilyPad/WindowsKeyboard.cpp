@@ -1,4 +1,5 @@
 #include "Global.h"
+#include "InputManager.h"
 #include "VKey.h"
 #include "WindowsKeyboard.h"
 #include "KeyboardQueue.h"
@@ -20,8 +21,17 @@ wchar_t *WindowsKeyboard::GetPhysicalControlName(PhysicalControl *control) {
 }
 
 void WindowsKeyboard::UpdateKey(int vkey, int state) {
-	if (vkey > 4 && vkey < 256) {
-		physicalControlState[vkey] = (state << 16);
+	if (vkey > 7 && vkey < 256) {
+		int newState = state * FULLY_DOWN;
+		if (newState != physicalControlState[vkey]) {
+			// Check for alt-F4 to avoid toggling skip mode incorrectly.
+			if (vkey != VK_F4 || !(physicalControlState[VK_MENU] || physicalControlState[VK_RMENU] || physicalControlState[VK_LMENU])) {
+				int event = KEYPRESS;
+				if (!newState) event = KEYRELEASE;
+				QueueKeyEvent(vkey, event);
+	}
+		}
+		physicalControlState[vkey] = newState;
 	}
 }
 

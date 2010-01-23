@@ -64,6 +64,8 @@ extern "C" char* CALLBACK PS2EgetLibName(void);
 #include <string>
 using namespace std;
 
+extern std::string s_strIniPath;
+
 extern u32 THR_KeyEvent; // value for passing out key events beetwen threads
 extern bool THR_bShift;
 
@@ -119,19 +121,32 @@ struct RECT
 	int right, bottom;
 };
 
-typedef struct {
-	Display *dpy;
-	int screen;
-	Window win;
-	GLXContext ctx;
+#define GL_X11_WINDOW
+
+class GLWindow
+{
+    private:
+#ifdef GL_X11_WINDOW
+        Display *glDisplay;
+        Window glWindow;
+        int glScreen;
+        GLXContext context;
 	XSetWindowAttributes attr;
-	Bool fs;
-	Bool doubleBuffered;
 	XF86VidModeModeInfo deskMode;
-	int x, y;
-	unsigned int width, height;
-	unsigned int depth;	
-} GLWindow;
+#endif
+        bool fullScreen, doubleBuffered;
+        s32 x, y;
+        u32 width, height, depth;	
+    
+    public:
+        void SwapBuffers();
+        void SetTitle(char *strtitle);
+        bool CreateWindow(void *pDisplay);
+        bool DestroyWindow();
+        void CloseWindow();
+        void DisplayWindow(int _width, int _height);
+        void ResizeCheck();
+};
 
 extern GLWindow GLWin;
 

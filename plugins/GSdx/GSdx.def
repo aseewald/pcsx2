@@ -11,7 +11,8 @@ EXPORTS
 	GSsetBaseMem		
 	GSinit				
 	GSshutdown			
-	GSopen				
+	GSopen
+	GSopen2				
 	GSclose				
 	GSreset				
 	GSwriteCSR			
@@ -28,9 +29,14 @@ EXPORTS
 	GSabout				
 	GSreadFIFO			
 	GSreadFIFO2			
-	GSirqCallback		
+	GSirqCallback
+	GSsetupRecording		
 	GSsetGameCRC		
-	GSsetFrameSkip		
+	GSsetFrameSkip
+	GSsetFrameLimit		
+	GSsetVsync
+	GSsetExclusive
+	GSsetSettingsDir
 	GSgetLastTag
 	GSReplay
 	GSBenchmark

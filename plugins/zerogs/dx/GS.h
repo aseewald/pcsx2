@@ -22,11 +22,8 @@
 #include <stdio.h>
 #include <malloc.h>
 
-// need C definitions
-extern "C" {
 #define GSdefs
 #include "PS2Edefs.h"
-}
 
 #ifdef _WIN32
 
@@ -745,5 +742,9 @@ inline float Clamp(float fx, float fmin, float fmax)
 	if( fx < fmin ) return fmin;
 	return fx > fmax ? fmax : fx;
 }
+
+#include <string>
+
+extern std::string s_strIniPath;
 
 #endif

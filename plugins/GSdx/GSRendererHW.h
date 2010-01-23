@@ -24,209 +24,449 @@
 #include "GSRenderer.h"
 #include "GSTextureCache.h"
 #include "GSCrc.h"
+#include "GSFunctionMap.h"
 
-template<class Device, class Vertex, class TextureCache> 
-class GSRendererHW : public GSRendererT<Device, Vertex>
+
+template<class Vertex> 
+class GSRendererHW : public GSRendererT<Vertex>
 {
-	TextureCache* m_tc;
 	int m_width;
 	int m_height;
+	int m_upscale_multiplier;
+	int m_gamefix_skipdraw;
 	int m_skip;
 	bool m_reset;
 
-protected:
-	void Reset() 
+	#pragma region hacks
+
+	typedef bool (GSRendererHW::*OI_Ptr)(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t);
+	typedef void (GSRendererHW::*OO_Ptr)();
+	typedef bool (GSRendererHW::*CU_Ptr)();
+
+	bool OI_FFXII(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)
 	{
+		static uint32* video = NULL;
+		static int lines = 0;
+
+		if(lines == 0)
+	{
+			if(m_vt.m_primclass == GS_LINE_CLASS && (m_count == 448 * 2 || m_count == 512 * 2))
+			{
+				lines = m_count / 2;
+			}
+		}
+		else
+		{
+			if(m_vt.m_primclass == GS_POINT_CLASS)
+			{
+				if(m_count >= 16 * 512)
+				{
+					// incoming pixels are stored in columns, one column is 16x512, total res 448x512 or 448x454
+
+					if(!video) video = new uint32[512 * 512];
+
+					int ox = m_context->XYOFFSET.OFX;
+					int oy = m_context->XYOFFSET.OFY;
+
+					for(int i = 0; i < m_count; i++)
+		{
+						int x = ((int)m_vertices[i].p.x - ox) >> 4;
+						int y = ((int)m_vertices[i].p.y - oy) >> 4;
+
+						// video[y * 448 + x] = m_vertices[i].c0;
+						video[(y << 8) + (y << 7) + (y << 6) + x] = m_vertices[i].c0;
+					}
+
+					return false;
+				}
+				else 
+			{
+					lines = 0;
+				}
+			}
+			else if(m_vt.m_primclass == GS_LINE_CLASS)
+			{
+				if(m_count == lines * 2)
+				{
+					// normally, this step would copy the video onto screen with 512 texture mapped horizontal lines,
+					// but we use the stored video data to create a new texture, and replace the lines with two triangles
+
+					m_dev->Recycle(t->m_texture);
+
+					t->m_texture = m_dev->CreateTexture(512, 512);
+
+					t->m_texture->Update(GSVector4i(0, 0, 448, lines), video, 448 * 4);
+
+					m_vertices[0] = m_vertices[0];
+					m_vertices[1] = m_vertices[1];
+					m_vertices[2] = m_vertices[m_count - 2];
+					m_vertices[3] = m_vertices[1];
+					m_vertices[4] = m_vertices[2];
+					m_vertices[5] = m_vertices[m_count - 1];
+
+					m_count = 6;
+
+					m_vt.Update(m_vertices, m_count, GS_TRIANGLE_CLASS);
+				}
+				else 
+				{
+					lines = 0;
+				}
+			}
+		}
+
+		return true;
+					}
+
+	bool OI_FFX(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)
+					{
+		uint32 FBP = m_context->FRAME.Block();
+		uint32 ZBP = m_context->ZBUF.Block();
+		uint32 TBP = m_context->TEX0.TBP0;
+
+		if((FBP == 0x00d00 || FBP == 0x00000) && ZBP == 0x02100 && PRIM->TME && TBP == 0x01a00 && m_context->TEX0.PSM == PSM_PSMCT16S)
+		{
+			// random battle transition (z buffer written directly, clear it now)
+
+			m_dev->ClearDepth(ds, 0);
+					}
+
+		return true;
+				}
+
+	bool OI_MetalSlug6(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)
+				{
+		// missing red channel fix
+		
+		for(int i = 0, j = m_count; i < j; i++)
+					{
+			if(m_vertices[i].r == 0 && m_vertices[i].g != 0 && m_vertices[i].b != 0)
+			{
+				m_vertices[i].r = (m_vertices[i].g + m_vertices[i].b) / 2;
+					}
+		}
+
+		m_vt.Update(m_vertices, m_count, m_vt.m_primclass);
+
+		return true;
+					}
+
+	bool OI_GodOfWar2(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)
+	{
+		uint32 FBP = m_context->FRAME.Block();
+		uint32 FBW = m_context->FRAME.FBW;
+		uint32 FPSM = m_context->FRAME.PSM;
+
+		if((FBP == 0x00f00 || FBP == 0x00100) && FPSM == PSM_PSMZ24) // ntsc 0xf00, pal 0x100
+					{
+			// z buffer clear
+
+			GIFRegTEX0 TEX0;
+
+			TEX0.TBP0 = FBP;
+			TEX0.TBW = FBW;
+			TEX0.PSM = FPSM;
+
+			if(GSTextureCache::Target* ds = m_tc->LookupTarget(TEX0, m_width, m_height, GSTextureCache::DepthStencil, true))
+			{
+				m_dev->ClearDepth(ds->m_texture, 0);
+					}
+
+			return false;
+				}
+
+		return true;
+			}
+
+	bool OI_SimpsonsGame(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)
+			{
+		uint32 FBP = m_context->FRAME.Block();
+		uint32 FBW = m_context->FRAME.FBW;
+		uint32 FPSM = m_context->FRAME.PSM;
+
+		if(FBP == 0x01800 && FPSM == PSM_PSMZ24)
+		{
+			// instead of just simply drawing a full height 512x512 sprite to clear the z buffer,
+			// it uses a 512x256 sprite only, yet it is still able to fill the whole surface with zeros,
+			// how? by using a render target that overlaps with the lower half of the z buffer...
+
+			m_dev->ClearDepth(ds, 0);
+
+			return false;
+		}
+
+		return true;
+		}
+
+	bool OI_RozenMaidenGebetGarden(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)
+		{
+		if(!PRIM->TME)
+		{
+			uint32 FBP = m_context->FRAME.Block();
+			uint32 ZBP = m_context->ZBUF.Block();
+
+			if(FBP == 0x008c0 && ZBP == 0x01a40)
+		{
+				//  frame buffer clear, atst = fail, afail = write z only, z buffer points to frame buffer
+
+				GIFRegTEX0 TEX0;
+
+				TEX0.TBP0 = ZBP;
+				TEX0.TBW = m_context->FRAME.FBW;
+				TEX0.PSM = m_context->FRAME.PSM;
+
+				if(GSTextureCache::Target* rt = m_tc->LookupTarget(TEX0, m_width, m_height, GSTextureCache::RenderTarget, true))
+				{
+					m_dev->ClearRenderTarget(rt->m_texture, 0);
+				}
+
+				return false;
+	}
+			else if(FBP == 0x00000 && m_context->ZBUF.Block() == 0x01180)
+	{
+				// z buffer clear, frame buffer now points to the z buffer (how can they be so clever?)
+
+				GIFRegTEX0 TEX0;
+
+				TEX0.TBP0 = FBP;
+				TEX0.TBW = m_context->FRAME.FBW;
+				TEX0.PSM = m_context->ZBUF.PSM;
+
+				if(GSTextureCache::Target* ds = m_tc->LookupTarget(TEX0, m_width, m_height, GSTextureCache::DepthStencil, true))
+		{
+					m_dev->ClearDepth(ds->m_texture, 0);
+				}
+
+				return false;
+		}
+	}
+
+		return true;
+	}
+
+	bool OI_PointListPalette(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)
+	{
+		if(m_vt.m_primclass == GS_POINT_CLASS && !PRIM->TME)
+		{
+			uint32 FBP = m_context->FRAME.Block();
+			uint32 FBW = m_context->FRAME.FBW;
+
+			if(FBP >= 0x03f40 && (FBP & 0x1f) == 0)
+			{
+				if(m_count == 16)
+				{
+					for(int i = 0; i < 16; i++)
+					{
+						m_vertices[i].a = m_vertices[i].a >= 0x80 ? 0xff : m_vertices[i].a * 2;
+
+						m_mem.WritePixel32(i & 7, i >> 3, m_vertices[i].c0, FBP, FBW);
+					}
+
+					m_mem.m_clut.Invalidate();
+
+					return false;
+				}
+				else if(m_count == 256)
+		{
+					for(int i = 0; i < 256; i++)
+			{
+						m_vertices[i].a = m_vertices[i].a >= 0x80 ? 0xff : m_vertices[i].a * 2;
+
+						m_mem.WritePixel32(i & 15, i >> 4, m_vertices[i].c0, FBP, FBW);
+		}
+
+					m_mem.m_clut.Invalidate();
+
+		return false;
+	}
+				else
+	{
+					ASSERT(0);
+				}
+			}
+		}
+
+		return true;
+	}
+
+	void OO_DBZBT2()
+	{
+		// palette readback (cannot detect yet, when fetching the texture later)
+
+		uint32 FBP = m_context->FRAME.Block();
+		uint32 TBP0 = m_context->TEX0.TBP0;
+
+		if(PRIM->TME && (FBP == 0x03c00 && TBP0 == 0x03c80 || FBP == 0x03ac0 && TBP0 == 0x03b40))
+	{
+			GIFRegBITBLTBUF BITBLTBUF;
+
+			BITBLTBUF.SBP = FBP;
+			BITBLTBUF.SBW = 1;
+			BITBLTBUF.SPSM = PSM_PSMCT32;
+
+			InvalidateLocalMem(BITBLTBUF, GSVector4i(0, 0, 64, 64));
+		}
+	}
+
+	void OO_MajokkoALaMode2()
+	{
+		// palette readback
+
+		uint32 FBP = m_context->FRAME.Block();
+
+		if(!PRIM->TME && FBP == 0x03f40)
+		{
+			GIFRegBITBLTBUF BITBLTBUF;
+
+			BITBLTBUF.SBP = FBP;
+			BITBLTBUF.SBW = 1;
+			BITBLTBUF.SPSM = PSM_PSMCT32;
+
+			InvalidateLocalMem(BITBLTBUF, GSVector4i(0, 0, 16, 16));
+		}
+	}
+
+	bool CU_DBZBT2()
+		{
+		// palette should stay 64 x 64
+
+		uint32 FBP = m_context->FRAME.Block();
+
+		return FBP != 0x03c00 && FBP != 0x03ac0;
+		}
+
+	bool CU_MajokkoALaMode2()
+		{
+		// palette should stay 16 x 16
+
+		uint32 FBP = m_context->FRAME.Block();
+
+		return FBP != 0x03f40;
+		}
+
+	bool CU_TalesOfAbyss()
+	{
+		// full image blur and brightening
+
+		uint32 FBP = m_context->FRAME.Block();
+
+		return FBP != 0x036e0 && FBP != 0x03560 && FBP != 0x038e0;
+		}
+
+	class Hacks
+	{
+		template<class T> struct HackEntry 
+		{
+			CRC::Title title; 
+			CRC::Region region; 
+			T func;
+
+			struct HackEntry(CRC::Title t, CRC::Region r, T f)
+		{
+				title = t;
+				region = r;
+				func = f;
+			}
+		};
+
+		template<class T> class FunctionMap : public GSFunctionMap<uint32, T> 
+			{
+			list<HackEntry<T> >& m_tbl;
+
+			T GetDefaultFunction(uint32 key)
+				{
+				CRC::Title title = (CRC::Title)(key & 0xffffff);
+				CRC::Region region = (CRC::Region)(key >> 24);
+
+				for(list<HackEntry<T> >::iterator i = m_tbl.begin(); i != m_tbl.end(); i++)
+					{
+					if(i->title == title && (i->region == CRC::RegionCount || i->region == region))
+						{
+						return i->func;
+						}
+					}
+
+				return NULL;
+				}
+
+		public:
+			FunctionMap(list<HackEntry<T> >& tbl) : m_tbl(tbl) {}
+		};
+
+		list<HackEntry<OI_Ptr> > m_oi_list;
+		list<HackEntry<OO_Ptr> > m_oo_list;
+		list<HackEntry<CU_Ptr> > m_cu_list;
+
+		FunctionMap<OI_Ptr> m_oi_map;
+		FunctionMap<OO_Ptr> m_oo_map;
+		FunctionMap<CU_Ptr> m_cu_map;
+
+	public:
+		OI_Ptr m_oi;
+		OO_Ptr m_oo;
+		CU_Ptr m_cu;
+		
+		Hacks() 
+			: m_oi_map(m_oi_list)
+			, m_oo_map(m_oo_list)
+			, m_cu_map(m_cu_list)
+			, m_oi(NULL) 
+			, m_oo(NULL) 
+			, m_cu(NULL)
+			{
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::FFXII, CRC::EU, &GSRendererHW::OI_FFXII));
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::FFX, CRC::RegionCount, &GSRendererHW::OI_FFX));
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::MetalSlug6, CRC::RegionCount, &GSRendererHW::OI_MetalSlug6));
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::GodOfWar2, CRC::RegionCount, &GSRendererHW::OI_GodOfWar2));
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::SimpsonsGame, CRC::RegionCount, &GSRendererHW::OI_SimpsonsGame));
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::RozenMaidenGebetGarden, CRC::RegionCount, &GSRendererHW::OI_RozenMaidenGebetGarden));
+
+			m_oo_list.push_back(HackEntry<OO_Ptr>(CRC::DBZBT2, CRC::RegionCount, &GSRendererHW::OO_DBZBT2));
+			m_oo_list.push_back(HackEntry<OO_Ptr>(CRC::MajokkoALaMode2, CRC::RegionCount, &GSRendererHW::OO_MajokkoALaMode2));
+
+			m_cu_list.push_back(HackEntry<CU_Ptr>(CRC::DBZBT2, CRC::RegionCount, &GSRendererHW::CU_DBZBT2));
+			m_cu_list.push_back(HackEntry<CU_Ptr>(CRC::MajokkoALaMode2, CRC::RegionCount, &GSRendererHW::CU_MajokkoALaMode2));
+			m_cu_list.push_back(HackEntry<CU_Ptr>(CRC::TalesOfAbyss, CRC::RegionCount, &GSRendererHW::CU_TalesOfAbyss));
+		}
+
+		void SetGame(const CRC::Game& game)
+		{
+			uint32 hash = (uint32)((game.region << 24) | game.title);
+
+			m_oi = m_oi_map[hash];
+			m_oo = m_oo_map[hash];
+			m_cu = m_cu_map[hash];
+
+			if(game.flags & CRC::PointListPalette)
+			{
+				ASSERT(m_oi == NULL);
+
+				m_oi = &GSRendererHW::OI_PointListPalette;
+			}
+		}
+
+	} m_hacks;
+
+		#pragma endregion
+
+protected:
+	GSTextureCache* m_tc;
+
+	void Reset() 
+		{
 		// TODO: GSreset can come from the main thread too => crash
 		// m_tc->RemoveAll();
 
 		m_reset = true;
 
 		__super::Reset();
-	}
-
-	void MinMaxUV(int w, int h, CRect& r)
-	{
-		int wms = m_context->CLAMP.WMS;
-		int wmt = m_context->CLAMP.WMT;
-
-		int minu = (int)m_context->CLAMP.MINU;
-		int minv = (int)m_context->CLAMP.MINV;
-		int maxu = (int)m_context->CLAMP.MAXU;
-		int maxv = (int)m_context->CLAMP.MAXV;
-
-		GSVector4i vr = GSVector4i(0, 0, w, h);
-
-		GSVector4i wm[3];
-
-		if(wms + wmt < 6)
-		{
-			GSVector4 mm;
-
-			if(m_count < 100)
-			{
-				Vertex* v = m_vertices;
-
-				GSVector4 minv(+1e10f);
-				GSVector4 maxv(-1e10f);
-
-				int i = 0;
-
-				if(PRIM->FST)
-				{
-					for(int j = m_count - 3; i < j; i += 4)
-					{
-						GSVector4 v0 = GSVector4(v[i + 0].m128[0]);
-						GSVector4 v1 = GSVector4(v[i + 1].m128[0]);
-						GSVector4 v2 = GSVector4(v[i + 2].m128[0]);
-						GSVector4 v3 = GSVector4(v[i + 3].m128[0]);
-
-						minv = minv.minv((v0.minv(v1)).minv(v2.minv(v3)));
-						maxv = maxv.maxv((v0.maxv(v1)).maxv(v2.maxv(v3)));
-					}
-
-					for(int j = m_count; i < j; i++)
-					{
-						GSVector4 v0 = GSVector4(v[i + 0].m128[0]);
-
-						minv = minv.minv(v0);
-						maxv = maxv.maxv(v0);
-					}
-
-					mm = minv.xyxy(maxv) * GSVector4(16 << m_context->TEX0.TW, 16 << m_context->TEX0.TH, 16 << m_context->TEX0.TW, 16 << m_context->TEX0.TH).rcpnr();
-				}
-				else
-				{
-					/*
-					for(int j = m_count - 3; i < j; i += 4)
-					{
-						GSVector4 v0 = GSVector4(v[i + 0].m128[0]) / GSVector4(v[i + 0].GetQ());
-						GSVector4 v1 = GSVector4(v[i + 1].m128[0]) / GSVector4(v[i + 1].GetQ());
-						GSVector4 v2 = GSVector4(v[i + 2].m128[0]) / GSVector4(v[i + 2].GetQ());
-						GSVector4 v3 = GSVector4(v[i + 3].m128[0]) / GSVector4(v[i + 3].GetQ());
-
-						minv = minv.minv((v0.minv(v1)).minv(v2.minv(v3)));
-						maxv = maxv.maxv((v0.maxv(v1)).maxv(v2.maxv(v3)));
-					}
-
-					for(int j = m_count; i < j; i++)
-					{
-						GSVector4 v0 = GSVector4(v[i + 0].m128[0]) / GSVector4(v[i + 0].GetQ());;
-
-						minv = minv.minv(v0);
-						maxv = maxv.maxv(v0);
-					}
-
-					mm = minv.xyxy(maxv);
-					*/
-
-					// just can't beat the compiler generated scalar sse code with packed div or rcp
-
-					mm.x = mm.y = +1e10;
-					mm.z = mm.w = -1e10;
-
-					for(int j = m_count; i < j; i++)
-					{
-						float w = 1.0f / v[i].GetQ();
-
-						float x = v[i].t.x * w;
-
-						if(x < mm.x) mm.x = x;
-						if(x > mm.z) mm.z = x;
-						
-						float y = v[i].t.y * w;
-
-						if(y < mm.y) mm.y = y;
-						if(y > mm.w) mm.w = y;
-					}
-				}
-			}
-			else
-			{
-				mm = GSVector4(0.0f, 0.0f, 1.0f, 1.0f);
-			}
-
-			GSVector4 v0 = GSVector4(vr);
-			GSVector4 v1 = v0.zwzw();
-
-			GSVector4 mmf = mm.floor();
-			GSVector4 mask = mmf.xyxy() == mmf.zwzw();
-
-			wm[0] = GSVector4i(v0.blend8((mm - mmf) * v1, mask));
-
-			mm *= v1;
-
-			wm[1] = GSVector4i(mm.sat(GSVector4::zero(), v1));
-			wm[2] = GSVector4i(mm.sat(GSVector4(minu, minv, maxu, maxv)));
 		}
-
-		GSVector4i v;
-
-		switch(wms)
-		{
-		case CLAMP_REPEAT:
-			v = wm[0];
-			if(v.x == 0 && v.z != w) v.z = w; // FIXME
-			vr.x = v.x;
-			vr.z = v.z;
-			break;
-		case CLAMP_CLAMP:
-		case CLAMP_REGION_CLAMP:
-			v = wm[wms];
-			if(v.x > v.z) v.x = v.z;
-			vr.x = v.x;
-			vr.z = v.z;
-			break;
-		case CLAMP_REGION_REPEAT:
-			if(m_psrr) {vr.x = maxu; vr.z = vr.x + (minu + 1);}
-			//else {vr.x = 0; vr.z = w;}
-			break;
-		default: 
-			__assume(0);
-		}
-
-		switch(wmt)
-		{
-		case CLAMP_REPEAT:
-			v = wm[0];
-			if(v.y == 0 && v.w != h) v.w = h; // FIXME
-			vr.y = v.y;
-			vr.w = v.w;
-			break;
-		case CLAMP_CLAMP:
-		case CLAMP_REGION_CLAMP:
-			v = wm[wmt];
-			if(v.y > v.w) v.y = v.w;
-			vr.y = v.y;
-			vr.w = v.w;
-			break;
-		case CLAMP_REGION_REPEAT:
-			if(m_psrr) {vr.y = maxv; vr.w = vr.y + (minv + 1);}
-			//else {r.y = 0; r.w = w;}
-			break;
-		default:
-			__assume(0);
-		}
-
-		r = vr;
-
-		r.InflateRect(1, 1); // one more pixel because of bilinear filtering
-
-		CSize bs = GSLocalMemory::m_psm[m_context->TEX0.PSM].bs;
-		CSize bsm(bs.cx - 1, bs.cy - 1);
-
-		r.left = max(r.left & ~bsm.cx, 0);
-		r.right = min((r.right + bsm.cx) & ~bsm.cx, w);
-
-		r.top = max(r.top & ~bsm.cy, 0);
-		r.bottom = min((r.bottom + bsm.cy) & ~bsm.cy, h);
-	}
 
 	void VSync(int field)
 	{
 		__super::VSync(field);
 
-		m_tc->IncAge();
+		m_tc->IncAge();  
 
 		m_skip = 0;
 
@@ -235,15 +475,16 @@ protected:
 			m_tc->RemoveAll();
 
 			m_reset = false;
-		}
-	}
+				}
+			}
 
 	void ResetDevice() 
 	{
+		__super::ResetDevice();
 		m_tc->RemoveAll();
-	}
+		}
 
-	bool GetOutput(int i, Texture& t)
+	GSTexture* GetOutput(int i)
 	{
 		const GSRegDISPFB& DISPFB = m_regs->DISP[i].DISPFB;
 
@@ -253,46 +494,46 @@ protected:
 		TEX0.TBW = DISPFB.FBW;
 		TEX0.PSM = DISPFB.PSM;
 
-		TRACE(_T("[%d] GetOutput %d %05x (%d)\n"), (int)m_perfmon.GetFrame(), i, (int)TEX0.TBP0, (int)TEX0.PSM);
+		// TRACE(_T("[%d] GetOutput %d %05x (%d)\n"), (int)m_perfmon.GetFrame(), i, (int)TEX0.TBP0, (int)TEX0.PSM);
 
-		if(GSTextureCache<Device>::GSRenderTarget* rt = m_tc->GetRenderTarget(TEX0, m_width, m_height, true))
+		GSTexture* t = NULL;
+
+		if(GSTextureCache::Target* rt = m_tc->LookupTarget(TEX0, m_width, m_height))
 		{
 			t = rt->m_texture;
 
 			if(s_dump)
-			{
-				CString str;
-				str.Format(_T("c:\\temp2\\_%05d_f%I64d_fr%d_%05x_%d.bmp"), s_n++, m_perfmon.GetFrame(), i, (int)TEX0.TBP0, (int)TEX0.PSM);
-				if(s_save) rt->m_texture.Save(str);
-			}
+				{
+				if(s_save && s_n >= s_saven) 
+					{
+					t->Save(format("c:\\temp2\\_%05d_f%I64d_fr%d_%05x_%d.bmp", s_n, m_perfmon.GetFrame(), i, (int)TEX0.TBP0, (int)TEX0.PSM));
+				}
 
-			return true;
+				s_n++;
+						}
 		}
 
-		return false;
+		return t;
 	}
 
-	void InvalidateVideoMem(const GIFRegBITBLTBUF& BITBLTBUF, CRect r)
+	void InvalidateVideoMem(const GIFRegBITBLTBUF& BITBLTBUF, const GSVector4i& r)
+					{
+		// printf("[%d] InvalidateVideoMem %d,%d - %d,%d %05x (%d)\n", (int)m_perfmon.GetFrame(), r.left, r.top, r.right, r.bottom, (int)BITBLTBUF.DBP, (int)BITBLTBUF.DPSM);
+
+		m_tc->InvalidateVideoMem(m_mem.GetOffset(BITBLTBUF.DBP, BITBLTBUF.DBW, BITBLTBUF.DPSM), r);
+						}
+
+	void InvalidateLocalMem(const GIFRegBITBLTBUF& BITBLTBUF, const GSVector4i& r)
 	{
-		TRACE(_T("[%d] InvalidateVideoMem %d,%d - %d,%d %05x (%d)\n"), (int)m_perfmon.GetFrame(), r.left, r.top, r.right, r.bottom, (int)BITBLTBUF.DBP, (int)BITBLTBUF.DPSM);
+		// printf("[%d] InvalidateLocalMem %d,%d - %d,%d %05x (%d)\n", (int)m_perfmon.GetFrame(), r.left, r.top, r.right, r.bottom, (int)BITBLTBUF.SBP, (int)BITBLTBUF.SPSM);
 
-		m_tc->InvalidateVideoMem(BITBLTBUF, r);
-	}
-
-	void InvalidateLocalMem(const GIFRegBITBLTBUF& BITBLTBUF, CRect r)
-	{
-		TRACE(_T("[%d] InvalidateLocalMem %d,%d - %d,%d %05x (%d)\n"), (int)m_perfmon.GetFrame(), r.left, r.top, r.right, r.bottom, (int)BITBLTBUF.SBP, (int)BITBLTBUF.SPSM);
-
-		m_tc->InvalidateLocalMem(BITBLTBUF, r);
-	}
+		m_tc->InvalidateLocalMem(m_mem.GetOffset(BITBLTBUF.SBP, BITBLTBUF.SBW, BITBLTBUF.SPSM), r);
+					}
 
 	void Draw()
-	{
-		if(IsBadFrame(m_skip))
-		{
-			return;
-		}
-
+					{
+		if(IsBadFrame(m_skip, m_gamefix_skipdraw)) return;
+		
 		GSDrawingEnvironment& env = m_env;
 		GSDrawingContext* context = m_context;
 
@@ -302,349 +543,192 @@ protected:
 		TEX0.TBW = context->FRAME.FBW;
 		TEX0.PSM = context->FRAME.PSM;
 
-		GSTextureCache<Device>::GSRenderTarget* rt = m_tc->GetRenderTarget(TEX0, m_width, m_height);
+		GSTextureCache::Target* rt = m_tc->LookupTarget(TEX0, m_width, m_height, GSTextureCache::RenderTarget, true);
 
 		TEX0.TBP0 = context->ZBUF.Block();
 		TEX0.TBW = context->FRAME.FBW;
 		TEX0.PSM = context->ZBUF.PSM;
 
-		GSTextureCache<Device>::GSDepthStencil* ds = m_tc->GetDepthStencil(TEX0, m_width, m_height);
+		GSTextureCache::Target* ds = m_tc->LookupTarget(TEX0, m_width, m_height, GSTextureCache::DepthStencil, m_context->DepthWrite());
 
-		GSTextureCache<Device>::GSTexture* tex = NULL;
+		GSTextureCache::Source* tex = NULL;
 
 		if(PRIM->TME)
-		{
-			tex = m_tc->GetTexture();
+				{
+			m_mem.m_clut.Read32(context->TEX0, env.TEXA);
+
+			GSVector4i r;
+
+			GetTextureMinMax(r, IsLinear());
+
+			tex = m_tc->LookupSource(context->TEX0, env.TEXA, r);
 
 			if(!tex) return;
-		}
+	}
 
 		if(s_dump)
+	{
+			uint64 frame = m_perfmon.GetFrame();
+
+			string s;
+			
+			if(s_save && s_n >= s_saven && tex) 
 		{
-			CString str;
-			str.Format(_T("c:\\temp2\\_%05d_f%I64d_tex_%05x_%d_%d%d_%02x_%02x_%02x_%02x.dds"), 
-				s_n++, m_perfmon.GetFrame(), (int)context->TEX0.TBP0, (int)context->TEX0.PSM,
-				(int)context->CLAMP.WMS, (int)context->CLAMP.WMT, 
-				(int)context->CLAMP.MINU, (int)context->CLAMP.MAXU, 
-				(int)context->CLAMP.MINV, (int)context->CLAMP.MAXV);
-			if(PRIM->TME) if(s_save) tex->m_texture.Save(str, true);
-			str.Format(_T("c:\\temp2\\_%05d_f%I64d_tpx_%05x_%d.dds"), s_n-1, m_perfmon.GetFrame(), context->TEX0.CBP, context->TEX0.CPSM);
-			if(PRIM->TME && tex->m_palette) if(s_save) tex->m_palette.Save(str, true);
-			str.Format(_T("c:\\temp2\\_%05d_f%I64d_rt0_%05x_%d.bmp"), s_n++, m_perfmon.GetFrame(), context->FRAME.Block(), context->FRAME.PSM);
-			if(s_save) rt->m_texture.Save(str);
-			str.Format(_T("c:\\temp2\\_%05d_f%I64d_rz0_%05x_%d.bmp"), s_n-1, m_perfmon.GetFrame(), context->ZBUF.Block(), context->ZBUF.PSM);
-			if(s_savez) ds->m_texture.Save(str);
-			// if(s_savez) m_dev.SaveToFileD32S8X24(ds->m_texture, str); // TODO
-			// if(s_savez) m_dev.SaveToFileD24S8(ds->m_texture, str); // TODO
+				s = format("c:\\temp2\\_%05d_f%I64d_tex_%05x_%d_%d%d_%02x_%02x_%02x_%02x.dds", 
+					s_n, frame, (int)context->TEX0.TBP0, (int)context->TEX0.PSM,
+					(int)context->CLAMP.WMS, (int)context->CLAMP.WMT, 
+					(int)context->CLAMP.MINU, (int)context->CLAMP.MAXU, 
+					(int)context->CLAMP.MINV, (int)context->CLAMP.MAXV);
+
+				tex->m_texture->Save(s, true);
+
+				if(tex->m_palette)
+			{
+					s = format("c:\\temp2\\_%05d_f%I64d_tpx_%05x_%d.dds", s_n, frame, context->TEX0.CBP, context->TEX0.CPSM);
+
+					tex->m_palette->Save(s, true);
+			}
 		}
 
-		int prim = PRIM->PRIM;
+			s_n++;
 
-		if(!OverrideInput(prim, rt->m_texture, ds->m_texture, tex ? &tex->m_texture : NULL))
+			if(s_save && s_n >= s_saven)
 		{
+				s = format("c:\\temp2\\_%05d_f%I64d_rt0_%05x_%d.bmp", s_n, frame, context->FRAME.Block(), context->FRAME.PSM);
+
+				rt->m_texture->Save(s);
+			}
+
+			if(s_savez && s_n >= s_saven)
+			{
+				s = format("c:\\temp2\\_%05d_f%I64d_rz0_%05x_%d.bmp", s_n, frame, context->ZBUF.Block(), context->ZBUF.PSM);
+
+				ds->m_texture->Save(s);
+			}
+
+			s_n++;
+	}
+
+		if(m_hacks.m_oi && !(this->*m_hacks.m_oi)(rt->m_texture, ds->m_texture, tex))
+	{
 			return;
 		}
 
-		Draw(prim, rt->m_texture, ds->m_texture, tex);
+		// skip alpha test if possible
 
-		OverrideOutput();
+		GIFRegTEST TEST = context->TEST;
+		GIFRegFRAME FRAME = context->FRAME;
+		GIFRegZBUF ZBUF = context->ZBUF;
+
+		uint32 fm = context->FRAME.FBMSK;
+		uint32 zm = context->ZBUF.ZMSK || context->TEST.ZTE == 0 ? 0xffffffff : 0;
+
+		if(context->TEST.ATE && context->TEST.ATST != ATST_ALWAYS)
+			{
+			if(TryAlphaTest(fm, zm))
+			{
+				context->TEST.ATST = ATST_ALWAYS;
+			}
+		}
+
+		context->FRAME.FBMSK = fm;
+		context->ZBUF.ZMSK = zm != 0;
+
+		//
+
+		Draw(rt->m_texture, ds->m_texture, tex);
+
+		//
+
+		context->TEST = TEST;
+		context->FRAME = FRAME;
+		context->ZBUF = ZBUF;
+
+		//
+
+		GSVector4i r = GSVector4i(m_vt.m_min.p.xyxy(m_vt.m_max.p)).rintersect(GSVector4i(m_context->scissor.in));
+
+		if(fm != 0xffffffff)
+		{
+			rt->m_valid = rt->m_valid.runion(r);
+
+			m_tc->InvalidateVideoMem(m_context->offset.fb, r, false);
+		}
+
+		if(zm != 0xffffffff)
+			{
+			ds->m_valid = ds->m_valid.runion(r);
+
+			m_tc->InvalidateVideoMem(m_context->offset.zb, r, false);
+			}
+
+		//
+
+		if(m_hacks.m_oo)
+		{
+			(this->*m_hacks.m_oo)();
+		}
 
 		if(s_dump)
 		{
-			CString str;
-			str.Format(_T("c:\\temp2\\_%05d_f%I64d_rt1_%05x_%d.bmp"), s_n++, m_perfmon.GetFrame(), context->FRAME.Block(), context->FRAME.PSM);
-			if(s_save) rt->m_texture.Save(str);
-			str.Format(_T("c:\\temp2\\_%05d_f%I64d_rz1_%05x_%d.bmp"), s_n-1, m_perfmon.GetFrame(), context->ZBUF.Block(), context->ZBUF.PSM);
-			if(s_savez) ds->m_texture.Save(str);
-			// if(s_savez) m_dev.SaveToFileD32S8X24(ds->m_texture, str); // TODO
-		}
+			uint64 frame = m_perfmon.GetFrame();
 
-		m_tc->InvalidateTextures(context->FRAME, context->ZBUF);
+			string s;
+
+			if(s_save && s_n >= s_saven)
+		{
+				s = format("c:\\temp2\\_%05d_f%I64d_rt1_%05x_%d.bmp", s_n, frame, context->FRAME.Block(), context->FRAME.PSM);
+
+				rt->m_texture->Save(s);
+			}
+
+			if(s_savez && s_n >= s_saven)
+			{
+				s = format("c:\\temp2\\_%05d_f%I64d_rz1_%05x_%d.bmp", s_n, frame, context->ZBUF.Block(), context->ZBUF.PSM);
+
+				ds->m_texture->Save(s);
+			}
+
+			s_n++;
+		}
 	}
 
-	virtual void Draw(int prim, Texture& rt, Texture& ds, typename GSTextureCache<Device>::GSTexture* tex) = 0;
-
-	virtual bool OverrideInput(int& prim, Texture& rt, Texture& ds, Texture* t)
-	{
-		#pragma region ffxii pal video conversion
-
-		if(m_game.title == CRC::FFXII && m_game.region == CRC::EU)
-		{
-			static DWORD* video = NULL;
-			static bool ok = false;
-
-			if(prim == GS_POINTLIST && m_count >= 448*448 && m_count <= 448*512)
-			{
-				// incoming pixels are stored in columns, one column is 16x512, total res 448x512 or 448x454
-
-				if(!video) video = new DWORD[512*512];
-
-				for(int x = 0, i = 0, rows = m_count / 448; x < 448; x += 16)
-				{
-					DWORD* dst = &video[x];
-
-					for(int y = 0; y < rows; y++, dst += 512)
-					{
-						for(int j = 0; j < 16; j++, i++)
-						{
-							dst[j] = m_vertices[i].c0;
-						}
-					}
-				}
-
-				ok = true;
-
-				return false;
-			}
-			else if(prim == GS_LINELIST && m_count == 512*2 && ok)
-			{
-				// normally, this step would copy the video onto screen with 512 texture mapped horizontal lines,
-				// but we use the stored video data to create a new texture, and replace the lines with two triangles
-
-				ok = false;
-
-				m_dev.CreateTexture(*t, 512, 512);
-
-				t->Update(CRect(0, 0, 448, 512), video, 512*4);
-
-				m_vertices[0] = m_vertices[0];
-				m_vertices[1] = m_vertices[1];
-				m_vertices[2] = m_vertices[m_count - 2];
-				m_vertices[3] = m_vertices[1];
-				m_vertices[4] = m_vertices[2];
-				m_vertices[5] = m_vertices[m_count - 1];
-
-				prim = GS_TRIANGLELIST;
-				m_count = 6;
-
-				return true;
-			}
-		}
-
-		#pragma endregion
-
-		#pragma region ffx random battle transition (z buffer written directly, clear it now)
-
-		if(m_game.title == CRC::FFX)
-		{
-			DWORD FBP = m_context->FRAME.Block();
-			DWORD ZBP = m_context->ZBUF.Block();
-			DWORD TBP = m_context->TEX0.TBP0;
-
-			if((FBP == 0x00d00 || FBP == 0x00000) && ZBP == 0x02100 && PRIM->TME && TBP == 0x01a00 && m_context->TEX0.PSM == PSM_PSMCT16S)
-			{
-				m_dev.ClearDepth(ds, 0);
-			}
-
-			return true;
-		}
-
-		#pragma endregion
-
-		#pragma region metal slug missing red channel fix
-		
-		if(m_game.title == CRC::MetalSlug6)
-		{
-			for(int i = 0, j = m_count; i < j; i++)
-			{
-				if(m_vertices[i].r == 0 && m_vertices[i].g != 0 && m_vertices[i].b != 0)
-				{
-					m_vertices[i].r = (m_vertices[i].g + m_vertices[i].b) / 2;
-				}
-			}
-
-			return true;
-		}
-
-		#pragma endregion
-
-		#pragma region tomoyo after, clannad (palette uploaded in a point list, pure genius...)
-
-		if(m_game.title == CRC::TomoyoAfter || m_game.title == CRC::Clannad)
-		{
-			if(prim == GS_POINTLIST && !PRIM->TME)
-			{
-				DWORD bp = m_context->FRAME.Block();
-				DWORD bw = m_context->FRAME.FBW;
-
-				if(bp >= 0x03f40 && (bp & 0x1f) == 0)
-				{
-					if(m_count == 16)
-					{
-						for(int i = 0; i < 16; i++)
-						{
-							m_vertices[i].a = m_vertices[i].a >= 0x80 ? 0xff : m_vertices[i].a * 2;
-
-							m_mem.WritePixel32(i & 7, i >> 3, m_vertices[i].c0, bp, bw);
-						}
-
-						m_mem.m_clut.Invalidate();
-
-						return false;
-					}
-					else if(m_count == 256)
-					{
-						for(int i = 0; i < 256; i++)
-						{
-							m_vertices[i].a = m_vertices[i].a >= 0x80 ? 0xff : m_vertices[i].a * 2;
-
-							m_mem.WritePixel32(i & 15, i >> 4, m_vertices[i].c0, bp, bw);
-						}
-
-						m_mem.m_clut.Invalidate();
-
-						return false;
-					}
-					else
-					{
-						ASSERT(0);
-					}
-				}
-			}
-
-			return true;
-		}
-
-		#pragma endregion
-
-		#pragma region GoW2 z buffer clear
-
-		if(m_game.title == CRC::GodOfWar2)
-		{
-			DWORD FBP = m_context->FRAME.Block();
-			DWORD FBW = m_context->FRAME.FBW;
-			DWORD FPSM = m_context->FRAME.PSM;
-
-			if((FBP == 0x00f00 || FBP == 0x00100) && FPSM == PSM_PSMZ24) // ntsc 0xf00, pal 0x100
-			{
-				GIFRegTEX0 TEX0;
-
-				TEX0.TBP0 = FBP;
-				TEX0.TBW = FBW;
-				TEX0.PSM = FPSM;
-
-				if(GSTextureCache<Device>::GSDepthStencil* ds = m_tc->GetDepthStencil(TEX0, m_width, m_height))
-				{
-					m_dev.ClearDepth(ds->m_texture, 0);
-				}
-
-				return false;
-			}
-
-			return true;
-		}
-
-		#pragma endregion
-
-		return true;
-	}
-
-	virtual void OverrideOutput()
-	{
-		#pragma region dbzbt2 palette readback (cannot detect yet, when fetching the texture later)
-
-		if(m_game.title == CRC::DBZBT2)
-		{
-			DWORD FBP = m_context->FRAME.Block();
-			DWORD TBP0 = m_context->TEX0.TBP0;
-
-			if(PRIM->TME && (FBP == 0x03c00 && TBP0 == 0x03c80 || FBP == 0x03ac0 && TBP0 == 0x03b40))
-			{
-				GIFRegBITBLTBUF BITBLTBUF;
-
-				BITBLTBUF.SBP = FBP;
-				BITBLTBUF.SBW = 1;
-				BITBLTBUF.SPSM = PSM_PSMCT32;
-
-				InvalidateLocalMem(BITBLTBUF, CRect(0, 0, 64, 64));
-			}
-		}
-
-		#pragma endregion
-
-		#pragma region MajokkoALaMode2 palette readback
-
-		if(m_game.title == CRC::MajokkoALaMode2)
-		{
-			DWORD FBP = m_context->FRAME.Block();
-
-			if(!PRIM->TME && FBP == 0x03f40)
-			{
-				GIFRegBITBLTBUF BITBLTBUF;
-
-				BITBLTBUF.SBP = FBP;
-				BITBLTBUF.SBW = 1;
-				BITBLTBUF.SPSM = PSM_PSMCT32;
-
-				InvalidateLocalMem(BITBLTBUF, CRect(0, 0, 16, 16));
-			}
-		}
-
-		#pragma endregion
-	}
+	virtual void Draw(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* tex) = 0;
 
 	bool CanUpscale()
 	{
-		#pragma region dbzbt2 palette should stay 64 x 64
-
-		if(m_game.title == CRC::DBZBT2)
+		if(m_hacks.m_cu && !(this->*m_hacks.m_cu)())
 		{
-			DWORD FBP = m_context->FRAME.Block();
-
-			if(FBP == 0x03c00 || FBP == 0x03ac0)
-			{
-				return false;
-			}
+			return false;
 		}
-
-		#pragma endregion
-
-		#pragma region MajokkoALaMode2 palette should stay 16 x 16
-
-		if(m_game.title == CRC::MajokkoALaMode2)
-		{
-			DWORD FBP = m_context->FRAME.Block();
-
-			if(FBP == 0x03f40)
-			{
-				return false;
-			}
-		}
-
-		#pragma endregion
-
-		#pragma region TalesOfAbyss full image blur and brightening
-
-		if(m_game.title == CRC::TalesOfAbyss)
-		{
-			DWORD FBP = m_context->FRAME.Block();
-
-			if(FBP == 0x036e0 || FBP == 0x03560 || FBP == 0x038e0)
-			{
-				return false;
-			}
-		}
-
-		#pragma endregion
 
 		return __super::CanUpscale();
 	}
 
 public:
-	GSRendererHW(BYTE* base, bool mt, void (*irq)(), const GSRendererSettings& rs, bool psrr)
-		: GSRendererT<Device, Vertex>(base, mt, irq, rs, psrr)
+	GSRendererHW(GSTextureCache* tc)
+		: GSRendererT<Vertex>()
+		, m_tc(tc)
 		, m_width(1024)
 		, m_height(1024)
+		, m_upscale_multiplier(1)
 		, m_skip(0)
 		, m_reset(false)
+		, m_gamefix_skipdraw (0)
 	{
 		if(!m_nativeres)
 		{
-			m_width = AfxGetApp()->GetProfileInt(_T("Settings"), _T("resx"), m_width);
-			m_height = AfxGetApp()->GetProfileInt(_T("Settings"), _T("resy"), m_height);
+			m_width = theApp.GetConfig("resx", m_width);
+			m_height = theApp.GetConfig("resy", m_height);
+			m_upscale_multiplier = theApp.GetConfig("upscale_multiplier", m_upscale_multiplier);
+			if (m_upscale_multiplier > 4) m_upscale_multiplier = 1; //use the normal upscale math
+			if (m_upscale_multiplier > 1) 
+			{
+				m_width  = 640 * m_upscale_multiplier; //512 is also common, but this is not always detected right.
+				m_height = 512 * m_upscale_multiplier; //448 is also common, but this is not always detected right.
 		}
-
-		m_tc = new TextureCache(this);
+	}
+		m_gamefix_skipdraw = theApp.GetConfig("gamefix_skipdraw", m_gamefix_skipdraw);
 	}
 
 	virtual ~GSRendererHW()
@@ -652,9 +736,11 @@ public:
 		delete m_tc;
 	}
 
-	void SetGameCRC(DWORD crc, int options)
+	void SetGameCRC(uint32 crc, int options)
 	{
 		__super::SetGameCRC(crc, options);
+
+		m_hacks.SetGame(m_game);
 
 		if(m_game.title == CRC::JackieChanAdv)
 		{

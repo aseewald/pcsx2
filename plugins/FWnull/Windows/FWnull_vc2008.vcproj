@@ -6,7 +6,7 @@
 	ProjectGUID="{3D0EB14D-32F3-4D82-9C6D-B806ADBB859C}"
 	RootNamespace="FWnull"
 	Keyword="Win32Proj"
-	TargetFrameworkVersion="131072"
+	TargetFrameworkVersion="0"
 	>
 	<Platforms>
 		<Platform
@@ -19,7 +19,7 @@
 		<Configuration
 			Name="Debug|Win32"
 			ConfigurationType="2"
-			InheritedPropertySheets="..\..\..\common\vsprops\plugin_svnroot.vsprops;.\ProjectRootDir.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\IncrementalLinking.vsprops"
+			InheritedPropertySheets="..\..\..\common\vsprops\plugin_svnroot.vsprops;.\ProjectRootDir.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\IncrementalLinking.vsprops;..\..\..\common\vsprops\CodeGen_Debug.vsprops"
 			CharacterSet="2"
 			>
 			<Tool
@@ -39,9 +39,6 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				Optimization="0"
-				BasicRuntimeChecks="3"
-				RuntimeLibrary="1"
 				UsePrecompiledHeader="0"
 			/>
 			<Tool
@@ -55,6 +52,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
+				OutputFile="$(OutDir)\$(ProjectName)-dbg.dll"
 				ModuleDefinitionFile="FireWireNull.def"
 				RandomizedBaseAddress="1"
 				TargetMachine="1"
@@ -84,7 +82,7 @@
 		<Configuration
 			Name="Release|Win32"
 			ConfigurationType="2"
-			InheritedPropertySheets="..\..\..\common\vsprops\plugin_svnroot.vsprops;.\ProjectRootDir.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\GlobalLinking.vsprops"
+			InheritedPropertySheets="..\..\..\common\vsprops\plugin_svnroot.vsprops;.\ProjectRootDir.vsprops;..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\common\vsprops\CodeGen_Release.vsprops"
 			CharacterSet="2"
 			WholeProgramOptimization="1"
 			>
@@ -105,10 +103,6 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				Optimization="2"
-				InlineFunctionExpansion="2"
-				OmitFramePointers="true"
-				RuntimeLibrary="0"
 				UsePrecompiledHeader="0"
 			/>
 			<Tool
@@ -157,15 +151,11 @@
 			Filter="cpp;c;cxx;def;odl;idl;hpj;bat;asm"
 			>
 			<File
-				RelativePath=".\Config.c"
+				RelativePath="..\Config.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\FW.c"
-				>
-			</File>
-			<File
-				RelativePath=".\Win32.c"
+				RelativePath="..\FW.cpp"
 				>
 			</File>
 		</Filter>
@@ -178,7 +168,7 @@
 				>
 			</File>
 			<File
-				RelativePath=".\resource.h"
+				RelativePath="..\Config.h"
 				>
 			</File>
 		</Filter>
@@ -188,10 +178,6 @@
 			>
 			<File
 				RelativePath=".\FireWireNull.def"
-				>
-			</File>
-			<File
-				RelativePath=".\FireWireNull.rc"
 				>
 			</File>
 		</Filter>

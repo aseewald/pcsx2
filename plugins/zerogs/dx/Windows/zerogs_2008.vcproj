@@ -5,7 +5,6 @@
 	Name="ZeroGS"
 	ProjectGUID="{5C6B7D28-E73D-4F71-8FC0-17ADA640EBD8}"
 	RootNamespace="ZeroGS"
-	TargetFrameworkVersion="131072"
 	>
 	<Platforms>
 		<Platform
@@ -18,7 +17,7 @@
 		<Configuration
 			Name="Devel|Win32"
 			ConfigurationType="2"
-			InheritedPropertySheets="..\..\..\..\common\vsprops\plugin_svnroot.vsprops;..\..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\..\common\vsprops\3rdpartyDeps.vsprops;..\..\..\..\common\vsprops\IncrementalLinking.vsprops"
+			InheritedPropertySheets="..\..\..\..\common\vsprops\plugin_svnroot.vsprops;..\..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\..\common\vsprops\3rdpartyDeps.vsprops;..\..\..\..\common\vsprops\CodeGen_Devel.vsprops;..\..\..\..\common\vsprops\IncrementalLinking.vsprops"
 			UseOfMFC="0"
 			ATLMinimizesCRunTimeLibraryUsage="false"
 			CharacterSet="2"
@@ -47,18 +46,9 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				Optimization="2"
-				InlineFunctionExpansion="2"
-				EnableIntrinsicFunctions="true"
-				FavorSizeOrSpeed="1"
-				OmitFramePointers="true"
 				AdditionalIncludeDirectories="..\x86\;..\..\ZeroGSShaders\"
 				PreprocessorDefinitions="NDEBUG;_USRDLL;__i386__;ZEROGS_DEVBUILD;ZEROGS_SSE2"
-				StringPooling="true"
-				RuntimeLibrary="0"
-				BufferSecurityCheck="false"
 				PrecompiledHeaderFile=".\Release/GSsoftdx.pch"
-				SuppressStartupBanner="true"
 				CompileAs="0"
 			/>
 			<Tool
@@ -74,7 +64,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="zlib.lib ddraw.lib dxerr9.lib dxguid.lib d3dx9.lib d3d9.lib odbc32.lib odbccp32.lib winmm.lib Vfw32.lib"
+				AdditionalDependencies="zlib.lib ddraw.lib dxerr.lib dxguid.lib d3dx9.lib d3d9.lib odbc32.lib odbccp32.lib winmm.lib Vfw32.lib"
 				OutputFile="$(OutDir)\$(ProjectName)-dev.dll"
 				SuppressStartupBanner="true"
 				AdditionalLibraryDirectories="..\"
@@ -107,7 +97,7 @@
 		<Configuration
 			Name="Debug|Win32"
 			ConfigurationType="2"
-			InheritedPropertySheets="..\..\..\..\common\vsprops\plugin_svnroot.vsprops;..\..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\..\common\vsprops\3rdpartyDeps.vsprops;..\..\..\..\common\vsprops\IncrementalLinking.vsprops"
+			InheritedPropertySheets="..\..\..\..\common\vsprops\plugin_svnroot.vsprops;..\..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\..\common\vsprops\3rdpartyDeps.vsprops;..\..\..\..\common\vsprops\CodeGen_Debug.vsprops;..\..\..\..\common\vsprops\IncrementalLinking.vsprops"
 			CharacterSet="2"
 			>
 			<Tool
@@ -127,13 +117,8 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				Optimization="0"
-				EnableFiberSafeOptimizations="true"
 				AdditionalIncludeDirectories="..\x86\;..\..\ZeroGSShaders\"
-				PreprocessorDefinitions="D3D_DEBUG_INFO;_USRDLL;_DEBUG;__i386__;ZEROGS_DEVBUILD;ZEROGS_SSE2;"
-				BasicRuntimeChecks="3"
-				RuntimeLibrary="1"
-				RuntimeTypeInfo="true"
+				PreprocessorDefinitions="D3D_DEBUG_INFO;_USRDLL;__i386__;ZEROGS_DEVBUILD;ZEROGS_SSE2"
 				DebugInformationFormat="4"
 			/>
 			<Tool
@@ -147,7 +132,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="zlib.lib ddraw.lib dxerr9.lib dxguid.lib d3dx9.lib d3d9.lib odbc32.lib odbccp32.lib winmm.lib Vfw32.lib"
+				AdditionalDependencies="zlib.lib ddraw.lib dxerr.lib dxguid.lib d3dx9.lib d3d9.lib odbc32.lib odbccp32.lib winmm.lib Vfw32.lib"
 				OutputFile="$(OutDir)\$(ProjectName)-dbg.dll"
 				AdditionalLibraryDirectories="..\"
 				IgnoreDefaultLibraryNames=""
@@ -179,7 +164,7 @@
 		<Configuration
 			Name="Release|Win32"
 			ConfigurationType="2"
-			InheritedPropertySheets="..\..\..\..\common\vsprops\plugin_svnroot.vsprops;..\..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\..\common\vsprops\3rdpartyDeps.vsprops;..\..\..\..\common\vsprops\GlobalLinking.vsprops"
+			InheritedPropertySheets="..\..\..\..\common\vsprops\plugin_svnroot.vsprops;..\..\..\..\common\vsprops\BaseProperties.vsprops;..\..\..\..\common\vsprops\CodeGen_Release.vsprops;..\..\..\..\common\vsprops\3rdpartyDeps.vsprops"
 			UseOfMFC="0"
 			ATLMinimizesCRunTimeLibraryUsage="false"
 			CharacterSet="2"
@@ -208,19 +193,9 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				Optimization="2"
-				InlineFunctionExpansion="2"
-				EnableIntrinsicFunctions="true"
-				FavorSizeOrSpeed="1"
-				OmitFramePointers="true"
-				WholeProgramOptimization="true"
 				AdditionalIncludeDirectories="..\x86\;..\..\ZeroGSShaders\"
 				PreprocessorDefinitions="NDEBUG;_WINDOWS;_USRDLL;__i386__;RELEASE_TO_PUBLIC;ZEROGS_SSE2"
-				StringPooling="true"
-				RuntimeLibrary="0"
-				BufferSecurityCheck="false"
 				PrecompiledHeaderFile=""
-				SuppressStartupBanner="true"
 				CompileAs="0"
 			/>
 			<Tool
@@ -236,7 +211,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="zlib.lib ddraw.lib dxerr9.lib dxguid.lib d3dx9.lib d3d9.lib odbc32.lib odbccp32.lib winmm.lib Vfw32.lib"
+				AdditionalDependencies="zlib.lib ddraw.lib dxerr.lib dxguid.lib d3dx9.lib d3d9.lib odbc32.lib odbccp32.lib winmm.lib Vfw32.lib"
 				OutputFile="$(OutDir)\$(ProjectName).dll"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
