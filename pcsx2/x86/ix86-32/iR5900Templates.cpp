@@ -1,22 +1,18 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
-
-
+ 
 #include "PrecompiledHeader.h"
 
 #include "Common.h"
@@ -26,11 +22,11 @@
 #include "iMMI.h"
 #include "iFPU.h"
 #include "iCOP0.h"
-#include "iVUmicro.h"
+#include "sVU_Micro.h"
 #include "VU.h"
 #include "VUmicro.h"
 
-#include "iVUzerorec.h"
+#include "sVU_zerorec.h"
 
 #include "vtlb.h"
 
@@ -110,136 +106,6 @@ void eeRecompileCode0(R5900FNPTR constcode, R5900FNPTR_INFO constscode, R5900FNP
 	}
 
 	moded = MODE_WRITE|((xmminfo&XMMINFO_READD)?MODE_READ:0);
-
-	// test if should write mmx
-	if( g_pCurInstInfo->info & EEINST_MMX ) {
-
-		if( xmminfo & (XMMINFO_READLO|XMMINFO_WRITELO) ) _addNeededMMXreg(MMX_GPR+MMX_LO);
-		if( xmminfo & (XMMINFO_READHI|XMMINFO_WRITEHI) ) _addNeededMMXreg(MMX_GPR+MMX_HI);
-		_addNeededMMXreg(MMX_GPR+_Rs_);
-		_addNeededMMXreg(MMX_GPR+_Rt_);
-
-		if( GPR_IS_CONST1(_Rs_) || GPR_IS_CONST1(_Rt_) ) {
-			int creg = GPR_IS_CONST1(_Rs_) ? _Rs_ : _Rt_;
-			int vreg = creg == _Rs_ ? _Rt_ : _Rs_;
-
-//			if(g_pCurInstInfo->regs[vreg]&EEINST_MMX) {
-//				mmreg1 = _allocMMXreg(-1, MMX_GPR+vreg, MODE_READ);
-//				_addNeededMMXreg(MMX_GPR+vreg);
-//			}
-			mmreg1 = _allocCheckGPRtoMMX(g_pCurInstInfo, vreg, MODE_READ);
-
-			if( mmreg1 >= 0 ) {
-				int info = PROCESS_EE_MMX;
-				
-				if( GPR_IS_CONST1(_Rs_) ) info |= PROCESS_EE_SETMODET(mmreg1);
-				else info |= PROCESS_EE_SETMODES(mmreg1);
-
-				if( xmminfo & XMMINFO_WRITED ) {
-					_addNeededMMXreg(MMX_GPR+_Rd_);
-					mmreg3 = _checkMMXreg(MMX_GPR+_Rd_, moded);
-
-					if( !(xmminfo&XMMINFO_READD) && mmreg3 < 0 && ((g_pCurInstInfo->regs[vreg] & EEINST_LASTUSE) || !EEINST_ISLIVE64(vreg)) ) {
-						if( EEINST_ISLIVE64(vreg) ) {
-							_freeMMXreg(mmreg1);
-							if( GPR_IS_CONST1(_Rs_) ) info &= ~PROCESS_EE_MODEWRITET;
-							else info &= ~PROCESS_EE_MODEWRITES;
-						}
-						_deleteGPRtoXMMreg(_Rd_, 2);
-						mmxregs[mmreg1].inuse = 1;
-						mmxregs[mmreg1].reg = _Rd_;
-						mmxregs[mmreg1].mode = moded;
-						mmreg3 = mmreg1;
-					}
-					else if( mmreg3 < 0 ) mmreg3 = _allocMMXreg(-1, MMX_GPR+_Rd_, moded);
-
-					info |= PROCESS_EE_SET_D(mmreg3);
-				}
-
-				if( xmminfo & (XMMINFO_READLO|XMMINFO_WRITELO) ) {
-					mmtemp = eeProcessHILO(MMX_LO, ((xmminfo&XMMINFO_READLO)?MODE_READ:0)|((xmminfo&XMMINFO_WRITELO)?MODE_WRITE:0), 1);
-					if( mmtemp >= 0 ) info |= PROCESS_EE_SET_LO(mmtemp);
-				}
-				if( xmminfo & (XMMINFO_READHI|XMMINFO_WRITEHI) ) {
-					mmtemp = eeProcessHILO(MMX_HI, ((xmminfo&XMMINFO_READLO)?MODE_READ:0)|((xmminfo&XMMINFO_WRITELO)?MODE_WRITE:0), 1);
-					if( mmtemp >= 0 ) info |= PROCESS_EE_SET_HI(mmtemp);
-				}
-
-				SetMMXstate();
-				if( creg == _Rs_ ) constscode(info|PROCESS_EE_SET_T(mmreg1));
-				else consttcode(info|PROCESS_EE_SET_S(mmreg1));
-				_clearNeededMMXregs();
-				if( xmminfo & XMMINFO_WRITED ) GPR_DEL_CONST(_Rd_);
-				return;
-			}
-		}
-		else {
-			// no const regs
-			mmreg1 = _allocCheckGPRtoMMX(g_pCurInstInfo, _Rs_, MODE_READ);
-			mmreg2 = _allocCheckGPRtoMMX(g_pCurInstInfo, _Rt_, MODE_READ);
-
-			if( mmreg1 >= 0 || mmreg2 >= 0 ) {
-				int info = PROCESS_EE_MMX;
-
-				// do it all in mmx
-				if( mmreg1 < 0 ) mmreg1 = _allocMMXreg(-1, MMX_GPR+_Rs_, MODE_READ);
-				if( mmreg2 < 0 ) mmreg2 = _allocMMXreg(-1, MMX_GPR+_Rt_, MODE_READ);
-
-				info |= PROCESS_EE_SETMODES(mmreg1)|PROCESS_EE_SETMODET(mmreg2);
-
-				// check for last used, if so don't alloc a new MMX reg
-				if( xmminfo & XMMINFO_WRITED ) {
-					_addNeededMMXreg(MMX_GPR+_Rd_);
-					mmreg3 = _checkMMXreg(MMX_GPR+_Rd_, moded);
-
-					if( mmreg3 < 0 ) {
-						if( !(xmminfo&XMMINFO_READD) && ((g_pCurInstInfo->regs[_Rt_] & EEINST_LASTUSE) || !EEINST_ISLIVE64(_Rt_)) ) {
-							if( EEINST_ISLIVE64(_Rt_) ) {
-								_freeMMXreg(mmreg2);
-								info &= ~PROCESS_EE_MODEWRITET;
-							}
-							_deleteGPRtoXMMreg(_Rd_, 2);
-							mmxregs[mmreg2].inuse = 1;
-							mmxregs[mmreg2].reg = _Rd_;
-							mmxregs[mmreg2].mode = moded;
-							mmreg3 = mmreg2;
-						}
-						else if( !(xmminfo&XMMINFO_READD) && ((g_pCurInstInfo->regs[_Rs_] & EEINST_LASTUSE) || !EEINST_ISLIVE64(_Rs_)) ) {
-							if( EEINST_ISLIVE64(_Rs_) ) {
-								_freeMMXreg(mmreg1);
-								info &= ~PROCESS_EE_MODEWRITES;
-							}
-							_deleteGPRtoXMMreg(_Rd_, 2);
-							mmxregs[mmreg1].inuse = 1;
-							mmxregs[mmreg1].reg = _Rd_;
-							mmxregs[mmreg1].mode = moded;
-							mmreg3 = mmreg1;
-						}
-						else mmreg3 = _allocMMXreg(-1, MMX_GPR+_Rd_, moded);
-					}
-
-					info |= PROCESS_EE_SET_D(mmreg3);
-				}
-
-				if( xmminfo & (XMMINFO_READLO|XMMINFO_WRITELO) ) {
-					mmtemp = eeProcessHILO(MMX_LO, ((xmminfo&XMMINFO_READLO)?MODE_READ:0)|((xmminfo&XMMINFO_WRITELO)?MODE_WRITE:0), 1);
-					if( mmtemp >= 0 ) info |= PROCESS_EE_SET_LO(mmtemp);
-				}
-				if( xmminfo & (XMMINFO_READHI|XMMINFO_WRITEHI) ) {
-					mmtemp = eeProcessHILO(MMX_HI, ((xmminfo&XMMINFO_READLO)?MODE_READ:0)|((xmminfo&XMMINFO_WRITELO)?MODE_WRITE:0), 1);
-					if( mmtemp >= 0 ) info |= PROCESS_EE_SET_HI(mmtemp);
-				}
-
-				SetMMXstate();
-				noconstcode(info|PROCESS_EE_SET_S(mmreg1)|PROCESS_EE_SET_T(mmreg2));
-				_clearNeededMMXregs();
-				if( xmminfo & XMMINFO_WRITED ) GPR_DEL_CONST(_Rd_);
-				return;
-			}
-		}
-
-		_clearNeededMMXregs();
-	}
 
 	// test if should write xmm, mirror to mmx code
 	if( g_pCurInstInfo->info & EEINST_XMM ) {
@@ -417,44 +283,6 @@ void eeRecompileCode1(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode)
 		return;
 	}
 
-	// test if should write mmx
-	if( g_pCurInstInfo->info & EEINST_MMX ) {
-
-		// no const regs
-		mmreg1 = _allocCheckGPRtoMMX(g_pCurInstInfo, _Rs_, MODE_READ);
-
-		if( mmreg1 >= 0 ) {
-			int info = PROCESS_EE_MMX|PROCESS_EE_SETMODES(mmreg1);
-
-			// check for last used, if so don't alloc a new MMX reg
-			_addNeededMMXreg(MMX_GPR+_Rt_);
-			mmreg2 = _checkMMXreg(MMX_GPR+_Rt_, MODE_WRITE);
-
-			if( mmreg2 < 0 ) {
-				if( (g_pCurInstInfo->regs[_Rs_] & EEINST_LASTUSE) || !EEINST_ISLIVE64(_Rs_) ) {
-					if( EEINST_ISLIVE64(_Rs_) ) {
-						_freeMMXreg(mmreg1);
-						info &= ~PROCESS_EE_MODEWRITES;
-					}
-					_deleteGPRtoXMMreg(_Rt_, 2);
-					mmxregs[mmreg1].inuse = 1;
-					mmxregs[mmreg1].reg = _Rt_;
-					mmxregs[mmreg1].mode = MODE_WRITE|MODE_READ;
-					mmreg2 = mmreg1;
-				}
-				else mmreg2 = _allocMMXreg(-1, MMX_GPR+_Rt_, MODE_WRITE);
-			}
-
-			SetMMXstate();
-			noconstcode(info|PROCESS_EE_SET_S(mmreg1)|PROCESS_EE_SET_T(mmreg2));
-			_clearNeededMMXregs();
-			GPR_DEL_CONST(_Rt_);
-			return;
-		}
-
-		_clearNeededMMXregs();
-	}
-
 	// test if should write xmm, mirror to mmx code
 	if( g_pCurInstInfo->info & EEINST_XMM ) {
 
@@ -517,44 +345,6 @@ void eeRecompileCode2(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode)
 		return;
 	}
 
-	// test if should write mmx
-	if( g_pCurInstInfo->info & EEINST_MMX ) {
-
-		// no const regs
-		mmreg1 = _allocCheckGPRtoMMX(g_pCurInstInfo, _Rt_, MODE_READ);
-
-		if( mmreg1 >= 0 ) {
-			int info = PROCESS_EE_MMX|PROCESS_EE_SETMODET(mmreg1);
-
-			// check for last used, if so don't alloc a new MMX reg
-			_addNeededMMXreg(MMX_GPR+_Rd_);
-			mmreg2 = _checkMMXreg(MMX_GPR+_Rd_, MODE_WRITE);
-
-			if( mmreg2 < 0 ) {
-				if( (g_pCurInstInfo->regs[_Rt_] & EEINST_LASTUSE) || !EEINST_ISLIVE64(_Rt_) ) {
-					if( EEINST_ISLIVE64(_Rt_) ) {
-						_freeMMXreg(mmreg1);
-						info &= ~PROCESS_EE_MODEWRITET;
-					}
-					_deleteGPRtoXMMreg(_Rd_, 2);
-					mmxregs[mmreg1].inuse = 1;
-					mmxregs[mmreg1].reg = _Rd_;
-					mmxregs[mmreg1].mode = MODE_WRITE|MODE_READ;
-					mmreg2 = mmreg1;
-				}
-				else mmreg2 = _allocMMXreg(-1, MMX_GPR+_Rd_, MODE_WRITE);
-			}
-
-			SetMMXstate();
-			noconstcode(info|PROCESS_EE_SET_T(mmreg1)|PROCESS_EE_SET_D(mmreg2));
-			_clearNeededMMXregs();
-			GPR_DEL_CONST(_Rd_);
-			return;
-		}
-
-		_clearNeededMMXregs();
-	}
-
 	// test if should write xmm, mirror to mmx code
 	if( g_pCurInstInfo->info & EEINST_XMM ) {
 
@@ -603,7 +393,8 @@ void eeRecompileCode2(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode)
 // rt op rs 
 void eeRecompileCode3(R5900FNPTR constcode, R5900FNPTR_INFO multicode)
 {
-	assert(0);
+	pxFail( "Unfinished code reached." );
+	
 	// for now, don't support xmm
 	_deleteEEreg(_Rs_, 1);
 	_deleteEEreg(_Rt_, 1);
@@ -708,7 +499,8 @@ void eeRecompileCodeConst2(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode)
 // rd = rt MULT rs  (SPECIAL)
 void eeRecompileCodeConstSPECIAL(R5900FNPTR constcode, R5900FNPTR_INFO multicode, int MULT)
 {
-	assert(0);
+	pxFail( "Unfinished code reached." );
+
 	// for now, don't support xmm
 	if( MULT ) {
 		_deleteGPRtoXMMreg(_Rd_, 0);
@@ -864,7 +656,7 @@ void eeFPURecompileCode(R5900FNPTR_INFO xmmcode, R5900FNPTR fpucode, int xmminfo
 	if( mmregt >= 0 ) info |= PROCESS_EE_SETMODET_XMM(mmregt);
 
 	if( xmminfo & XMMINFO_READD ) {
-		assert( xmminfo & XMMINFO_WRITED );
+		pxAssert( xmminfo & XMMINFO_WRITED );
 		mmregd = _allocFPtoXMMreg(-1, _Fd_, MODE_READ);
 	}
 
@@ -954,15 +746,15 @@ void eeFPURecompileCode(R5900FNPTR_INFO xmmcode, R5900FNPTR fpucode, int xmminfo
 		}
 	}
 
-	assert( mmregs >= 0 || mmregt >= 0 || mmregd >= 0 || mmregacc >= 0 );
+	pxAssert( mmregs >= 0 || mmregt >= 0 || mmregd >= 0 || mmregacc >= 0 );
 
 	if( xmminfo & XMMINFO_WRITED ) {
-		assert( mmregd >= 0 );
+		pxAssert( mmregd >= 0 );
 		info |= PROCESS_EE_SET_D(mmregd);
 	}
 	if( xmminfo & (XMMINFO_WRITEACC|XMMINFO_READACC) ) {
 		if( mmregacc >= 0 ) info |= PROCESS_EE_SET_ACC(mmregacc)|PROCESS_EE_ACC;
-		else assert( !(xmminfo&XMMINFO_WRITEACC));		
+		else pxAssert( !(xmminfo&XMMINFO_WRITEACC));		
 	}
 
 	if( xmminfo & XMMINFO_READS ) {
@@ -974,7 +766,7 @@ void eeFPURecompileCode(R5900FNPTR_INFO xmmcode, R5900FNPTR fpucode, int xmminfo
 		
 	// at least one must be in xmm
 	if( (xmminfo & (XMMINFO_READS|XMMINFO_READT)) == (XMMINFO_READS|XMMINFO_READT) ) {
-		assert( mmregs >= 0 || mmregt >= 0 );
+		pxAssert( mmregs >= 0 || mmregt >= 0 );
 	}
 
 	xmmcode(info);

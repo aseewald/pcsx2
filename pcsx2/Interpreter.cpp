@@ -1,26 +1,24 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "PrecompiledHeader.h"
 
+#include "PrecompiledHeader.h"
 #include "Common.h"
-#include "R5900.h"
+
 #include "R5900OpcodeTables.h"
+#include "System/SysThreads.h"
 
 #include <float.h>
 
@@ -32,12 +30,14 @@ static int branch2 = 0;
 static u32 cpuBlockCycles = 0;		// 3 bit fixed point version of cycle count
 static std::string disOut;
 
+static void intEventTest();
+
 // These macros are used to assemble the repassembler functions
 
 static void debugI()
 {
 	if( !IsDevBuild ) return;
-	if( cpuRegs.GPR.n.r0.UD[0] || cpuRegs.GPR.n.r0.UD[1] ) Console::Error("R0 is not zero!!!!");
+	if( cpuRegs.GPR.n.r0.UD[0] || cpuRegs.GPR.n.r0.UD[1] ) Console.Error("R0 is not zero!!!!");
 }
 
 //long int runs=0;
@@ -53,7 +53,7 @@ static void execI()
 	//runs++;
 	//if (runs > 1599999999){ //leave some time to startup the testgame
 	//	if (opcode.Name[0] == 'L') { //find all opcodes beginning with "L"
-	//		Console::WriteLn ("Load %s", params opcode.Name);
+	//		Console.WriteLn ("Load %s", opcode.Name);
 	//	}
 	//}
 
@@ -73,8 +73,6 @@ static void execI()
 
 	opcode.interpret();
 }
-
-static bool EventRaised = false;
 
 static __forceinline void _doBranch_shared(u32 tar)
 {
@@ -96,19 +94,19 @@ static void __fastcall doBranch( u32 target )
 	_doBranch_shared( target );
 	cpuRegs.cycle += cpuBlockCycles >> 3;
 	cpuBlockCycles &= (1<<3)-1;
-	EventRaised |= intEventTest();
+	intEventTest();
 }
 
 void __fastcall intDoBranch(u32 target)
 {
-	//Console::WriteLn("Interpreter Branch ");
+	//Console.WriteLn("Interpreter Branch ");
 	_doBranch_shared( target );
 
 	if( Cpu == &intCpu )
 	{
 		cpuRegs.cycle += cpuBlockCycles >> 3;
 		cpuBlockCycles &= (1<<3)-1;
-		EventRaised |= intEventTest();
+		intEventTest();
 	}
 }
 
@@ -133,7 +131,9 @@ namespace OpcodeImpl {
 * Jump to target                                         *
 * Format:  OP target                                     *
 *********************************************************/
-
+// fixme: looking at the other branching code, shouldn't those _SetLinks in BGEZAL and such only be set
+// if the condition is true? --arcum42
+	
 void J()   
 {
 	doBranch(_JumpTarget_);
@@ -181,10 +181,10 @@ void BGEZ()    // Branch if Rs >= 0
 
 void BGEZAL() // Branch if Rs >= 0 and link
 { 
-	_SetLink(31); 
 	
 	if (cpuRegs.GPR.r[_Rs_].SD[0] >= 0)
 	{ 
+		_SetLink(31); 
 		doBranch(_BranchTarget_); 
 	}
 }  
@@ -215,9 +215,9 @@ void BLTZ()    // Branch if Rs <  0
 
 void BLTZAL()  // Branch if Rs <  0 and link
 { 
-	_SetLink(31); \
 	if (cpuRegs.GPR.r[_Rs_].SD[0] < 0) 
 	{ 
+		_SetLink(31); 
 		doBranch(_BranchTarget_); 
 	}
 }  
@@ -308,10 +308,10 @@ void BGEZL()     // Branch if Rs >= 0
 
 void BLTZALL()   // Branch if Rs <  0 and link
 { 
-	_SetLink(31); 
 	
 	if(cpuRegs.GPR.r[_Rs_].SD[0] < 0) 
 	{ 
+		_SetLink(31); 
 		doBranch(_BranchTarget_); 
 	} 
 	else 
@@ -323,10 +323,10 @@ void BLTZALL()   // Branch if Rs <  0 and link
 
 void BGEZALL()   // Branch if Rs >= 0 and link
 {  
-	_SetLink(31); 
 	
 	if(cpuRegs.GPR.r[_Rs_].SD[0] >= 0) 
 	{ 
+		_SetLink(31); 
 		doBranch(_BranchTarget_); 
 	} 
 	else 
@@ -358,44 +358,70 @@ void JALR()
 
 ////////////////////////////////////////////////////////
 
-void intAlloc()
+static void intAlloc()
 {
 	 // fixme : detect cpu for use the optimize asm code
 }
 
-void intReset()
+static void intReset()
 {
 	cpuRegs.branch = 0;
 	branch2 = 0;
 }
 
- bool intEventTest()
+static void intEventTest()
 {
 	// Perform counters, ints, and IOP updates:
-	return _cpuBranchTest_Shared();
+	_cpuBranchTest_Shared();
 }
 
-void intExecute()
+static void intExecute()
 {
 	g_EEFreezeRegs = false;
 
 	// Mem protection should be handled by the caller here so that it can be
 	// done in a more optimized fashion.
 
-	EventRaised = false;
-
-	while( !EventRaised )
-	{
+	try {
+		while( true )
 		execI();
-	}
+	} catch( Exception::ExitCpuExecute& ) { }
 }
 
-static void intExecuteBlock()
+static void intExecuteBiosStub()
 {
 	g_EEFreezeRegs = false;
 
-	branch2 = 0;
-	while (!branch2) execI();
+	// We need to be weary of events that could occur during vsyncs, which means
+	// making sure to exit this function for ExitCpuExecute.  The calling function
+	// will update UI status, and then re-enter if the bios stub execution criteria
+	// wasn't met yet.
+
+	try {
+		while( (cpuRegs.pc != 0x00200008) && (cpuRegs.pc != 0x00100008) ) {
+			execI();
+		}
+	} catch( Exception::ExitCpuExecute& ) { }
+
+	// ... some maual bios injection hack from a century ago, me thinks.  Leaving the
+	// code intact for posterity. --air
+
+	//    {
+	//        FILE* f = fopen("eebios.bin", "wb");
+	//        fwrite(PSM(0x80000000), 0x100000, 1, f);
+	//        fclose(f);
+	//        exit(0);
+
+	//        f = fopen("iopbios.bin", "wb");
+	//        fwrite(PS2MEM_PSX, 0x80000, 1, f);
+	//        fclose(f);
+	//    }
+}
+
+static void intCheckExecutionState()
+{
+	if( GetCoreThread().HasPendingStateChangeRequest() )
+		throw Exception::ExitCpuExecute();
 }
 
 static void intStep()
@@ -411,12 +437,16 @@ static void intClear(u32 Addr, u32 Size)
 static void intShutdown() {
 }
 
-R5900cpu intCpu = {
+R5900cpu intCpu =
+{
 	intAlloc,
+	intShutdown,
+
 	intReset,
 	intStep,
 	intExecute,
-	intExecuteBlock,
+	intExecuteBiosStub,
+
+	intCheckExecutionState,
 	intClear,
-	intShutdown
 };

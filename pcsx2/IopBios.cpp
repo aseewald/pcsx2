@@ -1,25 +1,23 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
+
 #include "PrecompiledHeader.h"
+#include "IopCommon.h"
 
 #include <ctype.h>
-#include "IopCommon.h"
 
 namespace R3000A {
 
@@ -171,29 +169,28 @@ const char *biosC0n[256] = {
 #define Rv0 (iopVirtMemR<char>(v0))
 #define Rsp (iopVirtMemR<char>(sp))
 
-void bios_write() { // 0x35/0x03
-
-
-    if (a0 == 1) { // stdout
+void bios_write()  // 0x35/0x03
+{
+	if (a0 == 1)  // stdout
+	{
 		const char *ptr = Ra1;
-
-		while (a2 > 0) {
-			SysPrintf("%c", *ptr++); a2--;
+		Console.Write( ConColor_IOP, L"%s", ShiftJIS_ConvertString(ptr, a2).c_str() );
 		}
-		pc0 = ra; return;
-    }
+	else
+	{
 	PSXBIOS_LOG("bios_%s: %x,%x,%x", biosB0n[0x35], a0, a1, a2);
 
 	v0 = -1;
+	}
 	pc0 = ra;
 }
 
-void bios_printf() { // 3f
-	char tmp[1024];
-	char tmp2[1024];
-	unsigned long save[4];
+void bios_printf() // 3f
+{
+	char tmp[1024], tmp2[1024];
+	u32 save[4];
 	char *ptmp = tmp;
-	int n=1, i=0, j;
+	int n=1, i=0, j = 0;
 
 	memcpy(save, iopVirtMemR<void>(sp), 4*4);
 
@@ -201,78 +198,110 @@ void bios_printf() { // 3f
 	iopMemWrite32(sp + 4, a1);
 	iopMemWrite32(sp + 8, a2);
 	iopMemWrite32(sp + 12, a3);
-	
 
-	// old code used phys... is tlb more correct?
+	// old code used phys... is iopMemRead32 more correct?
 	//psxMu32(sp) = a0;
 	//psxMu32(sp + 4) = a1;
 	//psxMu32(sp + 8) = a2;
-	//psxMu32(sp + 12) = a3;
+	//psxMu32(sp + 12) = a3;+
 
-	while (Ra0[i]) {
-		switch (Ra0[i]) {
+	while (Ra0[i]) 
+	{
+		switch (Ra0[i]) 
+		{
 			case '%':
 				j = 0;
 				tmp2[j++] = '%';
+			
 _start:
-				switch (Ra0[++i]) {
+				switch (Ra0[++i]) 
+				{
 					case '.':
 					case 'l':
-						tmp2[j++] = Ra0[i]; goto _start;
+						tmp2[j++] = Ra0[i]; 
+						goto _start;
 					default:
-						if (Ra0[i] >= '0' && Ra0[i] <= '9') {
+						if (Ra0[i] >= '0' && Ra0[i] <= '9') 
+						{
 							tmp2[j++] = Ra0[i];
 							goto _start;
 						}
 						break;
 				}
+				
 				tmp2[j++] = Ra0[i];
 				tmp2[j] = 0;
 
-				switch (Ra0[i]) {
+				switch (Ra0[i]) 
+				{
 					case 'f': case 'F':
-						ptmp+= sprintf(ptmp, tmp2, (float)iopMemRead32(sp + n * 4)); n++; break;
+						ptmp+= sprintf(ptmp, tmp2, (float)iopMemRead32(sp + n * 4));
+						n++; 
+						break;
+					
 					case 'a': case 'A':
 					case 'e': case 'E':
 					case 'g': case 'G':
-						ptmp+= sprintf(ptmp, tmp2, (double)iopMemRead32(sp + n * 4)); n++; break;
+						ptmp+= sprintf(ptmp, tmp2, (double)iopMemRead32(sp + n * 4)); 
+						n++;
+						break;
+					
 					case 'p':
 					case 'i':
 					case 'd': case 'D':
 					case 'o': case 'O':
 					case 'x': case 'X':
-						ptmp+= sprintf(ptmp, tmp2, (unsigned int)iopMemRead32(sp + n * 4)); n++; break;
+						ptmp+= sprintf(ptmp, tmp2, (u32)iopMemRead32(sp + n * 4)); 
+						n++; 
+						break;
+					
 					case 'c':
-						ptmp+= sprintf(ptmp, tmp2, (unsigned char)iopMemRead32(sp + n * 4)); n++; break;
+						ptmp+= sprintf(ptmp, tmp2, (u8)iopMemRead32(sp + n * 4)); 
+						n++; 
+						break;
+					
 					case 's':
-						ptmp+= sprintf(ptmp, tmp2, iopVirtMemR<char>(iopMemRead32(sp + n * 4))); n++; break;
+						ptmp+= sprintf(ptmp, tmp2, iopVirtMemR<char>(iopMemRead32(sp + n * 4)));
+						n++; 
+						break;
+					
 					case '%':
-						*ptmp++ = Ra0[i]; break;
+						*ptmp++ = Ra0[i];
+						break;
+					
+					default:
+						break;
 				}
 				i++;
 				break;
+				
 			default:
 				*ptmp++ = Ra0[i++];
+				break;
 		}
 	}
 	*ptmp = 0;
 
-	// Note: Use Read to obtain a write pointer here, since we're just writing back the 
+	// Use Read to obtain a write pointer here, since we're just writing back the 
 	// temp buffer we saved earlier.
 	memcpy( (void*)iopVirtMemR<void>(sp), save, 4*4);
-
-	Console::Write( Color_Cyan, "%s", params tmp);
-
+	
+	// Use "%s" even though it seems indirect: this avoids chaos if/when the IOP decides
+	// to feed us strings that contain percentages or other printf formatting control chars.
+	Console.Write( ConColor_IOP, L"%s", ShiftJIS_ConvertString(tmp).c_str(), 1023 );
 	pc0 = ra;
 }
 
-void bios_putchar () { // 3d
-    Console::Write( Color_Cyan, "%c", params a0 );
+void bios_putchar ()  // 3d
+{
+	// FIXME?  How would we properly handle Shift-JIS here?  Or is it even needed?
+    Console.Write( ConColor_IOP, "%c", a0 );
     pc0 = ra;
 }
 
-void bios_puts () { // 3e/3f
-    Console::Write( Color_Cyan, Ra0 );
+void bios_puts ()  // 3e/3f
+{
+    Console.Write( ConColor_IOP, L"%s", ShiftJIS_ConvertString(Ra0).c_str() );
     pc0 = ra;
 }
 
@@ -280,10 +309,12 @@ void (*biosA0[256])();
 void (*biosB0[256])();
 void (*biosC0[256])();
 
-void psxBiosInit() {
+void psxBiosInit() 
+{
 	int i;
 
-	for(i = 0; i < 256; i++) {
+	for(i = 0; i < 256; i++) 
+	{
 		biosA0[i] = NULL;
 		biosB0[i] = NULL;
 		biosC0[i] = NULL;
@@ -296,7 +327,8 @@ void psxBiosInit() {
 
 }
 
-void psxBiosShutdown() {
+void psxBiosShutdown() 
+{
 }
 
 }	// end namespace R3000A

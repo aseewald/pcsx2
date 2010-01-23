@@ -1,24 +1,20 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "PrecompiledHeader.h"
 
-using namespace std;
+#include "PrecompiledHeader.h"
 
 #include "Debug.h"
 #include "R5900.h"
@@ -131,7 +127,7 @@ typedef void (*TdisR5900F)DisFInterface;
 
 // sap!  it stands for string append.  It's not a friendly name but for now it makes
 // the copy-paste marathon of code below more readable!
-#define _sap( str ) ssappendf( output, str, params 
+#define _sap( str ) ssappendf( output, str, 
 
 #define dName(i)	_sap("%-7s\t") i);
 #define dGPR128(i)	_sap("%8.8x_%8.8x_%8.8x_%8.8x (%s),") cpuRegs.GPR.r[i].UL[3], cpuRegs.GPR.r[i].UL[2], cpuRegs.GPR.r[i].UL[1], cpuRegs.GPR.r[i].UL[0], disRNameGPR[i])
@@ -168,7 +164,7 @@ typedef void (*TdisR5900F)DisFInterface;
 
 struct sSymbol {
 	u32 addr;
-	char name[32];
+	char name[256];
 };
 
 static sSymbol *dSyms = NULL;
@@ -177,7 +173,9 @@ static int nSyms = 0;
 
 void disR5900AddSym(u32 addr, const char *name) {
 
-	assert( strlen(name) < 32 );
+    if( !pxAssertDev(strlen(name) < sizeof(dSyms->name),
+		wxsFormat(L"String length out of bounds on debug symbol. Allowed=%d, Symbol=%d", sizeof(dSyms->name)-1, strlen(name)))
+	) return;
 
 	if( nSyms+1 >= nSymAlloc )
 	{
@@ -188,7 +186,7 @@ void disR5900AddSym(u32 addr, const char *name) {
 
 	if (dSyms == NULL) return;
 	dSyms[nSyms].addr = addr;
-	strncpy(dSyms[nSyms].name, name, 32);
+	strncpy(dSyms[nSyms].name, name, 256);
 	nSyms++;
 }
 
@@ -470,8 +468,8 @@ MakeDisF(disCVTSw,		dName("CVTSw"); dCP132(_Fd_); dCP132(_Fs_);)
 * Format:  OP rt, offset(base)                           *
 *********************************************************/
 
-MakeDisF(disLWC1,		dName("LWC1"); dCP132(_Rt_); dOffset();)
-MakeDisF(disSWC1,		dName("SWC1"); dCP132(_Rt_); dOffset();)
+MakeDisF(disLWC1,		dName("LWC1"); dCP132(_Ft_); dOffset();)
+MakeDisF(disSWC1,		dName("SWC1"); dCP132(_Ft_); dOffset();)
 
 /*********************************************************
 * Conditional Move                                       *
@@ -766,7 +764,7 @@ MakeDisF(disVWAITQ,		dName("VWAITQ");)
 MakeDisF(disSYNC,		dName("SYNC");)  
 MakeDisF(disBREAK,		dName("BREAK");) 
 MakeDisF(disSYSCALL,	dName("SYSCALL"); dCode();)
-MakeDisF(disCACHE,		ssappendf(output, "%-7s, %x,", params "CACHE", _Rt_); dOfB();)
+MakeDisF(disCACHE,		ssappendf(output, "%-7s, %x,", "CACHE", _Rt_); dOfB();)
 MakeDisF(disPREF,		dName("PREF");) 
 
 MakeDisF(disMFSA,		dName("MFSA"); dGPR64(_Rd_); dSaR();)   

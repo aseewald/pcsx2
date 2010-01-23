@@ -1,19 +1,16 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *	Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
  
 #include "PrecompiledHeader.h"
@@ -35,14 +32,7 @@
 using namespace R5900;
 
 FILE *emuLog;
-
-#ifdef PCSX2_DEVBUILD
-u32 varLog;
-
-// these used by the depreciated _old_Log only
-u16 logProtocol;
-u8 logSource;
-#endif
+wxString emuLogName;
 
 bool enableLogging = TRUE;
 int connected=0;
@@ -55,33 +45,23 @@ void __Log( const char* fmt, ... )
 	char tmp[2024];
 	va_list list;
 
-	if (!enableLogging) return;
-	
 	va_start(list, fmt);
 
 	// concatenate the log message after the prefix:
 	int length = vsprintf(tmp, fmt, list);
 	va_end( list );
 
-	assert( length <= 2020 );
-	if( length > 2020 )
-	{
-		Msgbox::Alert("Source Log Stack Corruption Detected.  Program execution may become unstable.");
+	pxAssertDev( length <= 2020, "Source log buffer overrun" );
 		// fixme: should throw an exception here once we have proper exception handling implemented.
-	}
 
-	if (varLog & 0x80000000)		// log to console enabled?
-	{
-		Console::Write(tmp);
-
-	} 
-	else if( emuLog != NULL )		// manually write to the logfile.
+#ifdef PCSX2_DEVBUILD
+	if( emuLog != NULL )
 	{
 		fputs( tmp, emuLog );
 		fputs( "\n", emuLog );
-		//fputs( "\r\n", emuLog );
 		fflush( emuLog );
 	}
+#endif
 }
 
 static __forceinline void _vSourceLog( u16 protocol, u8 source, u32 cpuPc, u32 cpuCycle, const char *fmt, va_list list )
@@ -92,33 +72,26 @@ static __forceinline void _vSourceLog( u16 protocol, u8 source, u32 cpuPc, u32 c
 
 	// concatenate the log message after the prefix:
 	int length = vsprintf(&tmp[prelength], fmt, list);
-	assert( length <= 2020 );
-	if( length > 2020 )
-	{
-		Msgbox::Alert("Source Log Stack Corruption Detected.  Program execution may become unstable.");
+	pxAssertDev( length <= 2020, "Source log buffer overrun" );
 		// fixme: should throw an exception here once we have proper exception handling implemented.
-	}
 
 #ifdef PCSX2_DEVBUILD
 #ifdef _WIN32
 	// Send log data to the (remote?) debugger.
-	if (connected && logProtocol<0x10)
+	// (not supported yet in the wxWidgets port)
+	/*if (connected && logProtocol<0x10)
 	{
 		sendTTYP(logProtocol, logSource, tmp);
-	}
-#endif
+	}*/
 #endif
 
-	if (varLog & 0x80000000)		// log to console enabled?
-	{
-		Console::WriteLn(tmp);
-
-	} else if( emuLog != NULL )		// manually write to the logfile.
+	if( emuLog != NULL )
 	{
 		fputs( tmp, emuLog );
 		fputs( "\n", emuLog );
 		fflush( emuLog );
 	}
+#endif
 }
 
 // Note: This function automatically appends a newline character always!
@@ -126,9 +99,6 @@ static __forceinline void _vSourceLog( u16 protocol, u8 source, u32 cpuPc, u32 c
 void SourceLog( u16 protocol, u8 source, u32 cpuPc, u32 cpuCycle, const char *fmt, ...)
 {
 	va_list list;
-	
-	if (!enableLogging) return;
-	
 	va_start(list, fmt);
 	_vSourceLog( protocol, source, cpuPc, cpuCycle, fmt, list );
 	va_end(list);
@@ -139,7 +109,6 @@ void SourceLog( u16 protocol, u8 source, u32 cpuPc, u32 cpuCycle, const char *fm
 	bool SrcLog_##unit( const char* fmt, ... ) \
 	{ \
 		va_list list; \
-		if (!enableLogging) return false; \
 		va_start( list, fmt ); \
 		_vSourceLog( protocol, source, \
 			(source == 'E') ? cpuRegs.pc : psxRegs.pc, \
@@ -153,7 +122,6 @@ IMPLEMENT_SOURCE_LOG( BIOS, 'E', 0 )
 
 IMPLEMENT_SOURCE_LOG( CPU, 'E', 1 ) 
 IMPLEMENT_SOURCE_LOG( FPU, 'E', 1 ) 
-IMPLEMENT_SOURCE_LOG( MMI, 'E', 1 ) 
 IMPLEMENT_SOURCE_LOG( COP0, 'E', 1 )
 
 IMPLEMENT_SOURCE_LOG( MEM, 'E', 6 )
@@ -168,6 +136,8 @@ IMPLEMENT_SOURCE_LOG( SIF, 'E', 9 )
 IMPLEMENT_SOURCE_LOG( IPU, 'E', 8 ) 
 IMPLEMENT_SOURCE_LOG( VUM, 'E', 2 ) 
 IMPLEMENT_SOURCE_LOG( RPC, 'E', 9 ) 
+IMPLEMENT_SOURCE_LOG( ISOFS, 'E', 9 ) 
+IMPLEMENT_SOURCE_LOG( VIFUNPACK, 'E', 7 ) 
 
 IMPLEMENT_SOURCE_LOG( PSXCPU, 'I', 1 ) 
 IMPLEMENT_SOURCE_LOG( PSXMEM, 'I', 6 ) 
@@ -180,6 +150,8 @@ IMPLEMENT_SOURCE_LOG( MEMCARDS, 'I', 7 )
 IMPLEMENT_SOURCE_LOG( PAD, 'I', 7 ) 
 IMPLEMENT_SOURCE_LOG( GTE, 'I', 3 ) 
 IMPLEMENT_SOURCE_LOG( CDR, 'I', 8 ) 
+IMPLEMENT_SOURCE_LOG( CDVD, 'I', 8 ) 
+IMPLEMENT_SOURCE_LOG( CACHE, 'I', 8 ) 
 
 
 

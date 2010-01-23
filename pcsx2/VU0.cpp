@@ -1,20 +1,18 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
+
 
 /* TODO
  -Fix the flags Proper as they aren't handle now..
@@ -25,14 +23,11 @@
 */
 
 #include "PrecompiledHeader.h"
+#include "Common.h"
 
 #include <cmath>
 
-#include "Common.h"
-#include "DebugTools/Debug.h"
-#include "R5900.h"
 #include "R5900OpcodeTables.h"
-#include "VUops.h"
 #include "VUmicro.h"
 
 #define _Ft_ _Rt_
@@ -47,11 +42,9 @@
 #define _Fsf_ ((cpuRegs.code >> 21) & 0x03)
 #define _Ftf_ ((cpuRegs.code >> 23) & 0x03)
 
-#include "VUflags.h"
-
 using namespace R5900;
 
-PCSX2_ALIGNED16(VURegs VU0);
+__aligned16 VURegs VU0;
 
 void COP2_BC2() { Int_COP2BC2PrintTable[_Rt_]();}
 void COP2_SPECIAL() { Int_COP2SPECIAL1PrintTable[_Funct_]();}
@@ -66,31 +59,30 @@ void COP2_Unknown()
 }
 
 //****************************************************************************
-void _vu0WaitMicro() {
-	int startcycle;
+
+__forceinline void _vu0run(bool breakOnMbit) {
 	
-	if ((VU0.VI[REG_VPU_STAT].UL & 0x1) == 0) {
-		return;
-	}
+	if (!(VU0.VI[REG_VPU_STAT].UL & 1)) return;
 
-	startcycle = VU0.cycle;
-
-	VU0.flags|= VUFLAG_BREAKONMFLAG;
-	VU0.flags&= ~VUFLAG_MFLAGSET;
+	int startcycle = VU0.cycle;
+	VU0.flags &= ~VUFLAG_MFLAGSET;
 
 	do {
-		CpuVU0.ExecuteBlock();
-        // knockout kings 2002 loops here
-        if( VU0.cycle-startcycle > 0x1000 ) {
-			Console::Notice("VU0 perma-stall, breaking execution..."); // (email zero if gfx are bad)
-            break;
+		// knockout kings 2002 loops here with sVU
+		if (breakOnMbit && (VU0.cycle-startcycle > 0x1000)) {
+			Console.Warning("VU0 perma-stall, breaking execution...");
+			break; // mVU will never get here (it handles mBit internally)
         }
-	} while ((VU0.VI[REG_VPU_STAT].UL & 0x1) && (VU0.flags & VUFLAG_MFLAGSET) == 0);
+		CpuVU0->ExecuteBlock();
+	} while ((VU0.VI[REG_VPU_STAT].UL & 1)						// E-bit Termination
+	  &&	(!breakOnMbit || !(VU0.flags & VUFLAG_MFLAGSET)));	// M-bit Break
 
 	//NEW
 	cpuRegs.cycle += (VU0.cycle-startcycle)*2;
-	VU0.flags&= ~VUFLAG_BREAKONMFLAG;
 }
+
+void _vu0WaitMicro()   { _vu0run(1); } // Runs VU0 Micro Until E-bit or M-Bit End
+void _vu0FinishMicro() { _vu0run(0); } // Runs VU0 Micro Until E-Bit End
 
 namespace R5900 {
 namespace Interpreter{
@@ -108,7 +100,7 @@ namespace OpcodeImpl
 
 	// Asadr.Changed
 	//TODO: check this
-	// HUH why ? doesn;t make any sense ...
+	// HUH why ? doesn't make any sense ...
 	void SQC2() {
 		u32 addr = _Imm_ + cpuRegs.GPR.r[_Rs_].UL[0];
 		//memWrite64(addr,  VU0.VF[_Ft_].UD[0]); 
@@ -162,24 +154,23 @@ void CTC2() {
 		case REG_FBRST:
 			VU0.VI[REG_FBRST].UL = cpuRegs.GPR.r[_Rt_].UL[0] & 0x0C0C;
 			if (cpuRegs.GPR.r[_Rt_].UL[0] & 0x1) { // VU0 Force Break
-				Console::Error("fixme: VU0 Force Break");
+				Console.Error("fixme: VU0 Force Break");
 			}
 			if (cpuRegs.GPR.r[_Rt_].UL[0] & 0x2) { // VU0 Reset
-				//Console::WriteLn("fixme: VU0 Reset");
+				//Console.WriteLn("fixme: VU0 Reset");
 				vu0ResetRegs();
 			}
 			if (cpuRegs.GPR.r[_Rt_].UL[0] & 0x100) { // VU1 Force Break
-				Console::Error("fixme: VU1 Force Break");
+				Console.Error("fixme: VU1 Force Break");
 			}
 			if (cpuRegs.GPR.r[_Rt_].UL[0] & 0x200) { // VU1 Reset
-//				Console::WriteLn("fixme: VU1 Reset");
+//				Console.WriteLn("fixme: VU1 Reset");
 				vu1ResetRegs();
 			}
 			break;
 		case REG_CMSAR1: // REG_CMSAR1
 			if (!(VU0.VI[REG_VPU_STAT].UL & 0x100) ) {
-				VU1.VI[REG_TPC].UL = cpuRegs.GPR.r[_Rt_].US[0];
-				vu1ExecMicro(VU1.VI[REG_TPC].UL);	// Execute VU1 Micro SubRoutine
+				vu1ExecMicro(cpuRegs.GPR.r[_Rt_].US[0]);	// Execute VU1 Micro SubRoutine
 			}
 			break;
 		default:
@@ -345,20 +336,28 @@ void VXITOP()  { VU0.code = cpuRegs.code; _vuXITOP(&VU0); }
 // fixme: Shouldn't anything calling this function be calling vu0WaitMicro instead?
 // Meaning that this function stalls, but doesn't increment the cpuRegs.cycle like
 // you would think it should.
+
+// Well, we can always test that out...
+//#define USE_WAIT_MICRO
+
 void vu0Finish()
 {
+#ifdef USE_WAIT_MICRO
+    _vu0WaitMicro();
+#else
 	if( (VU0.VI[REG_VPU_STAT].UL & 0x1) ) {
 		int i = 0;
 
 		while(i++ < 32) {
-			CpuVU0.ExecuteBlock();
+			CpuVU0->ExecuteBlock();
 			if(!(VU0.VI[REG_VPU_STAT].UL & 0x1))
 				break;
 		}
 		if(VU0.VI[REG_VPU_STAT].UL & 0x1) {
 			VU0.VI[REG_VPU_STAT].UL &= ~1;
 			// this log tends to spam a lot (MGS3)
-			//Console::Notice("vu0Finish > stall aborted by force.");
+			//Console.Warning("vu0Finish > stall aborted by force.");
 		}
 	}
+#endif
 }

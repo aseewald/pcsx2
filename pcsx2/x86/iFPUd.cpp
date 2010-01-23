@@ -1,44 +1,59 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
+
  
 #include "PrecompiledHeader.h"
  
 #include "Common.h"
 #include "R5900OpcodeTables.h"
-#include "ix86/ix86.h"
+#include "x86emitter/x86emitter.h"
 #include "iR5900.h"
 #include "iFPU.h"
 
-/* Version of the FPU that emulates an exponent of 0xff and overflow/underflow flags */
+/* This is a version of the FPU that emulates an exponent of 0xff and overflow/underflow flags */
 
 /* Can be made faster by not converting stuff back and forth between instructions. */
+
+
+//----------------------------------------------------------------
+// FPU emulation status:
+// ADD, SUB (incl. accumulation stage of MADD/MSUB) - no known problems.
+// Mul (incl. multiplication stage of MADD/MSUB) - incorrect. PS2's result mantissa is sometimes 
+//													smaller by 0x1 than IEEE's result (with round to zero).
+// DIV, SQRT, RSQRT - incorrect. PS2's result varies between IEEE's result with round to zero
+//													and IEEE's result with round to +/-infinity.
+// other stuff - no known problems.
+//----------------------------------------------------------------
+
+
+using namespace x86Emitter;
  
-//set overflow flag (set only if FPU_RESULT is 1)
+// Set overflow flag (define only if FPU_RESULT is 1)
 #define FPU_FLAGS_OVERFLOW 1 
-//set underflow flag (set only if FPU_RESULT is 1)
+// Set underflow flag (define only if FPU_RESULT is 1)
 #define FPU_FLAGS_UNDERFLOW 1 
  
-//if 1, result is not clamped (Gives correct results as in PS2,	
-//but can cause problems due to insuffecient clamping levels in the VUs)
+// If 1, result is not clamped (Gives correct results as in PS2,	
+// but can cause problems due to insufficient clamping levels in the VUs)
 #define FPU_RESULT 1 
  
-//set I&D flags. also impacts other aspects of DIV/R/SQRT correctness
+// Set I&D flags. also impacts other aspects of DIV/R/SQRT correctness
 #define FPU_FLAGS_ID 1 
+ 
+// Add/Sub opcodes produce the same results as the ps2
+#define FPU_CORRECT_ADD_SUB 1 
 
 #ifdef FPU_RECOMPILE 
 
@@ -47,8 +62,8 @@ namespace R5900 {
 namespace Dynarec {
 namespace OpcodeImpl {
 namespace COP1 {
-	
-u32 __fastcall FPU_MUL_MANTISSA(u32 s, u32 t);
+
+u32 __fastcall FPU_MUL_HACK(u32 s, u32 t);
 
 namespace DOUBLE {
  
@@ -69,11 +84,6 @@ namespace DOUBLE {
 #define FPUflagSD	0X00000020
 #define FPUflagSO	0X00000010
 #define FPUflagSU	0X00000008
- 
-#define FPU_ADD_SUB_HACK 1 // Add/Sub opcodes produce more ps2-like results if set to 1
- 
-static u32 PCSX2_ALIGNED16(s_neg[4]) = { 0x80000000, 0xffffffff, 0xffffffff, 0xffffffff };
-static u32 PCSX2_ALIGNED16(s_pos[4]) = { 0x7fffffff, 0xffffffff, 0xffffffff, 0xffffffff };
  
 #define REC_FPUBRANCH(f) \
 	void f(); \
@@ -102,42 +112,70 @@ static u32 PCSX2_ALIGNED16(s_pos[4]) = { 0x7fffffff, 0xffffffff, 0xffffffff, 0xf
 //------------------------------------------------------------------
 // PS2 -> DOUBLE
 //------------------------------------------------------------------
- 
+
 #define SINGLE(sign, exp, mant) (((sign)<<31) | ((exp)<<23) | (mant))
 #define DOUBLE(sign, exp, mant) (((sign ## ULL)<<63) | ((exp ## ULL)<<52) | (mant ## ULL))
- 
-static u32 PCSX2_ALIGNED16(pos_inf[4]) = {SINGLE(0,0xff,0), 0, 0, 0};
-static u32 PCSX2_ALIGNED16(neg_inf[4]) = {SINGLE(1,0xff,0), 0, 0, 0};
-static u32 PCSX2_ALIGNED16(one_exp[4]) = {SINGLE(0,1,0), 0, 0, 0};
-static u64 PCSX2_ALIGNED16(dbl_one_exp[2]) = {DOUBLE(0,1,0), 0};
- 
-static u64 PCSX2_ALIGNED16(dbl_cvt_overflow) = DOUBLE(0,1151,0); //needs special code if above or equal
-static u64 PCSX2_ALIGNED16(dbl_ps2_overflow) = DOUBLE(0,1152,0); //overflow & clamp if above or equal
-static u64 PCSX2_ALIGNED16(dbl_underflow) = DOUBLE(0,897,0); //underflow if below
- 
-static u64 PCSX2_ALIGNED16(dbl_s_pos[2]) = {0x7fffffffffffffffULL, 0}; 
-//static u64 PCSX2_ALIGNED16(dbl_s_neg[2]) = {0x8000000000000000ULL, 0}; 
- 
-// converts small normal numbers to double equivalent
-// converts large normal numbers (which represent NaN/inf in IEEE) to double equivalent
 
-//mustn't use EAX/ECX/EDX/x86regs (MUL)
+struct FPUd_Globals
+{
+	u32		neg[4], pos[4];
+
+	u32		pos_inf[4], neg_inf[4],
+			one_exp[4];
+
+	u64		dbl_one_exp[2];
+ 
+	u64		dbl_cvt_overflow,	// needs special code if above or equal
+			dbl_ps2_overflow,	// overflow & clamp if above or equal
+			dbl_underflow;		// underflow if below
+
+	u64		padding;
+
+	u64		dbl_s_pos[2];
+	//u64		dlb_s_neg[2];
+};
+
+static const __aligned(32) FPUd_Globals s_const = 
+{
+	{ 0x80000000, 0xffffffff, 0xffffffff, 0xffffffff },
+	{ 0x7fffffff, 0xffffffff, 0xffffffff, 0xffffffff },
+
+	{SINGLE(0,0xff,0), 0, 0, 0},
+	{SINGLE(1,0xff,0), 0, 0, 0},
+	{SINGLE(0,1,0), 0, 0, 0},
+
+	{DOUBLE(0,1,0), 0},
+
+	DOUBLE(0,1151,0),	// cvt_overflow
+	DOUBLE(0,1152,0),	// ps2_overflow
+	DOUBLE(0,897,0),	// underflow
+
+	0,					// Padding!!
+
+	{0x7fffffffffffffffULL, 0},
+	//{0x8000000000000000ULL, 0},
+};
+
+ 
+// ToDouble : converts single-precision PS2 float to double-precision IEEE float
+
 void ToDouble(int reg)
 {
-	SSE_UCOMISS_M32_to_XMM(reg, (uptr)&pos_inf); //sets ZF if equal or uncomparable
-	u8 *to_complex = JE8(0); //complex conversion if positive infinity or NaN
-	SSE_UCOMISS_M32_to_XMM(reg, (uptr)&neg_inf); 
-	u8 *to_complex2 = JE8(0); //complex conversion if negative infinity
+	SSE_UCOMISS_M32_to_XMM(reg, (uptr)s_const.pos_inf); // Sets ZF if reg is equal or incomparable to pos_inf
+	u8 *to_complex = JE8(0); // Complex conversion if positive infinity or NaN
+	SSE_UCOMISS_M32_to_XMM(reg, (uptr)s_const.neg_inf); 
+	u8 *to_complex2 = JE8(0); // Complex conversion if negative infinity
  
-	SSE2_CVTSS2SD_XMM_to_XMM(reg, reg); //simply convert
+	SSE2_CVTSS2SD_XMM_to_XMM(reg, reg); // Simply convert
 	u8 *end = JMP8(0);
  
 	x86SetJ8(to_complex);
 	x86SetJ8(to_complex2);
  
-	SSE2_PSUBD_M128_to_XMM(reg, (uptr)&one_exp); //lower exponent
+	// Special conversion for when IEEE sees the value in reg as an INF/NaN
+	SSE2_PSUBD_M128_to_XMM(reg, (uptr)s_const.one_exp); // Lower exponent by one
 	SSE2_CVTSS2SD_XMM_to_XMM(reg, reg); 
-	SSE2_PADDQ_M128_to_XMM(reg, (uptr)&dbl_one_exp); //raise exponent
+	SSE2_PADDQ_M128_to_XMM(reg, (uptr)s_const.dbl_one_exp); // Raise exponent by one
  
 	x86SetJ8(end);
 }
@@ -147,19 +185,20 @@ void ToDouble(int reg)
 //------------------------------------------------------------------
  
 /* 
-	if FPU_RESULT, results are more like the real PS2's FPU. But if the VU doesn't clamp all operands,
-		new issues may happen if a game transfers the FPU results into the VU and continues operations there.
-		ar tonelico 1 does this with the result from DIV/RSQRT (when a division by zero occurs)
+	if FPU_RESULT is defined, results are more like the real PS2's FPU. But new issues may happen if 
+		the VU isn't clamping all operands since games may transfer FPU results into the VU.
+		Ar tonelico 1 does this with the result from DIV/RSQRT (when a division by zero occurs)
 	otherwise, results are still usually better than iFPU.cpp.
 */
  
-//mustn't use EAX/ECX/EDX/x86regs (MUL)
- 
+// ToPS2FPU_Full - converts double-precision IEEE float to single-precision PS2 float
+
 // converts small normal numbers to PS2 equivalent
 // converts large normal numbers to PS2 equivalent (which represent NaN/inf in IEEE)
 // converts really large normal numbers to PS2 signed max
 // converts really small normal numbers to zero (flush)
 // doesn't handle inf/nan/denormal
+
 void ToPS2FPU_Full(int reg, bool flags, int absreg, bool acc, bool addsub)
 {
 	if (flags)
@@ -168,29 +207,29 @@ void ToPS2FPU_Full(int reg, bool flags, int absreg, bool acc, bool addsub)
 		AND32ItoM((uptr)&fpuRegs.ACCflag, ~1);
 
 	SSE_MOVAPS_XMM_to_XMM(absreg, reg);
-	SSE2_ANDPD_M128_to_XMM(absreg, (uptr)&dbl_s_pos); 
+	SSE2_ANDPD_M128_to_XMM(absreg, (uptr)&s_const.dbl_s_pos); 
  
-	SSE2_UCOMISD_M64_to_XMM(absreg, (uptr)&dbl_cvt_overflow);
+	SSE2_UCOMISD_M64_to_XMM(absreg, (uptr)&s_const.dbl_cvt_overflow);
 	u8 *to_complex = JAE8(0);
  
-	SSE2_UCOMISD_M64_to_XMM(absreg, (uptr)&dbl_underflow);
+	SSE2_UCOMISD_M64_to_XMM(absreg, (uptr)&s_const.dbl_underflow);
 	u8 *to_underflow = JB8(0); 
  
 	SSE2_CVTSD2SS_XMM_to_XMM(reg, reg); //simply convert
 	u8 *end = JMP8(0);
  
 	x86SetJ8(to_complex); 
-	SSE2_UCOMISD_M64_to_XMM(absreg, (uptr)&dbl_ps2_overflow);
+	SSE2_UCOMISD_M64_to_XMM(absreg, (uptr)&s_const.dbl_ps2_overflow);
 	u8 *to_overflow = JAE8(0);
  
-	SSE2_PSUBQ_M128_to_XMM(reg, (uptr)&dbl_one_exp); //lower exponent
+	SSE2_PSUBQ_M128_to_XMM(reg, (uptr)&s_const.dbl_one_exp); //lower exponent
 	SSE2_CVTSD2SS_XMM_to_XMM(reg, reg); //convert
-	SSE2_PADDD_M128_to_XMM(reg, (uptr)one_exp); //raise exponent
+	SSE2_PADDD_M128_to_XMM(reg, (uptr)s_const.one_exp); //raise exponent
 	u8 *end2 = JMP8(0);
  
 	x86SetJ8(to_overflow); 
 	SSE2_CVTSD2SS_XMM_to_XMM(reg, reg); 
-	SSE_ORPS_M128_to_XMM(reg, (uptr)&s_pos); //clamp
+	SSE_ORPS_M128_to_XMM(reg, (uptr)&s_const.pos); //clamp
 	if (flags && FPU_FLAGS_OVERFLOW)
 		OR32ItoM((uptr)&fpuRegs.fprc[31], (FPUflagO | FPUflagSO));
 	if (flags && FPU_FLAGS_OVERFLOW && acc)
@@ -223,7 +262,7 @@ void ToPS2FPU_Full(int reg, bool flags, int absreg, bool acc, bool addsub)
 		x86SetJ8(is_zero);
 	}
 	SSE2_CVTSD2SS_XMM_to_XMM(reg, reg);
-	SSE_ANDPS_M128_to_XMM(reg, (uptr)&s_neg); //flush to zero
+	SSE_ANDPS_M128_to_XMM(reg, (uptr)s_const.neg); //flush to zero
  
 	x86SetJ8(end);
 	x86SetJ8(end2);
@@ -232,7 +271,6 @@ void ToPS2FPU_Full(int reg, bool flags, int absreg, bool acc, bool addsub)
 		x86SetJ8(end4);
 }
  
-//mustn't use EAX/ECX/EDX/x86regs (MUL)
 void ToPS2FPU(int reg, bool flags, int absreg, bool acc, bool addsub = false)
 {
 	if (FPU_RESULT)
@@ -249,10 +287,10 @@ void ToPS2FPU(int reg, bool flags, int absreg, bool acc, bool addsub = false)
 void SetMaxValue(int regd)
 {
 	if (FPU_RESULT)
-		SSE_ORPS_M128_to_XMM(regd, (uptr)&s_pos[0]); // set regd to maximum
+		SSE_ORPS_M128_to_XMM(regd, (uptr)&s_const.pos[0]); // set regd to maximum
 	else
 	{
-		SSE_ANDPS_M128_to_XMM(regd, (uptr)&s_neg[0]); // Get the sign bit
+		SSE_ANDPS_M128_to_XMM(regd, (uptr)&s_const.neg[0]); // Get the sign bit
 		SSE_ORPS_M128_to_XMM(regd, (uptr)&g_maxvals[0]); // regd = +/- Maximum  (CLAMP)!
 	}
 }
@@ -287,7 +325,7 @@ void recABS_S_xmm(int info)
  
 	CLEAR_OU_FLAGS;
  
-	SSE_ANDPS_M128_to_XMM(EEREC_D, (uptr)&s_pos[0]);
+	SSE_ANDPS_M128_to_XMM(EEREC_D, (uptr)s_const.pos);
 }
  
 FPURECOMPILE_CONSTCODE(ABS_S, XMMINFO_WRITED|XMMINFO_READS);
@@ -310,9 +348,9 @@ void FPU_ADD_SUB(int tempd, int tempt) //tempd and tempt are overwritten, they a
 	int temp2 = _allocX86reg(-1, X86TYPE_TEMP, 0, 0); //receives regt
 	int xmmtemp = _allocTempXMMreg(XMMT_FPS, -1); //temporary for anding with regd/regt
  
-	if (tempecx != ECX)	{ Console::Error("FPU: ADD/SUB Allocation Error!"); tempecx = ECX;}
-	if (temp2 == -1)	{ Console::Error("FPU: ADD/SUB Allocation Error!"); temp2 = EAX;}
-	if (xmmtemp == -1)	{ Console::Error("FPU: ADD/SUB Allocation Error!"); xmmtemp = XMM0;}
+	if (tempecx != ECX)	{ Console.Error("FPU: ADD/SUB Allocation Error!"); tempecx = ECX;}
+	if (temp2 == -1)	{ Console.Error("FPU: ADD/SUB Allocation Error!"); temp2 = EAX;}
+	if (xmmtemp == -1)	{ Console.Error("FPU: ADD/SUB Allocation Error!"); xmmtemp = XMM0;}
  
 	SSE2_MOVD_XMM_to_R(tempecx, tempd); 
 	SSE2_MOVD_XMM_to_R(temp2, tempt);
@@ -343,7 +381,7 @@ void FPU_ADD_SUB(int tempd, int tempt) //tempd and tempt are overwritten, they a
  
 	x86SetJ8(j8Ptr[0]);
 	//diff = 25 .. 255 , expt < expd
-	SSE_ANDPS_M128_to_XMM(tempt, (uptr)s_neg);
+	SSE_ANDPS_M128_to_XMM(tempt, (uptr)s_const.neg);
 	j8Ptr[5] = JMP8(0);
  
 	x86SetJ8(j8Ptr[1]);
@@ -357,7 +395,7 @@ void FPU_ADD_SUB(int tempd, int tempt) //tempd and tempt are overwritten, they a
  
 	x86SetJ8(j8Ptr[3]);
 	//diff = -255 .. -25, expd < expt
-	SSE_ANDPS_M128_to_XMM(tempd, (uptr)s_neg); 
+	SSE_ANDPS_M128_to_XMM(tempd, (uptr)s_const.neg); 
 	j8Ptr[7] = JMP8(0);
  
 	x86SetJ8(j8Ptr[2]);
@@ -372,31 +410,31 @@ void FPU_ADD_SUB(int tempd, int tempt) //tempd and tempt are overwritten, they a
 	_freeX86reg(temp2);
 	_freeX86reg(tempecx);
 }
- 
- 
+
 void FPU_MUL(int info, int regd, int sreg, int treg, bool acc)
 {
+	u8 *noHack;
+	u32 *endMul;
+
 	if (CHECK_FPUMULHACK)
 	{
 		SSE2_MOVD_XMM_to_R(ECX, sreg);
 		SSE2_MOVD_XMM_to_R(EDX, treg);
-		CALLFunc( (uptr)&FPU_MUL_MANTISSA );
-		ToDouble(sreg); ToDouble(treg); 
-		SSE2_MULSD_XMM_to_XMM(sreg, treg);
-		ToPS2FPU(sreg, true, treg, acc);
-		SSE_MOVSS_XMM_to_XMM(regd, sreg);
-		SSE2_MOVD_XMM_to_R(ECX, regd);
-		AND32ItoR(ECX, 0xff800000);
-		OR32RtoR(EAX, ECX);
+		CALLFunc( (uptr)&FPU_MUL_HACK ); //returns the hacked result or 0
+		TEST32RtoR(EAX, EAX);
+		noHack = JZ8(0);
 		SSE2_MOVD_R_to_XMM(regd, EAX);
+			endMul = JMP32(0);
+		x86SetJ8(noHack);
 	}
-	else
-	{
+
 		ToDouble(sreg); ToDouble(treg); 
 		SSE2_MULSD_XMM_to_XMM(sreg, treg);
 		ToPS2FPU(sreg, true, treg, acc);
 		SSE_MOVSS_XMM_to_XMM(regd, sreg);
-	}
+
+	if (CHECK_FPUMULHACK) 
+		x86SetJ32(endMul);
 }
 
 //------------------------------------------------------------------
@@ -410,7 +448,7 @@ void recFPUOp(int info, int regd, int op, bool acc)
 	int sreg, treg;
 	ALLOC_S(sreg); ALLOC_T(treg);
  
-	if (FPU_ADD_SUB_HACK) //ADD or SUB
+	if (FPU_CORRECT_ADD_SUB)
 		FPU_ADD_SUB(sreg, treg);
  
 	ToDouble(sreg); ToDouble(treg);
@@ -556,8 +594,8 @@ void recDIVhelper1(int regd, int regt) // Sets flags
 	u32 *ajmp32, *bjmp32;
 	int t1reg = _allocTempXMMreg(XMMT_FPS, -1);
 	int tempReg = _allocX86reg(-1, X86TYPE_TEMP, 0, 0);
-	if (t1reg == -1) {Console::Error("FPU: DIV Allocation Error!");}
-	if (tempReg == -1) {Console::Error("FPU: DIV Allocation Error!"); tempReg = EAX;}
+	if (t1reg == -1) {Console.Error("FPU: DIV Allocation Error!");}
+	if (tempReg == -1) {Console.Error("FPU: DIV Allocation Error!"); tempReg = EAX;}
  
 	AND32ItoM((uptr)&fpuRegs.fprc[31], ~(FPUflagI|FPUflagD)); // Clear I and D flags
  
@@ -608,20 +646,40 @@ void recDIVhelper2(int regd, int regt) // Doesn't sets flags
  
 	ToPS2FPU(regd, false, regt, false);
 }
- 
+
+static __aligned16 SSE_MXCSR roundmode_nearest, roundmode_neg;
+
 void recDIV_S_xmm(int info)
 {
-	static u32 PCSX2_ALIGNED16(roundmode_temp[4]) = { 0x00000000, 0x00000000, 0x00000000, 0x00000000 };
-	int roundmodeFlag = 0;
-    //if (t0reg == -1) {Console::Error("FPU: DIV Allocation Error!");}
-    //Console::WriteLn("DIV");
+	bool roundmodeFlag = false;
+    //if (t0reg == -1) {Console.Error("FPU: DIV Allocation Error!");}
+    //Console.WriteLn("DIV");
  
-	if ((g_sseMXCSR & 0x00006000) != 0x00000000) { // Set roundmode to nearest if it isn't already
-		//Console::WriteLn("div to nearest");
-		roundmode_temp[0] = (g_sseMXCSR & 0xFFFF9FFF); // Set new roundmode
-		roundmode_temp[1] = g_sseMXCSR; // Backup old Roundmode
-		SSE_LDMXCSR ((uptr)&roundmode_temp[0]); // Recompile Roundmode Change
-		roundmodeFlag = 1;
+	if( CHECK_FPUNEGDIVHACK )
+	{
+		if (g_sseMXCSR.GetRoundMode() != SSEround_NegInf)
+		{
+			// Set roundmode to nearest since it isn't already
+			//Console.WriteLn("div to negative inf");
+
+			roundmode_neg = g_sseMXCSR;
+			roundmode_neg.SetRoundMode( SSEround_NegInf );
+			xLDMXCSR( roundmode_neg );
+			roundmodeFlag = true;
+	}
+	}
+	else
+	{
+		if (g_sseMXCSR.GetRoundMode() != SSEround_Nearest)
+		{
+			// Set roundmode to nearest since it isn't already
+			//Console.WriteLn("div to nearest");
+
+			roundmode_nearest = g_sseMXCSR;
+			roundmode_nearest.SetRoundMode( SSEround_Nearest );
+			xLDMXCSR( roundmode_nearest );
+			roundmodeFlag = true;
+		}
 	}
  
 	int sreg, treg;
@@ -635,9 +693,7 @@ void recDIV_S_xmm(int info)
  
 	SSE_MOVSS_XMM_to_XMM(EEREC_D, sreg);
  
-	if (roundmodeFlag == 1) { // Set roundmode back if it was changed
-		SSE_LDMXCSR ((uptr)&roundmode_temp[1]);
-	}
+	if (roundmodeFlag) xLDMXCSR (g_sseMXCSR);
 	_freeXMMreg(sreg); _freeXMMreg(treg);
 }
  
@@ -664,7 +720,7 @@ void recMaddsub(int info, int regd, int op, bool acc)
 
 	GET_ACC(treg); 
 
-	if (FPU_ADD_SUB_HACK) //ADD or SUB
+	if (FPU_CORRECT_ADD_SUB) 
 		FPU_ADD_SUB(treg, sreg); //might be problematic for something!!!!
 
 	//          TEST FOR ACC/MUL OVERFLOWS, PROPOGATE THEM IF THEY OCCUR
@@ -680,7 +736,7 @@ void recMaddsub(int info, int regd, int op, bool acc)
 
 	x86SetJ8(mulovf);
 	if (op == 1) //sub
-		SSE_XORPS_M128_to_XMM(sreg, (uptr)&s_neg);
+		SSE_XORPS_M128_to_XMM(sreg, (uptr)s_const.neg);
 	SSE_MOVAPS_XMM_to_XMM(treg, sreg);  //fall through below
 
 	x86SetJ8(accovf);
@@ -728,8 +784,11 @@ FPURECOMPILE_CONSTCODE(MADDA_S, XMMINFO_WRITEACC|XMMINFO_READACC|XMMINFO_READS|X
 // MAX / MIN XMM
 //------------------------------------------------------------------
  
-static const u32 PCSX2_ALIGNED16(minmax_mask[4]) = {0xffffffff, 0x80000000, 0, 0};
-static const u32 PCSX2_ALIGNED16(minmax_mask2[4]) = {0, 0x40000000, 0, 0};
+static const __aligned16 u32 minmax_mask[8] =
+{
+	0xffffffff,	0x80000000, 0, 0,
+	0,			0x40000000, 0, 0
+};
 // FPU's MAX/MIN work with all numbers (including "denormals"). Check VU's logical min max for more info.
 void recMINMAX(int info, bool ismin)
 {
@@ -740,10 +799,10 @@ void recMINMAX(int info, bool ismin)
  
 	SSE2_PSHUFD_XMM_to_XMM(sreg, sreg, 0x00);
 	SSE2_PAND_M128_to_XMM(sreg, (uptr)minmax_mask);
-	SSE2_POR_M128_to_XMM(sreg, (uptr)minmax_mask2);
+	SSE2_POR_M128_to_XMM(sreg, (uptr)&minmax_mask[4]);
 	SSE2_PSHUFD_XMM_to_XMM(treg, treg, 0x00);
 	SSE2_PAND_M128_to_XMM(treg, (uptr)minmax_mask);
-	SSE2_POR_M128_to_XMM(treg, (uptr)minmax_mask2);
+	SSE2_POR_M128_to_XMM(treg, (uptr)&minmax_mask[4]);
 	if (ismin)
 		SSE2_MINSD_XMM_to_XMM(sreg, treg);
 	else
@@ -837,7 +896,7 @@ void recNEG_S_xmm(int info) {
  
 	CLEAR_OU_FLAGS;
  
-	SSE_XORPS_M128_to_XMM(EEREC_D, (uptr)&s_neg[0]);
+	SSE_XORPS_M128_to_XMM(EEREC_D, (uptr)&s_const.neg[0]);
 }
  
 FPURECOMPILE_CONSTCODE(NEG_S, XMMINFO_WRITED|XMMINFO_READS);
@@ -871,19 +930,20 @@ FPURECOMPILE_CONSTCODE(SUBA_S, XMMINFO_WRITEACC|XMMINFO_READS|XMMINFO_READT);
 void recSQRT_S_xmm(int info)
 {
 	u8 *pjmp;
-	static u32 PCSX2_ALIGNED16(roundmode_temp[4]) = { 0x00000000, 0x00000000, 0x00000000, 0x00000000 };
 	int roundmodeFlag = 0;
 	int tempReg = _allocX86reg(-1, X86TYPE_TEMP, 0, 0);
-	if (tempReg == -1) {Console::Error("FPU: SQRT Allocation Error!"); tempReg = EAX;}
+	if (tempReg == -1) {Console.Error("FPU: SQRT Allocation Error!"); tempReg = EAX;}
 	int t1reg = _allocTempXMMreg(XMMT_FPS, -1);
-	if (t1reg == -1) {Console::Error("FPU: SQRT Allocation Error!");}
-	//Console::WriteLn("FPU: SQRT");
+	if (t1reg == -1) {Console.Error("FPU: SQRT Allocation Error!");}
+	//Console.WriteLn("FPU: SQRT");
  
-	if ((g_sseMXCSR & 0x00006000) != 0x00000000) { // Set roundmode to nearest if it isn't already
-		//Console::WriteLn("sqrt to nearest");
-		roundmode_temp[0] = (g_sseMXCSR & 0xFFFF9FFF); // Set new roundmode
-		roundmode_temp[1] = g_sseMXCSR; // Backup old Roundmode
-		SSE_LDMXCSR ((uptr)&roundmode_temp[0]); // Recompile Roundmode Change
+	if (g_sseMXCSR.GetRoundMode() != SSEround_Nearest)
+	{
+		// Set roundmode to nearest if it isn't already
+		//Console.WriteLn("sqrt to nearest");
+		roundmode_nearest = g_sseMXCSR;
+		roundmode_nearest.SetRoundMode( SSEround_Nearest );
+		xLDMXCSR (roundmode_nearest);
 		roundmodeFlag = 1;
 	}
  
@@ -897,12 +957,12 @@ void recSQRT_S_xmm(int info)
 		AND32ItoR(tempReg, 1);  //Check sign
 		pjmp = JZ8(0); //Skip if none are
 			OR32ItoM((uptr)&fpuRegs.fprc[31], FPUflagI|FPUflagSI); // Set I and SI flags
-			SSE_ANDPS_M128_to_XMM(EEREC_D, (uptr)&s_pos[0]); // Make EEREC_D Positive
+			SSE_ANDPS_M128_to_XMM(EEREC_D, (uptr)&s_const.pos[0]); // Make EEREC_D Positive
 		x86SetJ8(pjmp);
 	}
 	else 
 	{
-		SSE_ANDPS_M128_to_XMM(EEREC_D, (uptr)&s_pos[0]); // Make EEREC_D Positive
+		SSE_ANDPS_M128_to_XMM(EEREC_D, (uptr)&s_const.pos[0]); // Make EEREC_D Positive
 	}
  
  
@@ -912,9 +972,10 @@ void recSQRT_S_xmm(int info)
  
 	ToPS2FPU(EEREC_D, false, t1reg, false);
   
-	if (roundmodeFlag == 1) { // Set roundmode back if it was changed
-		SSE_LDMXCSR ((uptr)&roundmode_temp[1]);
+	if (roundmodeFlag == 1) {
+		xLDMXCSR (g_sseMXCSR);
 	}
+
 	_freeX86reg(tempReg);
 	_freeXMMreg(t1reg);
 }
@@ -933,8 +994,8 @@ void recRSQRThelper1(int regd, int regt) // Preforms the RSQRT function when reg
 	u32 *pjmp32;
 	int t1reg = _allocTempXMMreg(XMMT_FPS, -1);
 	int tempReg = _allocX86reg(-1, X86TYPE_TEMP, 0, 0);
-	if (t1reg == -1) {Console::Error("FPU: RSQRT Allocation Error!");}
-	if (tempReg == -1) {Console::Error("FPU: RSQRT Allocation Error!"); tempReg = EAX;}
+	if (t1reg == -1) {Console.Error("FPU: RSQRT Allocation Error!");}
+	if (tempReg == -1) {Console.Error("FPU: RSQRT Allocation Error!"); tempReg = EAX;}
  
 	AND32ItoM((uptr)&fpuRegs.fprc[31], ~(FPUflagI|FPUflagD)); // Clear I and D flags
  
@@ -943,7 +1004,7 @@ void recRSQRThelper1(int regd, int regt) // Preforms the RSQRT function when reg
 	AND32ItoR(tempReg, 1);  //Check sign
 	pjmp2 = JZ8(0); //Skip if not set
 		OR32ItoM((uptr)&fpuRegs.fprc[31], FPUflagI|FPUflagSI); // Set I and SI flags
-		SSE_ANDPS_M128_to_XMM(regt, (uptr)&s_pos[0]); // Make regt Positive
+		SSE_ANDPS_M128_to_XMM(regt, (uptr)&s_const.pos[0]); // Make regt Positive
 	x86SetJ8(pjmp2);
  
 	//--- Check for zero ---
@@ -983,7 +1044,7 @@ void recRSQRThelper1(int regd, int regt) // Preforms the RSQRT function when reg
  
 void recRSQRThelper2(int regd, int regt) // Preforms the RSQRT function when regd <- Fs and regt <- Ft (Doesn't set flags)
 {
-	SSE_ANDPS_M128_to_XMM(regt, (uptr)&s_pos[0]); // Make regt Positive
+	SSE_ANDPS_M128_to_XMM(regt, (uptr)&s_const.pos[0]); // Make regt Positive
  
 	ToDouble(regt); ToDouble(regd);
  
@@ -997,14 +1058,19 @@ void recRSQRT_S_xmm(int info)
 {
 	int sreg, treg;
  
-	static u32 PCSX2_ALIGNED16(roundmode_temp[4]) = { 0x00000000, 0x00000000, 0x00000000, 0x00000000 };
-	int roundmodeFlag = 0;
-	if ((g_sseMXCSR & 0x00006000) != 0x00000000) { // Set roundmode to nearest if it isn't already
-		//Console::WriteLn("rsqrt to nearest");
-		roundmode_temp[0] = (g_sseMXCSR & 0xFFFF9FFF); // Set new roundmode
-		roundmode_temp[1] = g_sseMXCSR; // Backup old Roundmode
-		SSE_LDMXCSR ((uptr)&roundmode_temp[0]); // Recompile Roundmode Change
-		roundmodeFlag = 1;
+	// iFPU (regular FPU) doesn't touch roundmode for rSQRT.
+	// Should this do the same?  or is changing the roundmode to nearest the better
+	// behavior for both recs? --air
+
+	bool roundmodeFlag = false;
+	if (g_sseMXCSR.GetRoundMode() != SSEround_Nearest)
+	{
+		// Set roundmode to nearest if it isn't already
+		//Console.WriteLn("sqrt to nearest");
+		roundmode_nearest = g_sseMXCSR;
+		roundmode_nearest.SetRoundMode( SSEround_Nearest );
+		xLDMXCSR (roundmode_nearest);
+		roundmodeFlag = true;
 	}
  
 	ALLOC_S(sreg); ALLOC_T(treg);
@@ -1018,9 +1084,7 @@ void recRSQRT_S_xmm(int info)
  
 	_freeXMMreg(treg); _freeXMMreg(sreg);
  
-	if (roundmodeFlag == 1) { // Set roundmode back if it was changed
-		SSE_LDMXCSR ((uptr)&roundmode_temp[1]);
-	}
+	if (roundmodeFlag) xLDMXCSR (g_sseMXCSR);
 }
  
 FPURECOMPILE_CONSTCODE(RSQRT_S, XMMINFO_WRITED|XMMINFO_READS|XMMINFO_READT);

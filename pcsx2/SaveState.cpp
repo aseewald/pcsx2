@@ -1,40 +1,32 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
+ *
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "PrecompiledHeader.h"
 
+#include "PrecompiledHeader.h"
 #include "IopCommon.h"
 #include "SaveState.h"
 
-#include "CDVDisodrv.h"
-#include "VUmicro.h"
-#include "VU.h"
-#include "iCore.h"
-#include "iVUzerorec.h"
-
-#include "GS.h"
+#include "ps2/BiosTools.h"
 #include "COP0.h"
 #include "Cache.h"
+#include "AppConfig.h"
+
+#include "Elfheader.h"
 
 using namespace R5900;
 
-extern void recResetEE();
-extern void recResetIOP();
 
 static void PreLoadPrep()
 {
@@ -43,91 +35,120 @@ static void PreLoadPrep()
 
 static void PostLoadPrep()
 {
-	memzero_obj(pCache);
+	memzero(pCache);
 //	WriteCP0Status(cpuRegs.CP0.n.Status.val);
 	for(int i=0; i<48; i++) MapTLB(i);
 }
 
-string SaveState::GetFilename( int slot )
+wxString SaveStateBase::GetFilename( int slot )
 {
-	return Path::Combine( SSTATES_DIR, fmt_string( "%8.8X.%3.3d", ElfCRC, slot ) );
+	return (g_Conf->Folders.Savestates +
+		wxsFormat( L"%8.8X.%3.3d", ElfCRC, slot )).GetFullPath();
 }
 
-SaveState::SaveState( const char* msg, const string& destination ) :
-	m_version( g_SaveVersion )
-,	m_tagspace( 128 )
+SaveStateBase::SaveStateBase( SafeArray<u8>& memblock )
+	: m_memory( memblock )
 {
-	Console::WriteLn( "%s %hs", params msg, &destination );
+	m_version	= g_SaveVersion;
+	m_idx		= 0;
+	m_sectid	= FreezeId_Unknown;
+	m_pid		= PluginId_GS;
+	m_DidBios	= false;
 }
 
-s32 CALLBACK gsSafeFreeze( int mode, freezeData *data )
+void SaveStateBase::PrepBlock( int size )
 {
-	if( mtgsThread != NULL )
-	{
-		if( mode == 2 )
-			return GSfreeze( 2, data );
-
-		// have to call in thread, otherwise weird stuff will start happening
-		mtgsThread->SendPointerPacket( GS_RINGTYPE_FREEZE, mode, data );
-		mtgsWaitGS();
-		return 0;
-	}
+	const int end = m_idx+size;
+	if( IsSaving() )
+		m_memory.MakeRoomFor( end );
 	else
 	{
-		// Single threaded...
-		return GSfreeze( mode, data );
+		if( m_memory.GetSizeInBytes() < end )
+			throw Exception::SaveStateLoadError();
 	}
 }
 
-void SaveState::FreezeTag( const char* src )
+void SaveStateBase::FreezeTag( const char* src )
 {
-	const int length = strlen( src );
-	m_tagspace.MakeRoomFor( length+1 );
-	
-	strcpy( m_tagspace.GetPtr(), src );
-	FreezeMem( m_tagspace.GetPtr(), length );
+	const uint allowedlen = sizeof( m_tagspace )-1;
+	pxAssertDev( strlen(src) < allowedlen, wxsFormat( L"Tag name exceeds the allowed length of %d chars.", allowedlen) );
 
-	if( strcmp( m_tagspace.GetPtr(), src ) != 0 )
+	memzero( m_tagspace );
+	strcpy( m_tagspace, src );
+	Freeze( m_tagspace );
+
+	if( strcmp( m_tagspace, src ) != 0 )
 	{
-		assert( 0 );
-		throw Exception::BadSavedState( string( "Tag: " )+src );
+		pxFail( "Savestate data corruption detected while reading tag" );
+		throw Exception::SaveStateLoadError(
+			// Untranslated diagnostic msg (use default msg for translation)
+			L"Savestate data corruption detected while reading tag: " + fromUTF8(src)
+		);
 	}
 }
 
-void SaveState::FreezeAll()
+void SaveStateBase::FreezeBios()
 {
-	if( IsLoading() )
-		PreLoadPrep();
-		
 	// Check the BIOS, and issue a warning if the bios for this state
 	// doesn't match the bios currently being used (chances are it'll still
 	// work fine, but some games are very picky).
 
-	char descout[128], descin[128];
-	memzero_obj( descout );
-	IsBIOS( Config.Bios, descout );
-	memcpy_fast( descin, descout, 128 );
+	char descin[128], desccmp[128];
+	wxString descout;
+	IsBIOS( g_Conf->FullpathToBios(), descout );
+	memzero( descin );
+	memzero( desccmp );
+
+	memcpy_fast( descin, descout.ToUTF8().data(), descout.Length() );
+	memcpy_fast( desccmp, descout.ToUTF8().data(), descout.Length() );
+
+	// ... and only freeze bios info once per state, since the user msg could
+	// become really annoying on a corrupted state or something.  (have to always
+	// load though, so that we advance past the duplicated info, if present)
+
+	if( IsLoading() || !m_DidBios )
 	Freeze( descin );
-	
-	if( memcmp( descin, descout, 128 ) != 0 )
+
+	if( !m_DidBios )
 	{
-		Console::Error(
-			"\n\tWarning: BIOS Version Mismatch, savestate may be unstable!\n"
-			"\t\tCurrent BIOS:   %s\n"
-			"\t\tSavestate BIOS: %s\n",
-			params descout, descin
+		if( memcmp( descin, desccmp, 128 ) != 0 )
+		{
+			Console.Newline();
+			Console.Indent(1).Error( "Warning: BIOS Version Mismatch, savestate may be unstable!" );
+			Console.Indent(2).Error(
+				"Current Version:   %s\n"
+				"Savestate Version: %s\n",
+				descout.ToUTF8().data(), descin
 		);
 	}
+	}
+	m_DidBios = true;
+}
+
+static const int MainMemorySizeInBytes =
+	Ps2MemSize::Base + Ps2MemSize::Scratch + Ps2MemSize::Hardware +
+	Ps2MemSize::IopRam + Ps2MemSize::IopHardware + 0x0100;
+
+void SaveStateBase::FreezeMainMemory()
+{
+	if( IsLoading() )
+		PreLoadPrep();
 
 	// First Block - Memory Dumps
 	// ---------------------------
-	FreezeMem(PS2MEM_BASE, Ps2MemSize::Base);		// 32 MB main memory   
-	FreezeMem(PS2MEM_SCRATCH, Ps2MemSize::Scratch);	// scratch pad 
+	FreezeMem(PS2MEM_BASE,		Ps2MemSize::Base);		// 32 MB main memory
+	FreezeMem(PS2MEM_SCRATCH,	Ps2MemSize::Scratch);	// scratch pad
 	FreezeMem(PS2MEM_HW, Ps2MemSize::Hardware);		// hardware memory
 
 	FreezeMem(psxM, Ps2MemSize::IopRam);		// 2 MB main memory
 	FreezeMem(psxH, Ps2MemSize::IopHardware);	// hardware memory
-	FreezeMem(psxS, 0x000100);					// iop's sif memory	
+	FreezeMem(psxS, 0x000100);					// iop's sif memory
+}
+
+void SaveStateBase::FreezeRegisters()
+{
+	if( IsLoading() )
+		PreLoadPrep();
 
 	// Second Block - Various CPU Registers and States
 	// -----------------------------------------------
@@ -149,6 +170,7 @@ void SaveState::FreezeAll()
 
 	// Fourth Block - EE-related systems
 	// ---------------------------------
+	FreezeTag( "EE-Subsystems" );
 	rcntFreeze();
 	gsFreeze();
 	vuMicroFreeze();
@@ -161,225 +183,271 @@ void SaveState::FreezeAll()
 
 	// Fifth Block - iop-related systems
 	// ---------------------------------
+	FreezeTag( "IOP-Subsystems" );
 	psxRcntFreeze();
 	sioFreeze();
 	sio2Freeze();
 	cdrFreeze();
 	cdvdFreeze();
 
-	// Sixth Block - Plugins Galore!
-	// -----------------------------
-	FreezePlugin( "GS", gsSafeFreeze );
-	FreezePlugin( "SPU2", SPU2freeze );
-	FreezePlugin( "DEV9", DEV9freeze );
-	FreezePlugin( "USB", USBfreeze );
-	FreezePlugin( "PAD1", PAD1freeze );
-	FreezePlugin( "PAD2", PAD2freeze );
-
 	if( IsLoading() )
 		PostLoadPrep();
 }
 
-/////////////////////////////////////////////////////////////////////////////
-// gzipped to/from disk state saves implementation
-
-gzBaseStateInfo::gzBaseStateInfo( const char* msg, const string& filename ) :
-  SaveState( msg, filename )
-, m_filename( filename )
-, m_file( NULL )
+void SaveStateBase::WritebackSectionLength( int seekpos, int sectlen, const wxChar* sectname )
 {
-}
-
-gzBaseStateInfo::~gzBaseStateInfo()
-{
-	if( m_file != NULL )
+	int realsectsize = m_idx - seekpos;
+	if( IsSaving() )
 	{
-		gzclose( m_file );
-		m_file = NULL;
+		// write back the section length...
+		*((u32*)m_memory.GetPtr(seekpos-4)) = realsectsize;
+	}
+	else	// IsLoading!!
+	{
+		if( sectlen != realsectsize )		// if they don't match then we have a problem, jim.
+		{
+			throw Exception::SaveStateLoadError( wxEmptyString,
+				wxsFormat( L"Invalid size encountered on section '%s'.", sectname ),
+				_("The savestate data is invalid or corrupted.")
+			);
+		}
 	}
 }
 
-
-gzSavingState::gzSavingState( const string& filename ) :
-  gzBaseStateInfo( _("Saving state to: "), filename )
+bool SaveStateBase::FreezeSection( int seek_section )
 {
-	m_file = gzopen(filename.c_str(), "wb");
-	if( m_file == NULL )
-		throw Exception::FileNotFound();
+	const bool isSeeking = (seek_section != FreezeId_NotSeeking );
+	if( IsSaving() ) pxAssertDev( !isSeeking, "Cannot seek on a saving-mode savestate stream." );
 
-	gzsetparams( m_file, Z_BEST_SPEED, Z_DEFAULT_STRATEGY );
-	Freeze( m_version );
-}
+	Freeze( m_sectid );
+	if( seek_section == m_sectid ) return false;
 
-
-gzLoadingState::gzLoadingState( const string& filename ) :
-  gzBaseStateInfo( _("Loading state from: "), filename )
-{
-	m_file = gzopen(filename.c_str(), "rb");
-	if( m_file == NULL )
-		throw Exception::FileNotFound();
-
-	gzread( m_file, &m_version, 4 );
-
-	if( (m_version >> 16) != (g_SaveVersion >> 16) )
+	switch( m_sectid )
 	{
-		Console::Error(
-			"Savestate load aborted:\n"
-			"\tUnknown or invalid savestate identifier, either from a (very!) old version of\n"
-			"\tPcsx2, or the file is corrupted"
+		case FreezeId_End:
+		return false;
+
+		case FreezeId_Bios:
+		{
+			int sectlen = 128;
+			FreezeTag( "BiosVersion" );
+			Freeze( sectlen );
+
+			if( sectlen != 128 )
+			{
+				throw Exception::SaveStateLoadError( wxEmptyString,
+					L"Invalid size encountered on BiosVersion section.",
+					_("The savestate data is invalid or corrupted.")
+				);
+			}
+
+			if( isSeeking )
+				m_idx += sectlen;
+			else
+				FreezeBios();
+			m_sectid++;
+		}
+		break;
+
+		case FreezeId_Memory:
+	{
+			FreezeTag( "MainMemory" );
+
+			int seekpos = m_idx+4;
+			int sectlen = MainMemorySizeInBytes;
+			Freeze( sectlen );
+			if( sectlen != MainMemorySizeInBytes )
+			{
+				throw Exception::SaveStateLoadError( wxEmptyString,
+					L"Invalid size encountered on MainMemory section.",
+					_("The savestate data is invalid or corrupted.")
 		);
-		throw Exception::UnsupportedStateVersion( m_version );
 	}
-	else if( m_version > g_SaveVersion )
+
+			if( isSeeking )
+				m_idx += sectlen;
+			else
+				FreezeMainMemory();
+
+			int realsectsize = m_idx - seekpos;
+			pxAssert( sectlen == realsectsize );
+			m_sectid++;
+		}
+		break;
+
+		case FreezeId_Registers:
 	{
-		Console::Error(
-			"Savestate load aborted:\n"
-			"\tThe savestate was created with a newer version of Pcsx2.  I don't know how to load it!" );
-		throw Exception::UnsupportedStateVersion( m_version );
+			FreezeTag( "HardwareRegisters" );
+			int seekpos = m_idx+4;
+			int sectlen = 0xdead;	// gets written back over with "real" data in IsSaving() mode
+
+			Freeze( sectlen );
+			FreezeRegisters();
+
+			WritebackSectionLength( seekpos, sectlen, L"HardwareRegisters" );
+			m_sectid++;
 	}
+		break;
+
+		case FreezeId_Plugin:
+		{
+			FreezeTag( "Plugin" );
+			int seekpos = m_idx+4;
+			int sectlen = 0xdead;	// gets written back over with "real" data in IsSaving() mode
+
+			Freeze( sectlen );
+			Freeze( m_pid );
+
+			if( isSeeking )
+				m_idx += sectlen;
+			else
+				g_plugins->Freeze( (PluginsEnum_t)m_pid, *this );
+
+			WritebackSectionLength( seekpos, sectlen, L"Plugins" );
+
+			// following increments only affect Saving mode, which needs to be sure to save all
+			// plugins (order doesn't matter but sequential is easy enough. (ignored by Loading mode)
+			m_pid++;
+			if( m_pid >= PluginId_Count )
+				m_sectid = FreezeId_End;
+		}
+		break;
+
+		case FreezeId_Unknown:
+		default:
+			pxAssert( IsSaving() );
+
+			// Skip unknown sections with a warning log.
+			// Maybe it'll work!  (haha?)
+
+			int size;
+			Freeze( m_tagspace );
+			Freeze( size );
+			m_tagspace[sizeof(m_tagspace)-1] = 0;
+
+			Console.Warning(
+				"Warning: Unknown tag encountered while loading savestate; going to ignore it!\n"
+				"\tTagname: %s, Size: %d", m_tagspace, size
+			);
+			m_idx += size;
+		break;
+	}
+
+	if( wxThread::IsMain() )
+		wxSafeYield( NULL, true );
+
+	return true;
 }
 
-gzLoadingState::~gzLoadingState() { }
-
-
-void gzSavingState::FreezeMem( void* data, int size )
+void SaveStateBase::FreezeAll()
 {
-	gzwrite( m_file, data, size );
-}
+	if( IsSaving() )
+	{
+		// Loading mode streams will assign these, but saving mode reads them so better
+		// do some setup first.
 
-void gzLoadingState::FreezeMem( void* data, int size )
-{
-	if( gzread( m_file, data, size ) != size )
-		throw Exception::BadSavedState( m_filename );
-}
+		m_sectid	= (int)FreezeId_End+1;
+		m_pid		= PluginId_GS;
+	}
 
-void gzSavingState::FreezePlugin( const char* name, s32 (CALLBACK *freezer)(int mode, freezeData *data) )
-{
-	freezeData fP = { 0, NULL };
-	Console::WriteLn( "\tSaving %s", params name );
-
-	FreezeTag( name );
-
-	if (freezer(FREEZE_SIZE, &fP) == -1)
-		throw Exception::FreezePluginFailure( name, "saving" );
-
-	Freeze( fP.size );
-	if( fP.size == 0 ) return;
-
-	SafeArray<s8> buffer( fP.size );
-	fP.data = buffer.GetPtr();
-
-	if(freezer(FREEZE_SAVE, &fP) == -1)
-		throw Exception::FreezePluginFailure( name, "saving" );
-
-	FreezeMem( fP.data, fP.size );
-}
-
-void gzLoadingState::FreezePlugin( const char* name, s32 (CALLBACK *freezer)(int mode, freezeData *data) )
-{
-	freezeData fP = { 0, NULL };
-	Console::WriteLn( "\tLoading %s", params name );
-
-	FreezeTag( name );
-	Freeze( fP.size );
-	if( fP.size == 0 ) return;
-
-	SafeArray<s8> buffer( fP.size );
-	fP.data = buffer.GetPtr();
-
-	FreezeMem( fP.data, fP.size );
-
-	if(freezer(FREEZE_LOAD, &fP) == -1)
-		throw Exception::FreezePluginFailure( name, "loading" );
+	while( FreezeSection() );
 }
 
 //////////////////////////////////////////////////////////////////////////////////
 // uncompressed to/from memory state saves implementation
 
-memBaseStateInfo::memBaseStateInfo( SafeArray<u8>& memblock, const char* msg ) :
-  SaveState( msg, "Memory" )
-, m_memory( memblock )
-, m_idx( 0 )
+memSavingState::memSavingState( SafeArray<u8>& save_to ) :
+	SaveStateBase( save_to )
 {
-	// Always clear the MTGS thread state.
-	mtgsWaitGS();
 }
 
-memSavingState::memSavingState( SafeArray<u8>& save_to ) : memBaseStateInfo( save_to, _("Saving state to: ") )
-{
-	save_to.ChunkSize = ReallocThreshold;
-	save_to.MakeRoomFor( MemoryBaseAllocSize );
-}
-
-// Saving of state data to a memory buffer
+// Saving of state data
 void memSavingState::FreezeMem( void* data, int size )
 {
-	const int end = m_idx+size;
-	m_memory.MakeRoomFor( end );
-
-	u8* dest = (u8*)m_memory.GetPtr();
-	const u8* src = (u8*)data;
-
-	for( ; m_idx<end; ++m_idx, ++src )
-		dest[m_idx] = *src;
+	m_memory.MakeRoomFor( m_idx+size );
+	memcpy_fast( m_memory.GetPtr(m_idx), data, size );
+	m_idx += size;
 }
 
-memLoadingState::memLoadingState(SafeArray<u8>& load_from ) : 
-	memBaseStateInfo( load_from, _("Loading state from: ") )
+void memSavingState::FreezeAll()
+{
+	// 90% of all savestates fit in under 45 megs (and require more than 43 megs, so might as well...)
+	m_memory.ChunkSize = ReallocThreshold;
+	m_memory.MakeRoomFor( MemoryBaseAllocSize );
+
+	_parent::FreezeAll();
+}
+
+memLoadingState::memLoadingState( const SafeArray<u8>& load_from ) :
+	SaveStateBase( const_cast<SafeArray<u8>&>(load_from) )
 {
 }
 
 memLoadingState::~memLoadingState() { }
 
-// Loading of state data from a memory buffer...
+// Loading of state data
 void memLoadingState::FreezeMem( void* data, int size )
 {
-	const int end = m_idx+size;
-	const u8* src = (u8*)m_memory.GetPtr();
-	u8* dest = (u8*)data;
-
-	for( ; m_idx<end; ++m_idx, ++dest )
-		*dest = src[m_idx];
+	const u8* const src = m_memory.GetPtr(m_idx);
+	m_idx += size;
+	memcpy_fast( data, src, size );
 }
 
-void memSavingState::FreezePlugin( const char* name, s32 (CALLBACK *freezer)(int mode, freezeData *data) )
+bool memLoadingState::SeekToSection( PluginsEnum_t pid )
 {
-	freezeData fP = { 0, NULL };
-	Console::WriteLn( "\tSaving %s", params name );
+	m_idx = 0;		// start from the beginning
 
-	if( freezer(FREEZE_SIZE, &fP) == -1 )
-		throw Exception::FreezePluginFailure( name, "saving" );
-
-	Freeze( fP.size );
-	if( fP.size == 0 ) return;
-
-	const int end = m_idx+fP.size;
-	m_memory.MakeRoomFor( end );
-
-	fP.data = ((s8*)m_memory.GetPtr()) + m_idx;
-	if(freezer(FREEZE_SAVE, &fP) == -1)
-		throw Exception::FreezePluginFailure( name, "saving" );
-
-	m_idx += fP.size;
-}
-
-void memLoadingState::FreezePlugin( const char* name, s32 (CALLBACK *freezer)(int mode, freezeData *data) )
-{
-	freezeData fP;
-	Console::WriteLn( "\tLoading %s", params name );
-
-	Freeze( fP.size );
-	if( fP.size == 0 ) return;
-
-	if( ( fP.size + m_idx ) > m_memory.GetSizeInBytes() )
+	do
 	{
-		assert(0);
-		throw Exception::BadSavedState( "memory" );
-	}
+		while( FreezeSection( FreezeId_Plugin ) );
+		if( m_sectid == FreezeId_End ) return false;
 
-	fP.data = ((s8*)m_memory.GetPtr()) + m_idx;
-	if(freezer(FREEZE_LOAD, &fP) == -1)
-		throw Exception::FreezePluginFailure( name, "loading" );
+		FreezeTag( "Plugin" );
+		int sectlen = 0xdead;
 
-	m_idx += fP.size;
+		Freeze( sectlen );
+		Freeze( m_pid );
+
+	} while( m_pid != pid );
+	return true;
+}
+
+// --------------------------------------------------------------------------------------
+//  SaveState Exception Messages
+// --------------------------------------------------------------------------------------
+
+wxString Exception::UnsupportedStateVersion::FormatDiagnosticMessage() const
+{
+	// Note: no stacktrace needed for this one...
+	return wxsFormat( L"Unknown or unsupported savestate version: 0x%x", Version );
+}
+
+wxString Exception::UnsupportedStateVersion::FormatDisplayMessage() const
+{
+	// m_message_user contains a recoverable savestate error which is helpful to the user.
+	return wxsFormat(
+		m_message_user + L"\n\n" +
+		wxsFormat( _("Cannot load savestate.  It is of an unknown or unsupported version."), Version )
+	);
+}
+
+wxString Exception::StateCrcMismatch::FormatDiagnosticMessage() const
+{
+	// Note: no stacktrace needed for this one...
+	return wxsFormat(
+		L"Game/CDVD does not match the savestate CRC.\n"
+		L"\tCdvd CRC: 0x%X\n\tGame CRC: 0x%X\n",
+		Crc_Savestate, Crc_Cdvd
+	);
+}
+
+wxString Exception::StateCrcMismatch::FormatDisplayMessage() const
+{
+	return wxsFormat(
+		m_message_user + L"\n\n" +
+		wxsFormat(
+			L"Savestate game/crc mismatch. Cdvd CRC: 0x%X Game CRC: 0x%X\n",
+			Crc_Savestate, Crc_Cdvd
+		)
+	);
 }

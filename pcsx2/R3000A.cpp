@@ -1,25 +1,24 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "PrecompiledHeader.h"
 
+#include "PrecompiledHeader.h"
 #include "IopCommon.h"
-#include "R5900.h"
+
+#include "Sio.h"
+#include "Sif.h"
 
 using namespace R3000A;
 
@@ -49,11 +48,11 @@ bool iopBranchAction = false;
 
 bool iopEventTestIsActive = false;
 
-PCSX2_ALIGNED16(psxRegisters psxRegs);
+__aligned16 psxRegisters psxRegs;
 
 void psxReset()
 {
-	memzero_obj(psxRegs);
+	memzero(psxRegs);
 
 	psxRegs.pc = 0xbfc00000; // Start in bootstrap
 	psxRegs.CP0.n.Status = 0x10900000; // COP0 enabled | BEV = 1 | TS = 1
@@ -65,18 +64,17 @@ void psxReset()
 
 	psxHwReset();
 	psxBiosInit();
-	//psxExecuteBios();
 }
 
 void psxShutdown() {
 	psxBiosShutdown();
-	psxSIOShutdown();
 	//psxCpu->Shutdown();
 }
 
-void psxException(u32 code, u32 bd) {
+void __fastcall psxException(u32 code, u32 bd)
+{
 //	PSXCPU_LOG("psxException %x: %x, %x", code, psxHu32(0x1070), psxHu32(0x1074));
-	//Console::WriteLn("!! psxException %x: %x, %x", params code, psxHu32(0x1070), psxHu32(0x1074));
+	//Console.WriteLn("!! psxException %x: %x, %x", code, psxHu32(0x1070), psxHu32(0x1074));
 	// Set the Cause
 	psxRegs.CP0.n.Cause &= ~0x7f;
 	psxRegs.CP0.n.Cause |= code;
@@ -105,7 +103,10 @@ void psxException(u32 code, u32 bd) {
 		PSXMu32(psxRegs.CP0.n.EPC)&= ~0x02000000;
 	}*/
 
-	if (Config.PsxOut && !CHECK_EEREC) {
+	if (!CHECK_IOPREC)
+	{
+		// HLE Bios Handlers, enabled for interpreters only.
+
 		u32 call = psxRegs.GPR.n.t1 & 0xff;
 		switch (psxRegs.pc & 0x1fffff) {
 			case 0xa0:
@@ -135,7 +136,7 @@ void psxException(u32 code, u32 bd) {
 	}
 
 	/*if (psxRegs.CP0.n.Cause == 0x400 && (!(psxHu32(0x1450) & 0x8))) {
-		hwIntcIrq(1);
+		hwIntcIrq(INTC_SBUS);
 	}*/
 }
 
@@ -164,13 +165,17 @@ __forceinline int psxTestCycle( u32 startCycle, s32 delta )
 __forceinline void PSX_INT( IopEventId n, s32 ecycle )
 {
 	// Generally speaking games shouldn't throw ints that haven't been cleared yet.
-	// It's usually indicative os something amiss in our emulation, so uncomment this
+	// It's usually indicative of something amiss in our emulation, so uncomment this
 	// code to help trap those sort of things.
 
 	// Exception: IRQ16 - SIO - it drops ints like crazy when handling PAD stuff.
-	//if( /*n!=16 &&*/ psxRegs.interrupt & (1<<n) )
-	//	Console::WriteLn( "***** IOP > Twice-thrown int on IRQ %d", n );
-
+	if( /*n!=16 &&*/ psxRegs.interrupt & (1<<n) )
+		DevCon.Warning( "***** IOP > Twice-thrown int on IRQ %d", n );
+	
+	// 19 is CDVD read int, it's supposed to be high.
+	//if (ecycle > 8192 && n != 19) 
+	//	DevCon.Warning( "IOP cycles high: %d, n %d", ecycle, n );
+	
 	psxRegs.interrupt |= 1 << n;
 
 	psxRegs.sCycle[n] = psxRegs.cycle;
@@ -201,12 +206,28 @@ static __forceinline void IopTestEvent( IopEventId n, void (*callback)() )
 		psxSetNextBranch( psxRegs.sCycle[n], psxRegs.eCycle[n] );
 }
 
+static __forceinline void sifHackInterrupt()
+{
+	// No reason -- just that sometimes the SIF fell asleep, and this wakes it up.
+
+	iopIntcIrq( 3 );		// IOP DMAC int
+	//hwIntcIrq(INTC_SBUS);	// EE's SIF BUS notifier... maybe or maybe not needed?
+
+	// hack is rescheduled as needed by the event handler (depending on if it's actively
+	// signalling an interrupt or not).. better there than here.
+	//PSX_INT( IopEvt_SIFhack, 128 );
+}
+
 static __forceinline void _psxTestInterrupts()
 {
 	IopTestEvent(IopEvt_SIF0,		sif0Interrupt);	// SIF0
 	IopTestEvent(IopEvt_SIF1,		sif1Interrupt);	// SIF1
 	IopTestEvent(IopEvt_SIO,		sioInterrupt);
 	IopTestEvent(IopEvt_CdvdRead,	cdvdReadInterrupt);
+
+#if IOP_ENABLE_SIF_HACK
+	IopTestEvent(IopEvt_SIFhack,	sifHackInterrupt);
+#endif
 
 	// Profile-guided Optimization (sorta)
 	// The following ints are rarely called.  Encasing them in a conditional
@@ -215,8 +236,10 @@ static __forceinline void _psxTestInterrupts()
 	if( psxRegs.interrupt & ( (1ul<<5) | (3ul<<11) | (3ul<<20) | (3ul<<17) ) )
 	{
 		IopTestEvent(IopEvt_Cdvd,		cdvdActionInterrupt);
+//#ifndef ENABLE_NEW_IOPDMA_SIO
 		IopTestEvent(IopEvt_Dma11,		psxDMA11Interrupt);	// SIO2
 		IopTestEvent(IopEvt_Dma12,		psxDMA12Interrupt);	// SIO2
+//#endif
 		IopTestEvent(IopEvt_Cdrom,		cdrInterrupt);
 		IopTestEvent(IopEvt_CdromRead,	cdrReadInterrupt);
 		IopTestEvent(IopEvt_DEV9,		dev9Interrupt);
@@ -231,10 +254,13 @@ __releaseinline void psxBranchTest()
 		psxRcntUpdate();
 		iopBranchAction = true;
 	}
-
+	else
+	{
 	// start the next branch at the next counter event by default
 	// the interrupt code below will assign nearer branches if needed.
 	g_psxNextBranchCycle = psxNextsCounter+psxNextCounter;
+	}
+	
 	
 	if (psxRegs.interrupt)
 	{
@@ -243,14 +269,32 @@ __releaseinline void psxBranchTest()
 		iopEventTestIsActive = false;
 	}
 
-	if( psxHu32(0x1078) == 0 ) return;
-	if( (psxHu32(0x1070) & psxHu32(0x1074)) == 0 ) return;
-
-	if ((psxRegs.CP0.n.Status & 0xFE01) >= 0x401)
+	if( (psxHu32(0x1078) != 0) && ((psxHu32(0x1070) & psxHu32(0x1074)) != 0) )
 	{
+		if( (psxRegs.CP0.n.Status & 0xFE01) >= 0x401 )
+		{
 		PSXCPU_LOG("Interrupt: %x  %x", psxHu32(0x1070), psxHu32(0x1074));
 		psxException(0, 0);
 		iopBranchAction = true;
+
+			// No need to execute the SIFhack after cpuExceptions, since these by nature break SIF's
+			// thread sleep hangs and allow the IOP to "come back to life."
+			psxRegs.interrupt &= ~IopEvt_SIFhack;
+	}
+	}
+
+	if( IOP_ENABLE_SIF_HACK && !iopBranchAction && !(psxRegs.interrupt & IopEvt_SIFhack) )
+	{
+		// Safeguard: since we're not executing an exception vector, we should schedule a SIF wakeup
+		// just in case.  (and don't reschedule it if it's already scheduled, since that would just
+		// delay the previously scheduled one, and we don't want that)
+
+		// (TODO: The endless loop in question is a branch instruction that branches to itself endlessly,
+		//  waiting for SIF to wake it up via any cpuException.  We could check for that instruction
+		//  location and only schedule a SIF fix when it's detected...  But for now this is easy and gives
+		//  us good control over testing parameters...)
+
+		PSX_INT( IopEvt_SIFhack, 96 );
 	}
 }
 
@@ -266,7 +310,7 @@ void iopTestIntc()
 
 		cpuSetNextBranchDelta( 16 );
 		iopBranchAction = true;
-		//Console::Error( "** IOP Needs an EE EventText, kthx **  %d", params psxCycleEE );
+		//Console.Error( "** IOP Needs an EE EventText, kthx **  %d", psxCycleEE );
 
 		// Note: No need to set the iop's branch delta here, since the EE
 		// will run an IOP branch test regardless.
@@ -275,9 +319,3 @@ void iopTestIntc()
 		psxSetNextBranchDelta( 2 );
 }
 
-void psxExecuteBios() {
-/*	while (psxRegs.pc != 0x80030000)
-		psxCpu->ExecuteBlock();
-	PSX_LOG("*BIOS END*");
-*/
-}

@@ -1,23 +1,20 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "PrecompiledHeader.h"
 
+#include "PrecompiledHeader.h"
 #include "IopCommon.h"
 
 extern void zeroEx();
@@ -159,7 +156,7 @@ void psxSYSCALL() {
 }
 
 void psxRFE() {
-//	Console::WriteLn("RFE\n");
+//	Console.WriteLn("RFE\n");
 	psxRegs.CP0.n.Status = (psxRegs.CP0.n.Status & 0xfffffff0) |
 						  ((psxRegs.CP0.n.Status & 0x3c) >> 2);
 //	Log=0;
@@ -303,7 +300,7 @@ void psxCTC0() { _rFs_ = _u32(_rRt_); }
 * Format:  ?                                             *
 *********************************************************/
 void psxNULL() { 
-Console::Notice("psx: Unimplemented op %x", params psxRegs.code);
+Console.Warning("psx: Unimplemented op %x", psxRegs.code);
 }
 
 void psxSPECIAL() {

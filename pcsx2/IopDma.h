@@ -1,19 +1,16 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifndef __PSXDMA_H__
@@ -21,7 +18,7 @@
 
 #include "PS2Edefs.h"
 
-#define ENABLE_NEW_IOPDMA
+// defined in PS2Edefs.h
 
 #ifdef ENABLE_NEW_IOPDMA
 
@@ -53,8 +50,8 @@ struct DmaStatusInfo
 
 extern DmaStatusInfo  IopChannels[DMA_CHANNEL_MAX];
 
-void IopDmaStart(int channel, u32 chcr, u32 madr, u32 bcr);
-void IopDmaUpdate(u32 elapsed);
+extern void IopDmaStart(int channel, u32 chcr, u32 madr, u32 bcr);
+extern void IopDmaUpdate(u32 elapsed);
 
 // external dma handlers
 extern s32 cdvdDmaRead(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed);
@@ -63,23 +60,23 @@ extern void cdvdDmaInterrupt(s32 channel);
 //#else
 #endif
 
-void psxDma2(u32 madr, u32 bcr, u32 chcr);
-void psxDma3(u32 madr, u32 bcr, u32 chcr);
-void psxDma4(u32 madr, u32 bcr, u32 chcr);
-void psxDma6(u32 madr, u32 bcr, u32 chcr);
-void psxDma7(u32 madr, u32 bcr, u32 chcr);
-void psxDma8(u32 madr, u32 bcr, u32 chcr);
-void psxDma9(u32 madr, u32 bcr, u32 chcr);
-void psxDma10(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma2(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma3(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma4(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma6(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma7(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma8(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma9(u32 madr, u32 bcr, u32 chcr);
+extern void psxDma10(u32 madr, u32 bcr, u32 chcr);
 
-int  psxDma4Interrupt();
-int  psxDma7Interrupt();
-void  dev9Interrupt();
-void dev9Irq(int cycles);
-void  usbInterrupt();
-void usbIrq(int cycles);
-void fwIrq();
-void spu2Irq();
+extern int  psxDma4Interrupt();
+extern int  psxDma7Interrupt();
+extern void dev9Interrupt();
+extern void dev9Irq(int cycles);
+extern void usbInterrupt();
+extern void usbIrq(int cycles);
+extern void fwIrq();
+extern void spu2Irq();
 
 extern void iopIntcIrq( uint irqType );
 extern void iopTestIntc();

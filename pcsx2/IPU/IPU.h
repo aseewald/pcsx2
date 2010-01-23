@@ -1,25 +1,23 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifndef __IPU_H__
 #define __IPU_H__
 
 #include "mpeg2lib/Mpeg.h"
+#include "coroutine.h"
 
 // IPU_INLINE_IRQS
 // Scheduling ints into the future is a purist approach to emulation, and
@@ -36,13 +34,16 @@
 
 //#define IPU_INLINE_IRQS
 
-
 #ifdef _MSC_VER
 #pragma pack(1)
 #endif
 
+
+#define ipumsk( src ) ( (src) & 0xff )
+#define ipucase( src ) case ipumsk(src)
+
 //
-// Bitfield Structure
+// Bitfield Structures
 //
 union tIPU_CMD {
 	struct {
@@ -56,38 +57,6 @@ union tIPU_CMD {
 	};
 };
 
-#define IPU_CTRL_IFC_M		(0x0f<< 0)
-#define IPU_CTRL_OFC_M		(0x0f<< 4)
-#define IPU_CTRL_CBP_M		(0x3f<< 8)
-#define IPU_CTRL_ECD_M		(0x01<<14)
-#define IPU_CTRL_SCD_M		(0x01<<15)
-#define IPU_CTRL_IDP_M		(0x03<<16)
-#define IPU_CTRL_AS_M		(0x01<<20)
-#define IPU_CTRL_IVF_M		(0x01<<21)
-#define IPU_CTRL_QST_M		(0x01<<22)
-#define IPU_CTRL_MP1_M		(0x01<<23)
-#define IPU_CTRL_PCT_M		(0x07<<24)
-#define IPU_CTRL_RST_M		(0x01<<30)
-#define IPU_CTRL_BUSY_M		(0x01<<31)
-
-#define IPU_CTRL_IFC_O		( 0)
-#define IPU_CTRL_OFC_O		( 4)
-#define IPU_CTRL_CBP_O		( 8)
-#define IPU_CTRL_ECD_O		(14)
-#define IPU_CTRL_SCD_O		(15)
-#define IPU_CTRL_IDP_O		(16)
-#define IPU_CTRL_AS_O		(20)
-#define IPU_CTRL_IVF_O		(21)
-#define IPU_CTRL_QST_O		(22)
-#define IPU_CTRL_MP1_O		(23)
-#define IPU_CTRL_PCT_O		(24)
-#define IPU_CTRL_RST_O		(30)
-#define IPU_CTRL_BUSY_O		(31)
-
-
-//
-// Bitfield Structure
-//
 union tIPU_CTRL {
 	struct {
 		u32 IFC : 4;	// Input FIFO counter
@@ -100,27 +69,26 @@ union tIPU_CTRL {
 		u32 AS : 1;		// Alternate scan
 		u32 IVF : 1;	// Intra VLC format
 		u32 QST : 1;	// Q scale step
-		u32 MP1 : 1;	// MPEG1 bit strea
+		u32 MP1 : 1;	// MPEG1 bit stream
 		u32 PCT : 3;	// Picture Type
 		u32 resv1 : 3;
 		u32 RST : 1;	// Reset
 		u32 BUSY : 1;	// Busy
 	};
 	u32 _u32;
+
+	tIPU_CTRL( u32 val ) { _u32 = val; }
+	
+    // CTRL = the first 16 bits of ctrl [0x8000ffff], + value for the next 16 bits,
+    // minus the reserved bits. (18-19; 27-29) [0x47f30000]
+	void write(u32 value) { _u32 = (value & 0x47f30000) | (_u32 & 0x8000ffff); }
+
+	bool test(u32 flags) { return !!(_u32 & flags); }
+	void set_flags(u32 flags) { _u32 |= flags; }
+	void clear_flags(u32 flags) { _u32 &= ~flags; }
+	void reset() { _u32 = 0; }
 };
 
-#define IPU_BP_BP_M		(0x7f<< 0)
-#define IPU_BP_IFC_M	(0x0f<< 8)
-#define IPU_BP_FP_M		(0x03<<16)
-
-#define IPU_BP_BP_O		( 0)
-#define IPU_BP_IFC_O	( 8)
-#define IPU_BP_FP_O		(16)
-
-
-//
-// Bitfield Structure
-//
 struct tIPU_BP {
 	u32 BP;		// Bit stream point
 	u16 IFC;	// Input FIFO counter
@@ -147,11 +115,14 @@ union tIPU_CMD_IDEC
 		u32 cmd : 4;
 	};
 
-	u32 value;
+	u32 _u32;
 
-	tIPU_CMD_IDEC( u32 val ) : value( val )
-	{
-	}
+	tIPU_CMD_IDEC( u32 val ) { _u32 = val; }
+	
+	bool test(u32 flags) { return !!(_u32 & flags); }
+	void set_flags(u32 flags) { _u32 |= flags; }
+	void clear_flags(u32 flags) { _u32 &= ~flags; }
+	void reset() { _u32 = 0; }
 };
 
 union tIPU_CMD_BDEC
@@ -167,11 +138,14 @@ union tIPU_CMD_BDEC
 		u32 MBI : 1;
 		u32 cmd : 4;
 	};
-	u32 value;
+	u32 _u32;
 
-	tIPU_CMD_BDEC( u32 val ) : value( val )
-	{
-	}
+	tIPU_CMD_BDEC( u32 val ) { _u32 = val; }
+	
+	bool test(u32 flags) { return !!(_u32 & flags); }
+	void set_flags(u32 flags) { _u32 |= flags; }
+	void clear_flags(u32 flags) { _u32 &= ~flags; }
+	void reset() { _u32 = 0; }
 };
 
 union tIPU_CMD_CSC
@@ -184,11 +158,38 @@ union tIPU_CMD_CSC
 		u32 OFM : 1;
 		u32 cmd : 4;
 	};
-	u32 value;
+	u32 _u32;
 
-	tIPU_CMD_CSC( u32 val ) : value( val )
+	tIPU_CMD_CSC( u32 val ){ _u32 = val; }
+	
+	bool test(u32 flags) { return !!(_u32 & flags); }
+	void set_flags(u32 flags) { _u32 |= flags; }
+	void clear_flags(u32 flags) { _u32 &= ~flags; }
+	void reset() { _u32 = 0; }
+};
+
+union tIPU_DMA
+{
+	struct
 	{
-	}
+		bool GIFSTALL  : 1;
+		bool TIE0 :1;
+		bool TIE1 : 1;
+		bool ACTV1 : 1;
+		bool DOTIE1  : 1;
+		bool FIREINT0 : 1;
+		bool FIREINT1 : 1;
+		bool VIFSTALL : 1;
+		bool SIFSTALL : 1;
+	};
+	u32 _u32;
+	
+	tIPU_DMA( u32 val ){ _u32 = val; }
+	
+	bool test(u32 flags) { return !!(_u32 & flags); }
+	void set_flags(u32 flags) { _u32 |= flags; }
+	void clear_flags(u32 flags) { _u32 &= ~flags; }
+	void reset() { _u32 = 0; }
 };
 
 enum SCE_IPU
@@ -223,31 +224,24 @@ extern tIPU_BP g_BP;
 extern int coded_block_pattern;
 extern int g_nIPU0Data; // or 0x80000000 whenever transferring
 extern u8* g_pIPU0Pointer;
+extern int FOreadpos;
+extern void FIFOfrom_readsingle(void *value);
 
 // The IPU can only do one task at once and never uses other buffers so these
 // should be made available to functions in other modules to save registers.
-PCSX2_ALIGNED16(extern macroblock_rgb32 rgb32);
-PCSX2_ALIGNED16(extern macroblock_8 mb8);
+extern __aligned16 macroblock_rgb32	rgb32;
+extern __aligned16 macroblock_8		mb8;
 
-void dmaIPU0();
-void dmaIPU1();
-
-int ipuInit();
-void ipuReset();
-void ipuShutdown();
-int  ipuFreeze(gzFile f, int Mode);
-bool ipuCanFreeze();
-
+extern int ipuInit();
+extern void ipuReset();
+extern void ipuShutdown();
+extern int  ipuFreeze(gzFile f, int Mode);
+extern bool ipuCanFreeze();
 
 extern u32 ipuRead32(u32 mem);
 extern u64 ipuRead64(u32 mem);
 extern void ipuWrite32(u32 mem,u32 value);
 extern void ipuWrite64(u32 mem,u64 value);
-
-int ipuConstRead32(u32 x86reg, u32 mem);
-void ipuConstRead64(u32 mem, int mmreg);
-void ipuConstWrite32(u32 mem, int mmreg);
-void ipuConstWrite64(u32 mem, int mmreg);
 
 extern void IPUCMD_WRITE(u32 val);
 extern void ipuSoftReset();
@@ -269,5 +263,6 @@ void FIFOfrom_read(void *value,int size);
 int FIFOto_read(void *value);
 int FIFOto_write(u32* pMem, int size);
 void FIFOto_clear();
+void FIFOfrom_clear();
 
 #endif

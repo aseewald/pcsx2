@@ -8,7 +8,7 @@
 namespace R5900 {
 namespace Dynarec {
 
-// R5900 branch hepler!
+// R5900 branch helper!
 // Recompiles code for a branch test and/or skip, complete with delay slot
 // handling.  Note, for "likely" branches use iDoBranchImm_Likely instead, which
 // handles delay slots differently.
@@ -148,32 +148,32 @@ void recMTSAH( void )
 	////////////////////////////////////////////////////
 	void recNULL( void )
 	{
-		Console::Error("EE: Unimplemented op %x", params cpuRegs.code);
+		Console.Error("EE: Unimplemented op %x", cpuRegs.code);
 	}
 
 	////////////////////////////////////////////////////
 	void recUnknown()
 	{
 		// TODO : Unknown ops should throw an exception.
-		Console::Error("EE: Unrecognized op %x", params cpuRegs.code);
+		Console.Error("EE: Unrecognized op %x", cpuRegs.code);
 	}
 
 	void recMMI_Unknown()
 	{
 		// TODO : Unknown ops should throw an exception.
-		Console::Error("EE: Unrecognized MMI op %x", params cpuRegs.code);
+		Console.Error("EE: Unrecognized MMI op %x", cpuRegs.code);
 	}
 
 	void recCOP0_Unknown()
 	{
 		// TODO : Unknown ops should throw an exception.
-		Console::Error("EE: Unrecognized COP0 op %x", params cpuRegs.code);
+		Console.Error("EE: Unrecognized COP0 op %x", cpuRegs.code);
 	}
 
 	void recCOP1_Unknown()
 	{
 		// TODO : Unknown ops should throw an exception.
-		Console::Error("EE: Unrecognized FPU/COP1 op %x", params cpuRegs.code);
+		Console.Error("EE: Unrecognized FPU/COP1 op %x", cpuRegs.code);
 	}
 
 	/**********************************************************
@@ -181,13 +181,14 @@ void recMTSAH( void )
 	*
 	**********************************************************/
 
+	// Suikoden 3 uses it a lot
 	void recCACHE()
 	{
-	   MOV32ItoM( (uptr)&cpuRegs.code, (u32)cpuRegs.code );
-	   MOV32ItoM( (uptr)&cpuRegs.pc, (u32)pc );
-	   iFlushCall(FLUSH_EVERYTHING);
-	   CALLFunc( (uptr)R5900::Interpreter::OpcodeImpl::CACHE );
-	   branch = 2;
+	   //MOV32ItoM( (uptr)&cpuRegs.code, (u32)cpuRegs.code );
+	   //MOV32ItoM( (uptr)&cpuRegs.pc, (u32)pc );
+	   //iFlushCall(FLUSH_EVERYTHING);
+	   //CALLFunc( (uptr)R5900::Interpreter::OpcodeImpl::CACHE );
+	   //branch = 2;
 	}
 
 	void recTGE( void ) 

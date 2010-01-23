@@ -1,290 +1,463 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of te License, or (at your option) any later version.
+ *
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "PrecompiledHeader.h"
 
-#include "Common.h"
+#include "zlib/zlib.h"
+
+#include "App.h"
 #include "HostGui.h"
 
+class _BaseStateThread;
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// RecoverySystem.cpp -- houses code for recovering from on-the-fly changes to the emu
-// configuration, and for saving/restoring the GS state (for more seamless exiting of
-// fullscreen GS operation).
-//
-// The following handful of local classes are implemented att he bottom of this file.
+// Used to hold the current state backup (fullcopy of PS2 memory and plugin states).
+static SafeArray<u8> state_buffer;
 
-static SafeArray<u8>* g_RecoveryState = NULL;
-static SafeArray<u8>* g_gsRecoveryState = NULL;
+_BaseStateThread* current_state_thread = NULL;
 
-// This class type creates a memory savestate using the existing Recovery information
-// (if present) to generate the savestate material.  If no recovery data is present,
-// the current emulation state is used instead.
-class RecoveryMemSavingState : public memSavingState, Sealed
+// Simple lock boolean for the state buffer being in use by a thread.
+static NonblockingMutex state_buffer_lock;
+
+// This boolean is to keep the system from resuming emulation until the current state has completely
+// uploaded or downloaded itself.  It is only modified from the main thread, and should only be read
+// from the main thread.
+int sys_resume_lock = 0;
+
+static FnType_OnThreadComplete* Callback_FreezeFinished = NULL;
+
+static bool StateCopy_ForceClear()
 {
-public:
-	virtual ~RecoveryMemSavingState() { }
-	RecoveryMemSavingState();
+	sys_resume_lock = 0;
+	state_buffer_lock.Release();
+	state_buffer.Dispose();
+}
 
-	void gsFreeze();
-	void FreezePlugin( const char* name, s32 (CALLBACK* freezer)(int mode, freezeData *data) );
-};
-
-// This class type creates an on-disk (zipped) savestate using the existing Recovery
-// information (if present) to generate the savestate material.  If no recovery data is
-// present, the current emulation state is used instead.
-class RecoveryZipSavingState : public gzSavingState, Sealed
+class EventListener_AppExiting : public IEventListener_AppStatus
 {
+protected:
+	PersistentThread&		m_thread;
+
 public:
-	virtual ~RecoveryZipSavingState() { }
-	RecoveryZipSavingState( const string& filename );
-
-	void gsFreeze();
-	void FreezePlugin( const char* name, s32 (CALLBACK* freezer)(int mode, freezeData *data) );
-};
-
-// Special helper class used to save *just* the GS-relevant state information.
-class JustGsSavingState : public memSavingState, Sealed
-{
-public:
-	virtual ~JustGsSavingState() { }
-	JustGsSavingState();
-
-	// This special override saves the gs info to m_idx+4, and then goes back and
-	// writes in the length of data saved.
-	void gsFreeze();
-};
-
-namespace StateRecovery {
-
-	bool HasState()
+	EventListener_AppExiting( PersistentThread& thr )
+		: m_thread( thr )
 	{
-		return g_RecoveryState != NULL || g_gsRecoveryState != NULL;
 	}
 
-	// Exceptions:
-	void Recover()
+	virtual ~EventListener_AppExiting() throw() {}
+
+};
+
+enum
+{
+	StateThreadAction_None = 0,
+	StateThreadAction_Create,
+	StateThreadAction_Restore,
+	StateThreadAction_ZipToDisk,
+	StateThreadAction_UnzipFromDisk,
+};
+
+class _BaseStateThread : public PersistentThread,
+	public virtual IEventListener_AppStatus,
+	public virtual IDeletableObject
+{
+	typedef PersistentThread _parent;
+
+protected:
+	bool	m_isStarted;
+
+	// Holds the pause/suspend state of the emulator when the state load/stave chain of action is started,
+	// so that the proper state can be restored automatically on completion.
+	bool	m_resume_when_done;
+
+public:
+	virtual ~_BaseStateThread() throw()
 	{
-		// Just in case they weren't initialized earlier (no harm in calling this multiple times)
-		if( OpenPlugins(NULL) == -1 ) return;
+		if( !m_isStarted ) return;
 
-		if( g_RecoveryState != NULL )
-		{
-			Console::Status( "Resuming execution from full memory state..." );
-			memLoadingState( *g_RecoveryState ).FreezeAll();
-		}
-		else if( g_gsRecoveryState != NULL )
-		{
-			s32 dummylen;
+		// Assertion fails because C++ changes the 'this' pointer to the base class since
+		// derived classes have been deallocated at this point the destructor!
 
-			Console::Status( "Resuming execution from gsState..." );
-			memLoadingState eddie( *g_gsRecoveryState );
-			eddie.FreezePlugin( "GS", gsSafeFreeze );
-			eddie.Freeze( dummylen );		// reads the length value recorded earlier.
-			eddie.gsFreeze();
-		}
-
-		StateRecovery::Clear();
-
-		// this needs to be called for every new game!
-		// (note: sometimes launching games through bios will give a crc of 0)
-
-		if( GSsetGameCRC != NULL )
-			GSsetGameCRC(ElfCRC, g_ZeroGSOptions);
+		//pxAssumeDev( current_state_thread == this, wxCharNull );
+		current_state_thread = NULL;
+		state_buffer_lock.Release();		// just in case;
 	}
 
-	// Saves recovery state info to the given filename, or saves the active emulation state
-	// (if one exists) and no recovery data was found.  This is needed because when a recovery
-	// state is made, the emulation state is usually reset so the only persisting state is
-	// the one in the memory save. :)
-	void SaveToFile( const string& file )
+protected:
+	_BaseStateThread( const char* name, FnType_OnThreadComplete* onFinished )
 	{
-		if( g_RecoveryState != NULL )
-		{
-			// State is already saved into memory, and the emulator (and in-progress flag)
-			// have likely been cleared out.  So save from the Recovery buffer instead of
-			// doing a "standard" save:
+		Callback_FreezeFinished = onFinished;
+		m_name					= L"StateThread::" + fromUTF8(name);
+		m_isStarted				= false;
+		m_resume_when_done		= false;
+	}
 
-			gzFile fileptr = gzopen( file.c_str(), "wb" );
-			if( fileptr == NULL )
+	void OnStart()
+	{
+		if( !state_buffer_lock.TryAcquire() )
+			throw Exception::CancelEvent( m_name + L"request ignored: state copy buffer is already locked!" );
+
+		current_state_thread = this;
+		m_isStarted = true;
+		_parent::OnStart();
+	}
+
+	void SendFinishEvent( int type )
+		{
+		wxGetApp().PostCommand( this, pxEvt_FreezeThreadFinished, type, m_resume_when_done );
+		}
+
+	void AppStatusEvent_OnExit()
+		{
+		Cancel();
+
+		Pcsx2App& myapp( wxGetApp() );
+		myapp.RemoveListener( *this );
+		myapp.DeleteObject( *this );
+		}
+};
+
+// --------------------------------------------------------------------------------------
+//  StateThread_Freeze
+// --------------------------------------------------------------------------------------
+class StateThread_Freeze : public _BaseStateThread
+{
+	typedef _BaseStateThread _parent;
+	
+public:
+	StateThread_Freeze( FnType_OnThreadComplete* onFinished ) : _BaseStateThread( "Freeze", onFinished )
+	{
+		if( !SysHasValidState() )
+			throw Exception::RuntimeError( L"Cannot complete state freeze request; the virtual machine state is reset.", _("You'll need to start a new virtual machine before you can save its state.") );
+	}
+
+protected:
+	void OnStart()
+	{
+		_parent::OnStart();
+		++sys_resume_lock;
+		m_resume_when_done = CoreThread.Pause();
+	}
+
+	void ExecuteTaskInThread()
+	{
+		memSavingState( state_buffer ).FreezeAll();
+	}
+
+	void OnCleanupInThread()
+	{
+		SendFinishEvent( StateThreadAction_Create );
+		_parent::OnCleanupInThread();
+	}
+};
+
+// --------------------------------------------------------------------------------------
+//   StateThread_ZipToDisk
+// --------------------------------------------------------------------------------------
+class StateThread_ZipToDisk : public _BaseStateThread
+{
+	typedef _BaseStateThread _parent;
+
+protected:
+	const wxString	m_filename;
+	gzFile			m_gzfp;
+
+public:
+	StateThread_ZipToDisk( FnType_OnThreadComplete* onFinished, bool resume_done, const wxString& file )
+		: _BaseStateThread( "ZipToDisk", onFinished )
+		, m_filename( file )
+		{
+		m_gzfp				= NULL;
+		m_resume_when_done	= resume_done;
+	}
+
+	virtual ~StateThread_ZipToDisk() throw()
 			{
-				Msgbox::Alert( _("File permissions error while trying to save to file:\n\t%ts"), params &file );
-				return;
-			}
-			gzwrite( fileptr, &g_SaveVersion, sizeof( u32 ) );
-			gzwrite( fileptr, g_RecoveryState->GetPtr(), g_RecoveryState->GetSizeInBytes() );
-			gzclose( fileptr );
-		}
-		else if( g_gsRecoveryState != NULL )
-		{
-			RecoveryZipSavingState( file ).FreezeAll();
-		}
-		else
-		{
-			if( !g_EmulationInProgress )
-			{
-				Msgbox::Alert( "You need to start a game first before you can save it's state." );
-				return;
+		if( m_gzfp != NULL ) gzclose( m_gzfp );
 			}
 
-			States_Save( file );
+protected:
+	void OnStart()
+		{
+		_parent::OnStart();
+		m_gzfp = gzopen( m_filename.ToUTF8(), "wb" );
+		if(	m_gzfp == NULL )
+			throw Exception::CreateStream( m_filename, "Cannot create savestate file for writing." );
 		}
+
+	void ExecuteTaskInThread()
+		{
+		Yield( 3 );
+
+		static const int BlockSize = 0x10000;
+		int curidx = 0;
+		do
+			{
+			int thisBlockSize = std::min( BlockSize, state_buffer.GetSizeInBytes() - curidx );
+			if( gzwrite( m_gzfp, state_buffer.GetPtr(curidx), thisBlockSize ) < thisBlockSize )
+				throw Exception::BadStream( m_filename );
+			curidx += thisBlockSize;
+			Yield( 1 );
+		} while( curidx < state_buffer.GetSizeInBytes() );
+			}
+	
+	void OnCleanupInThread()
+	{
+		SendFinishEvent( StateThreadAction_ZipToDisk );
+		_parent::OnCleanupInThread();
+	}
+};
+
+
+// --------------------------------------------------------------------------------------
+//   StateThread_UnzipFromDisk
+// --------------------------------------------------------------------------------------
+class StateThread_UnzipFromDisk : public _BaseStateThread
+{
+	typedef _BaseStateThread _parent;
+
+protected:
+	const wxString	m_filename;
+	gzFile			m_gzfp;
+
+	// set true only once the whole file has finished loading.  IF the thread is canceled or
+	// an error occurs, this will remain false.
+	bool			m_finished;
+	
+public:
+	StateThread_UnzipFromDisk( FnType_OnThreadComplete* onFinished, bool resume_done, const wxString& file )
+		: _BaseStateThread( "UnzipFromDisk", onFinished )
+		, m_filename( file )
+	{
+		m_gzfp				= NULL;
+		m_finished			= false;
+		m_resume_when_done	= resume_done;
+		}
+
+	virtual ~StateThread_UnzipFromDisk() throw()
+	{
+		if( m_gzfp != NULL ) gzclose( m_gzfp );
 	}
 
-	// Saves recovery state info to the given saveslot, or saves the active emulation state
-	// (if one exists) and no recovery data was found.  This is needed because when a recovery
-	// state is made, the emulation state is usually reset so the only persisting state is
-	// the one in the memory save. :)
-	void SaveToSlot( uint num )
+protected:
+	void OnStart()
 	{
-		SaveToFile( SaveState::GetFilename( num ) );
+		_parent::OnStart();
+
+		m_gzfp = gzopen( m_filename.ToUTF8(), "rb" );
+		if(	m_gzfp == NULL )
+			throw Exception::CreateStream( m_filename, "Cannot open savestate file for reading." );
+	}
+
+	void ExecuteTaskInThread()
+	{
+		// fixme: should start initially with the file size, and then grow from there.
+
+		static const int BlockSize = 0x100000;
+		state_buffer.MakeRoomFor( 0x800000 );		// start with an 8 meg buffer to avoid frequent reallocation.
+
+		int curidx = 0;
+		do
+		{
+			state_buffer.MakeRoomFor( curidx+BlockSize );
+			gzread( m_gzfp, state_buffer.GetPtr(curidx), BlockSize );
+			curidx += BlockSize;
+			TestCancel();
+		} while( !gzeof(m_gzfp) );
+		
+		m_finished = true;
+		}
+
+	void OnCleanupInThread()
+		{
+		SendFinishEvent( StateThreadAction_UnzipFromDisk );
+		_parent::OnCleanupInThread();
+		}
+};
+
+void Pcsx2App::OnFreezeThreadFinished( wxCommandEvent& evt )
+{
+	// clear the OnFreezeFinished to NULL now, in case of error.
+	// (but only actually run it if no errors occur)
+	FnType_OnThreadComplete* fn_tmp = Callback_FreezeFinished;
+	Callback_FreezeFinished = NULL;
+
+	{
+		ScopedPtr<PersistentThread> thr( (PersistentThread*)evt.GetClientData() );
+		if( !pxAssertDev( thr != NULL, "NULL thread handle on freeze finished?" ) ) return;
+		state_buffer_lock.Release();
+		--sys_resume_lock;
+		thr->RethrowException();
 	}
 	
-	// This method will override any existing recovery states, so call it with caution, if you
-	// think that there could be existing important state info in the recovery buffers (but
-	// really there shouldn't be, unless you're calling this function when it's not intended
-	// to be called).
-	void MakeGsOnly()
+	if( fn_tmp != NULL ) fn_tmp( evt );
+}
+
+static void OnFinished_Resume( const wxCommandEvent& evt )
+{
+	CoreThread.RecoverState();
+	if( evt.GetExtraLong() ) CoreThread.Resume();
+}
+
+static wxString zip_dest_filename;
+
+static void OnFinished_ZipToDisk( const wxCommandEvent& evt )
+{
+	if( !pxAssertDev( evt.GetInt() == StateThreadAction_Create, "Unexpected StateThreadAction value, aborting save." ) ) return;
+
+	if( zip_dest_filename.IsEmpty() )
 	{
-		StateRecovery::Clear();
+		Console.Warning( "Cannot save state to disk: empty filename specified." );
+		return;
+	}
+
+	// Phase 2: Record to disk!!
+	(new StateThread_ZipToDisk( NULL, !!evt.GetExtraLong(), zip_dest_filename ))->Start();
+	
+	CoreThread.Resume();
+}
+
+
+// =====================================================================================================
+//  StateCopy Public Interface
+// =====================================================================================================
+
+void StateCopy_SaveToFile( const wxString& file )
+{
+	if( state_buffer_lock.IsLocked() ) return;
+	zip_dest_filename = file;
+	(new StateThread_Freeze( OnFinished_ZipToDisk ))->Start();
+	Console.WriteLn( Color_StrongGreen, L"Saving savestate to file: %s", zip_dest_filename.c_str() );
+}
+
+void StateCopy_LoadFromFile( const wxString& file )
+{
+	if( state_buffer_lock.IsLocked() ) return;
+	bool resume_when_done = CoreThread.Pause();
+	(new StateThread_UnzipFromDisk( OnFinished_Resume, resume_when_done, file ))->Start();
+}
+
+// Saves recovery state info to the given saveslot, or saves the active emulation state
+// (if one exists) and no recovery data was found.  This is needed because when a recovery
+// state is made, the emulation state is usually reset so the only persisting state is
+// the one in the memory save. :)
+void StateCopy_SaveToSlot( uint num )
+{
+	if( state_buffer_lock.IsLocked() ) return;
+
+	zip_dest_filename = SaveStateBase::GetFilename( num );
+	(new StateThread_Freeze( OnFinished_ZipToDisk ))->Start();
+	Console.WriteLn( Color_StrongGreen, "Saving savestate to slot %d...", num );
+	Console.Indent().WriteLn( Color_StrongGreen, L"filename: %s", zip_dest_filename.c_str() );
+}
+
+void StateCopy_LoadFromSlot( uint slot )
+{
+	if( state_buffer_lock.IsLocked() ) return;
+	wxString file( SaveStateBase::GetFilename( slot ) );
+
+	if( !wxFileExists( file ) )
+	{
+		Console.Warning( "Savestate slot %d is empty.", slot );
+		return;
+	}
+
+	Console.WriteLn( Color_StrongGreen, "Loading savestate from slot %d...", slot );
+	Console.Indent().WriteLn( Color_StrongGreen, L"filename: %s", file.c_str() );
+
+	bool resume_when_done = CoreThread.Pause();
+	(new StateThread_UnzipFromDisk( OnFinished_Resume, resume_when_done, file ))->Start();
+}
+
+bool StateCopy_IsValid()
+{
+	return !state_buffer.IsDisposed();
+}
+
+const SafeArray<u8>* StateCopy_GetBuffer()
+{
+	if( state_buffer_lock.IsLocked() || state_buffer.IsDisposed() ) return NULL;
+	return &state_buffer;
+}
+
+void StateCopy_FreezeToMem()
+{
+	if( state_buffer_lock.IsLocked() ) return;
+	(new StateThread_Freeze( OnFinished_Resume ))->Start();
+}
+
+class Acquire_And_Block
+{
+protected:
+	bool	m_DisposeWhenFinished;
+	bool	m_Acquired;
+
+public:
+	Acquire_And_Block( bool dispose )
+	{
+		m_DisposeWhenFinished	= dispose;
+		m_Acquired				= false;
+
+		/*
+		// If the state buffer is locked and we're being called from the main thread then we need
+		// to cancel the current action.  This is needed because state_buffer_lock is only updated
+		// from events handled on the main thread.
+
+		if( wxThread::IsMain() )
+			throw Exception::CancelEvent( "Blocking ThawFromMem canceled due to existing state buffer lock." );
+		else*/
+
+		while ( !state_buffer_lock.TryAcquire() )
+		{
+			pxAssume( current_state_thread != NULL );
+			current_state_thread->Block();
+			wxGetApp().ProcessPendingEvents();		// Trying this for now, may or may not work due to recursive pitfalls (see above)
+		};
+
+		m_Acquired = true;
+	}
+	
+	virtual ~Acquire_And_Block() throw()
+	{
+		if( m_DisposeWhenFinished )
+			state_buffer.Dispose();
 		
-		if( !g_EmulationInProgress ) return;
-
-		g_gsRecoveryState = new SafeArray<u8>();
-		JustGsSavingState eddie;
-		eddie.FreezePlugin( "GS", gsSafeFreeze ) ;
-		eddie.gsFreeze();
+		if( m_Acquired )
+			state_buffer_lock.Release();
 	}
+};
 
-	// Creates a full recovery of the entire emulation state (CPU and all plugins).
-	// If a current recovery state is already present, then nothing is done (the
-	// existing recovery state takes precedence).
-	void MakeFull()
-	{
-		if( g_RecoveryState != NULL ) return;
-
-		try
-		{
-			g_RecoveryState = new SafeArray<u8>( "Memory Savestate Recovery" );
-			RecoveryMemSavingState().FreezeAll();
-			safe_delete( g_gsRecoveryState );
-			g_EmulationInProgress = false;
-		}
-		catch( Exception::RuntimeError& ex )
-		{
-			Msgbox::Alert(
-				"Pcsx2 gamestate recovery failed. Some options may have been reverted to protect your game's state.\n"
-				"Error: %s", params ex.cMessage() );
-			safe_delete( g_RecoveryState );
-		}
-	}
-
-	// Clears and deallocates any recovery states.
-	void Clear()
-	{
-		safe_delete( g_RecoveryState );
-		safe_delete( g_gsRecoveryState );
-	}
+void StateCopy_FreezeToMem_Blocking()
+{
+	Acquire_And_Block blocker( false );
+	memSavingState( state_buffer ).FreezeAll();
 }
 
-RecoveryMemSavingState::RecoveryMemSavingState() : memSavingState( *g_RecoveryState )
+// Copies the saved state into the active VM, and automatically free's the saved state data.
+void StateCopy_ThawFromMem_Blocking()
 {
+	Acquire_And_Block blocker( true );
+	memLoadingState( state_buffer ).FreezeAll();
 }
 
-void RecoveryMemSavingState::gsFreeze()
+void StateCopy_Clear()
 {
-	if( g_gsRecoveryState != NULL )
-	{
-		// just copy the data from src to dst.
-		// the normal savestate doesn't expect a length prefix for internal structures,
-		// so don't copy that part.
-		const u32 pluginlen = *((u32*)g_gsRecoveryState->GetPtr());
-		const u32 gslen = *((u32*)g_gsRecoveryState->GetPtr(pluginlen+4));
-		memcpy( m_memory.GetPtr(m_idx), g_gsRecoveryState->GetPtr(pluginlen+8), gslen );
-		m_idx += gslen;
-	}
-	else
-		memSavingState::gsFreeze();
+	if( state_buffer_lock.IsLocked() ) return;
+	state_buffer.Dispose();
 }
 
-void RecoveryMemSavingState::FreezePlugin( const char* name, s32 (CALLBACK* freezer)(int mode, freezeData *data) )
+bool StateCopy_IsBusy()
 {
-	if( (freezer == gsSafeFreeze) && (g_gsRecoveryState != NULL) )
-	{
-		// Gs data is already in memory, so just copy from src to dest:
-		// length of the GS data is stored as the first u32, so use that to run the copy:
-		const u32 len = *((u32*)g_gsRecoveryState->GetPtr());
-		memcpy( m_memory.GetPtr(m_idx), g_gsRecoveryState->GetPtr(), len+4 );
-		m_idx += len+4;
-	}
-	else
-		memSavingState::FreezePlugin( name, freezer );
-}
-
-RecoveryZipSavingState::RecoveryZipSavingState( const string& filename ) : gzSavingState( filename )
-{
-}
-
-void RecoveryZipSavingState::gsFreeze()
-{
-	if( g_gsRecoveryState != NULL )
-	{
-		// read data from the gsRecoveryState allocation instead of the GS, since the gs
-		// info was invalidated when the plugin was shut down.
-
-		// the normal savestate doesn't expect a length prefix for internal structures,
-		// so don't copy that part.
-
-		u32& pluginlen = *((u32*)g_gsRecoveryState->GetPtr(0));
-		u32& gslen = *((u32*)g_gsRecoveryState->GetPtr(pluginlen+4));
-		gzwrite( m_file, g_gsRecoveryState->GetPtr(pluginlen+4), gslen );
-	}
-	else
-		gzSavingState::gsFreeze();
-}
-
-void RecoveryZipSavingState::FreezePlugin( const char* name, s32 (CALLBACK* freezer)(int mode, freezeData *data) )
-{
-	if( (freezer == gsSafeFreeze) && (g_gsRecoveryState != NULL) )
-	{
-		// Gs data is already in memory, so just copy from there into the gzip file.
-		// length of the GS data is stored as the first u32, so use that to run the copy:
-		u32& len = *((u32*)g_gsRecoveryState->GetPtr());
-		gzwrite( m_file, g_gsRecoveryState->GetPtr(), len+4 );
-	}
-	else
-		gzSavingState::FreezePlugin( name, freezer );
-}
-
-JustGsSavingState::JustGsSavingState() : memSavingState( *g_gsRecoveryState )
-{
-}
-
-// This special override saves the gs info to m_idx+4, and then goes back and
-// writes in the length of data saved.
-void JustGsSavingState::gsFreeze()
-{
-	int oldmidx = m_idx;
-	m_idx += 4;
-	memSavingState::gsFreeze();
-	if( IsSaving() )
-	{
-		s32& len = *((s32*)m_memory.GetPtr( oldmidx ));
-		len = (m_idx - oldmidx)-4;
-	}
+	return state_buffer_lock.IsLocked();
 }

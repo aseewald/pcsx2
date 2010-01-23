@@ -1,34 +1,32 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "PrecompiledHeader.h"
+#include "Common.h"
 
 #include <cmath>
 #include <float.h>
 
-#include "Common.h"
 #include "VUmicro.h"
+
 /*****************************************/
 /*          NEW FLAGS                    */ //By asadr. Thnkx F|RES :p
 /*****************************************/
 
 
-__inline void vuUpdateDI(VURegs * VU) {
+void vuUpdateDI(VURegs * VU) {
 //	u32 Flag_S = 0;
 //	u32 Flag_I = 0;
 //	u32 Flag_D = 0;
@@ -43,7 +41,7 @@ __inline void vuUpdateDI(VURegs * VU) {
 //	VU->statusflag|= (Flag_D | (VU0.VI[REG_STATUS_FLAG].US[0] >> 5)) << 11;
 }
 
-__forceinline u32 VU_MAC_UPDATE( int shift, VURegs * VU, float f)
+static __releaseinline u32 VU_MAC_UPDATE( int shift, VURegs * VU, float f )
 {
 	u32 v = *(u32*)&f; 
 	int exp = (v >> 23) & 0xff; 
@@ -114,7 +112,7 @@ __forceinline void VU_MACw_CLEAR(VURegs * VU)
 	VU->macflag&= ~(0x1111<<0);
 }
 
-void VU_STAT_UPDATE(VURegs * VU) {
+__releaseinline void VU_STAT_UPDATE(VURegs * VU) {
 	int newflag = 0 ;
 	if (VU->macflag & 0x000F) newflag = 0x1;
 	if (VU->macflag & 0x00F0) newflag |= 0x2;

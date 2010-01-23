@@ -1,20 +1,18 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
+
 
 #include "PrecompiledHeader.h"
 
@@ -22,8 +20,6 @@
 
 #include "IopCommon.h"
 #include "Stats.h"
-
-#include "Paths.h"
 
 void statsOpen() {
 	stats.vsyncCount = 0;
@@ -35,6 +31,7 @@ void statsOpen() {
 }
 
 void statsClose() {
+/*
 	time_t t;
 	FILE *f;
 
@@ -44,7 +41,7 @@ void statsClose() {
 #else
 	f = fopen(LOGS_DIR "/stats.txt", "w");
 #endif
-	if (!f) { Console::WriteLn("Can't open stats.txt"); return; }
+	if (!f) { Console.WriteLn("Can't open stats.txt"); return; }
 	fprintf(f, "-- PCSX2 v%s statics--\n\n", PCSX2_VERSION);
 	fprintf(f, "Ran for %d seconds\n", t);
 	fprintf(f, "Total VSyncs: %d (%s)\n", stats.vsyncCount, Config.PsxType ? "PAL" : "NTSC");
@@ -55,6 +52,7 @@ void statsClose() {
 	else fprintf(f, "Recompiler Mode: VUrec1 %s, VUrec0 %s\n", 
 		CHECK_VU1REC ? "Enabled" : "Disabled", CHECK_VU0REC ? "Enabled" : "Disabled");
 	fclose(f);
+*/
 }
 
 void statsVSync() {

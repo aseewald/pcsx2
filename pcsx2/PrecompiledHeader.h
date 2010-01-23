@@ -1,34 +1,38 @@
-#pragma once
+#ifndef PCSX2_PRECOMPILED_HEADER
+#define PCSX2_PRECOMPILED_HEADER
 
-#ifndef _PCSX2_PRECOMPILED_HEADER_
-#define _PCSX2_PRECOMPILED_HEADER_
-#endif // pragma once
+//#pragma once		// no dice, causes problems in GCC PCH (which doesn't really work very well
+
+// Disable some pointless warnings...
+#ifdef _MSC_VER
+#	pragma warning(disable:4250) //'class' inherits 'method' via dominance
+#	pragma warning(disable:4996) //ignore the stricmp deprecated warning
+#endif
 
 //////////////////////////////////////////////////////////////////////////////////////////
-// Microsoft specific STL extensions for bounds checking and stuff: Enabled in devbuilds,
-// disabled in release builds. :)
+// Define PCSX2's own i18n helpers.  These override the wxWidgets helpers and provide
+// additional functionality.
+//
+#define WXINTL_NO_GETTEXT_MACRO
+#undef _
+#define _(s)		pxGetTranslation(_T(s))
 
-#ifdef _MSC_VER
-#ifdef PCSX2_DEVBUILD
-#	define _SECURE_SCL 1
-#	define _SECURE_SCL_THROWS 1
-#else
-#	define _SECURE_SCL 0
-#endif
-#endif
+// macro provided for tagging translation strings, without actually running them through the
+// translator (which the _() does automatically, and sometimes we don't want that).  This is
+// a shorthand replacement for wxTRANSLATE.
+#define wxLt(a)		(a)
 
 #define NOMINMAX		// Disables other libs inclusion of their own min/max macros (we use std instead)
 
-#if defined (__linux__)  // some distributions are lower case
-#	define __LINUX__
-#endif
+//////////////////////////////////////////////////////////////////////////////////////////
+// Welcome wxWidgets to the party!
 
-#ifdef _WIN32
-// disable warning C4244: '=' : conversion from 'big' to 'small', possible loss of data
-#	pragma warning(disable:4244)
-#else
-#	include <unistd.h>		// Non-Windows platforms need this
-#endif
+#include <wx/string.h>
+#include <wx/tokenzr.h>
+#include <wx/gdicmn.h>		// for wxPoint/wxRect stuff
+#include <wx/intl.h>
+#include <wx/log.h>
+#include <wx/filename.h>
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Include the STL junk that's actually handy.
@@ -37,6 +41,7 @@
 #include <algorithm>
 #include <vector>
 #include <string>
+#include <list>
 #include <sstream>
 #include <cstring>		// string.h under c++
 #include <cstdio>		// stdio.h under c++
@@ -48,10 +53,9 @@
 // might as well add them here)
 
 #include <stddef.h>
-#include <malloc.h>
-#include <assert.h>
 #include <sys/stat.h>
 #include <pthread.h>
+
 
 using std::string;		// we use it enough, so bring it into the global namespace.
 using std::min;
@@ -59,22 +63,40 @@ using std::max;
 
 typedef int BOOL;
 
-#	undef TRUE
-#	undef FALSE
-#	define TRUE  1
-#	define FALSE 0
+#undef TRUE
+#undef FALSE
+#define TRUE  1
+#define FALSE 0
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Begin Pcsx2 Includes: Add items here that are local to Pcsx2 but stay relatively
-// unchanged for long periods of time.
+// unchanged for long periods of time, or happen to be used by almost everything, so they
+// need a full recompile anyway, when modified (etc)
 
 #include "zlib/zlib.h"
-#include "PS2Etypes.h"
-#include "MemcpyFast.h"
-#include "StringUtils.h"
-#include "Exceptions.h"
+#include "Pcsx2Defs.h"
+#include "i18n.h"
 
-////////////////////////////////////////////////////////////////////
+#include "Utilities/Assertions.h"
+#include "Utilities/FixedPointTypes.h"
+#include "Utilities/wxBaseTools.h"
+#include "Utilities/ScopedPtr.h"
+#include "Utilities/Path.h"
+#include "Utilities/Console.h"
+#include "Utilities/Exceptions.h"
+#include "Utilities/MemcpyFast.h"
+#include "Utilities/General.h"
+#include "x86emitter/tools.h"
+
+#include "Config.h"
+
+// Linux isn't set up for svn version numbers yet.
+#ifdef __LINUX__
+#	define SVN_REV 0
+#	define SVN_MODS 0
+#endif
+
+//////////////////////////////////////////////////////////////////////////////////////////
 // Compiler/OS specific macros and defines -- Begin Section
 
 #if defined(_MSC_VER)
@@ -92,13 +114,6 @@ typedef int BOOL;
 #		define __declspec(x)
 #	endif
 
-static __forceinline u32 timeGetTime()
-{
-	struct timeb t;
-	ftime(&t);
-	return (u32)(t.time*1000+t.millitm);
-}
-
 #	ifndef strnicmp
 #		define strnicmp strncasecmp
 #	endif
@@ -109,52 +124,4 @@ static __forceinline u32 timeGetTime()
 
 #endif		// end GCC/Linux stuff
 
-// compile-time assert
-#ifndef C_ASSERT
-#	define C_ASSERT(e) typedef char __C_ASSERT__[(e)?1:-1]
 #endif
-
-#ifndef __LINUX__
-#	define __unused
-#endif
-
-/////////////////////////////////////////////////////////////////////////
-// GNU GetText / NLS 
-
-#ifdef ENABLE_NLS
-
-#ifdef _WIN32
-#include "libintlmsc.h"
-#else
-#include <locale.h>
-#include <libintl.h>
-#endif
-
-#undef _
-#define _(String) dgettext (PACKAGE, String)
-#ifdef gettext_noop
-#  define N_(String) gettext_noop (String)
-#else
-#  define N_(String) (String)
-#endif
-
-#else
-
-#define _(msgid) msgid
-#define N_(msgid) msgid
-
-#endif		// ENABLE_NLS
-
-//////////////////////////////////////////////////////////////////////////////////////////
-// Forceinline macro that is enabled for RELEASE/PUBLIC builds ONLY.  (non-inline in devel)
-// This is useful because forceinline can make certain types of debugging problematic since
-// functions that look like they should be called won't breakpoint since their code is inlined.
-// Henceforth, use release_inline for things which we want inlined on public/release builds but
-// *not* in devel builds.
-
-#ifdef PCSX2_DEVBUILD
-#	define __releaseinline
-#else
-#	define __releaseinline __forceinline
-#endif
-

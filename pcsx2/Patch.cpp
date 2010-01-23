@@ -1,119 +1,92 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
+ *
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
-	
-//
-// Includes
-//
+
 #include "PrecompiledHeader.h"
 
 #define _PC_	// disables MIPS opcode macros.
 
 #include "IopCommon.h"
-#include "Paths.h"
 #include "Patch.h"
-#include "VU.h"
 
-#ifdef _MSC_VER
-#pragma warning(disable:4996) //ignore the stricmp deprecated warning
-#endif
+#include <wx/textfile.h>
 
-IniPatch patch[ MAX_PATCH ];
+IniPatch Patch[ MAX_PATCH ];
 
-u32 SkipCount=0, IterationCount=0;
-u32 IterationIncrement=0, ValueIncrement=0;
-u32 PrevCheatType=0, PrevCheataddr = 0,LastType = 0;
+u32 SkipCount = 0, IterationCount = 0;
+u32 IterationIncrement = 0, ValueIncrement = 0;
+u32 PrevCheatType = 0, PrevCheatAddr = 0,LastType = 0;
 
-int g_ZeroGSOptions=0, patchnumber;
+int g_ZeroGSOptions = 0, patchnumber;
 
-char strgametitle[256]= {0};
+wxString strgametitle;
 
-//
-// Variables
-//
-PatchTextTable commands[] =
+struct PatchTextTable
 {
-	{ "comment", 1, patchFunc_comment },
-	{ "gametitle", 2, patchFunc_gametitle },
-	{ "patch", 3, patchFunc_patch },
-	{ "fastmemory", 4, patchFunc_fastmemory }, // enable for faster but bugger mem (mvc2 is faster)
-	{ "roundmode", 5, patchFunc_roundmode }, // changes rounding mode for floating point
+	int				code;
+	const wxChar*	text;
+	PATCHTABLEFUNC*	func;
+};
+
+static const PatchTextTable commands[] =
+{
+	{ 1, L"comment", PatchFunc::comment },
+	{ 2, L"gametitle", PatchFunc::gametitle },
+	{ 3, L"patch", PatchFunc::patch },
+	{ 4, L"fastmemory", NULL }, // enable for faster but bugger mem (mvc2 is faster)
+	{ 5, L"roundmode", PatchFunc::roundmode }, // changes rounding mode for floating point
 											// syntax: roundmode=X,Y
 											// possible values for X,Y: NEAR, DOWN, UP, CHOP
 											// X - EE rounding mode (default is NEAR)
 											// Y - VU rounding mode (default is CHOP)
-	{ "zerogs", 6, patchFunc_zerogs }, // zerogs=hex
-	{ "path3hack", 7, patchFunc_path3hack },
-	{ "vunanmode",8, patchFunc_vunanmode },
-	{ "ffxhack",9, patchFunc_ffxhack},
-	{ "xkickdelay",10, patchFunc_xkickdelay},
-	{ "", 0, NULL }
+	{ 6, L"zerogs", PatchFunc::zerogs }, // zerogs=hex
+	{ 7, L"vunanmode", NULL },
+	{ 8, L"ffxhack", NULL},			// *obsolete*
+	{ 9, L"xkickdelay", NULL},
+
+	{ 0, wxEmptyString, NULL }		// Array Terminator
 };
 
-PatchTextTable dataType[] =
+static const PatchTextTable dataType[] =
 {
-	{ "byte", 1, NULL },
-	{ "short", 2, NULL },
-	{ "word", 3, NULL },
-	{ "double", 4, NULL },
-	{ "extended", 5, NULL },
-	{ "", 0, NULL }
+	{ 1, L"byte", NULL },
+	{ 2, L"short", NULL },
+	{ 3, L"word", NULL },
+	{ 4, L"double", NULL },
+	{ 5, L"extended", NULL },
+	{ 0, wxEmptyString, NULL }
 };
 
-PatchTextTable cpuCore[] =
+static const PatchTextTable cpuCore[] =
 {
-	{ "EE", 1, NULL },
-	{ "IOP", 2, NULL },
-	{ "", 0, NULL }
+	{ 1, L"EE", NULL },
+	{ 2, L"IOP", NULL },
+	{ 0, wxEmptyString,  NULL }
 };
-
-//
-// Function Implementations
-//
-
-int PatchTableExecute( char * text1, char * text2, PatchTextTable * Table )
-{
-	int i = 0;
-
-	while ( Table[ i ].text[ 0 ] )
-	{
-		if ( !strcmp( Table[ i ].text, text1 ) )
-		{
-			if ( Table[ i ].func ) Table[ i ].func( text1, text2 );
-			break;
-		}
-		i++;
-	}
-
-	return Table[ i ].code;
-}
 
 void writeCheat()
 {
 	switch (LastType)
 	{
 		case 0x0:
-			memWrite8(PrevCheataddr,IterationIncrement & 0xFF);
+			memWrite8(PrevCheatAddr,IterationIncrement & 0xFF);
 			break;
 		case 0x1:
-			memWrite16(PrevCheataddr,IterationIncrement & 0xFFFF);
+			memWrite16(PrevCheatAddr,IterationIncrement & 0xFFFF);
 			break;
 		case 0x2:
-			memWrite32(PrevCheataddr,IterationIncrement);
+			memWrite32(PrevCheatAddr,IterationIncrement);
 			break;
 		default:
 			break;
@@ -122,304 +95,402 @@ void writeCheat()
 
 void handle_extended_t( IniPatch *p)
 {
-	
-	u8 u8Val=0;
-	u16 u16Val=0;
-	u32 u32Val=0;
-	u32 i;
-	
 	if (SkipCount > 0)
 	{
 		SkipCount--;
 	}
-	else switch (PrevCheatType) 
+	else switch (PrevCheatType)
 	{
 		case 0x3040:                                                          // vvvvvvvv  00000000  Inc
-			u32Val = memRead32(PrevCheataddr);
-			memWrite32(PrevCheataddr, u32Val+(p->addr));
+		{
+			u32 mem = memRead32(PrevCheatAddr);
+			memWrite32(PrevCheatAddr, mem + (p->addr));
 			PrevCheatType = 0;
 			break;
-						
-		case 0x3050:                                                          // vvvvvvvv  00000000  Dec
-			u32Val = memRead32(PrevCheataddr);
-			memWrite32(PrevCheataddr, u32Val-(p->addr));
-			PrevCheatType = 0;
-			break;
-						
-		case 0x4000:							  // vvvvvvvv  iiiiiiii  
-			for(i=0;i<IterationCount;i++)
-			{
-				memWrite32((u32)(PrevCheataddr+(i*IterationIncrement)),(u32)(p->addr+((u32)p->data*i)));
-			}
-			PrevCheatType = 0;
-			break;
-							
-		case 0x5000:							  // dddddddd  iiiiiiii  
-			for(i=0;i<IterationCount;i++)
-			{
-				u8Val = memRead8(PrevCheataddr+i);
-				memWrite8(((u32)p->data)+i,u8Val);
-			}
-			PrevCheatType = 0;
-			break;
-							
-		case 0x6000:							  // 000Xnnnn  iiiiiiii  
+		}
 
+		case 0x3050:                                                          // vvvvvvvv  00000000  Dec
+		{
+			u32 mem = memRead32(PrevCheatAddr);
+			memWrite32(PrevCheatAddr, mem - (p->addr));
+			PrevCheatType = 0;
+			break;
+		}
+
+		case 0x4000: // vvvvvvvv  iiiiiiii
+			for(u32 i = 0; i < IterationCount; i++)
+			{
+				memWrite32((u32)(PrevCheatAddr + (i * IterationIncrement)),(u32)(p->addr + ((u32)p->data * i)));
+			}
+			PrevCheatType = 0;
+			break;
+
+		case 0x5000: // dddddddd  iiiiiiii
+			for(u32 i = 0; i < IterationCount; i++)
+			{
+				u8 mem = memRead8(PrevCheatAddr + i);
+				memWrite8(((u32)p->data) + i, mem);
+			}
+			PrevCheatType = 0;
+			break;
+
+		case 0x6000: // 000Xnnnn  iiiiiiii
 			if (IterationIncrement == 0x0)
 			{
-				LastType = ((u32)p->addr&0x000F0000)/0x10000;
-				u32Val = memRead32(PrevCheataddr);
+				//LastType = ((u32)p->addr & 0x000F0000) >> 16;
+				u32 mem = memRead32(PrevCheatAddr);
 				if ((u32)p->addr < 0x100)
 				{
 					LastType = 0x0;
-					PrevCheataddr =u32Val+((u32)p->addr);
+					PrevCheatAddr = mem + ((u32)p->addr);
 				}
 				else if ((u32)p->addr < 0x1000)
 				{
 					LastType = 0x1;
-					PrevCheataddr =u32Val+((u32)p->addr*2);
+					PrevCheatAddr = mem + ((u32)p->addr * 2);
 				}
-				else 
+				else
 				{
 					LastType = 0x2;
-					PrevCheataddr =u32Val+((u32)p->addr*4);
+					PrevCheatAddr = mem + ((u32)p->addr * 4);
 				}
 
-				
 				// Check if needed to read another pointer
 				PrevCheatType = 0;
-				if (((u32Val&0x0FFFFFFF) & 0x3FFFFFFC) != 0)
+				if (((mem & 0x0FFFFFFF) & 0x3FFFFFFC) != 0)
 				{
-					if (LastType==0x0)
-						memWrite8(PrevCheataddr,(u8)p->data&0xFF);
-					else if (LastType==0x1)
-						memWrite16(PrevCheataddr,(u16)p->data&0x0FFFF);
-					else if (LastType==0x2)
-						memWrite32(PrevCheataddr,(u32)p->data);
+				    switch(LastType)
+				    {
+				        case 0x0:
+                            memWrite8(PrevCheatAddr,(u8)p->data & 0xFF);
+                            break;
+				        case 0x1:
+                            memWrite16(PrevCheatAddr,(u16)p->data & 0x0FFFF);
+                            break;
+				        case 0x2:
+                            memWrite32(PrevCheatAddr,(u32)p->data);
+                            break;
+				        default:
+                            break;
 				}
-				
+			}
 			}
 			else
 			{
-				
-				// Get Number of pointers 
-				if (((u32)p->addr&0x0000FFFF) == 0)
+				// Get Number of pointers
+				if (((u32)p->addr & 0x0000FFFF) == 0)
 					IterationCount = 1;
 				else
-					IterationCount = (u32)p->addr&0x0000FFFF;
-		
-				
+					IterationCount = (u32)p->addr & 0x0000FFFF;
+
 				// Read first pointer
-				LastType = ((u32)p->addr&0x000F0000)/0x10000;
-				u32Val = memRead32(PrevCheataddr);
-				
-				PrevCheataddr =u32Val+(u32)p->data;
+				LastType = ((u32)p->addr & 0x000F0000) >> 16;
+				u32 mem = memRead32(PrevCheatAddr);
+
+				PrevCheatAddr = mem + (u32)p->data;
 				IterationCount--;
+
 				// Check if needed to read another pointer
-				if (IterationCount == 0){
+				if (IterationCount == 0)
+				{
 					PrevCheatType = 0;
-					if (((u32Val&0x0FFFFFFF) & 0x3FFFFFFC) != 0) writeCheat();
-				
-				}else{
-				
-					if (((u32Val&0x0FFFFFFF) & 0x3FFFFFFC) != 0)
+					if (((mem & 0x0FFFFFFF) & 0x3FFFFFFC) != 0) writeCheat();
+				}
+				else
+				{
+					if (((mem & 0x0FFFFFFF) & 0x3FFFFFFC) != 0)
 						PrevCheatType = 0;
 					else
 						PrevCheatType = 0x6001;
 				}
 			}
-			break;					
-		case 0x6001:							// 000Xnnnn  iiiiiiii  
+			break;
+
+		case 0x6001: // 000Xnnnn  iiiiiiii
+		{
 			// Read first pointer
-			u32Val = memRead32(PrevCheataddr&0x0FFFFFFF);
+			u32 mem = memRead32(PrevCheatAddr & 0x0FFFFFFF);
 
-			PrevCheataddr =u32Val+(u32)p->addr;
+			PrevCheatAddr = mem + (u32)p->addr;
 			IterationCount--;
-			
-			// Check if needed to read another pointer
-			if (IterationCount == 0){
-				
-				PrevCheatType = 0;
-				if (((u32Val&0x0FFFFFFF) & 0x3FFFFFFC) != 0) writeCheat();
-			}else{
-				
-				u32Val = memRead32(PrevCheataddr);
 
-				PrevCheataddr =u32Val+(u32)p->data;
+			// Check if needed to read another pointer
+			if (IterationCount == 0)
+			{
+				PrevCheatType = 0;
+				if (((mem & 0x0FFFFFFF) & 0x3FFFFFFC) != 0) writeCheat();
+			}
+			else
+			{
+				mem = memRead32(PrevCheatAddr);
+
+				PrevCheatAddr = mem + (u32)p->data;
 				IterationCount--;
-				if (IterationCount == 0){
+				if (IterationCount == 0)
+				{
 					PrevCheatType = 0;
-					if (((u32Val&0x0FFFFFFF) & 0x3FFFFFFC) != 0) writeCheat();
+					if (((mem & 0x0FFFFFFF) & 0x3FFFFFFC) != 0) writeCheat();
 				}
 			}
-		break;					
+		}
+		break;
+
 		default:
-		if ((p->addr&0xF0000000) == 0x00000000) // 0aaaaaaa 0000000vv
-		{ 
-			memWrite8(p->addr&0x0FFFFFFF, (u8)p->data&0x000000FF);
+            if ((p->addr & 0xF0000000) == 0x00000000) // 0aaaaaaa 0000000vv
+            {
+                memWrite8(p->addr & 0x0FFFFFFF, (u8)p->data & 0x000000FF);
 			PrevCheatType = 0;
 		}
-		else if ((p->addr&0xF0000000) == 0x10000000) // 0aaaaaaa 0000vvvv
+            else if ((p->addr & 0xF0000000) == 0x10000000) // 0aaaaaaa 0000vvvv
 		{
-			memWrite16(p->addr&0x0FFFFFFF, (u16)p->data&0x0000FFFF);
+                memWrite16(p->addr & 0x0FFFFFFF, (u16)p->data & 0x0000FFFF);
 			PrevCheatType = 0;
 		}
-		else if ((p->addr&0xF0000000) == 0x20000000) // 0aaaaaaa vvvvvvvv
-		{ 
-			memWrite32(p->addr&0x0FFFFFFF, (u32)p->data);
+            else if ((p->addr & 0xF0000000) == 0x20000000) // 0aaaaaaa vvvvvvvv
+            {
+                memWrite32(p->addr & 0x0FFFFFFF, (u32)p->data);
 			PrevCheatType = 0;
 		}
-		else if ((p->addr&0xFFFF0000) == 0x30000000) // 300000vv 0aaaaaaa  Inc
-		{ 
-			u8Val = memRead8((u32)p->data);
-			memWrite8((u32)p->data, u8Val+(p->addr&0x000000FF));
+            else if ((p->addr & 0xFFFF0000) == 0x30000000) // 300000vv 0aaaaaaa  Inc
+            {
+                u8 mem = memRead8((u32)p->data);
+                memWrite8((u32)p->data, mem + (p->addr & 0x000000FF));
 			PrevCheatType = 0;
 		}
-		else if ((p->addr&0xFFFF0000) == 0x30100000) // 301000vv 0aaaaaaa  Dec
-		{ 
-			u8Val = memRead8((u32)p->data);
-			memWrite8((u32)p->data, u8Val-(p->addr&0x000000FF));
+            else if ((p->addr & 0xFFFF0000) == 0x30100000) // 301000vv 0aaaaaaa  Dec
+            {
+                u8 mem = memRead8((u32)p->data);
+                memWrite8((u32)p->data, mem - (p->addr & 0x000000FF));
 			PrevCheatType = 0;
 		}
-		else if ((p->addr&0xFFFF0000) == 0x30200000) // 3020vvvv 0aaaaaaa Inc
-		{ 
-			u16Val = memRead16((u32)p->data);
-			memWrite16((u32)p->data, u16Val+(p->addr&0x0000FFFF));
+            else if ((p->addr & 0xFFFF0000) == 0x30200000) // 3020vvvv 0aaaaaaa Inc
+            {
+                u16 mem = memRead16((u32)p->data);
+                memWrite16((u32)p->data, mem + (p->addr & 0x0000FFFF));
 			PrevCheatType = 0;
 		}
-		else if ((p->addr&0xFFFF0000) == 0x30300000) // 3030vvvv 0aaaaaaa Dec
-		{ 
-			u16Val = memRead16((u32)p->data);
-			memWrite16((u32)p->data, u16Val-(p->addr&0x0000FFFF));
+            else if ((p->addr & 0xFFFF0000) == 0x30300000) // 3030vvvv 0aaaaaaa Dec
+            {
+                u16 mem = memRead16((u32)p->data);
+                memWrite16((u32)p->data, mem - (p->addr & 0x0000FFFF));
 			PrevCheatType = 0;
 		}
-		else if ((p->addr&0xFFFF0000) == 0x30400000) // 30400000 0aaaaaaa Inc	+ Another line
-		{ 
-			PrevCheatType= 0x3040;
-			PrevCheataddr= (u32)p->data;
+            else if ((p->addr & 0xFFFF0000) == 0x30400000) // 30400000 0aaaaaaa Inc	+ Another line
+            {
+                PrevCheatType = 0x3040;
+                PrevCheatAddr = (u32)p->data;
 		}
-		else if ((p->addr&0xFFFF0000) == 0x30500000) // 30500000 0aaaaaaa Inc	+ Another line
-		{ 
-			PrevCheatType= 0x3050;
-			PrevCheataddr= (u32)p->data;
+            else if ((p->addr & 0xFFFF0000) == 0x30500000) // 30500000 0aaaaaaa Inc	+ Another line
+            {
+                PrevCheatType = 0x3050;
+                PrevCheatAddr = (u32)p->data;
 		}
-		else if ((p->addr&0xF0000000) == 0x40000000) // 4aaaaaaa nnnnssss + Another line
-		{ 
-			IterationCount=((u32)p->data&0xFFFF0000)/0x10000;
-			IterationIncrement=((u32)p->data&0x0000FFFF)*4;
-			PrevCheataddr=(u32)p->addr&0x0FFFFFFF;
-			PrevCheatType= 0x4000;
+            else if ((p->addr & 0xF0000000) == 0x40000000) // 4aaaaaaa nnnnssss + Another line
+            {
+                IterationCount = ((u32)p->data & 0xFFFF0000) / 0x10000;
+                IterationIncrement = ((u32)p->data & 0x0000FFFF) * 4;
+                PrevCheatAddr = (u32)p->addr & 0x0FFFFFFF;
+                PrevCheatType = 0x4000;
 		}
-		else if  ((p->addr&0xF0000000) == 0x50000000) // 5sssssss nnnnnnnn + Another line
-		{ 
-			PrevCheataddr = (u32)p->addr&0x0FFFFFFF;
-			IterationCount=((u32)p->data);
-			PrevCheatType= 0x5000;
+            else if ((p->addr & 0xF0000000) == 0x50000000) // 5sssssss nnnnnnnn + Another line
+            {
+                PrevCheatAddr = (u32)p->addr & 0x0FFFFFFF;
+                IterationCount = ((u32)p->data);
+                PrevCheatType = 0x5000;
 		}
-		else if  ((p->addr&0xF0000000) == 0x60000000) // 6aaaaaaa 000000vv + Another line/s
-		{ 
-			PrevCheataddr = (u32)p->addr&0x0FFFFFFF;
-			IterationIncrement=((u32)p->data);
-			IterationCount=0;
-			PrevCheatType= 0x6000;
+            else if ((p->addr & 0xF0000000) == 0x60000000) // 6aaaaaaa 000000vv + Another line/s
+            {
+                PrevCheatAddr = (u32)p->addr & 0x0FFFFFFF;
+                IterationIncrement = ((u32)p->data);
+                IterationCount = 0;
+                PrevCheatType = 0x6000;
 		}
-		else if ((p->addr&0xF0000000) == 0x70000000) 
-		{ 
-			if  ((p->data&0x00F00000) == 0x00000000) // 7aaaaaaa 000000vv 
-			{	
-				u8Val = memRead8((u32)p->addr&0x0FFFFFFF);
-				memWrite8((u32)p->addr&0x0FFFFFFF,(u8)(u8Val|(p->data&0x000000FF)));
+            else if ((p->addr & 0xF0000000) == 0x70000000)
+            {
+                if ((p->data & 0x00F00000) == 0x00000000) // 7aaaaaaa 000000vv
+                {
+                    u8 mem = memRead8((u32)p->addr & 0x0FFFFFFF);
+                    memWrite8((u32)p->addr & 0x0FFFFFFF,(u8)(mem | (p->data & 0x000000FF)));
 			}
-			else if  ((p->data&0x00F00000) == 0x00100000) // 7aaaaaaa 0010vvvv
+                else if ((p->data & 0x00F00000) == 0x00100000) // 7aaaaaaa 0010vvvv
 			{
-				u16Val = memRead16((u32)p->addr&0x0FFFFFFF);
-				memWrite16((u32)p->addr&0x0FFFFFFF,(u16)(u16Val|(p->data&0x0000FFFF)));
+                    u16 mem = memRead16((u32)p->addr & 0x0FFFFFFF);
+                    memWrite16((u32)p->addr & 0x0FFFFFFF,(u16)(mem | (p->data & 0x0000FFFF)));
 			}
-			else if  ((p->data&0x00F00000) == 0x00200000) // 7aaaaaaa 002000vv
+                else if ((p->data & 0x00F00000) == 0x00200000) // 7aaaaaaa 002000vv
 			{
-				u8Val = memRead8((u32)p->addr&0x0FFFFFFF);
-				memWrite8((u32)p->addr&0x0FFFFFFF,(u8)(u8Val&(p->data&0x000000FF)));
+                    u8 mem = memRead8((u32)p->addr&0x0FFFFFFF);
+                    memWrite8((u32)p->addr & 0x0FFFFFFF,(u8)(mem & (p->data & 0x000000FF)));
 			}
-			else if  ((p->data&0x00F00000) == 0x00300000) // 7aaaaaaa 0030vvvv
+                else if ((p->data & 0x00F00000) == 0x00300000) // 7aaaaaaa 0030vvvv
 			{
-				u16Val = memRead16((u32)p->addr&0x0FFFFFFF);
-				memWrite16((u32)p->addr&0x0FFFFFFF,(u16)(u16Val&(p->data&0x0000FFFF)));
+                    u16 mem = memRead16((u32)p->addr & 0x0FFFFFFF);
+                    memWrite16((u32)p->addr & 0x0FFFFFFF,(u16)(mem & (p->data & 0x0000FFFF)));
 			}
-			else if  ((p->data&0x00F00000) == 0x00400000) // 7aaaaaaa 004000vv
+                else if ((p->data & 0x00F00000) == 0x00400000) // 7aaaaaaa 004000vv
 			{
-				u8Val = memRead8((u32)p->addr&0x0FFFFFFF);
-				memWrite8((u32)p->addr&0x0FFFFFFF,(u8)(u8Val^(p->data&0x000000FF)));
+                    u8 mem = memRead8((u32)p->addr & 0x0FFFFFFF);
+                    memWrite8((u32)p->addr & 0x0FFFFFFF,(u8)(mem ^ (p->data & 0x000000FF)));
 			}
-			else if  ((p->data&0x00F00000) == 0x00500000) // 7aaaaaaa 0050vvvv
+                else if ((p->data & 0x00F00000) == 0x00500000) // 7aaaaaaa 0050vvvv
 			{
-				u16Val = memRead16((u32)p->addr&0x0FFFFFFF);
-				memWrite16((u32)p->addr&0x0FFFFFFF,(u16)(u16Val^(p->data&0x0000FFFF)));
-			}
-		}
-		else if (p->addr < 0xE0000000) 
-		{ 
-			if ((((u32)p->data & 0xFFFF0000)==0x00000000) ||
-			     (((u32)p->data & 0xFFFF0000)==0x00100000) ||
-			     (((u32)p->data & 0xFFFF0000)==0x00200000) ||
-			     (((u32)p->data & 0xFFFF0000)==0x00300000)) 
-			{
-				u16Val = memRead16((u32)p->addr&0x0FFFFFFF);
-				if (u16Val != (0x0000FFFF&(u32)p->data)) SkipCount = 1;
-				PrevCheatType= 0;
+                    u16 mem = memRead16((u32)p->addr & 0x0FFFFFFF);
+                    memWrite16((u32)p->addr & 0x0FFFFFFF,(u16)(mem ^ (p->data & 0x0000FFFF)));
 			}
 		}
-		else if (p->addr < 0xF0000000) 
-		{ 
-			if ((((u32)p->data&0xF0000000)==0x00000000) ||
-			     (((u32)p->data&0xF0000000)==0x10000000) ||
-			     (((u32)p->data&0xF0000000)==0x20000000) ||
-			     (((u32)p->data&0xF0000000)==0x30000000)) 
+            else if (p->addr < 0xE0000000)
 			{
-				u16Val = memRead16((u32)p->data&0x0FFFFFFF);
-				if (u16Val != (0x0000FFFF&(u32)p->addr)) SkipCount = ((u32)p->addr&0xFFF0000)/0x10000;
-				PrevCheatType= 0;
+                if ((((u32)p->data & 0xFFFF0000) == 0x00000000) ||
+                    (((u32)p->data & 0xFFFF0000) == 0x00100000) ||
+                    (((u32)p->data & 0xFFFF0000) == 0x00200000) ||
+                    (((u32)p->data & 0xFFFF0000) == 0x00300000))
+                {
+                    u16 mem = memRead16((u32)p->addr & 0x0FFFFFFF);
+                    if (mem != (0x0000FFFF & (u32)p->data)) SkipCount = 1;
+                    PrevCheatType = 0;
+			}
+		}
+            else if (p->addr < 0xF0000000)
+			{
+                if (((u32)p->data & 0xC0000000) == 0x00000000)
+                if ((((u32)p->data & 0xF0000000) == 0x00000000) ||
+                    (((u32)p->data & 0xF0000000) == 0x10000000) ||
+                    (((u32)p->data & 0xF0000000) == 0x20000000) ||
+                    (((u32)p->data & 0xF0000000) == 0x30000000))
+                {
+                    u16 mem = memRead16((u32)p->data & 0x0FFFFFFF);
+                    if (mem != (0x0000FFFF & (u32)p->addr)) SkipCount = ((u32)p->addr & 0xFFF0000) / 0x10000;
+                    PrevCheatType = 0;
 			}
 		}
 	}
 }
 
-void _applypatch(int place, IniPatch *p) 
+// IniFile Functions.
+
+void inifile_trim( wxString& buffer )
 {
-	if (p->placetopatch != place) return;
+	buffer.Trim(false);			// trims left side.
+
+	if( buffer.Length() <= 1 )	// this I'm not sure about... - air
+	{
+		buffer.Clear();
+		return;
+	}
+
+	if( buffer.Left( 2 ) == L"//" )
+	{
+		buffer.Clear();
+		return;
+	}
+
+	buffer.Trim(true);			// trims right side.
+}
+
+static int PatchTableExecute( const ParsedAssignmentString& set, const PatchTextTable * Table )
+{
+	int i = 0;
+
+	while (Table[i].text[0])
+	{
+		if (!set.lvalue.Cmp(Table[i].text))
+		{
+			if (Table[i].func) Table[i].func(set.lvalue, set.rvalue);
+			break;
+		}
+		i++;
+	}
+
+	return Table[i].code;
+}
+
+// This routine is for executing the commands of the ini file.
+void inifile_command( const wxString& cmd )
+{
+	ParsedAssignmentString set( cmd );
+
+	// Is this really what we want to be doing here? Seems like just leaving it empty/blank
+	// would make more sense... --air
+    if (set.rvalue.IsEmpty()) set.rvalue = set.lvalue;
+
+    int code = PatchTableExecute( set, commands );
+}
+
+// This routine recieves a file from inifile_read, trims it,
+// Then sends the command to be parsed.
+void inifile_process(wxTextFile &f1 )
+{
+    for (uint i = 0; i < f1.GetLineCount(); i++)
+    {
+        inifile_trim(f1[i]);
+        if (!f1[i].IsEmpty()) inifile_command(f1[i]);
+    }
+}
+
+// This routine creates a pnach filename from the games crc,
+// loads it, trims the commands, and sends them to be parsed.
+void inifile_read(const wxString& name )
+{
+	wxTextFile f1;
+	wxString buffer;
+
+	patchnumber = 0;
+
+	// FIXME : We need to add a 'patches' folder to the AppConfig, and use that instead. --air
+
+	buffer = Path::Combine(L"patches", name + L".pnach");
+
+	if(!f1.Open(buffer) && wxFileName::IsCaseSensitive())
+	{
+		f1.Open( Path::Combine(L"patches", name.Upper() + L".pnach") );
+	}
+
+	if(!f1.IsOpened())
+	{
+		Console.WriteLn( Color_Gray, "No patch found. Resuming execution without a patch (this is NOT an error)." );
+		return;
+	}
+
+	Console.WriteLn( Color_Green, "Patch found!");
+	inifile_process( f1 );
+}
+
+void _ApplyPatch(IniPatch *p)
+{
 	if (p->enabled == 0) return;
-	
-	switch (p->cpu) 
+
+	switch (p->cpu)
 	{
 		case CPU_EE:
-			switch (p->type) 
+			switch (p->type)
 			{
-				case BYTE_T: 
+				case BYTE_T:
 					memWrite8(p->addr, (u8)p->data);
 					break;
-				
+
 				case SHORT_T:
 					memWrite16(p->addr, (u16)p->data);
 					break;
-				
+
 				case WORD_T:
 					memWrite32(p->addr, (u32)p->data);
 					break;
-				
+
 				case DOUBLE_T:
 					memWrite64(p->addr, &p->data);
 					break;
-				
+
 				case EXTENDED_T:
 					handle_extended_t(p);
 					break;
-				
+
 				default:
 					break;
 			}
 			break;
-		
-		case CPU_IOP: 
-			switch (p->type) 
+
+		case CPU_IOP:
+			switch (p->type)
 			{
 				case BYTE_T:
 					iopMemWrite8(p->addr, (u8)p->data);
@@ -433,302 +504,250 @@ void _applypatch(int place, IniPatch *p)
 				default:
 					break;
 			}
-			break; 
-		
+			break;
+
 		default:
 			break;
 	}
 }
 
-//this is for apply patches directly to memory
-void applypatch(int place) 
+//this is for applying patches directly to memory
+void ApplyPatch(int place)
 {
-	int i;
-
-	if (place == 0) Console::WriteLn(" patchnumber: %d", params patchnumber);
-	
-	for ( i = 0; i < patchnumber; i++ ) 
+	for (int i = 0; i < patchnumber; i++)
 	{
-		_applypatch(place, &patch[i]);
+	    if (Patch[i].placetopatch == place)
+            _ApplyPatch(&Patch[i]);
 	}
 }
 
-void patchFunc_comment( char * text1, char * text2 )
+void InitPatch(const wxString& crc)
 {
-	Console::WriteLn( "comment: %s", params text2 );
+    inifile_read(crc);
+    Console.WriteLn("patchnumber: %d", patchnumber);
+    ApplyPatch(0);
 }
 
-
-void patchFunc_gametitle( char * text1, char * text2 )
-{
-	Console::WriteLn( "gametitle: %s", params text2 );
-	sprintf(strgametitle,"%s",text2);
-	Console::SetTitle(strgametitle);
-}
-
-void patchFunc_patch( char * cmd, char * param )
-{
-	char * pText;
-
-	if ( patchnumber >= MAX_PATCH )
-	{
-		Console::Error( "Patch ERROR: Maximum number of patches reached: %s=%s", params cmd, param );
-		return;
-	}
-
-	pText = strtok( param, "," );
-	pText = param;
-
-	patch[ patchnumber ].placetopatch = strtol( pText, (char **)NULL, 0 );
-
-	pText = strtok( NULL, "," );
-	inifile_trim( pText );
-	patch[ patchnumber ].cpu = (patch_cpu_type)PatchTableExecute( pText, NULL, cpuCore );
-	if ( patch[ patchnumber ].cpu == 0 ) 
-	{
-		Console::Error( "Unrecognized patch '%s'", params pText );
-		return;
-	}
-
-	pText = strtok( NULL, "," );
-	inifile_trim( pText );
-	sscanf( pText, "%X", &patch[ patchnumber ].addr );
-
-	pText = strtok( NULL, "," );
-	inifile_trim( pText );
-	patch[ patchnumber ].type = (patch_data_type)PatchTableExecute( pText, NULL, dataType );
-	if ( patch[ patchnumber ].type == 0 ) 
-	{
-		Console::Error( "Unrecognized patch '%s'", params pText );
-		return;
-	}
-	
-	pText = strtok( NULL, "," );
-	inifile_trim( pText );
-	sscanf( pText, "%I64X", &patch[ patchnumber ].data );
-
-	patch[ patchnumber ].enabled = 1;
-
-	patchnumber++;
-}
-
-//this routine is for executing the commands of the ini file
-void inifile_command( char * cmd )
-{
-	int code;
-	char command[ 256 ];
-	char parameter[ 256 ];
-
-	// extract param part (after '=')
-	char * pEqual = strchr( cmd, '=' );
-
-	if ( ! pEqual ) pEqual = cmd+strlen(cmd); // fastmemory doesn't have =
-
-	memzero_obj( command );
-	memzero_obj( parameter );
-		
-	strncpy( command, cmd, pEqual - cmd );
-	strncpy( parameter, pEqual + 1, sizeof( parameter ) );
-
-	inifile_trim( command );
-	inifile_trim( parameter );
-
-	code = PatchTableExecute( command, parameter, commands );
-}
-
-void inifile_trim( char * buffer )
-{
-	char * pInit = buffer;
-	char * pEnd = NULL;
-
-	while ( ( *pInit == ' ' ) || ( *pInit == '\t' ) ) //skip space
-	{
-		pInit++;
-	}
-	
-	if ( ( pInit[ 0 ] == '/' ) && ( pInit[ 1 ] == '/' ) ) //remove comment
-	{
-		buffer[ 0 ] = '\0';
-		return;
-	}
-	
-	pEnd = pInit + strlen( pInit ) - 1;
-	if ( pEnd <= pInit )
-	{
-		buffer[ 0 ] = '\0';
-		return;
-	}
-	
-	while ( ( *pEnd == '\r' ) || ( *pEnd == '\n' ) || ( *pEnd == ' ' ) || ( *pEnd == '\t' ) )
-	{
-		pEnd--;
-	}
-	
-	if ( pEnd <= pInit )
-	{
-		buffer[ 0 ] = '\0';
-		return;
-	}
-	
-	memmove( buffer, pInit, pEnd - pInit + 1 );
-	buffer[ pEnd - pInit + 1 ] = '\0';
-}
-
-void inisection_process( FILE * f1 )
-{
-	char buffer[ 1024 ];
-	while( fgets( buffer, sizeof( buffer ), f1 ) )
-	{
-		inifile_trim( buffer );
-		if ( buffer[ 0 ] ) inifile_command( buffer );
-	}
-}
-
-//this routine is for reading the ini file
-
-void inifile_read( const char * name )
-{
-	FILE * f1;
-	char buffer[ 1024 ];
-
-	patchnumber = 0;
-	
-#ifdef _WIN32
-	sprintf( buffer, PATCHES_DIR "\\%s.pnach", name );
-#else
-	sprintf( buffer, PATCHES_DIR "/%s.pnach", name );
-#endif
-
-	f1 = fopen( buffer, "rt" );
-
-#ifndef _WIN32
-	if( !f1 ) 
-	{
-		 // try all upper case because linux is case sensitive
-		 char* pstart = buffer+8;
-		 char* pend = buffer+strlen(buffer);
-		 while(pstart != pend ) 
-		{
-			// stop at the first . since we only want to update the hex
-			if( *pstart == '.' ) break;
-			*pstart = toupper(*pstart);
-			*pstart++;
-		 }
-
-		 f1 = fopen(buffer, "rt");
-	}
-#endif
-
-	if( !f1 )
-	{
-		Console::WriteLn("No patch found.Resuming execution without a patch (this is NOT an error)." );
-		return;
-	}
-
-	inisection_process( f1 );
-	fclose( f1 );
-}
-
-void resetpatch( void )
+void ResetPatch( void )
 {
 	patchnumber = 0;
 }
 
 int AddPatch(int Mode, int Place, int Address, int Size, u64 data)
 {
-
 	if ( patchnumber >= MAX_PATCH )
 	{
-		Console::Error( "Patch ERROR: Maximum number of patches reached.");
+		Console.Error( "Patch ERROR: Maximum number of patches reached.");
 		return -1;
 	}
 
-	patch[patchnumber].placetopatch = Mode;
-	
-	patch[patchnumber].cpu = (patch_cpu_type)Place;
-	patch[patchnumber].addr = Address;
-	patch[patchnumber].type = (patch_data_type)Size;
-	patch[patchnumber].data = data;
+	Patch[patchnumber].placetopatch = Mode;
+	Patch[patchnumber].cpu = (patch_cpu_type)Place;
+	Patch[patchnumber].addr = Address;
+	Patch[patchnumber].type = (patch_data_type)Size;
+	Patch[patchnumber].data = data;
 	return patchnumber++;
 }
-	
-void patchFunc_ffxhack( char * cmd, char * param )
-{
-	 //Keeping this as a dummy a while :p
-	 //g_FFXHack = 1;
-}
 
-void patchFunc_xkickdelay( char * cmd, char * param )
+void PrintPatch(int i)
 {
-	g_VUGameFixes |= VUFIX_XGKICKDELAY2;
-}
+	Console.WriteLn("Patch[%d]:", i);
+	if (Patch[i].enabled == 0)
+        Console.WriteLn("Disabled.");
+    else
+        Console.WriteLn("Enabled.");
 
-void patchFunc_fastmemory( char * cmd, char * param )
-{
-	// only valid for recompilers, and only in the vm build
-	SetFastMemory(1);
-}
+    Console.WriteLn("PlaceToPatch:%d", Patch[i].placetopatch);
 
-void patchFunc_vunanmode( char * cmd, char * param )
-{
-	// Doesn't do anything anymore
-}
-
-void patchFunc_path3hack( char * cmd, char * param )
-{
-	path3hack = TRUE;
-}
-
-void patchFunc_roundmode( char * cmd, char * param )
-{
-	int index;
-	char * pText;
-
-	u32 eetype = (Config.sseMXCSR & 0x6000);
-	u32 vutype = (Config.sseVUMXCSR & 0x6000);
-	
-	index = 0;
-	pText = strtok( param, ", " );
-	while(pText != NULL) 
+    switch(Patch[i].cpu)
 	{
-		u32 type = 0xffff;
-		
-		if( stricmp(pText, "near") == 0 )
-			type = 0x0000;
-		else if( stricmp(pText, "down") == 0 ) 
-			type = 0x2000;
-		else if( stricmp(pText, "up") == 0 ) 
-			type = 0x4000;
-		else if( stricmp(pText, "chop") == 0 ) 
-			type = 0x6000;
+        case CPU_EE:	Console.WriteLn("Cpu: EE"); break;
+        case CPU_IOP:	Console.WriteLn("Cpu: IOP"); break;
+        default:		Console.WriteLn("Cpu: None"); break;
+	}
 
-		if( type == 0xffff ) 
+    Console.WriteLn("Address: %X", Patch[i].addr);
+
+    switch (Patch[i].type)
+	{
+        case BYTE_T:		Console.WriteLn("Type: Byte"); break;
+        case SHORT_T:		Console.WriteLn("Type: Short"); break;
+        case WORD_T:		Console.WriteLn("Type: Word"); break;
+        case DOUBLE_T:		Console.WriteLn("Type: Double"); break;
+        case EXTENDED_T:	Console.WriteLn("Type: Extended"); break;
+
+        default:			Console.WriteLn("Type: None"); break;
+	}
+
+    Console.WriteLn("Data: %I64X", Patch[i].data);
+}
+
+static u32 StrToU32(const wxString& str, int base = 10)
+{
+    unsigned long l;
+    str.ToULong(&l, base);
+    return l;
+}
+
+static u64 StrToU64(const wxString& str, int base = 10)
+{
+    wxULongLong_t l;
+    str.ToULongLong(&l, base);
+    return l;
+}
+
+// PatchFunc Functions.
+namespace PatchFunc
+{
+    void comment( const wxString& text1, const wxString& text2 )
+	{
+        Console.WriteLn( L"comment: " + text2 );
+	}
+
+    void gametitle( const wxString& text1, const wxString& text2 )
+	{
+        Console.WriteLn( L"gametitle: " + text2 );
+        strgametitle = text2;
+        Console.SetTitle( strgametitle );
+	}
+
+    struct PatchPieces
+	{
+		wxArrayString m_pieces;
+	
+		PatchPieces( const wxString& param )
+	{
+			SplitString( m_pieces, param, L"," );
+			if( m_pieces.Count() < 5 )
+				throw wxsFormat( L"Expected 5 data parameters; only found %d", m_pieces.Count() );
+	}
+
+		const wxString& PlaceToPatch() const	{ return m_pieces[0]; }
+		const wxString& CpuType() const			{ return m_pieces[1]; }
+		const wxString& MemAddr() const			{ return m_pieces[2]; }
+		const wxString& OperandSize() const		{ return m_pieces[3]; }
+		const wxString& WriteValue() const		{ return m_pieces[4]; }
+    };
+
+    void patch( const wxString& cmd, const wxString& param )
+	{
+		// Error Handling Note:  I just throw simple wxStrings here, and then catch them below and
+		// format them into more detailed cmd+data+error printouts.  If we want to add user-friendly
+		// (translated) messages for display in a popup window then we'll have to upgrade the
+		// exception a little bit.
+
+        DevCon.WriteLn(cmd + L" " + param);
+
+		try
+	{
+			if ( patchnumber >= MAX_PATCH )
+				throw wxString( L"Maximum number of patches reached" );
+	        
+			Patch[patchnumber].enabled = 0;
+			PatchPieces pieces( param );
+
+			Patch[patchnumber].placetopatch	= StrToU32(pieces.PlaceToPatch(), 10);
+			Patch[patchnumber].cpu			= (patch_cpu_type)PatchTableExecute( pieces.CpuType(), cpuCore );
+			Patch[patchnumber].addr			= StrToU32(pieces.MemAddr(), 16);
+			Patch[patchnumber].type			= (patch_data_type)PatchTableExecute( pieces.OperandSize(), dataType );
+			Patch[patchnumber].data			= StrToU64( pieces.WriteValue(), 16 );
+
+			if (Patch[patchnumber].cpu == 0)
+				throw wxsFormat( L"Unrecognized CPU Target: '%s'", pieces.CpuType().c_str() );
+
+			if (Patch[patchnumber].type == 0)
+				throw wxsFormat( L"Unrecognized Operand Size: '%s'", pieces.OperandSize().c_str() );
+
+			Patch[patchnumber].enabled = 1;		// omg success!!
+
+			//PrintPatch(patchnumber);
+			patchnumber++;
+		}
+		catch( wxString& exmsg )
+	{
+			Console.Error( L"(Patch) Error Parsing: %s=%s", cmd.c_str(), param.c_str() );
+			Console.Indent().Error( exmsg );
+		 }
+	}
+
+    void roundmode( const wxString& cmd, const wxString& param )
+	{
+        DevCon.WriteLn(cmd + L" " + param);
+
+        int index;
+        wxString pText;
+
+        SSE_RoundMode eetype = EmuConfig.Cpu.sseMXCSR.GetRoundMode();
+        SSE_RoundMode vutype = EmuConfig.Cpu.sseVUMXCSR.GetRoundMode();
+
+	index = 0;
+        pText = param.Lower().BeforeFirst(L',');
+        while(pText != wxEmptyString)
+	{
+            SSE_RoundMode type;
+
+            if (pText.Contains(L"near"))
+                type = SSEround_Nearest;
+            else if (pText.Contains(L"down"))
+                type = SSEround_NegInf;
+            else if (pText.Contains(L"up"))
+                type = SSEround_PosInf;
+            else if (pText.Contains(L"chop"))
+                type = SSEround_Chop;
+            else
 		{
-			Console::WriteLn("bad argument (%s) to round mode! skipping...\n", params pText);
+                Console.WriteLn(L"bad argument (" + pText + L") to round mode! skipping...\n");
 			break;
 		}
 
-		if( index == 0 ) 
-			eetype=type;
-		else			 
-			vutype=type;
+            if( index == 0 )
+                eetype = type;
+            else
+                vutype = type;
 
 		if( index == 1 )
 			break;
 
 		index++;
-		pText = strtok(NULL, ", ");
+            pText = param.AfterFirst(L',');
 	}
 
 	SetRoundMode(eetype,vutype);
+    }
+
+    void zerogs(const wxString& cmd, const wxString& param)
+    {
+        DevCon.WriteLn( cmd + L" " + param);
+        g_ZeroGSOptions = StrToU32(param, 16);
+    }
 }
 
-void patchFunc_zerogs(char* cmd, char* param)
+void PrintRoundMode(SSE_RoundMode ee, SSE_RoundMode vu)
 {
-	 sscanf(param, "%x", &g_ZeroGSOptions);
+    switch(ee)
+    {
+        case SSEround_Nearest: DevCon.WriteLn("EE: Near"); break;
+        case SSEround_NegInf: DevCon.WriteLn("EE: Down"); break;
+        case SSEround_PosInf: DevCon.WriteLn("EE: Up"); break;
+        case SSEround_Chop: DevCon.WriteLn("EE: Chop"); break;
+        default: DevCon.WriteLn("EE: ?"); break;
+    }
+
+    switch(vu)
+    {
+        case SSEround_Nearest: DevCon.WriteLn("VU: Near"); break;
+        case SSEround_NegInf: DevCon.WriteLn("VU: Down"); break;
+        case SSEround_PosInf: DevCon.WriteLn("VU: Up"); break;
+        case SSEround_Chop: DevCon.WriteLn("VU: Chop"); break;
+        default: DevCon.WriteLn("VU: ?"); break;
+    }
 }
 
-void SetRoundMode(u32 ee, u32 vu)
+void SetRoundMode(SSE_RoundMode ee, SSE_RoundMode vu)
 {
-	SetCPUState( (Config.sseMXCSR & 0x9fff) | ee, (Config.sseVUMXCSR & 0x9fff) | vu);
+	SSE_MXCSR mxfpu	= EmuConfig.Cpu.sseMXCSR;
+	SSE_MXCSR mxvu	= EmuConfig.Cpu.sseVUMXCSR;
+
+    //PrintRoundMode(ee,vu);
+	SetCPUState( mxfpu.SetRoundMode( ee ), mxvu.SetRoundMode( vu ) );
 }

@@ -1,11 +1,5 @@
-#ifndef _VTLB_H_
-#define _VTLB_H_
 
-typedef u8 mem8_t;
-typedef u16 mem16_t;
-typedef u32 mem32_t;
-typedef u64 mem64_t;
-typedef u64 mem128_t;
+#pragma once
 
 // Specialized function pointers for each read type
 typedef  mem8_t __fastcall vtlbMemR8FP(u32 addr);
@@ -23,16 +17,27 @@ typedef  void __fastcall vtlbMemW128FP(u32 addr,const mem128_t* data);
 
 typedef u32 vtlbHandler;
 
+extern void vtlb_Core_Alloc();
+extern void vtlb_Core_Shutdown();
 extern void vtlb_Init();
 extern void vtlb_Reset();
 extern void vtlb_Term();
-extern u8* vtlb_malloc( uint size, uint align, uptr tryBaseAddress );
+extern u8* vtlb_malloc( uint size, uint align );
 extern void vtlb_free( void* pmem, uint size );
 
 
-//physical stuff
-vtlbHandler vtlb_RegisterHandler(	vtlbMemR8FP* r8,vtlbMemR16FP* r16,vtlbMemR32FP* r32,vtlbMemR64FP* r64,vtlbMemR128FP* r128,
-									vtlbMemW8FP* w8,vtlbMemW16FP* w16,vtlbMemW32FP* w32,vtlbMemW64FP* w64,vtlbMemW128FP* w128);
+extern vtlbHandler vtlb_NewHandler();
+
+extern vtlbHandler vtlb_RegisterHandler(
+	vtlbMemR8FP* r8,vtlbMemR16FP* r16,vtlbMemR32FP* r32,vtlbMemR64FP* r64,vtlbMemR128FP* r128,
+	vtlbMemW8FP* w8,vtlbMemW16FP* w16,vtlbMemW32FP* w32,vtlbMemW64FP* w64,vtlbMemW128FP* w128
+);
+
+extern void vtlb_ReassignHandler( vtlbHandler rv, 
+	vtlbMemR8FP* r8,vtlbMemR16FP* r16,vtlbMemR32FP* r32,vtlbMemR64FP* r64,vtlbMemR128FP* r128,
+	vtlbMemW8FP* w8,vtlbMemW16FP* w16,vtlbMemW32FP* w32,vtlbMemW64FP* w64,vtlbMemW128FP* w128
+);
+
 
 extern void vtlb_MapHandler(vtlbHandler handler,u32 start,u32 size);
 extern void vtlb_MapBlock(void* base,u32 start,u32 size,u32 blocksize=0);
@@ -46,13 +51,13 @@ extern void vtlb_VMapUnmap(u32 vaddr,u32 sz);
 
 //Memory functions
 
-extern u8 __fastcall vtlb_memRead8(u32 mem);
-extern u16 __fastcall vtlb_memRead16(u32 mem);
+extern mem8_t __fastcall vtlb_memRead8(u32 mem);
+extern mem16_t __fastcall vtlb_memRead16(u32 mem);
 extern u32 __fastcall vtlb_memRead32(u32 mem);
 extern void __fastcall vtlb_memRead64(u32 mem, u64 *out);
 extern void __fastcall vtlb_memRead128(u32 mem, u64 *out);
-extern void __fastcall vtlb_memWrite8 (u32 mem, u8  value);
-extern void __fastcall vtlb_memWrite16(u32 mem, u16 value);
+extern void __fastcall vtlb_memWrite8 (u32 mem, mem8_t  value);
+extern void __fastcall vtlb_memWrite16(u32 mem, mem16_t value);
 extern void __fastcall vtlb_memWrite32(u32 mem, u32 value);
 extern void __fastcall vtlb_memWrite64(u32 mem, const u64* value);
 extern void __fastcall vtlb_memWrite128(u32 mem, const u64* value);
@@ -67,6 +72,8 @@ extern void vtlb_DynGenRead32_Const( u32 bits, bool sign, u32 addr_const );
 
 namespace vtlb_private
 {
+	static const uint VTLB_ALLOC_SIZE = 0x2900000;	//this is a bit more than required
+
 	static const uint VTLB_PAGE_BITS = 12;
 	static const uint VTLB_PAGE_MASK = 4095;
 	static const uint VTLB_PAGE_SIZE = 4096;
@@ -77,6 +84,9 @@ namespace vtlb_private
 
 	struct MapData
 	{
+		u8* alloc_base;			//base of the memory array
+		int alloc_current;		//current base
+
 		s32 pmap[VTLB_PMAP_ITEMS];	//512KB
 		s32 vmap[VTLB_VMAP_ITEMS];   //4MB
 
@@ -86,7 +96,5 @@ namespace vtlb_private
 		void* RWFT[5][2][128];
 	};
 
-	PCSX2_ALIGNED_EXTERN( 64, MapData vtlbdata );
+	extern __aligned(64) MapData vtlbdata;
 }
-
-#endif

@@ -1,29 +1,22 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "PrecompiledHeader.h"
+#include "Common.h"
 
 #include <cmath>
-#include "Common.h"
-#include "R5900.h"
-#include "R5900OpcodeTables.h"
-
-using namespace std;			// for min / max
 
 // Helper Macros
 //****************************************************************
@@ -83,7 +76,7 @@ using namespace std;			// for min / max
 // If we have an infinity value, then Overflow has occured.
 #define checkOverflow(xReg, cFlagsToSet, shouldReturn) {  \
 	if ( ( xReg & ~0x80000000 ) == PosInfinity ) {  \
-		/*Console::Notice( "FPU OVERFLOW!: Changing to +/-Fmax!!!!!!!!!!!!\n" );*/  \
+		/*Console.Warning( "FPU OVERFLOW!: Changing to +/-Fmax!!!!!!!!!!!!\n" );*/  \
 		xReg = ( xReg & 0x80000000 ) | posFmax;  \
 		_ContVal_ |= cFlagsToSet;  \
 		if ( shouldReturn ) { return; }  \
@@ -93,7 +86,7 @@ using namespace std;			// for min / max
 // If we have a denormal value, then Underflow has occured.
 #define checkUnderflow(xReg, cFlagsToSet, shouldReturn) {  \
 	if ( ( ( xReg & 0x7F800000 ) == 0 ) && ( ( xReg & 0x007FFFFF ) != 0 ) ) {  \
-		/*Console::Notice( "FPU UNDERFLOW!: Changing to +/-0!!!!!!!!!!!!\n" );*/  \
+		/*Console.Warning( "FPU UNDERFLOW!: Changing to +/-0!!!!!!!!!!!!\n" );*/  \
 		xReg &= 0x80000000;  \
 		_ContVal_ |= cFlagsToSet;  \
 		if ( shouldReturn ) { return; }  \
@@ -380,14 +373,14 @@ void SUBA_S() {
 void LWC1() {
 	u32 addr;
 	addr = cpuRegs.GPR.r[_Rs_].UL[0] + (s16)(cpuRegs.code & 0xffff);	// force sign extension to 32bit
-	if (addr & 0x00000003) { Console::Error( "FPU (LWC1 Opcode): Invalid Unaligned Memory Address" ); return; }  // Should signal an exception?
+	if (addr & 0x00000003) { Console.Error( "FPU (LWC1 Opcode): Invalid Unaligned Memory Address" ); return; }  // Should signal an exception?
 	fpuRegs.fpr[_Rt_].UL = memRead32(addr);
 }
 
 void SWC1() {
 	u32 addr;
 	addr = cpuRegs.GPR.r[_Rs_].UL[0] + (s16)(cpuRegs.code & 0xffff);	// force sign extension to 32bit
-	if (addr & 0x00000003) { Console::Error( "FPU (SWC1 Opcode): Invalid Unaligned Memory Address" ); return; }  // Should signal an exception?
+	if (addr & 0x00000003) { Console.Error( "FPU (SWC1 Opcode): Invalid Unaligned Memory Address" ); return; }  // Should signal an exception?
 	memWrite32(addr, fpuRegs.fpr[_Rt_].UL);
 }
 

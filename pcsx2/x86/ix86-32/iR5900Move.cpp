@@ -1,20 +1,18 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
+
 
 #include "PrecompiledHeader.h"
 
@@ -98,7 +96,7 @@ void recMFHILO(int hi)
 
 	if( reghi >= 0 ) {
 		if( regd >= 0 ) {
-			assert( regd != reghi );
+			pxAssert( regd != reghi );
 
 			xmmregs[regd].inuse = 0;
 
@@ -193,7 +191,7 @@ void recMTHILO(int hi)
 
 	if( reghi >= 0 ) {
 		if( regs >= 0 ) {
-			assert( reghi != regs );
+			pxAssert( reghi != regs );
 
 			_deleteGPRtoXMMreg(_Rs_, 0);
 			SSE2_PUNPCKHQDQ_XMM_to_XMM(reghi, reghi);
@@ -432,31 +430,6 @@ void recMOVZtemp_const()
 
 void recMOVZtemp_consts(int info)
 {
-	if( info & PROCESS_EE_MMX ) {
-
-		u32* mem;
-		int t0reg = _allocMMXreg(-1, MMX_TEMP, 0);
-		PXORRtoR(t0reg, t0reg);
-		PCMPEQDRtoR(t0reg, EEREC_T);
-		PMOVMSKBMMXtoR(EAX, t0reg);
-		CMP8ItoR(EAX, 0xff);
-		j8Ptr[ 0 ] = JNE8( 0 );
-
-		if( g_cpuFlushedConstReg & (1<<_Rs_) ) mem = &cpuRegs.GPR.r[_Rs_].UL[0];
-		else {
-			mem = recAllocStackMem(8,8);
-
-			mem[0] = g_cpuConstRegs[_Rs_].UL[0];
-			mem[1] = g_cpuConstRegs[_Rs_].UL[1];
-		}
-
-		MOVQMtoR(EEREC_D, (u32)mem);
-		x86SetJ8( j8Ptr[ 0 ] ); 
-
-		_freeMMXreg(t0reg);
-		return;
-	}
-
 	MOV32MtoR( EAX, (int)&cpuRegs.GPR.r[ _Rt_ ].UL[ 0 ] );
 	OR32MtoR( EAX, (int)&cpuRegs.GPR.r[ _Rt_ ].UL[ 1 ] );
 	j8Ptr[ 0 ] = JNZ8( 0 );
@@ -469,11 +442,6 @@ void recMOVZtemp_consts(int info)
 
 void recMOVZtemp_constt(int info)
 {
-	if( info & PROCESS_EE_MMX ) {
-		if( EEREC_D != EEREC_S ) MOVQRtoR(EEREC_D, EEREC_S);
-		return;
-	}
-	
 	if( _hasFreeXMMreg() ) {
 		int t0reg = _allocMMXreg(-1, MMX_TEMP, 0);
 		MOVQMtoR(t0reg, (int)&cpuRegs.GPR.r[ _Rs_ ].UL[ 0 ]);
@@ -491,22 +459,6 @@ void recMOVZtemp_constt(int info)
 void recMOVZtemp_(int info)
 {
 	int t0reg = -1;
-
-	if( info & PROCESS_EE_MMX ) {
-
-		t0reg = _allocMMXreg(-1, MMX_TEMP, 0);
-		PXORRtoR(t0reg, t0reg);
-		PCMPEQDRtoR(t0reg, EEREC_T);
-		PMOVMSKBMMXtoR(EAX, t0reg);
-		CMP8ItoR(EAX, 0xff);
-		j8Ptr[ 0 ] = JNE8( 0 );
-
-		MOVQRtoR(EEREC_D, EEREC_S);
-		x86SetJ8( j8Ptr[ 0 ] );
-
-		_freeMMXreg(t0reg);
-		return;
-	}
 
 	if( _hasFreeXMMreg() )
 		t0reg = _allocMMXreg(-1, MMX_TEMP, 0);
@@ -555,32 +507,6 @@ void recMOVNtemp_const()
 
 void recMOVNtemp_consts(int info)
 {
-	if( info & PROCESS_EE_MMX ) {
-
-		u32* mem;
-		int t0reg = _allocMMXreg(-1, MMX_TEMP, 0);
-		PXORRtoR(t0reg, t0reg);
-		PCMPEQDRtoR(t0reg, EEREC_T);
-
-		PMOVMSKBMMXtoR(EAX, t0reg);
-		CMP8ItoR(EAX, 0xff);
-		j8Ptr[ 0 ] = JE8( 0 );
-
-		if( g_cpuFlushedConstReg & (1<<_Rs_) ) mem = &cpuRegs.GPR.r[_Rs_].UL[0];
-		else {
-			mem = recAllocStackMem(8,8);
-
-			mem[0] = g_cpuConstRegs[_Rs_].UL[0];
-			mem[1] = g_cpuConstRegs[_Rs_].UL[1];
-		}
-
-		MOVQMtoR(EEREC_D, (u32)mem);
-		x86SetJ8( j8Ptr[ 0 ] ); 
-
-		_freeMMXreg(t0reg);
-		return;
-	}
-
 	MOV32MtoR( EAX, (int)&cpuRegs.GPR.r[ _Rt_ ].UL[ 0 ] );
 	OR32MtoR( EAX, (int)&cpuRegs.GPR.r[ _Rt_ ].UL[ 1 ] );
 	j8Ptr[ 0 ] = JZ8( 0 );
@@ -610,22 +536,6 @@ void recMOVNtemp_constt(int info)
 void recMOVNtemp_(int info)
 {
 	int t0reg=-1;
-
-	if( info & PROCESS_EE_MMX ) {
-
-		t0reg = _allocMMXreg(-1, MMX_TEMP, 0);
-		PXORRtoR(t0reg, t0reg);
-		PCMPEQDRtoR(t0reg, EEREC_T);
-		PMOVMSKBMMXtoR(EAX, t0reg);
-		CMP8ItoR(EAX, 0xff);
-		j8Ptr[ 0 ] = JE8( 0 );
-
-		MOVQRtoR(EEREC_D, EEREC_S);
-		x86SetJ8( j8Ptr[ 0 ] );
-
-		_freeMMXreg(t0reg);
-		return;
-	}
 
 	if( _hasFreeXMMreg() )
 		t0reg = _allocMMXreg(-1, MMX_TEMP, 0);

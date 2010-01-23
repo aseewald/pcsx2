@@ -1,20 +1,18 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
+
 
 #include "PrecompiledHeader.h"
 
@@ -66,10 +64,7 @@ REC_FUNC(SQC2);
 
 #else
 
-PCSX2_ALIGNED16(u64 retValues[2]);
-static u32 s_bCachingMem = 0;
-static u32 s_nAddMemOffset = 0;
-static u32 s_tempaddr = 0;
+__aligned16 u64 retValues[2];
 
 void _eeOnLoadWrite(int reg)
 {
@@ -93,6 +88,10 @@ void _eeOnLoadWrite(int reg)
 }
 
 #ifdef PCSX2_VIRTUAL_MEM
+
+static u32 s_bCachingMem = 0;
+static u32 s_nAddMemOffset = 0;
+static u32 s_tempaddr = 0;
 
 ////////////////////////////////////////////////////
 //#define REC_SLOWREAD
@@ -129,7 +128,7 @@ void recTransferX86ToReg(int x86reg, int gprreg, int sign)
 	}
 }
 
-#ifdef _DEBUG
+#ifdef PCSX2_DEBUG
 void testaddrs()
 {
 	register int tempaddr;
@@ -157,7 +156,7 @@ static __forceinline void SET_HWLOC_R5900() {
 	}
 	
 	if (x86FpuState==MMX_STATE) { 
-		if (cpucaps.has3DNOWInstructionExtensions) 
+		if (x86caps.has3DNOWInstructionExtensions) 
 			FEMMS(); 
 		else 
 			EMMS(); 
@@ -185,7 +184,7 @@ void assertmem()
 {
 	__asm mov s_tempaddr, ecx
 	__asm mov s_bCachingMem, edx
-	Console::Error("%x(%x) not mem write!", params s_tempaddr, s_bCachingMem);
+	Console.Error("%x(%x) not mem write!", s_tempaddr, s_bCachingMem);
 	assert(0);
 }
 
@@ -230,7 +229,7 @@ int recSetMemLocation(int regs, int imm, int mmreg, int msize, int j32)
 
 	if ( imm != 0 ) ADD32ItoR( ECX, imm );
 
-#ifdef _DEBUG
+#ifdef PCSX2_DEBUG
 	//CALLFunc((uptr)testaddrs);
 #endif
 
@@ -255,7 +254,7 @@ int recSetMemLocation(int regs, int imm, int mmreg, int msize, int j32)
 		x86SetJ8(ptr);
 		if( msize == 1 ) AND8ItoR(ECX, 0xf8);
 		else if( msize == 2 ) AND8ItoR(ECX, 0xf0);
-#ifdef _DEBUG
+#ifdef PCSX2_DEBUG
 		MOV32RtoR(EAX, ECX);
 		SHR32ItoR(EAX, 28);
 		CMP32ItoR(EAX, 1);
@@ -751,7 +750,7 @@ void recLQ( void )
 		assert( (g_cpuConstRegs[_Rs_].UL[0]+_Imm_) % 16 == 0 );
 
 		if( _Rt_ ) {
-			if( (g_pCurInstInfo->regs[_Rt_]&EEINST_XMM) || !(g_pCurInstInfo->regs[_Rt_]&EEINST_MMX) ) {
+			if(g_pCurInstInfo->regs[_Rt_]&EEINST_XMM) {
 				_deleteMMXreg(MMX_GPR+_Rt_, 2);
 				_eeOnWriteReg(_Rt_, 0);
 				mmreg = _allocGPRtoXMMreg(-1, _Rt_, MODE_WRITE);
@@ -2061,7 +2060,7 @@ void recSQC2( void )
 
 using namespace Interpreter::OpcodeImpl;
 
-PCSX2_ALIGNED16(u32 dummyValue[4]);
+__aligned16 u32 dummyValue[4];
 
 void SetFastMemory(int bSetFast)
 {

@@ -1,41 +1,41 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "PrecompiledHeader.h"
 #include "Win32.h"
 
 // Translates an Errno code into an exception.
-void StreamException_ThrowFromErrno( const string& streamname, errno_t errcode )
+// Throws an exception based on the given error code (usually taken from ANSI C's errno)
+void StreamException_ThrowFromErrno( const wxString& streamname, errno_t errcode )
 {
 	if( errcode == 0 ) return;
 
 	switch( errcode )
 	{
 		case EINVAL:
-			throw Exception::InvalidArgument( "Invalid argument." );
+			pxFailDev( L"Invalid argument" );
+			throw Exception::Stream( streamname, "Invalid argument" );
 
 		case EACCES:	// Access denied!
 			throw Exception::AccessDenied( streamname );
 
 		case EMFILE:	// Too many open files!
-			throw Exception::CreateStream( streamname, "File handle allocation failure - Too many open files" );
+			throw Exception::CreateStream( streamname, "Too many open files" );	// File handle allocation failure
 
 		case EEXIST:
-			throw Exception::CreateStream( streamname, "Cannot create - File already exists" );
+			throw Exception::CreateStream( streamname, "File already exists" );
 
 		case ENOENT:	// File not found!
 			throw Exception::FileNotFound( streamname );
@@ -48,12 +48,14 @@ void StreamException_ThrowFromErrno( const string& streamname, errno_t errcode )
 
 		default:
 			throw Exception::Stream( streamname,
-				fmt_string( "General file/stream error occured [errno: %d]", errcode )
+				wxsFormat( L"General file/stream error [errno: %d]", errcode )
 			);
 	}
 }
 
-void StreamException_ThrowLastError( const string& streamname, HANDLE result )
+// Throws an exception based on the value returned from GetLastError.
+// Performs an option return value success/fail check on hresult.
+void StreamException_ThrowLastError( const wxString& streamname, HANDLE result )
 {
 	if( result != INVALID_HANDLE_VALUE ) return;
 
@@ -68,28 +70,28 @@ void StreamException_ThrowLastError( const string& streamname, HANDLE result )
 			throw Exception::FileNotFound( streamname );
 		
 		case ERROR_TOO_MANY_OPEN_FILES:
-			throw Exception::CreateStream( streamname, "File handle allocation failure - Too many open files " );
+			throw Exception::CreateStream( streamname, "Too many open files" );
 		
 		case ERROR_ACCESS_DENIED:
 			throw Exception::AccessDenied( streamname );
 
 		case ERROR_INVALID_HANDLE:
-			throw Exception::InvalidOperation( "Stream object or handle is invalid." );
+			throw Exception::BadStream( streamname, "Stream object or handle is invalid" );
 
 		case ERROR_SHARING_VIOLATION:
-			throw Exception::AccessDenied( streamname, "Sharing violation." );
+			throw Exception::AccessDenied( streamname, "Sharing violation" );
 
 		default:
 		{
 			throw Exception::Stream( streamname,
-				fmt_string( "General Win32 File/stream error [GetLastError: %d]", error )
+				wxsFormat( L"General Win32 File/stream error [GetLastError: %d]", error )
 			);
 		}
 	}
 }
 
 // returns TRUE if an error occurred.
-bool StreamException_LogFromErrno( const string& streamname, const char* action, errno_t result )
+bool StreamException_LogFromErrno( const wxString& streamname, const wxChar* action, errno_t result )
 {
 	try
 	{
@@ -97,14 +99,14 @@ bool StreamException_LogFromErrno( const string& streamname, const char* action,
 	}
 	catch( Exception::Stream& ex )
 	{
-		Console::Notice( "%s > %s", params action, ex.cMessage() );
+		Console.WriteLn( Color_Yellow, L"%s: %s", action, ex.FormatDiagnosticMessage().c_str() );
 		return true;
 	}
 	return false;
 }
 
 // returns TRUE if an error occurred.
-bool StreamException_LogLastError( const string& streamname, const char* action, HANDLE result )
+bool StreamException_LogLastError( const wxString& streamname, const wxChar* action, HANDLE result )
 {
 	try
 	{
@@ -112,17 +114,26 @@ bool StreamException_LogLastError( const string& streamname, const char* action,
 	}
 	catch( Exception::Stream& ex )
 	{
-		Console::Notice( "%s > %s", params action, ex.cMessage() );
+		Console.WriteLn( Color_Yellow, L"%s: %s", action, ex.FormatDiagnosticMessage().c_str() );
 		return true;
 	}
 	return false;
 }
 
-// Exceptions thrown: None.  Errors are logged to console.  Failures are considered non-critical
-void NTFS_CompressFile( const char* file, bool compressStatus )
+// Sets the NTFS compression flag for a directory or file. This function does not operate
+// recursively.  Set compressStatus to false to decompress compressed files (and do nothing
+// to already decompressed files).
+//
+// Exceptions thrown: None.
+//   (Errors are logged to console.  Failures are considered non-critical)
+//
+void NTFS_CompressFile( const wxString& file, bool compressStatus )
 {
-	bool isFile = Path::isFile( file );
-	
+	bool isFile = !wxDirExists( file );
+
+	if( isFile && !wxFileExists( file ) ) return;
+	if( !wxIsWritable( file ) ) return;
+
 	const DWORD flags = isFile ? FILE_ATTRIBUTE_NORMAL : (FILE_FLAG_BACKUP_SEMANTICS | FILE_ATTRIBUTE_DIRECTORY);
 
 	HANDLE bloated_crap = CreateFile( file,
@@ -136,7 +147,7 @@ void NTFS_CompressFile( const char* file, bool compressStatus )
 
 	// Fail silently -- non-compression of files and folders is not an errorable offense.
 
-	if( !StreamException_LogLastError( file, "NTFS Compress Notice", bloated_crap ) )
+	if( !StreamException_LogLastError( file, L"NTFS Compress Notice", bloated_crap ) )
 	{
 		DWORD bytesReturned = 0;
 		DWORD compressMode = compressStatus ? COMPRESSION_FORMAT_DEFAULT : COMPRESSION_FORMAT_NONE;
@@ -148,7 +159,7 @@ void NTFS_CompressFile( const char* file, bool compressStatus )
 		);
 		
 		if( !result )
-			StreamException_LogLastError( file, "NTFS Compress Notice" );
+			StreamException_LogLastError( file, L"NTFS Compress Notice" );
 
 		CloseHandle( bloated_crap );
 	}

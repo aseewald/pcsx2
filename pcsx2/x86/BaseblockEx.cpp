@@ -1,29 +1,24 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
+
 
 #include "PrecompiledHeader.h"
 #include "BaseblockEx.h"
 
 BASEBLOCKEX* BaseBlocks::New(u32 startpc, uptr fnptr)
 {
-	if (blocks.size() == size)
-		return 0;
-
 	BASEBLOCKEX newblock;
 	std::vector<BASEBLOCKEX>::iterator iter;
 	memset(&newblock, 0, sizeof newblock);
@@ -41,7 +36,7 @@ BASEBLOCKEX* BaseBlocks::New(u32 startpc, uptr fnptr)
 			imin = imid + 1;
 	}
 
-	assert(imin == blocks.size() || blocks[imin].startpc > startpc);
+	pxAssert(imin == blocks.size() || blocks[imin].startpc > startpc);
 	iter = blocks.insert(blocks.begin() + imin, newblock);
 
 	std::pair<linkiter_t, linkiter_t> range = links.equal_range(startpc);
@@ -93,12 +88,13 @@ BASEBLOCKEX* BaseBlocks::GetByX86(uptr ip)
 	return &blocks[imin];
 }
 
-void BaseBlocks::Link(u32 pc, uptr jumpptr)
+void BaseBlocks::Link(u32 pc, s32* jumpptr)
 {
 	BASEBLOCKEX *targetblock = Get(pc);
 	if (targetblock && targetblock->startpc == pc)
-		*(u32*)jumpptr = targetblock->fnptr - (jumpptr + 4);
+		*jumpptr = (s32)(targetblock->fnptr - (sptr)(jumpptr + 1));
 	else
-		*(u32*)jumpptr = recompiler - (jumpptr + 4);
-	links.insert(std::pair<u32, uptr>(pc, jumpptr));
+		*jumpptr = (s32)(recompiler - (sptr)(jumpptr + 1));
+	links.insert(std::pair<u32, uptr>(pc, (uptr)jumpptr));
 }
+

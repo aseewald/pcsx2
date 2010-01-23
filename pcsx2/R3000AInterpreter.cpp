@@ -1,24 +1,20 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
 
 #include "PrecompiledHeader.h"
-
 #include "IopCommon.h"
 
 using namespace R3000A;
@@ -200,14 +196,11 @@ const char* intrname[]={
 
 void zeroEx()
 {
-#ifdef PCSX2_DEVBUILD
 	u32 pc;
 	u32 code;
 	const char *lib;
 	char *fname = NULL;
 	int i;
-
-	if (!Config.PsxOut) return;
 
 	pc = psxRegs.pc;
 	while (iopMemRead32(pc) != 0x41e00000) pc-=4;
@@ -221,7 +214,7 @@ void zeroEx()
 
 			fname = irxlibs[i].names[code];
             //if( strcmp(fname, "setIOPrcvaddr") == 0 ) {
-//                Console::WriteLn("yo");
+//                Console.WriteLn("yo");
 //                varLog |= 0x100000;
 //                Log = 1;
 //            }
@@ -236,18 +229,6 @@ void zeroEx()
 		psxRegs.GPR.n.a0, psxRegs.GPR.n.a1, psxRegs.GPR.n.a2, psxRegs.GPR.n.a3);
 	}
 
-//	Log=0;
-//	if (!strcmp(lib, "intrman") && code == 0x11) Log=1;
-//	if (!strcmp(lib, "sifman") && code == 0x5) Log=1;
-//	if (!strcmp(lib, "sifcmd") && code == 0x4) Log=1;
-//	if (!strcmp(lib, "thbase") && code == 0x6) Log=1;
-/*
-	if (!strcmp(lib, "sifcmd") && code == 0xe) {
-		branchPC = psxRegs.GPR.n.ra;
-		psxRegs.GPR.n.v0 = 0;
-		return;
-	}
-*/
 	if (!strncmp(lib, "ioman", 5) && code == 7) {
 		if (psxRegs.GPR.n.a0 == 1) {
 			pc = psxRegs.pc;
@@ -261,16 +242,21 @@ void zeroEx()
 		psxRegs.pc = psxRegs.GPR.n.ra;
 	}
 
+	{
+		// these three can be pretty spammy at times, and so we might want to attach a
+		// log source toggle to them.
+
 	if (!strncmp(lib, "loadcore", 8) && code == 6) {
-		DevCon::WriteLn("loadcore RegisterLibraryEntries (%x): %8.8s", params psxRegs.pc, iopVirtMemR<char>(psxRegs.GPR.n.a0+12));
+			DbgCon.WriteLn( Color_Gray, "loadcore RegisterLibraryEntries (%x): %8.8s", psxRegs.pc, iopVirtMemR<char>(psxRegs.GPR.n.a0+12));
 	}
 
 	if (!strncmp(lib, "intrman", 7) && code == 4) {
-		DevCon::WriteLn("intrman RegisterIntrHandler (%x): intr %s, handler %x", params psxRegs.pc, intrname[psxRegs.GPR.n.a0], psxRegs.GPR.n.a2);
+			DbgCon.WriteLn( Color_Gray, "intrman RegisterIntrHandler (%x): intr %s, handler %x", psxRegs.pc, intrname[psxRegs.GPR.n.a0], psxRegs.GPR.n.a2);
 	}
 
 	if (!strncmp(lib, "sifcmd", 6) && code == 17) {
-		DevCon::WriteLn("sifcmd sceSifRegisterRpc (%x): rpc_id %x", params psxRegs.pc, psxRegs.GPR.n.a1);
+			DbgCon.WriteLn( Color_Gray, "sifcmd sceSifRegisterRpc (%x): rpc_id %x", psxRegs.pc, psxRegs.GPR.n.a1);
+	}
 	}
 
 	if (!strncmp(lib, "sysclib", 8))
@@ -286,92 +272,97 @@ void zeroEx()
 				break;
 		}
 	}
-
-/*	psxRegs.pc = branchPC;
-	pc = psxRegs.GPR.n.ra;
-	while (psxRegs.pc != pc) psxCpu->ExecuteBlock();
-
-	PSXBIOS_LOG("%s: %s (%x) END", lib, fname == NULL ? "unknown" : fname, code);*/
-#endif
-
 }
-/*/==========================================CALL LOG
-char* getName(char *file, u32 addr){
-	FILE *f; u32 a;
-	static char name[100];
-
-	f=fopen(file, "r");
-	if (!f)
-		name[0]=0;
-	else{
-		while (!feof(f)){
-			fscanf(f, "%08X %s", &a, name);
-			if (a==addr)break;
-		}
-		fclose(f);
-	}
-	return name;
-}
-
-void spyFunctions(){
-	register irxImageInfo *iii;
-	if (psxRegs.pc >= 0x200000)	return;
-	for (iii=(irxImageInfo*)PSXM(0x800); iii && iii->text_size;
-		iii=iii->next ? (irxImageInfo*)PSXM(iii->next) : NULL)
-			if (iii->vaddr<=psxRegs.pc && psxRegs.pc<iii->vaddr+iii->text_size+iii->data_size+iii->bss_size){
-				if (strcmp("secrman_for_cex", PSXM(iii->name))==0){
-					char *name=getName("secrman.fun", psxRegs.pc-iii->vaddr);
-					if (strncmp("__push_params", name, 13)==0){
-						PAD_LOG(PSXM(psxRegs.GPR.n.a0), psxRegs.GPR.n.a1, psxRegs.GPR.n.a2, psxRegs.GPR.n.a3);
-					}else{
-						PAD_LOG("secrman: %s (ra=%06X cycle=%d)", name, psxRegs.GPR.n.ra-iii->vaddr, psxRegs.cycle);}}else
-				if (strcmp("mcman", PSXM(iii->name))==0){
-					PAD_LOG("mcman: %s (ra=%06X cycle=%d)",  getName("mcman.fun", psxRegs.pc-iii->vaddr), psxRegs.GPR.n.ra-iii->vaddr, psxRegs.cycle);}else
-				if (strcmp("padman", PSXM(iii->name))==0){
-					PAD_LOG("padman: %s (ra=%06X cycle=%d)",  getName("padman.fun", psxRegs.pc-iii->vaddr), psxRegs.GPR.n.ra-iii->vaddr, psxRegs.cycle);}else
-				if (strcmp("sio2man", PSXM(iii->name))==0){
-					PAD_LOG("sio2man: %s (ra=%06X cycle=%d)", getName("sio2man.fun", psxRegs.pc-iii->vaddr), psxRegs.GPR.n.ra-iii->vaddr, psxRegs.cycle);}
-				break;
-			}
-}
-*/
 
 /*********************************************************
 * Register branch logic                                  *
 * Format:  OP rs, offset                                 *
 *********************************************************/
-#define RepZBranchi32(op)      if(_i32(_rRs_) op 0) doBranch(_BranchTarget_);
-#define RepZBranchLinki32(op)  if(_i32(_rRs_) op 0) { _SetLink(31); doBranch(_BranchTarget_); }
 
-void psxBGEZ()   { RepZBranchi32(>=) }      // Branch if Rs >= 0
-void psxBGEZAL() { RepZBranchLinki32(>=) }  // Branch if Rs >= 0 and link
-void psxBGTZ()   { RepZBranchi32(>) }       // Branch if Rs >  0
-void psxBLEZ()   { RepZBranchi32(<=) }      // Branch if Rs <= 0
-void psxBLTZ()   { RepZBranchi32(<) }       // Branch if Rs <  0
-void psxBLTZAL() { RepZBranchLinki32(<) }   // Branch if Rs <  0 and link
+void psxBGEZ()         // Branch if Rs >= 0
+{ 
+	if (_i32(_rRs_) >= 0) doBranch(_BranchTarget_); 
+}
+
+void psxBGEZAL()   // Branch if Rs >= 0 and link
+{ 
+	if (_i32(_rRs_) >= 0) 
+	{ 
+		_SetLink(31); 
+		doBranch(_BranchTarget_); 
+	} 
+}
+
+void psxBGTZ()          // Branch if Rs >  0
+{ 
+	if (_i32(_rRs_) > 0) doBranch(_BranchTarget_); 
+}
+
+void psxBLEZ()         // Branch if Rs <= 0
+{ 
+	if (_i32(_rRs_) <= 0) doBranch(_BranchTarget_); 
+}
+void psxBLTZ()          // Branch if Rs <  0
+{ 
+	if (_i32(_rRs_) < 0) doBranch(_BranchTarget_); 
+}
+
+void psxBLTZAL()    // Branch if Rs <  0 and link
+{ 
+	if (_i32(_rRs_) < 0) 
+		{
+			_SetLink(31); 
+			doBranch(_BranchTarget_); 
+		} 
+}
 
 /*********************************************************
 * Register branch logic                                  *
 * Format:  OP rs, rt, offset                             *
 *********************************************************/
-#define RepBranchi32(op)      if(_i32(_rRs_) op _i32(_rRt_)) doBranch(_BranchTarget_);
 
-void psxBEQ() {	RepBranchi32(==) }  // Branch if Rs == Rt
-void psxBNE() {	RepBranchi32(!=) }  // Branch if Rs != Rt
+void psxBEQ()   // Branch if Rs == Rt
+{ 
+	if (_i32(_rRs_) == _i32(_rRt_)) doBranch(_BranchTarget_);
+}
+
+void psxBNE()   // Branch if Rs != Rt
+{ 
+	if (_i32(_rRs_) != _i32(_rRt_)) doBranch(_BranchTarget_); 
+}
 
 /*********************************************************
 * Jump to target                                         *
 * Format:  OP target                                     *
 *********************************************************/
-void psxJ()   {               doBranch(_JumpTarget_); }
-void psxJAL() {	_SetLink(31); doBranch(_JumpTarget_); /*spyFunctions();*/ }
+void psxJ()   
+{             
+	doBranch(_JumpTarget_); 
+}
+
+void psxJAL() 
+{	
+	_SetLink(31);
+	doBranch(_JumpTarget_); 
+}
 
 /*********************************************************
 * Register jump                                          *
 * Format:  OP rs, rd                                     *
 *********************************************************/
-void psxJR()   {                 doBranch(_u32(_rRs_)); }
-void psxJALR() { if (_Rd_) { _SetLink(_Rd_); } doBranch(_u32(_rRs_)); }
+void psxJR()   
+{              
+	doBranch(_u32(_rRs_));
+}
+
+void psxJALR() 
+{
+	if (_Rd_) 
+	{
+		_SetLink(_Rd_);
+	} 
+	doBranch(_u32(_rRs_));
+}
 
 ///////////////////////////////////////////
 // These macros are used to assemble the repassembler functions
@@ -380,7 +371,6 @@ static __forceinline void execI()
 {
 	psxRegs.code = iopMemRead32(psxRegs.pc);
 	
-	//if( (psxRegs.pc >= 0x1200 && psxRegs.pc <= 0x1400) || (psxRegs.pc >= 0x0b40 && psxRegs.pc <= 0x1000))
 		PSXCPU_LOG("%s", disR3000AF(psxRegs.code, psxRegs.pc));
 
 	psxRegs.pc+= 4;
@@ -411,11 +401,6 @@ static void intReset() {
 static void intExecute() {
 	for (;;) execI();
 }
-
-#ifdef _DEBUG
-extern u32 psxdump;
-extern void iDumpPsxRegisters(u32,u32);
-#endif
 
 static s32 intExecuteBlock( s32 eeCycles )
 {

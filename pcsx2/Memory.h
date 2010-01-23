@@ -1,19 +1,16 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #pragma once
@@ -23,23 +20,8 @@
 #endif
 
 //#define ENABLECACHE
+#include "MemoryTypes.h"
 #include "vtlb.h"
-
-namespace Ps2MemSize
-{
-	static const uint Base	= 0x02000000;		// 32 MB main memory!
-	static const uint Rom	= 0x00400000;		// 4 MB main rom
-	static const uint Rom1	= 0x00040000;		// DVD player
-	static const uint Rom2	= 0x00080000;		// Chinese rom extension (?)
-	static const uint ERom	= 0x001C0000;		// DVD player extensions (?)
-	static const uint Hardware = 0x00010000;
-	static const uint Scratch = 0x00004000;
-
-	static const uint IopRam = 0x00200000;	// 2MB main ram on the IOP.
-	static const uint IopHardware = 0x00010000;
-
-	static const uint GSregs = 0x00002000;		// 8k for the GS registers and stuff.
-}
 
 extern u8  *psM; //32mb Main Ram
 extern u8  *psR; //4mb rom area
@@ -56,10 +38,6 @@ extern u8  *psS; //0.015 mb, scratch pad
 #define PS2MEM_EROM		psER
 #define PS2MEM_SCRATCH	psS
 
-extern u8 g_RealGSMem[Ps2MemSize::GSregs];
-#define PS2MEM_GS	g_RealGSMem
-#define PS2GS_BASE(mem) (g_RealGSMem+(mem&0x13ff))
-
 // Various useful locations
 #define spr0 ((DMACh*)&PS2MEM_HW[0xD000])
 #define spr1 ((DMACh*)&PS2MEM_HW[0xD400])
@@ -75,11 +53,6 @@ extern u8 g_RealGSMem[Ps2MemSize::GSregs];
 
 #define ipu0dma ((DMACh *)&PS2MEM_HW[0xb000])
 #define ipu1dma ((DMACh *)&PS2MEM_HW[0xb400])
-
-// From Gif.h
-#define GSCSRr *((u64*)(g_RealGSMem+0x1000))
-#define GSIMR *((u32*)(g_RealGSMem+0x1010))
-#define GSSIGLBLID ((GSRegSIGBLID*)(g_RealGSMem+0x1080))
 
 #define PSM(mem)	(vtlb_GetPhyPtr((mem)&0x1fffffff)) //pcsx2 is a competition.The one with most hacks wins :D
 
@@ -146,21 +119,22 @@ extern u8 g_RealGSMem[Ps2MemSize::GSregs];
 #define psSu32(mem)	(*(u32*)&PS2MEM_SCRATCH[(mem) & 0x3fff])
 #define psSu64(mem)	(*(u64*)&PS2MEM_SCRATCH[(mem) & 0x3fff])
 
+#define psH_DMACh(mem)	(*(DMACh*)&PS2MEM_HW[(mem) & 0xffff])
 extern void memAlloc();
 extern void memReset();		// clears PS2 ram and loads the bios.  Throws Exception::FileNotFound on error.
 extern void memShutdown();
 extern void memSetKernelMode();
-extern void memSetSupervisorMode();
+//extern void memSetSupervisorMode();
 extern void memSetUserMode();
 extern void memSetPageAddr(u32 vaddr, u32 paddr);
 extern void memClearPageAddr(u32 vaddr);
+extern void memBindConditionalHandlers();
 
 extern void memMapVUmicro();
 
-extern int mmap_GetRamPageInfo(void* ptr);
-extern void mmap_MarkCountedRamPage(void* ptr,u32 vaddr);
+extern int mmap_GetRamPageInfo( u32 paddr );
+extern void mmap_MarkCountedRamPage( u32 paddr );
 extern void mmap_ResetBlockTracking();
-extern void mmap_ClearCpuBlock( uint offset );
 
 #define memRead8 vtlb_memRead8
 #define memRead16 vtlb_memRead16
@@ -174,34 +148,4 @@ extern void mmap_ClearCpuBlock( uint offset );
 #define memWrite64 vtlb_memWrite64
 #define memWrite128 vtlb_memWrite128
 
-#define _eeReadConstMem8 0&&
-#define _eeReadConstMem16 0&&
-#define _eeReadConstMem32 0&&
-#define _eeReadConstMem128 0&&
-#define _eeWriteConstMem8 0&&
-#define _eeWriteConstMem16 0&&
-#define _eeWriteConstMem32 0&&
-#define _eeWriteConstMem64 0&&
-#define _eeWriteConstMem128 0&&
-#define _eeMoveMMREGtoR 0&&
-
-// extra ops
-// These allow the old unused const versions of various HW accesses to continue to compile.
-// (code left in for reference purposes, but is not needed by Vtlb)
-#define _eeWriteConstMem16OP 0&&
-#define _eeWriteConstMem32OP 0&&
-
-#define recMemConstRead8 0&&
-#define recMemConstRead16 0&&
-#define recMemConstRead32 0&&
-#define recMemConstRead64 0&&
-#define recMemConstRead128 0&&
-
-#define recMemConstWrite8 0&&
-#define recMemConstWrite16 0&&
-#define recMemConstWrite32 0&&
-#define recMemConstWrite64 0&&
-#define recMemConstWrite128 0&&
-
-extern void loadBiosRom( const char *ext, u8 *dest, long maxSize );
 extern u16 ba0R16(u32 mem);

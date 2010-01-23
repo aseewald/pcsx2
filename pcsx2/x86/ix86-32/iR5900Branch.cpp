@@ -1,20 +1,18 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
+
 
 // recompiler reworked to add dynamic linking zerofrog(@gmail.com) Jan06
 
@@ -60,76 +58,7 @@ REC_SYS_DEL(BGEZALL, 31);
 
 void recSetBranchEQ(int info, int bne, int process)
 {
-	if( info & PROCESS_EE_MMX ) {
-		int t0reg;
-
-		SetMMXstate();
-
-		if( process & PROCESS_CONSTS ) {
-			if( (g_pCurInstInfo->regs[_Rt_] & EEINST_LASTUSE) || !EEINST_ISLIVE64(_Rt_) ) {
-				_deleteMMXreg(_Rt_, 1);
-				mmxregs[EEREC_T].inuse = 0;
-				t0reg = EEREC_T;
-			}
-			else {
-				t0reg = _allocMMXreg(-1, MMX_TEMP, 0);
-				MOVQRtoR(t0reg, EEREC_T);
-			}
-		
-			_flushConstReg(_Rs_);
-			PCMPEQDMtoR(t0reg, (u32)&cpuRegs.GPR.r[_Rs_].UL[0]);
-			
-			if( t0reg != EEREC_T ) _freeMMXreg(t0reg);
-		}
-		else if( process & PROCESS_CONSTT ) {
-			if( (g_pCurInstInfo->regs[_Rs_] & EEINST_LASTUSE) || !EEINST_ISLIVE64(_Rs_) ) {
-				_deleteMMXreg(_Rs_, 1);
-				mmxregs[EEREC_S].inuse = 0;
-				t0reg = EEREC_S;
-			}
-			else {
-				t0reg = _allocMMXreg(-1, MMX_TEMP, 0);
-				MOVQRtoR(t0reg, EEREC_S);
-			}
-		
-			_flushConstReg(_Rt_);
-			PCMPEQDMtoR(t0reg, (u32)&cpuRegs.GPR.r[_Rt_].UL[0]);
-
-			if( t0reg != EEREC_S ) _freeMMXreg(t0reg);
-		}
-		else {
-			
-			if( (g_pCurInstInfo->regs[_Rs_] & EEINST_LASTUSE) || !EEINST_ISLIVE64(_Rs_) ) {
-				_deleteMMXreg(_Rs_, 1);
-				mmxregs[EEREC_S].inuse = 0;
-				t0reg = EEREC_S;
-				PCMPEQDRtoR(t0reg, EEREC_T);
-			}
-			else if( (g_pCurInstInfo->regs[_Rt_] & EEINST_LASTUSE) || !EEINST_ISLIVE64(_Rt_) ) {
-				_deleteMMXreg(_Rt_, 1);
-				mmxregs[EEREC_T].inuse = 0;
-				t0reg = EEREC_T;
-				PCMPEQDRtoR(t0reg, EEREC_S);
-			}
-			else {
-				t0reg = _allocMMXreg(-1, MMX_TEMP, 0);
-				MOVQRtoR(t0reg, EEREC_S);
-				PCMPEQDRtoR(t0reg, EEREC_T);
-			}
-
-			if( t0reg != EEREC_S && t0reg != EEREC_T ) _freeMMXreg(t0reg);
-		}
-
-		PMOVMSKBMMXtoR(EAX, t0reg);
-
-		_eeFlushAllUnused();
-
-		CMP8ItoR( EAX, 0xff );
-
-		if( bne ) j32Ptr[ 1 ] = JE32( 0 );
-		else j32Ptr[ 0 ] = j32Ptr[ 1 ] = JNE32( 0 );
-	}
-	else if( info & PROCESS_EE_XMM ) {
+	if( info & PROCESS_EE_XMM ) {
 		int t0reg;
 
 		if( process & PROCESS_CONSTS ) {
@@ -492,7 +421,7 @@ EERECOMPILE_CODE0(BNEL, XMMINFO_READS|XMMINFO_READT);
 ////////////////////////////////////////////////////
 //void recBLTZAL( void ) 
 //{
-//	Console::WriteLn("BLTZAL");
+//	Console.WriteLn("BLTZAL");
 //	_eeFlushAllUnused();
 //	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
 //	MOV32ItoM( (int)&cpuRegs.pc, pc );
@@ -804,7 +733,7 @@ void recBLTZAL( void )
 	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
 	MOV32ItoM( (int)&cpuRegs.pc, pc );
 	iFlushCall(FLUSH_EVERYTHING);
-	CALLFunc( (int)BLTZAL );
+	CALLFunc( (uptr)R5900::Interpreter::OpcodeImpl::BLTZAL );
 	branch = 2;    
 }
 
@@ -814,7 +743,7 @@ void recBGEZAL( void )
 	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
 	MOV32ItoM( (int)&cpuRegs.pc, pc );
 	iFlushCall(FLUSH_EVERYTHING);
-	CALLFunc( (int)BGEZAL );
+	CALLFunc( (uptr)R5900::Interpreter::OpcodeImpl::BGEZAL );
 	branch = 2; 
 }
 
@@ -824,7 +753,7 @@ void recBLTZALL( void )
 	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
 	MOV32ItoM( (int)&cpuRegs.pc, pc );
 	iFlushCall(FLUSH_EVERYTHING);
-	CALLFunc( (int)BLTZALL );
+	CALLFunc( (uptr)R5900::Interpreter::OpcodeImpl::BLTZALL );
 	branch = 2; 
 }
 
@@ -834,7 +763,7 @@ void recBGEZALL( void )
 	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
 	MOV32ItoM( (int)&cpuRegs.pc, pc );
 	iFlushCall(FLUSH_EVERYTHING);
-	CALLFunc( (int)BGEZALL );
+	CALLFunc( (uptr)R5900::Interpreter::OpcodeImpl::BGEZALL );
 	branch = 2; 
 }
 
@@ -1064,7 +993,7 @@ void recBLTZ( void )
 	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
 	MOV32ItoM( (int)&cpuRegs.pc, pc );
 	iFlushCall(FLUSH_EVERYTHING);
-	CALLFunc( (int)BLTZ );
+	CALLFunc( (uptr)R5900::Interpreter::OpcodeImpl::BLTZ );
 	branch = 2;    
 }
 
@@ -1073,7 +1002,7 @@ void recBGEZ( void )
 	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
 	MOV32ItoM( (int)&cpuRegs.pc, pc );
 	iFlushCall(FLUSH_EVERYTHING);
-	CALLFunc( (int)BGEZ );
+	CALLFunc( (uptr)R5900::Interpreter::OpcodeImpl::BGEZ );
 	branch = 2;    
 }
 
@@ -1082,7 +1011,7 @@ void recBLTZL( void )
 	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
 	MOV32ItoM( (int)&cpuRegs.pc, pc );
 	iFlushCall(FLUSH_EVERYTHING);
-	CALLFunc( (int)BLTZL );
+	CALLFunc( (uptr)R5900::Interpreter::OpcodeImpl::BLTZL );
 	branch = 2;    
 }
 
@@ -1091,7 +1020,7 @@ void recBGEZL( void )
 	MOV32ItoM( (int)&cpuRegs.code, cpuRegs.code );
 	MOV32ItoM( (int)&cpuRegs.pc, pc );
 	iFlushCall(FLUSH_EVERYTHING);
-    CALLFunc( (int)BGEZL );
+    CALLFunc( (uptr)R5900::Interpreter::OpcodeImpl::BGEZL );
 	branch = 2;    
 }
 

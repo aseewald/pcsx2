@@ -1,20 +1,18 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
+
 
 // Important Note to Future Developers:
 //   None of the COP0 instructions are really critical performance items,
@@ -30,6 +28,7 @@
 #include "iCOP0.h"
 
 namespace Interp = R5900::Interpreter::OpcodeImpl::COP0;
+using namespace x86Emitter;
 
 namespace R5900 {
 namespace Dynarec {
@@ -106,14 +105,24 @@ void recEI()
 
 void recDI()
 {
-	// No need to branch after disabling interrupts...
+	//// No need to branch after disabling interrupts...
 
-	iFlushCall(0);
+	//iFlushCall(0);
 
-	MOV32MtoR( EAX, (uptr)&cpuRegs.cycle );
-	MOV32RtoM( (uptr)&g_nextBranchCycle, EAX );
+	//MOV32MtoR( EAX, (uptr)&cpuRegs.cycle );
+	//MOV32RtoM( (uptr)&g_nextBranchCycle, EAX );
 
-	CALLFunc( (uptr)Interp::DI );
+	//CALLFunc( (uptr)Interp::DI );
+
+	xMOV(eax, ptr32[&cpuRegs.CP0.n.Status]);
+	xTEST(eax, 0x20006); // EXL | ERL | EDI
+	xForwardJNZ8 iHaveNoIdea;
+	xTEST(eax, 0x18); // KSU
+	xForwardJNZ8 inUserMode;
+	iHaveNoIdea.SetTarget();
+	xAND(eax, ~(u32)0x10000); // EIE
+	xMOV(ptr32[&cpuRegs.CP0.n.Status], eax);
+	inUserMode.SetTarget();
 }
 
 
@@ -165,12 +174,14 @@ void recMFC0( void )
 			break;
 
 			case 1:
-				CALLFunc( (uptr)COP0_UpdatePCCR );
-				MOV32MtoR(EAX, (uptr)&cpuRegs.PERF.n.pcr0);
+				iFlushCall(FLUSH_NODESTROY);
+				xCALL( COP0_UpdatePCCR );
+				xMOV(eax, &cpuRegs.PERF.n.pcr0);
 				break;
 			case 3:
-				CALLFunc( (uptr)COP0_UpdatePCCR );
-				MOV32MtoR(EAX, (uptr)&cpuRegs.PERF.n.pcr1);
+				iFlushCall(FLUSH_NODESTROY);
+				xCALL( COP0_UpdatePCCR );
+				xMOV(eax, &cpuRegs.PERF.n.pcr1);
 			break;
 		}
 		_deleteEEreg(_Rt_, 0);
@@ -184,8 +195,8 @@ void recMFC0( void )
 
 		return;
 	}
-	else if( _Rd_ == 24){
-		COP0_LOG("MFC0 Breakpoint debug Registers code = %x\n", cpuRegs.code & 0x3FF);
+	else if(_Rd_ == 24){
+		SysCtrl_LOG("MFC0 Breakpoint debug Registers code = %x\n", cpuRegs.code & 0x3FF);
         return;
 	}
 	_eeOnWriteReg(_Rt_, 1);
@@ -242,8 +253,8 @@ void recMTC0()
 		{
 			case 12: 
 				iFlushCall(FLUSH_NODESTROY);
-				//_flushCachedRegs(); //NOTE: necessary?
-				_callFunctionArg1((uptr)WriteCP0Status, MEM_CONSTTAG, g_cpuConstRegs[_Rt_].UL[0]);
+				xMOV( ecx, g_cpuConstRegs[_Rt_].UL[0] );
+				xCALL( WriteCP0Status );
 			break;
 
 			case 9:
@@ -256,9 +267,10 @@ void recMTC0()
 				switch(_Imm_ & 0x3F)
 				{
 					case 0:
-						CALLFunc( (uptr)COP0_UpdatePCCR );
-						MOV32ItoM((uptr)&cpuRegs.PERF.n.pccr, g_cpuConstRegs[_Rt_].UL[0]);
-						CALLFunc( (uptr)COP0_DiagnosticPCCR );
+						iFlushCall(FLUSH_NODESTROY);
+						xCALL( COP0_UpdatePCCR );
+						xMOV( ptr32[&cpuRegs.PERF.n.pccr], g_cpuConstRegs[_Rt_].UL[0] );
+						xCALL( COP0_DiagnosticPCCR );
 					break;
 
 					case 1:
@@ -276,7 +288,7 @@ void recMTC0()
 			break;
 
 			case 24: 
-				COP0_LOG("MTC0 Breakpoint debug Registers code = %x\n", cpuRegs.code & 0x3FF);
+				SysCtrl_LOG("MTC0 Breakpoint debug Registers code = %x\n", cpuRegs.code & 0x3FF);
 			break;
 
 			default:
@@ -290,8 +302,8 @@ void recMTC0()
 		{
 			case 12: 
 				iFlushCall(FLUSH_NODESTROY);
-				//_flushCachedRegs(); //NOTE: necessary?
-				_callFunctionArg1((uptr)WriteCP0Status, MEM_GPRTAG|_Rt_, 0);
+				_eeMoveGPRtoR(ECX, _Rt_);
+				xCALL( WriteCP0Status );
 			break;
 
 			case 9:
@@ -304,9 +316,10 @@ void recMTC0()
 				switch(_Imm_ & 0x3F)
 				{
 					case 0:
-						CALLFunc( (uptr)COP0_UpdatePCCR );
+						iFlushCall(FLUSH_NODESTROY);
+						xCALL( COP0_UpdatePCCR );
 						_eeMoveGPRtoM((uptr)&cpuRegs.PERF.n.pccr, _Rt_);
-						CALLFunc( (uptr)COP0_DiagnosticPCCR );
+						xCALL( COP0_DiagnosticPCCR );
 					break;
 
 					case 1:
@@ -324,7 +337,7 @@ void recMTC0()
 			break;
 		
 			case 24: 
-				COP0_LOG("MTC0 Breakpoint debug Registers code = %x\n", cpuRegs.code & 0x3FF);
+				SysCtrl_LOG("MTC0 Breakpoint debug Registers code = %x\n", cpuRegs.code & 0x3FF);
 			break;
 		
 			default:

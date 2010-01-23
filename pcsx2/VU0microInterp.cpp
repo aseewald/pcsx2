@@ -1,25 +1,22 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "PrecompiledHeader.h"
 
+#include "PrecompiledHeader.h"
 #include "Common.h"
-#include "DebugTools/Debug.h"
+
 #include "VUmicro.h"
 
 extern void _vuFlushAll(VURegs* VU);
@@ -54,7 +51,7 @@ static void _vu0Exec(VURegs* VU)
 
 	if(VU0.VI[REG_TPC].UL >= VU0.maxmicro){
 #ifdef CPU_LOG
-		Console::WriteLn("VU0 memory overflow!!: %x", params VU->VI[REG_TPC].UL);
+		Console.WriteLn("VU0 memory overflow!!: %x", VU->VI[REG_TPC].UL);
 #endif
 		VU0.VI[REG_VPU_STAT].UL&= ~0x1;
 		VU->cycle++;
@@ -69,7 +66,7 @@ static void _vu0Exec(VURegs* VU)
 	}
 	if (ptr[1] & 0x20000000) { /* M flag */ 
 		VU->flags|= VUFLAG_MFLAGSET;
-//		Console::WriteLn("fixme: M flag set");
+//		Console.WriteLn("fixme: M flag set");
 	}
 	if (ptr[1] & 0x10000000) { /* D flag */
 		if (VU0.VI[REG_FBRST].UL & 0x4) {
@@ -108,19 +105,19 @@ static void _vu0Exec(VURegs* VU)
 		vfreg = 0; vireg = 0;
 		if (uregs.VFwrite) {
 			if (lregs.VFwrite == uregs.VFwrite) {
-//				Console::Notice("*PCSX2*: Warning, VF write to the same reg in both lower/upper cycle");
+//				Console.Warning("*PCSX2*: Warning, VF write to the same reg in both lower/upper cycle");
 				discard = 1;
 			}
 			if (lregs.VFread0 == uregs.VFwrite ||
 				lregs.VFread1 == uregs.VFwrite) {
-//				Console::WriteLn("saving reg %d at pc=%x", params i, VU->VI[REG_TPC].UL);
+//				Console.WriteLn("saving reg %d at pc=%x", i, VU->VI[REG_TPC].UL);
 				_VF = VU->VF[uregs.VFwrite];
 				vfreg = uregs.VFwrite;
 			}
 		}
 		if (uregs.VIread & (1 << REG_CLIP_FLAG)) {
 			if (lregs.VIwrite & (1 << REG_CLIP_FLAG)) {
-				Console::Notice("*PCSX2*: Warning, VI write to the same reg in both lower/upper cycle");
+				Console.Warning("*PCSX2*: Warning, VI write to the same reg in both lower/upper cycle");
 				discard = 1;
 			}
 			if (lregs.VIread & (1 << REG_CLIP_FLAG)) {
@@ -169,7 +166,7 @@ static void _vu0Exec(VURegs* VU)
 		if( VU->ebit-- == 1 ) {
 			_vuFlushAll(VU);
 			VU0.VI[REG_VPU_STAT].UL&= ~0x1; /* E flag */ 
-			vif0Regs->stat&= ~0x4;
+			vif0Regs->stat.VEW = false;
 		}
 	}
 }
@@ -178,7 +175,7 @@ void vu0Exec(VURegs* VU)
 {
 	if (VU->VI[REG_TPC].UL >= VU->maxmicro) { 
 #ifdef CPU_LOG
-		Console::Notice("VU0 memory overflow!!: %x", params VU->VI[REG_TPC].UL);
+		Console.Warning("VU0 memory overflow!!: %x", VU->VI[REG_TPC].UL);
 #endif
 		VU0.VI[REG_VPU_STAT].UL&= ~0x1; 
 	} else { 
@@ -186,68 +183,46 @@ void vu0Exec(VURegs* VU)
 	} 
 	VU->cycle++;
 
-	if (VU->VI[0].UL != 0) DbgCon::Error("VI[0] != 0!!!!\n");
-	if (VU->VF[0].f.x != 0.0f) DbgCon::Error("VF[0].x != 0.0!!!!\n");
-	if (VU->VF[0].f.y != 0.0f) DbgCon::Error("VF[0].y != 0.0!!!!\n");
-	if (VU->VF[0].f.z != 0.0f) DbgCon::Error("VF[0].z != 0.0!!!!\n");
-	if (VU->VF[0].f.w != 1.0f) DbgCon::Error("VF[0].w != 1.0!!!!\n");
+	if (VU->VI[0].UL != 0) DbgCon.Error("VI[0] != 0!!!!\n");
+	if (VU->VF[0].f.x != 0.0f) DbgCon.Error("VF[0].x != 0.0!!!!\n");
+	if (VU->VF[0].f.y != 0.0f) DbgCon.Error("VF[0].y != 0.0!!!!\n");
+	if (VU->VF[0].f.z != 0.0f) DbgCon.Error("VF[0].z != 0.0!!!!\n");
+	if (VU->VF[0].f.w != 1.0f) DbgCon.Error("VF[0].w != 1.0!!!!\n");
 }
 
-namespace VU0micro
+// --------------------------------------------------------------------------------------
+//  VU0microInterpreter
+// --------------------------------------------------------------------------------------
+InterpVU0::InterpVU0()
 {
-	void intAlloc()
+	IsInterpreter = true;
+}
+
+void InterpVU0::Step()
+{
+	vu0Exec( &VU0 );
+}
+
+void InterpVU0::ExecuteBlock()
+{
+	for (int i = 128; i--;)
 	{
+		if ((VU0.VI[REG_VPU_STAT].UL & 0x1) == 0)
+	{
+			// Okey.... It apparenly runs an extra instruction on branches or ebits, but
+			// *only* if the microprogram is longer than 128 instructions. This has got
+			// to be some kind of random gamefix hack. --air
+		
+			if( (i < 0) && (VU0.branch || VU0.ebit) )
+	{
+				// execute one more
+				vu0Exec(&VU0);
 	}
-
-	void intShutdown()
-	{
-	}
-
-	void __fastcall intClear(u32 Addr, u32 Size)
-	{
-	}
-
-	static void intReset()
-	{
-	}
-
-	static void intStep()
-	{
-		vu0Exec( &VU0 );
-	}
-
-	static void intExecuteBlock()
-	{
-		int i;
-
-	#ifdef _DEBUG
-		int prevbranch;
-	#endif
-
-		for (i = 128; i--;) {
-			
-			if ((VU0.VI[REG_VPU_STAT].UL & 0x1) == 0)
 				break;
+		}
 
-	#ifdef _DEBUG
-			prevbranch = vu0branch;
-	#endif
 			vu0Exec(&VU0);
 		}
 
-		if( i < 0 && (VU0.branch || VU0.ebit) ) {
-			// execute one more
-			vu0Exec(&VU0);
-		}
-	}
 }
 
-using namespace VU0micro;
-
-const VUmicroCpu intVU0 = 
-{
-	intReset
-,	intStep
-,	intExecuteBlock
-,	intClear
-};

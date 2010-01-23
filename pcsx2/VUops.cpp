@@ -1,28 +1,23 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "PrecompiledHeader.h"
+#include "Common.h"
 
 #include <cmath>
 
-#include "Common.h"
-#include "VUmicro.h"
-#include "VUflags.h"
 #include "VUops.h"
 #include "GS.h"
 
@@ -30,6 +25,9 @@
 #define _Ft_ ((VU->code >> 16) & 0x1F)  // The rt part of the instruction register 
 #define _Fs_ ((VU->code >> 11) & 0x1F)  // The rd part of the instruction register 
 #define _Fd_ ((VU->code >>  6) & 0x1F)  // The sa part of the instruction register
+#define _It_ (_Ft_ & 0xF)
+#define _Is_ (_Fs_ & 0xF)
+#define _Id_ (_Fd_ & 0xF)
 
 #define _X ((VU->code>>24) & 0x1)
 #define _Y ((VU->code>>23) & 0x1)
@@ -45,9 +43,9 @@
 #define _UImm11_	(s32)(VU->code & 0x7ff)
 
 
-VECTOR RDzero;
+static __aligned16 VECTOR RDzero;
 
-void _vuFMACflush(VURegs * VU) {
+static __releaseinline void __fastcall _vuFMACflush(VURegs * VU) {
 	int i;
 
 	for (i=0; i<8; i++) {
@@ -64,7 +62,7 @@ void _vuFMACflush(VURegs * VU) {
 	}
 }
 
-void _vuFDIVflush(VURegs * VU) {
+static __releaseinline void __fastcall _vuFDIVflush(VURegs * VU) {
 	if (VU->fdiv.enable == 0) return;
 
 	if ((VU->cycle - VU->fdiv.sCycle) >= VU->fdiv.Cycle) {
@@ -76,7 +74,7 @@ void _vuFDIVflush(VURegs * VU) {
 	}
 }
 
-void _vuEFUflush(VURegs * VU) {
+static __releaseinline void __fastcall _vuEFUflush(VURegs * VU) {
 	if (VU->efu.enable == 0) return;
 
 	if ((VU->cycle - VU->efu.sCycle) >= VU->efu.Cycle) {
@@ -142,13 +140,13 @@ void _vuFlushAll(VURegs* VU)
 	} while(nRepeat);
 }
 
-void _vuTestPipes(VURegs * VU) {
+__forceinline void _vuTestPipes(VURegs * VU) {
 	_vuFMACflush(VU);
 	_vuFDIVflush(VU);
 	_vuEFUflush(VU);
 }
 
-void _vuFMACTestStall(VURegs * VU, int reg, int xyzw) {
+static void __fastcall _vuFMACTestStall(VURegs * VU, int reg, int xyzw) {
 	int cycle;
 	int i;
 
@@ -171,7 +169,7 @@ void _vuFMACTestStall(VURegs * VU, int reg, int xyzw) {
 	_vuTestPipes(VU);
 }
 
-void _vuFMACAdd(VURegs * VU, int reg, int xyzw) {
+static __releaseinline void __fastcall _vuFMACAdd(VURegs * VU, int reg, int xyzw) {
 	int i;
 
 	/* find a free fmac pipe */
@@ -179,7 +177,7 @@ void _vuFMACAdd(VURegs * VU, int reg, int xyzw) {
 		if (VU->fmac[i].enable == 1) continue;
 		break;
 	}
-	//if (i==8) Console::Error("*PCSX2*: error , out of fmacs %d", params VU->cycle);
+	//if (i==8) Console.Error("*PCSX2*: error , out of fmacs %d", VU->cycle);
 	
 
 	VUM_LOG("adding FMAC pipe[%d]; xyzw=%x", i, xyzw);
@@ -194,7 +192,7 @@ void _vuFMACAdd(VURegs * VU, int reg, int xyzw) {
 	VU->fmac[i].clipflag = VU->clipflag;
 }
 
-void _vuFDIVAdd(VURegs * VU, int cycles) {
+static __releaseinline void __fastcall _vuFDIVAdd(VURegs * VU, int cycles) {
 	VUM_LOG("adding FDIV pipe");
 
 	VU->fdiv.enable = 1;
@@ -204,7 +202,7 @@ void _vuFDIVAdd(VURegs * VU, int cycles) {
 	VU->fdiv.statusflag = VU->statusflag;
 }
 
-void _vuEFUAdd(VURegs * VU, int cycles) {
+static __releaseinline void __fastcall _vuEFUAdd(VURegs * VU, int cycles) {
 //	VUM_LOG("adding EFU pipe\n");
 
 	VU->efu.enable = 1;
@@ -213,7 +211,7 @@ void _vuEFUAdd(VURegs * VU, int cycles) {
 	VU->efu.reg.F  = VU->p.F; 
 }
 
-void _vuFlushFDIV(VURegs * VU) {
+static __releaseinline void __fastcall _vuFlushFDIV(VURegs * VU) {
 	int cycle;
 
 	if (VU->fdiv.enable == 0) return;
@@ -227,7 +225,7 @@ void _vuFlushFDIV(VURegs * VU) {
 	VU->VI[REG_STATUS_FLAG].UL = VU->fdiv.statusflag;
 }
 
-void _vuFlushEFU(VURegs * VU) {
+static __releaseinline void __fastcall _vuFlushEFU(VURegs * VU) {
 	int cycle;
 
 	if (VU->efu.enable == 0) return;
@@ -240,7 +238,7 @@ void _vuFlushEFU(VURegs * VU) {
 	VU->VI[REG_P].UL = VU->efu.reg.UL;
 }
 
-void _vuTestFMACStalls(VURegs * VU, _VURegsNum *VUregsn) {
+__forceinline void _vuTestFMACStalls(VURegs * VU, _VURegsNum *VUregsn) {
 	if (VUregsn->VFread0) {
 		_vuFMACTestStall(VU, VUregsn->VFread0, VUregsn->VFr0xyzw);
 	}
@@ -249,7 +247,7 @@ void _vuTestFMACStalls(VURegs * VU, _VURegsNum *VUregsn) {
 	}
 }
 
-void _vuAddFMACStalls(VURegs * VU, _VURegsNum *VUregsn) {
+__forceinline void _vuAddFMACStalls(VURegs * VU, _VURegsNum *VUregsn) {
 	if (VUregsn->VFwrite) {
 		_vuFMACAdd(VU, VUregsn->VFwrite, VUregsn->VFwxyzw);
 	} else
@@ -260,36 +258,36 @@ void _vuAddFMACStalls(VURegs * VU, _VURegsNum *VUregsn) {
 	}
 }
 
-void _vuTestFDIVStalls(VURegs * VU, _VURegsNum *VUregsn) {
+__forceinline void _vuTestFDIVStalls(VURegs * VU, _VURegsNum *VUregsn) {
 //	_vuTestFMACStalls(VURegs * VU, _VURegsNum *VUregsn);
 	_vuFlushFDIV(VU);
 }
 
-void _vuAddFDIVStalls(VURegs * VU, _VURegsNum *VUregsn) {
+__forceinline void _vuAddFDIVStalls(VURegs * VU, _VURegsNum *VUregsn) {
 	if (VUregsn->VIwrite & (1 << REG_Q)) {
 		_vuFDIVAdd(VU, VUregsn->cycles);
 	}
 }
 
 
-void _vuTestEFUStalls(VURegs * VU, _VURegsNum *VUregsn) {
+__forceinline void _vuTestEFUStalls(VURegs * VU, _VURegsNum *VUregsn) {
 //	_vuTestFMACStalls(VURegs * VU, _VURegsNum *VUregsn);
 	_vuFlushEFU(VU);
 }
 
-void _vuAddEFUStalls(VURegs * VU, _VURegsNum *VUregsn) {
+__forceinline void _vuAddEFUStalls(VURegs * VU, _VURegsNum *VUregsn) {
 	if (VUregsn->VIwrite & (1 << REG_P)) {
 		_vuEFUAdd(VU, VUregsn->cycles);
 	}
 }
 
-void _vuTestUpperStalls(VURegs * VU, _VURegsNum *VUregsn) {
+__forceinline void _vuTestUpperStalls(VURegs * VU, _VURegsNum *VUregsn) {
 	switch (VUregsn->pipe) {
 		case VUPIPE_FMAC: _vuTestFMACStalls(VU, VUregsn); break;
 	}
 }
 
-void _vuTestLowerStalls(VURegs * VU, _VURegsNum *VUregsn) {
+__forceinline void _vuTestLowerStalls(VURegs * VU, _VURegsNum *VUregsn) {
 	switch (VUregsn->pipe) {
 		case VUPIPE_FMAC: _vuTestFMACStalls(VU, VUregsn); break;
 		case VUPIPE_FDIV: _vuTestFDIVStalls(VU, VUregsn); break;
@@ -297,13 +295,13 @@ void _vuTestLowerStalls(VURegs * VU, _VURegsNum *VUregsn) {
 	}
 }
 
-void _vuAddUpperStalls(VURegs * VU, _VURegsNum *VUregsn) {
+__forceinline void _vuAddUpperStalls(VURegs * VU, _VURegsNum *VUregsn) {
 	switch (VUregsn->pipe) {
 		case VUPIPE_FMAC: _vuAddFMACStalls(VU, VUregsn); break;
 	}
 }
 
-void _vuAddLowerStalls(VURegs * VU, _VURegsNum *VUregsn) {
+__forceinline void _vuAddLowerStalls(VURegs * VU, _VURegsNum *VUregsn) {
 	switch (VUregsn->pipe) {
 		case VUPIPE_FMAC: _vuAddFMACStalls(VU, VUregsn); break;
 		case VUPIPE_FDIV: _vuAddFDIVStalls(VU, VUregsn); break;
@@ -316,27 +314,25 @@ void _vuAddLowerStalls(VURegs * VU, _VURegsNum *VUregsn) {
 /*   VU Upper instructions    */
 /******************************/
 #ifndef INT_VUDOUBLEHACK
-float vuDouble(u32 f)
+static float __fastcall vuDouble(u32 f)
 {
-	switch(f & 0x7f800000){
+	switch(f & 0x7f800000)
+	{
 		case 0x0:
 			f &= 0x80000000;
 			return *(float*)&f;
 			break;
 		case 0x7f800000: 
 		{
-			u32 d;
-			d = (f & 0x80000000)|0x7f7fffff;
+			u32 d = (f & 0x80000000)|0x7f7fffff;
 			return *(float*)&d;
 			break;
 		}
-		default:
-			return *(float*)&f;
-			break;
 	}	
+			return *(float*)&f;
 }
 #else
-float vuDouble(u32 f)
+static __forceinline float vuDouble(u32 f)
 {
 	return *(float*)&f;
 }
@@ -1508,38 +1504,38 @@ void _vuRSQRT(VURegs * VU) {
 void _vuIADDI(VURegs * VU) { 
 	s16 imm = ((VU->code >> 6) & 0x1f); 
 	imm = ((imm & 0x10 ? 0xfff0 : 0) | (imm & 0xf));
-	if(_Ft_ == 0) return; 
-	VU->VI[_Ft_].SS[0] = VU->VI[_Fs_].SS[0] + imm;
+	if(_It_ == 0) return; 
+	VU->VI[_It_].SS[0] = VU->VI[_Is_].SS[0] + imm;
 }//last checked 17/05/03 shadow NOTE: not quite sure about that
 
 void _vuIADDIU(VURegs * VU) { 
-	if(_Ft_ == 0) return; 
-	VU->VI[_Ft_].SS[0] = VU->VI[_Fs_].SS[0] + (((VU->code >> 10) & 0x7800) | (VU->code & 0x7ff)); 
+	if(_It_ == 0) return; 
+	VU->VI[_It_].SS[0] = VU->VI[_Is_].SS[0] + (((VU->code >> 10) & 0x7800) | (VU->code & 0x7ff)); 
 }//last checked 17/05/03 shadow
 
 void _vuIADD(VURegs * VU) { 
-	if(_Fd_ == 0) return; 
-	VU->VI[_Fd_].SS[0] = VU->VI[_Fs_].SS[0] + VU->VI[_Ft_].SS[0]; 
+	if(_Id_ == 0) return; 
+	VU->VI[_Id_].SS[0] = VU->VI[_Is_].SS[0] + VU->VI[_It_].SS[0]; 
 }//last checked 17/05/03 shadow
 
 void _vuIAND(VURegs * VU) { 
-	if(_Fd_ == 0) return; 
-	VU->VI[_Fd_].US[0] = VU->VI[_Fs_].US[0] & VU->VI[_Ft_].US[0]; 
+	if(_Id_ == 0) return; 
+	VU->VI[_Id_].US[0] = VU->VI[_Is_].US[0] & VU->VI[_It_].US[0]; 
 }//last checked 17/05/03 shadow
 
 void _vuIOR(VURegs * VU) { 
-	if(_Fd_ == 0) return; 
-	VU->VI[_Fd_].US[0] = VU->VI[_Fs_].US[0] | VU->VI[_Ft_].US[0]; 
+	if(_Id_ == 0) return; 
+	VU->VI[_Id_].US[0] = VU->VI[_Is_].US[0] | VU->VI[_It_].US[0]; 
 }
 
 void _vuISUB(VURegs * VU) { 
-	if(_Fd_ == 0) return; 
-	VU->VI[_Fd_].SS[0] = VU->VI[_Fs_].SS[0] - VU->VI[_Ft_].SS[0]; 
+	if(_Id_ == 0) return; 
+	VU->VI[_Id_].SS[0] = VU->VI[_Is_].SS[0] - VU->VI[_It_].SS[0]; 
 }
 
 void _vuISUBIU(VURegs * VU) { 
-	if(_Ft_ == 0) return; 
-	VU->VI[_Ft_].SS[0] = VU->VI[_Fs_].SS[0] - (((VU->code >> 10) & 0x7800) | (VU->code & 0x7ff)); 
+	if(_It_ == 0) return; 
+	VU->VI[_It_].SS[0] = VU->VI[_Is_].SS[0] - (((VU->code >> 10) & 0x7800) | (VU->code & 0x7ff)); 
 }
 
 void _vuMOVE(VURegs * VU) { 
@@ -1554,16 +1550,16 @@ void _vuMOVE(VURegs * VU) {
 void _vuMFIR(VURegs * VU) { 
 	if (_Ft_ == 0) return; 
 
-	if (_X) VU->VF[_Ft_].SL[0] = (s32)VU->VI[_Fs_].SS[0];
-	if (_Y) VU->VF[_Ft_].SL[1] = (s32)VU->VI[_Fs_].SS[0]; 
-	if (_Z) VU->VF[_Ft_].SL[2] = (s32)VU->VI[_Fs_].SS[0]; 
-	if (_W) VU->VF[_Ft_].SL[3] = (s32)VU->VI[_Fs_].SS[0]; 
+	if (_X) VU->VF[_Ft_].SL[0] = (s32)VU->VI[_Is_].SS[0];
+	if (_Y) VU->VF[_Ft_].SL[1] = (s32)VU->VI[_Is_].SS[0]; 
+	if (_Z) VU->VF[_Ft_].SL[2] = (s32)VU->VI[_Is_].SS[0]; 
+	if (_W) VU->VF[_Ft_].SL[3] = (s32)VU->VI[_Is_].SS[0]; 
 }
 
 // Big bug!!! mov from fs to ft not ft to fs. asadr
 void _vuMTIR(VURegs * VU) { 
-	if(_Ft_ == 0) return;
-	VU->VI[_Ft_].US[0] =  *(u16*)&VU->VF[_Fs_].F[_Fsf_]; 
+	if(_It_ == 0) return;
+	VU->VI[_It_].US[0] =  *(u16*)&VU->VF[_Fs_].F[_Fsf_]; 
 } 
 
 void _vuMR32(VURegs * VU) {
@@ -1577,6 +1573,17 @@ void _vuMR32(VURegs * VU) {
 	if (_W) VU->VF[_Ft_].i.w = tx; 
 }//last updated 23/10/03 linuzappz
 
+// --------------------------------------------------------------------------------------
+//  Load / Store Instructions (VU Interpreter)
+// --------------------------------------------------------------------------------------
+
+__forceinline u32* GET_VU_MEM(VURegs* VU, u32 addr)		// non-static, also used by sVU for now.
+{
+	if( VU == g_pVU1 ) return (u32*)(VU1.Mem+(addr&0x3fff));
+	if( addr >= 0x4000 ) return (u32*)(VU0.Mem+(addr&0x43f0)); // get VF and VI regs (they're mapped to 0x4xx0 in VU0 mem!)
+	return (u32*)(VU0.Mem+(addr&0x0fff)); // for addr 0x0000 to 0x4000 just wrap around
+}
+
 void _vuLQ(VURegs * VU) { 
 	s16 imm; 
 	u16 addr;
@@ -1585,7 +1592,7 @@ void _vuLQ(VURegs * VU) {
 	if (_Ft_ == 0) return; 
  
 	imm = (VU->code & 0x400) ? (VU->code & 0x3ff) | 0xfc00 : (VU->code & 0x3ff); 
-	addr = ((imm + VU->VI[_Fs_].SS[0]) * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
+	addr = ((imm + VU->VI[_Is_].SS[0]) * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 
  	ptr = (u32*)GET_VU_MEM(VU, addr);
 	if (_X) VU->VF[_Ft_].UL[0] = ptr[0]; 
@@ -1598,10 +1605,10 @@ void _vuLQD( VURegs * VU ) {
 	u32 addr;
 	u32 *ptr; 
 
-	if (_Fs_ != 0) VU->VI[_Fs_].US[0]--; 
+	if (_Is_ != 0) VU->VI[_Is_].US[0]--; 
 	if (_Ft_ == 0) return;
 
-	addr = (VU->VI[_Fs_].US[0] * 16) & (VU == &VU1 ? 0x3fff : 0xfff);
+	addr = (VU->VI[_Is_].US[0] * 16) & (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u32*)GET_VU_MEM(VU, addr);
 	if (_X) VU->VF[_Ft_].UL[0] = ptr[0]; 
 	if (_Y) VU->VF[_Ft_].UL[1] = ptr[1]; 
@@ -1614,14 +1621,14 @@ void _vuLQI(VURegs * VU) {
 		u32 addr;
 		u32 *ptr;
 
-		addr = (VU->VI[_Fs_].US[0] * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
+		addr = (VU->VI[_Is_].US[0] * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 		ptr = (u32*)GET_VU_MEM(VU, addr);
 		if (_X) VU->VF[_Ft_].UL[0] = ptr[0]; 
 		if (_Y) VU->VF[_Ft_].UL[1] = ptr[1]; 
 		if (_Z) VU->VF[_Ft_].UL[2] = ptr[2]; 
 		if (_W) VU->VF[_Ft_].UL[3] = ptr[3]; 
 	}
-	if (_Fs_ != 0) VU->VI[_Fs_].US[0]++; 
+	if (_Fs_ != 0) VU->VI[_Is_].US[0]++; 
 }
 
 /* addr is now signed. Asadr */
@@ -1631,7 +1638,7 @@ void _vuSQ(VURegs * VU) {
 	u32 *ptr; 
  
 	imm = (VU->code & 0x400) ? (VU->code & 0x3ff) | 0xfc00 : (VU->code & 0x3ff); 
-	addr = ((imm + VU->VI[_Ft_].SS[0]) * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
+	addr = ((imm + VU->VI[_It_].SS[0]) * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u32*)GET_VU_MEM(VU, addr);
 	if (_X) ptr[0] = VU->VF[_Fs_].UL[0]; 
 	if (_Y) ptr[1] = VU->VF[_Fs_].UL[1]; 
@@ -1643,8 +1650,8 @@ void _vuSQD(VURegs * VU) {
 	u32 addr;
 	u32 *ptr; 
  
-	if(_Ft_ != 0) VU->VI[_Ft_].US[0]--; 
-	addr = (VU->VI[_Ft_].US[0] * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
+	if(_Ft_ != 0) VU->VI[_It_].US[0]--; 
+	addr = (VU->VI[_It_].US[0] * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u32*)GET_VU_MEM(VU, addr);
 	if (_X) ptr[0] = VU->VF[_Fs_].UL[0]; 
 	if (_Y) ptr[1] = VU->VF[_Fs_].UL[1]; 
@@ -1656,13 +1663,13 @@ void _vuSQI(VURegs * VU) {
 	u32 addr;
 	u32 *ptr; 
  
-	addr = (VU->VI[_Ft_].US[0] * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
+	addr = (VU->VI[_It_].US[0] * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u32*)GET_VU_MEM(VU, addr);
 	if (_X) ptr[0] = VU->VF[_Fs_].UL[0];
 	if (_Y) ptr[1] = VU->VF[_Fs_].UL[1];
 	if (_Z) ptr[2] = VU->VF[_Fs_].UL[2];
 	if (_W) ptr[3] = VU->VF[_Fs_].UL[3];
-	if(_Ft_ != 0) VU->VI[_Ft_].US[0]++; 
+	if(_Ft_ != 0) VU->VI[_It_].US[0]++; 
 }
 
 /* addr now signed. asadr */
@@ -1670,15 +1677,15 @@ void _vuILW(VURegs * VU) {
 	s16 imm; 
 	u16 addr;
 	u16 *ptr; 
-	if (_Ft_ == 0) return; 
+	if (_It_ == 0) return; 
  
  	imm = (VU->code & 0x400) ? (VU->code & 0x3ff) | 0xfc00 : (VU->code & 0x3ff); 
-	addr = ((imm + VU->VI[_Fs_].SS[0]) * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
+	addr = ((imm + VU->VI[_Is_].SS[0]) * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u16*)GET_VU_MEM(VU, addr);
-	if (_X) VU->VI[_Ft_].US[0] = ptr[0]; 
-	if (_Y) VU->VI[_Ft_].US[0] = ptr[2]; 
-	if (_Z) VU->VI[_Ft_].US[0] = ptr[4]; 
-	if (_W) VU->VI[_Ft_].US[0] = ptr[6]; 
+	if (_X) VU->VI[_It_].US[0] = ptr[0]; 
+	if (_Y) VU->VI[_It_].US[0] = ptr[2]; 
+	if (_Z) VU->VI[_It_].US[0] = ptr[4]; 
+	if (_W) VU->VI[_It_].US[0] = ptr[6]; 
 }
 
 void _vuISW(VURegs * VU) { 
@@ -1687,37 +1694,37 @@ void _vuISW(VURegs * VU) {
 	u16 *ptr; 
  
  	imm = (VU->code & 0x400) ? (VU->code & 0x3ff) | 0xfc00 : (VU->code & 0x3ff); 
-	addr = ((imm + VU->VI[_Fs_].SS[0]) * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
+	addr = ((imm + VU->VI[_Is_].SS[0]) * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u16*)GET_VU_MEM(VU, addr);
-	if (_X) { ptr[0] = VU->VI[_Ft_].US[0]; ptr[1] = 0; }
-	if (_Y) { ptr[2] = VU->VI[_Ft_].US[0]; ptr[3] = 0; }
-	if (_Z) { ptr[4] = VU->VI[_Ft_].US[0]; ptr[5] = 0; }
-	if (_W) { ptr[6] = VU->VI[_Ft_].US[0]; ptr[7] = 0; }
+	if (_X) { ptr[0] = VU->VI[_It_].US[0]; ptr[1] = 0; }
+	if (_Y) { ptr[2] = VU->VI[_It_].US[0]; ptr[3] = 0; }
+	if (_Z) { ptr[4] = VU->VI[_It_].US[0]; ptr[5] = 0; }
+	if (_W) { ptr[6] = VU->VI[_It_].US[0]; ptr[7] = 0; }
 }
 
 void _vuILWR(VURegs * VU) {
 	u32 addr;
 	u16 *ptr; 
-	if (_Ft_ == 0) return; 
+	if (_It_ == 0) return; 
  
-	addr = (VU->VI[_Fs_].US[0] * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
+	addr = (VU->VI[_Is_].US[0] * 16)& (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u16*)GET_VU_MEM(VU, addr);
-	if (_X) VU->VI[_Ft_].US[0] = ptr[0]; 
-	if (_Y) VU->VI[_Ft_].US[0] = ptr[2]; 
-	if (_Z) VU->VI[_Ft_].US[0] = ptr[4]; 
-	if (_W) VU->VI[_Ft_].US[0] = ptr[6]; 
+	if (_X) VU->VI[_It_].US[0] = ptr[0]; 
+	if (_Y) VU->VI[_It_].US[0] = ptr[2]; 
+	if (_Z) VU->VI[_It_].US[0] = ptr[4]; 
+	if (_W) VU->VI[_It_].US[0] = ptr[6]; 
 }
 
 void _vuISWR(VURegs * VU) { 
 	u32 addr;
 	u16 *ptr; 
  
-	addr = (VU->VI[_Fs_].US[0] * 16) & (VU == &VU1 ? 0x3fff : 0xfff);
+	addr = (VU->VI[_Is_].US[0] * 16) & (VU == &VU1 ? 0x3fff : 0xfff);
 	ptr = (u16*)GET_VU_MEM(VU, addr);
-	if (_X) { ptr[0] = VU->VI[_Ft_].US[0]; ptr[1] = 0; }
-	if (_Y) { ptr[2] = VU->VI[_Ft_].US[0]; ptr[3] = 0; }
-	if (_Z) { ptr[4] = VU->VI[_Ft_].US[0]; ptr[5] = 0; }
-	if (_W) { ptr[6] = VU->VI[_Ft_].US[0]; ptr[7] = 0; } 
+	if (_X) { ptr[0] = VU->VI[_It_].US[0]; ptr[1] = 0; }
+	if (_Y) { ptr[2] = VU->VI[_It_].US[0]; ptr[3] = 0; }
+	if (_Z) { ptr[4] = VU->VI[_It_].US[0]; ptr[5] = 0; }
+	if (_W) { ptr[6] = VU->VI[_It_].US[0]; ptr[7] = 0; } 
 }
 
 /* code contributed by _Riff_
@@ -1780,23 +1787,23 @@ void _vuWAITQ(VURegs * VU) {
 void _vuFSAND(VURegs * VU) { 
 	u16 imm;
 	imm = (((VU->code >> 21 ) & 0x1) << 11) | (VU->code & 0x7ff);
-	if(_Ft_ == 0) return; 
-	VU->VI[_Ft_].US[0] = (VU->VI[REG_STATUS_FLAG].US[0] & 0xFFF) & imm; 
+	if(_It_ == 0) return; 
+	VU->VI[_It_].US[0] = (VU->VI[REG_STATUS_FLAG].US[0] & 0xFFF) & imm; 
 }
 
 void _vuFSEQ(VURegs * VU) { 
 	u16 imm;
 	imm = (((VU->code >> 21 ) & 0x1) << 11) | (VU->code & 0x7ff);
-	if(_Ft_ == 0) return; 
-	if((VU->VI[REG_STATUS_FLAG].US[0] & 0xFFF) == imm) VU->VI[_Ft_].US[0] = 1; 
-	else VU->VI[_Ft_].US[0] = 0; 
+	if(_It_ == 0) return; 
+	if((VU->VI[REG_STATUS_FLAG].US[0] & 0xFFF) == imm) VU->VI[_It_].US[0] = 1; 
+	else VU->VI[_It_].US[0] = 0; 
 }
 
 void _vuFSOR(VURegs * VU) { 
 	u16 imm;
 	imm = (((VU->code >> 21 ) & 0x1) << 11) | (VU->code & 0x7ff);
-	if(_Ft_ == 0) return; 
-	VU->VI[_Ft_].US[0] = (VU->VI[REG_STATUS_FLAG].US[0] & 0xFFF) | imm; 
+	if(_It_ == 0) return; 
+	VU->VI[_It_].US[0] = (VU->VI[REG_STATUS_FLAG].US[0] & 0xFFF) | imm; 
 }
 
 void _vuFSSET(VURegs * VU) { 
@@ -1806,19 +1813,19 @@ void _vuFSSET(VURegs * VU) {
 }
 
 void _vuFMAND(VURegs * VU) { 
-	if(_Ft_ == 0) return; 
-	VU->VI[_Ft_].US[0] = VU->VI[_Fs_].US[0] & (VU->VI[REG_MAC_FLAG].UL & 0xFFFF);
+	if(_It_ == 0) return; 
+	VU->VI[_It_].US[0] = VU->VI[_Is_].US[0] & (VU->VI[REG_MAC_FLAG].UL & 0xFFFF);
 }
 
 void _vuFMEQ(VURegs * VU) { 
-	if(_Ft_ == 0) return; 
-	if((VU->VI[REG_MAC_FLAG].UL & 0xFFFF) == VU->VI[_Fs_].US[0]){ 
-	VU->VI[_Ft_].US[0] =1;} else { VU->VI[_Ft_].US[0] =0; } 
+	if(_It_ == 0) return; 
+	if((VU->VI[REG_MAC_FLAG].UL & 0xFFFF) == VU->VI[_Is_].US[0]){ 
+	VU->VI[_It_].US[0] =1;} else { VU->VI[_It_].US[0] =0; } 
 }
 
 void _vuFMOR(VURegs * VU) { 
-	if(_Ft_ == 0) return; 
-	VU->VI[_Ft_].US[0] = (VU->VI[REG_MAC_FLAG].UL & 0xFFFF) | VU->VI[_Fs_].US[0]; 
+	if(_It_ == 0) return; 
+	VU->VI[_It_].US[0] = (VU->VI[REG_MAC_FLAG].UL & 0xFFFF) | VU->VI[_Is_].US[0]; 
 }
 
 void _vuFCAND(VURegs * VU) {
@@ -1843,8 +1850,8 @@ void _vuFCSET(VURegs * VU) {
 }
 
 void _vuFCGET(VURegs * VU) { 
-	if(_Ft_ == 0) return;
-	VU->VI[_Ft_].US[0] = VU->VI[REG_CLIP_FLAG].UL & 0x0FFF;
+	if(_It_ == 0) return;
+	VU->VI[_It_].US[0] = VU->VI[REG_CLIP_FLAG].UL & 0x0FFF;
 }
 
 s32 _branchAddr(VURegs * VU) {
@@ -1859,42 +1866,42 @@ void _setBranch(VURegs * VU, u32 bpc) {
 }
 
 void _vuIBEQ(VURegs * VU) { 
-	if (VU->VI[_Ft_].US[0] == VU->VI[_Fs_].US[0]) { 
+	if (VU->VI[_It_].US[0] == VU->VI[_Is_].US[0]) { 
 		s32 bpc = _branchAddr(VU);
 		_setBranch(VU, bpc);
 	} 
 }
 
 void _vuIBGEZ(VURegs * VU) { 
-	if (VU->VI[_Fs_].SS[0] >= 0) { 
+	if (VU->VI[_Is_].SS[0] >= 0) { 
 		s32 bpc = _branchAddr(VU);
 		_setBranch(VU, bpc);
 	} 
 }
 
 void _vuIBGTZ(VURegs * VU) { 
-	if (VU->VI[_Fs_].SS[0] > 0) { 
+	if (VU->VI[_Is_].SS[0] > 0) { 
 		s32 bpc = _branchAddr(VU);
 		_setBranch(VU, bpc);
 	} 
 }
 
 void _vuIBLEZ(VURegs * VU) { 
-	if (VU->VI[_Fs_].SS[0] <= 0) { 
+	if (VU->VI[_Is_].SS[0] <= 0) { 
 		s32 bpc = _branchAddr(VU);
 		_setBranch(VU, bpc);
 	} 
 }
 
 void _vuIBLTZ(VURegs * VU) { 
-	if (VU->VI[_Fs_].SS[0] < 0) { 
+	if (VU->VI[_Is_].SS[0] < 0) { 
 		s32 bpc = _branchAddr(VU);
 		_setBranch(VU, bpc);
 	} 
 }
 
 void _vuIBNE(VURegs * VU) { 
-	if (VU->VI[_Ft_].US[0] != VU->VI[_Fs_].US[0]) { 
+	if (VU->VI[_It_].US[0] != VU->VI[_Is_].US[0]) { 
 		s32 bpc = _branchAddr(VU);
 		_setBranch(VU, bpc);
 	} 
@@ -1908,19 +1915,19 @@ void _vuB(VURegs * VU) {
 void _vuBAL(VURegs * VU) { 
 	s32 bpc = _branchAddr(VU);
 
-	if (_Ft_) VU->VI[_Ft_].US[0] = (VU->VI[REG_TPC].UL + 8)/8;
+	if (_It_) VU->VI[_It_].US[0] = (VU->VI[REG_TPC].UL + 8)/8;
 
 	_setBranch(VU, bpc);
 }
 
 void _vuJR(VURegs * VU) { 
-    u32 bpc = VU->VI[_Fs_].US[0] * 8;
+    u32 bpc = VU->VI[_Is_].US[0] * 8;
 	_setBranch(VU, bpc);
 }
 
 void _vuJALR(VURegs * VU) { 
-    u32 bpc = VU->VI[_Fs_].US[0] * 8;
-	if (_Ft_) VU->VI[_Ft_].US[0] = (VU->VI[REG_TPC].UL + 8)/8;
+    u32 bpc = VU->VI[_Is_].US[0] * 8;
+	if (_It_) VU->VI[_It_].US[0] = (VU->VI[REG_TPC].UL + 8)/8;
 
 	_setBranch(VU, bpc);
 }
@@ -2039,31 +2046,38 @@ void _vuEEXP(VURegs * VU) {
 }
 
 void _vuXITOP(VURegs * VU) { 
-	if (_Ft_ == 0) return;
-	VU->VI[_Ft_].US[0] = VU->vifRegs->itop;
+	if (_It_ == 0) return;
+	VU->VI[_It_].US[0] = VU->vifRegs->itop;
 }
 
 void _vuXGKICK(VURegs * VU)
 {
-	u32* ptr = (u32*)GET_VU_MEM(VU, (VU->VI[_Fs_].US[0]*16) & (VU == &VU1 ? 0x3fff : 0xfff));
-//	int temp = 0x4000 - ((VU->VI[_Fs_].US[0]*16) & 0x3fff);
-//	u32 tempmem[0x8000];
-	
 	// flush all pipelines first (in the right order)
 	_vuFlushAll(VU);
 
-	//Gonna be slow but reshuffles the memory so overflows wont occur
-	/*	memset(tempmem, 0, sizeof(tempmem));
-		memcpy(tempmem, ptr, temp);
-		ptr = (u32*)GET_VU_MEM(VU, 0);
-		memcpy(&tempmem[temp], ptr, ((VU->VI[_Fs_].US[0]*16) & 0x3fff));
-		GSGIFTRANSFER1((u32*)&tempmem[0], 0);
-	} else*/ GSGIFTRANSFER1((u32*)VU->Mem, (VU->VI[_Fs_].US[0]*16) & 0x3fff);
+	u8* data = ((u8*)VU->Mem + ((VU->VI[_Is_].US[0]*16) & 0x3fff));
+	u32 size;
+	size = GetMTGS().PrepDataPacket( GIF_PATH_1, data, (0x4000-((VU->VI[_Is_].US[0]*16) & 0x3fff)) >> 4);
+	u8* pmem = GetMTGS().GetDataPacketPtr();
+	
+	if((size << 4) > (u32)(0x4000-((VU->VI[_Is_].US[0]*16) & 0x3fff)))
+	{
+		//DevCon.Warning("addr + Size = 0x%x, transferring %x then doing %x", ((VU->VI[_Is_].US[0]*16) & 0x3fff) + (size << 4), (0x4000-((VU->VI[_Is_].US[0]*16) & 0x3fff)) >> 4, size - (0x4000-((VU->VI[_Is_].US[0]*16) & 0x3fff) >> 4));
+		memcpy_aligned(pmem, (u8*)VU->Mem+((VU->VI[_Is_].US[0]*16) & 0x3fff), 0x4000-((VU->VI[_Is_].US[0]*16) & 0x3fff));
+		size -= (0x4000-((VU->VI[_Is_].US[0]*16) & 0x3fff)) >> 4;
+		//DevCon.Warning("Size left %x", size);
+		pmem += 0x4000-((VU->VI[_Is_].US[0]*16) & 0x3fff);
+		memcpy_aligned(pmem, (u8*)VU->Mem, size<<4);
+	}
+	else {
+		memcpy_aligned(pmem, (u8*)VU->Mem+((VU->VI[_Is_].US[0]*16) & 0x3fff), size<<4);
+	}
+	GetMTGS().SendDataPacket();
 }
 
 void _vuXTOP(VURegs * VU) {
-	if(_Ft_ == 0) return;
-	VU->VI[_Ft_].US[0] = (u16)VU->vifRegs->top;
+	if(_It_ == 0) return;
+	VU->VI[_It_].US[0] = (u16)VU->vifRegs->top;
 }
 
 #define GET_VF0_FLAG(reg) (((reg)==0)?(1<<REG_VF0_FLAG):0)
@@ -2198,8 +2212,8 @@ void _vuRegs##OP(VURegs * VU, _VURegsNum *VUregsn) { \
 	VUregsn->VFwrite = 0; \
 	VUregsn->VFread0 = 0; \
 	VUregsn->VFread1 = 0; \
-	VUregsn->VIwrite = 1 << _Fd_; \
-	VUregsn->VIread  = (1 << _Fs_) | (1 << _Ft_); \
+	VUregsn->VIwrite = 1 << _Id_; \
+	VUregsn->VIread  = (1 << _Is_) | (1 << _It_); \
 	VUregsn->cycles  = 0; \
 }
 
@@ -2209,8 +2223,8 @@ void _vuRegs##OP(VURegs * VU, _VURegsNum *VUregsn) { \
 	VUregsn->VFwrite = 0; \
 	VUregsn->VFread0 = 0; \
 	VUregsn->VFread1 = 0; \
-	VUregsn->VIwrite = 1 << _Ft_; \
-	VUregsn->VIread  = 1 << _Fs_; \
+	VUregsn->VIwrite = 1 << _It_; \
+	VUregsn->VIread  = 1 << _Is_; \
 	VUregsn->cycles  = 0; \
 }
 
@@ -2512,7 +2526,7 @@ void _vuRegsMFIR(VURegs * VU, _VURegsNum *VUregsn) {
 	VUregsn->VFread0 = 0;
 	VUregsn->VFread1 = 0;
     VUregsn->VIwrite = 0;
-    VUregsn->VIread  = 1 << _Fs_;
+    VUregsn->VIread  = 1 << _Is_;
 }
 
 void _vuRegsMTIR(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2521,7 +2535,7 @@ void _vuRegsMTIR(VURegs * VU, _VURegsNum *VUregsn) {
 	VUregsn->VFread0 = _Fs_;
     VUregsn->VFr0xyzw= 1 << (3-_Fsf_);
 	VUregsn->VFread1 = 0;
-    VUregsn->VIwrite = 1 << _Ft_;
+    VUregsn->VIwrite = 1 << _It_;
     VUregsn->VIread  = GET_VF0_FLAG(_Fs_);
 }
 
@@ -2544,7 +2558,7 @@ void _vuRegsLQ(VURegs * VU, _VURegsNum *VUregsn) {
 	VUregsn->VFread0 = 0;
 	VUregsn->VFread1 = 0;
     VUregsn->VIwrite = 0;
-    VUregsn->VIread  = 1 << _Fs_;
+    VUregsn->VIread  = 1 << _Is_;
 }
 
 void _vuRegsLQD(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2553,8 +2567,8 @@ void _vuRegsLQD(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFwxyzw = _XYZW;
 	VUregsn->VFread0 = 0;
 	VUregsn->VFread1 = 0;
-    VUregsn->VIwrite = 1 << _Fs_;
-    VUregsn->VIread  = 1 << _Fs_;
+    VUregsn->VIwrite = 1 << _Is_;
+    VUregsn->VIread  = 1 << _Is_;
 }
 
 void _vuRegsLQI(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2563,8 +2577,8 @@ void _vuRegsLQI(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFwxyzw = _XYZW;
 	VUregsn->VFread0 = 0;
 	VUregsn->VFread1 = 0;
-    VUregsn->VIwrite = 1 << _Fs_;
-    VUregsn->VIread  = 1 << _Fs_;
+    VUregsn->VIwrite = 1 << _Is_;
+    VUregsn->VIread  = 1 << _Is_;
 }
 
 void _vuRegsSQ(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2574,7 +2588,7 @@ void _vuRegsSQ(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFr0xyzw= _XYZW;
 	VUregsn->VFread1 = 0;
     VUregsn->VIwrite = 0;
-    VUregsn->VIread  = (1 << _Ft_)|GET_VF0_FLAG(_Fs_);
+    VUregsn->VIread  = 1 << _It_;
 }
 
 void _vuRegsSQD(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2583,8 +2597,8 @@ void _vuRegsSQD(VURegs * VU, _VURegsNum *VUregsn) {
 	VUregsn->VFread0 = _Fs_;
     VUregsn->VFr0xyzw= _XYZW;
 	VUregsn->VFread1 = 0;
-    VUregsn->VIwrite = 1 << _Ft_;
-    VUregsn->VIread  = (1 << _Ft_)|GET_VF0_FLAG(_Fs_);
+    VUregsn->VIwrite = 1 << _It_;
+    VUregsn->VIread  = 1 << _It_;
 }
 
 void _vuRegsSQI(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2593,8 +2607,8 @@ void _vuRegsSQI(VURegs * VU, _VURegsNum *VUregsn) {
 	VUregsn->VFread0 = _Fs_;
     VUregsn->VFr0xyzw= _XYZW;
 	VUregsn->VFread1 = 0;
-    VUregsn->VIwrite = 1 << _Ft_;
-    VUregsn->VIread  = (1 << _Ft_)|GET_VF0_FLAG(_Fs_);
+    VUregsn->VIwrite = 1 << _It_;
+    VUregsn->VIread  = 1 << _It_;
 }
 
 void _vuRegsILW(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2602,8 +2616,8 @@ void _vuRegsILW(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFwrite = 0;
 	VUregsn->VFread0 = 0;
 	VUregsn->VFread1 = 0;
-    VUregsn->VIwrite = 1 << _Ft_;
-    VUregsn->VIread  = 1 << _Fs_;
+    VUregsn->VIwrite = 1 << _It_;
+    VUregsn->VIread  = 1 << _Is_;
 	VUregsn->cycles  = 3;
 }
 
@@ -2613,7 +2627,7 @@ void _vuRegsISW(VURegs * VU, _VURegsNum *VUregsn) {
 	VUregsn->VFread0 = 0;
 	VUregsn->VFread1 = 0;
     VUregsn->VIwrite = 0;
-    VUregsn->VIread  = (1 << _Fs_) | (1 << _Ft_);
+    VUregsn->VIread  = (1 << _Is_) | (1 << _It_);
 }
 
 void _vuRegsILWR(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2621,8 +2635,8 @@ void _vuRegsILWR(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFwrite = 0;
 	VUregsn->VFread0 = 0;
 	VUregsn->VFread1 = 0;
-    VUregsn->VIwrite = (1 << _Ft_);
-    VUregsn->VIread  = (1 << _Fs_);
+    VUregsn->VIwrite = (1 << _It_);
+    VUregsn->VIread  = (1 << _Is_);
 	VUregsn->cycles  = 3;
 }
 
@@ -2632,7 +2646,7 @@ void _vuRegsISWR(VURegs * VU, _VURegsNum *VUregsn) {
 	VUregsn->VFread0 = 0;
 	VUregsn->VFread1 = 0;
     VUregsn->VIwrite = 0;
-    VUregsn->VIread  = (1 << _Fs_) | (1 << _Ft_);
+    VUregsn->VIread  = (1 << _Is_) | (1 << _It_);
 }
 
 void _vuRegsRINIT(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2689,7 +2703,7 @@ void _vuRegsFSAND(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFwrite = 0;
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
-	VUregsn->VIwrite = 1 << _Ft_;
+	VUregsn->VIwrite = 1 << _It_;
     VUregsn->VIread  = 1 << REG_STATUS_FLAG;
 }
 
@@ -2698,7 +2712,7 @@ void _vuRegsFSEQ(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFwrite = 0;
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
-	VUregsn->VIwrite = 1 << _Ft_;
+	VUregsn->VIwrite = 1 << _It_;
     VUregsn->VIread  = 1 << REG_STATUS_FLAG;
 }
 
@@ -2707,7 +2721,7 @@ void _vuRegsFSOR(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFwrite = 0;
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
-	VUregsn->VIwrite = 1 << _Ft_;
+	VUregsn->VIwrite = 1 << _It_;
     VUregsn->VIread  = 1 << REG_STATUS_FLAG;
 }
 
@@ -2725,8 +2739,8 @@ void _vuRegsFMAND(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFwrite = 0;
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
-	VUregsn->VIwrite = 1 << _Ft_;
-    VUregsn->VIread  = (1 << REG_MAC_FLAG) | (1 << _Fs_);
+	VUregsn->VIwrite = 1 << _It_;
+    VUregsn->VIread  = (1 << REG_MAC_FLAG) | (1 << _Is_);
 }
 
 void _vuRegsFMEQ(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2734,8 +2748,8 @@ void _vuRegsFMEQ(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFwrite = 0;
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
-	VUregsn->VIwrite = 1 << _Ft_;
-    VUregsn->VIread  = (1 << REG_MAC_FLAG) | (1 << _Fs_);
+	VUregsn->VIwrite = 1 << _It_;
+    VUregsn->VIread  = (1 << REG_MAC_FLAG) | (1 << _Is_);
 }
 
 void _vuRegsFMOR(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2743,8 +2757,8 @@ void _vuRegsFMOR(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFwrite = 0;
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
-	VUregsn->VIwrite = 1 << _Ft_;
-    VUregsn->VIread  = (1 << REG_MAC_FLAG) | (1 << _Fs_);
+	VUregsn->VIwrite = 1 << _It_;
+    VUregsn->VIread  = (1 << REG_MAC_FLAG) | (1 << _Is_);
 }
 
 void _vuRegsFCAND(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2788,7 +2802,7 @@ void _vuRegsFCGET(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFwrite = 0;
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
-	VUregsn->VIwrite = 1 << _Ft_;
+	VUregsn->VIwrite = 1 << _It_;
     VUregsn->VIread  = 1 << REG_CLIP_FLAG;
 }
 
@@ -2798,7 +2812,7 @@ void _vuRegsIBEQ(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
     VUregsn->VIwrite = 0;
-    VUregsn->VIread  = (1 << _Fs_) | (1 << _Ft_);
+    VUregsn->VIread  = (1 << _Is_) | (1 << _It_);
 }
 
 void _vuRegsIBGEZ(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2807,7 +2821,7 @@ void _vuRegsIBGEZ(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
     VUregsn->VIwrite = 0;
-	VUregsn->VIread  = 1 << _Fs_;
+	VUregsn->VIread  = 1 << _Is_;
 }
 
 void _vuRegsIBGTZ(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2816,7 +2830,7 @@ void _vuRegsIBGTZ(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
     VUregsn->VIwrite = 0;
-	VUregsn->VIread  = 1 << _Fs_;
+	VUregsn->VIread  = 1 << _Is_;
 }
 
 void _vuRegsIBLEZ(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2825,7 +2839,7 @@ void _vuRegsIBLEZ(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
     VUregsn->VIwrite = 0;
-	VUregsn->VIread  = 1 << _Fs_;
+	VUregsn->VIread  = 1 << _Is_;
 }
 
 void _vuRegsIBLTZ(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2834,7 +2848,7 @@ void _vuRegsIBLTZ(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
     VUregsn->VIwrite = 0;
-	VUregsn->VIread  = 1 << _Fs_;
+	VUregsn->VIread  = 1 << _Is_;
 }
 
 void _vuRegsIBNE(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2843,7 +2857,7 @@ void _vuRegsIBNE(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
     VUregsn->VIwrite = 0;
-    VUregsn->VIread  = (1 << _Fs_) | (1 << _Ft_);
+    VUregsn->VIread  = (1 << _Is_) | (1 << _It_);
 }
 
 void _vuRegsB(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2860,7 +2874,7 @@ void _vuRegsBAL(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFwrite = 0;
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
-	VUregsn->VIwrite = 1 << _Ft_;
+	VUregsn->VIwrite = 1 << _It_;
     VUregsn->VIread  = 0;
 }
 
@@ -2870,7 +2884,7 @@ void _vuRegsJR(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
     VUregsn->VIwrite = 0;
-	VUregsn->VIread  = 1 << _Fs_;
+	VUregsn->VIread  = 1 << _Is_;
 }
 
 void _vuRegsJALR(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2878,8 +2892,8 @@ void _vuRegsJALR(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFwrite = 0;
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
-	VUregsn->VIwrite = 1 << _Ft_;
-	VUregsn->VIread  = 1 << _Fs_;
+	VUregsn->VIwrite = 1 << _It_;
+	VUregsn->VIread  = 1 << _Is_;
 }
 
 void _vuRegsMFP(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2920,7 +2934,7 @@ void _vuRegsXITOP(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFwrite = 0;
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
-    VUregsn->VIwrite = 1 << _Ft_;
+    VUregsn->VIwrite = 1 << _It_;
     VUregsn->VIread  = 0;
 	VUregsn->cycles  = 0;
 }
@@ -2931,7 +2945,7 @@ void _vuRegsXGKICK(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
     VUregsn->VIwrite = 0;
-    VUregsn->VIread  = 1 << _Fs_;
+    VUregsn->VIread  = 1 << _Is_;
 }
 
 void _vuRegsXTOP(VURegs * VU, _VURegsNum *VUregsn) {
@@ -2939,7 +2953,7 @@ void _vuRegsXTOP(VURegs * VU, _VURegsNum *VUregsn) {
     VUregsn->VFwrite = 0;
     VUregsn->VFread0 = 0;
     VUregsn->VFread1 = 0;
-    VUregsn->VIwrite = 1 << _Ft_;
+    VUregsn->VIwrite = 1 << _It_;
     VUregsn->VIread  = 0;
 	VUregsn->cycles  = 0;
 }

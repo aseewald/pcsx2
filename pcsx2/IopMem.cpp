@@ -1,20 +1,18 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
+
 
 #include "PrecompiledHeader.h"
 #include "IopCommon.h"
@@ -34,10 +32,14 @@ static const uint m_psxMemSize =
 	0x00010000 +		// psxP
 	0x00000100 ;		// psxS
 
+// TODO: move to a header
+void Pcsx2HostFSwrite32(u32 addr, u32 value);
+u32 Pcsx2HostFSread32(u32 addr);
+
 void psxMemAlloc()
 {
 	if( m_psxAllMem == NULL )
-		m_psxAllMem = vtlb_malloc( m_psxMemSize, 4096, 0x21000000 );
+		m_psxAllMem = vtlb_malloc( m_psxMemSize, 4096 );
 
 	if( m_psxAllMem == NULL)
 		throw Exception::OutOfMemory( "psxMemAlloc > failed allocating memory for the IOP processor." );
@@ -59,7 +61,7 @@ void psxMemReset()
 	jASSUME( psxMemWLUT != NULL );
 	jASSUME( m_psxAllMem != NULL );
 
-	DbgCon::Status( "psxMemReset > Resetting core memory!" );
+	DbgCon.WriteLn( "IOP Resetting physical ram..." );
 
 	memzero_ptr<0x2000 * sizeof(uptr) * 2>( psxMemWLUT );	// clears both allocations, RLUT and WLUT
 	memzero_ptr<m_psxMemSize>( m_psxAllMem );
@@ -72,13 +74,9 @@ void psxMemReset()
 	for (int i=0; i<0x0080; i++)
 	{
 		psxMemWLUT[i + 0x0000] = (uptr)&psxM[(i & 0x1f) << 16];
-		//psxMemWLUT[i + 0x8000] = (uptr)&psxM[(i & 0x1f) << 16];
-		//psxMemWLUT[i + 0xa000] = (uptr)&psxM[(i & 0x1f) << 16];
 
 		// RLUTs, accessed through WLUT.
 		psxMemWLUT[i + 0x2000] = (uptr)&psxM[(i & 0x1f) << 16];
-		//psxMemWLUT[i + 0x18000] = (uptr)&psxM[(i & 0x1f) << 16];
-		//psxMemWLUT[i + 0x1a000] = (uptr)&psxM[(i & 0x1f) << 16];
 	}
 
 	// A few single-page allocations for things we store in special locations.
@@ -94,24 +92,16 @@ void psxMemReset()
 	for (int i=0; i<0x0040; i++)
 	{
 		psxMemWLUT[i + 0x2000 + 0x1fc0] = (uptr)&PS2MEM_ROM[i << 16];
-		//psxMemWLUT[i + 0x19fc0] = (uptr)&PS2MEM_ROM[i << 16];
-		//psxMemWLUT[i + 0x1bfc0] = (uptr)&PS2MEM_ROM[i << 16];
 	}
 
 	for (int i=0; i<0x0004; i++)
 	{
 		psxMemWLUT[i + 0x2000 + 0x1e00] = (uptr)&PS2MEM_ROM1[i << 16];
-		//psxMemWLUT[i + 0x19e00] = (uptr)&PS2MEM_ROM1[i << 16];
-		//psxMemWLUT[i + 0x1be00] = (uptr)&PS2MEM_ROM1[i << 16];
 	}
 
 	// sif!! (which is read only? (air))
 	psxMemWLUT[0x2000 + 0x1d00] = (uptr)psxS;
 	//psxMemWLUT[0x1bd00] = (uptr)psxS;
-
-	// why isn't scratchpad read/write? (air)
-	//for (i=0; i<0x0001; i++) psxMemWLUT[i + 0x1d00] = (uptr)&psxS[i << 16];
-	//for (i=0; i<0x0001; i++) psxMemWLUT[i + 0xbd00] = (uptr)&psxS[i << 16];
 
 	// this one looks like an old hack for some special write-only memory area,
 	// but leaving it in for reference (air)
@@ -129,17 +119,22 @@ void psxMemShutdown()
 	psxMemRLUT = NULL;
 }
 
-u8 iopMemRead8(u32 mem)
+u8 __fastcall iopMemRead8(u32 mem)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
 
 	if (t == 0x1f80)
 	{
-		if (mem < 0x1f801000)
+		switch( mem & 0xf000 )
+		{
+			case 0x1000: return IopMemory::iopHwRead8_Page1(mem);
+			case 0x3000: return IopMemory::iopHwRead8_Page3(mem);
+			case 0x8000: return IopMemory::iopHwRead8_Page8(mem);
+
+			default:
 			return psxHu8(mem);
-		else
-			return psxHwRead8(mem);
+	}
 	}
 	else if (t == 0x1f40)
 	{
@@ -162,17 +157,22 @@ u8 iopMemRead8(u32 mem)
 	}
 }
 
-u16 iopMemRead16(u32 mem)
+u16 __fastcall iopMemRead16(u32 mem)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
 
 	if (t == 0x1f80)
 	{
-		if (mem < 0x1f801000)
+		switch( mem & 0xf000 )
+		{
+			case 0x1000: return IopMemory::iopHwRead16_Page1(mem);
+			case 0x3000: return IopMemory::iopHwRead16_Page3(mem);
+			case 0x8000: return IopMemory::iopHwRead16_Page8(mem);
+
+			default:
 			return psxHu16(mem);
-		else
-			return psxHwRead16(mem);
+	}
 	}
 	else
 	{
@@ -185,13 +185,13 @@ u16 iopMemRead16(u32 mem)
 				switch(mem & 0xF0)
 				{
 				case 0x00:
-					ret= psHu16(0x1000F200);
+					ret= psHu16(SBUS_F200);
 					break;
 				case 0x10:
-					ret= psHu16(0x1000F210);
+					ret= psHu16(SBUS_F210);
 					break;
 				case 0x40:
-					ret= psHu16(0x1000F240) | 0x0002;
+					ret= psHu16(SBUS_F240) | 0x0002;
 					break;
 				case 0x60:
 					ret = 0;
@@ -217,17 +217,22 @@ u16 iopMemRead16(u32 mem)
 	}
 }
 
-u32 iopMemRead32(u32 mem)
+u32 __fastcall iopMemRead32(u32 mem)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
 
 	if (t == 0x1f80)
 	{
-		if (mem < 0x1f801000)
+		switch( mem & 0xf000 )
+		{
+			case 0x1000: return IopMemory::iopHwRead32_Page1(mem);
+			case 0x3000: return IopMemory::iopHwRead32_Page3(mem);
+			case 0x8000: return IopMemory::iopHwRead32_Page8(mem);
+
+			default:
 			return psxHu32(mem);
-		else
-			return psxHwRead32(mem);
+		}
 	} else
 	{
 		//see also Hw.c
@@ -237,26 +242,29 @@ u32 iopMemRead32(u32 mem)
 			if (t == 0x1d00)
 			{
 				u32 ret;
-				switch(mem & 0xF0)
+				switch(mem & 0x8F0)
 				{
 				case 0x00:
-					ret= psHu32(0x1000F200);
+					ret= psHu32(SBUS_F200);
 					break;
 				case 0x10:
-					ret= psHu32(0x1000F210);
+					ret= psHu32(SBUS_F210);
 					break;
 				case 0x20:
-					ret= psHu32(0x1000F220);
+					ret= psHu32(SBUS_F220);
 					break;
 				case 0x30:	// EE Side
-					ret= psHu32(0x1000F230);
+					ret= psHu32(SBUS_F230);
 					break;
 				case 0x40:
-					ret= psHu32(0x1000F240) | 0xF0000002;
+					ret= psHu32(SBUS_F240) | 0xF0000002;
 					break;
 				case 0x60:
 					ret = 0;
 					break;
+				case 0x800:
+					return Pcsx2HostFSread32(mem);
+
 				default:
 					ret = psxHu32(mem);
 					break;
@@ -275,17 +283,23 @@ u32 iopMemRead32(u32 mem)
 	}
 }
 
-void iopMemWrite8(u32 mem, u8 value)
+void __fastcall iopMemWrite8(u32 mem, u8 value)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
 	
 	if (t == 0x1f80)
 	{
-		if (mem < 0x1f801000)
+		switch( mem & 0xf000 )
+		{
+			case 0x1000: IopMemory::iopHwWrite8_Page1(mem,value); break;
+			case 0x3000: IopMemory::iopHwWrite8_Page3(mem,value); break;
+			case 0x8000: IopMemory::iopHwWrite8_Page8(mem,value); break;
+
+			default:
 			psxHu8(mem) = value;
-		else
-			psxHwWrite8(mem, value);
+			break;
+	}
 	}
 	else if (t == 0x1f40)
 	{
@@ -303,7 +317,7 @@ void iopMemWrite8(u32 mem, u8 value)
 		{
 			if (t == 0x1d00) 
 			{
-				Console::WriteLn("sw8 [0x%08X]=0x%08X", params mem, value);
+				Console.WriteLn("sw8 [0x%08X]=0x%08X", mem, value);
 				psxSu8(mem) = value; 
 				return;
 			}
@@ -316,23 +330,29 @@ void iopMemWrite8(u32 mem, u8 value)
 	}
 }
 
-void iopMemWrite16(u32 mem, u16 value)
+void __fastcall iopMemWrite16(u32 mem, u16 value)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
 
 	if (t == 0x1f80)
 	{
-		if (mem < 0x1f801000)
+		switch( mem & 0xf000 )
+		{
+			case 0x1000: IopMemory::iopHwWrite16_Page1(mem,value); break;
+			case 0x3000: IopMemory::iopHwWrite16_Page3(mem,value); break;
+			case 0x8000: IopMemory::iopHwWrite16_Page8(mem,value); break;
+
+			default:
 			psxHu16(mem) = value;
-		else
-			psxHwWrite16(mem, value);
+			break;
+		}
 	} else
 	{
 		u8* p = (u8 *)(psxMemWLUT[mem >> 16]);
 		if (p != NULL && !(psxRegs.CP0.n.Status & 0x10000) )
 		{
-			if( t==0x1D00 ) Console::WriteLn("sw16 [0x%08X]=0x%08X", params mem, value);
+			if( t==0x1D00 ) Console.WriteLn("sw16 [0x%08X]=0x%08X", mem, value);
 			*(u16 *)(p + (mem & 0xffff)) = value;
 			psxCpu->Clear(mem&~3, 1);
 		}
@@ -340,11 +360,11 @@ void iopMemWrite16(u32 mem, u16 value)
 		{
 			if (t == 0x1d00)
 			{
-				switch (mem & 0xf0)
+				switch (mem & 0x8f0)
 				{
 					case 0x10:
 						// write to ps2 mem
-						psHu16(0x1000F210) = value;
+						psHu16(SBUS_F210) = value;
 						return;
 					case 0x40:
 					{
@@ -352,19 +372,20 @@ void iopMemWrite16(u32 mem, u16 value)
 						// write to ps2 mem
 						if(value & 0x20 || value & 0x80)
 						{
-							psHu16(0x1000F240) &= ~0xF000;
-							psHu16(0x1000F240) |= 0x2000;
+							psHu16(SBUS_F240) &= ~0xF000;
+							psHu16(SBUS_F240) |= 0x2000;
 						}
 
 						
-						if(psHu16(0x1000F240) & temp) psHu16(0x1000F240) &= ~temp;
-						else psHu16(0x1000F240) |= temp;
+						if(psHu16(SBUS_F240) & temp) 
+							psHu16(SBUS_F240) &= ~temp;
+						else 
+							psHu16(SBUS_F240) |= temp;
 						return;
 					}
 					case 0x60:
-						psHu32(0x1000F260) = 0;
+						psHu32(SBUS_F260) = 0;
 						return;
-
 				}
 				psxSu16(mem) = value; return;
 			}
@@ -379,17 +400,23 @@ void iopMemWrite16(u32 mem, u16 value)
 	}
 }
 
-void iopMemWrite32(u32 mem, u32 value)
+void __fastcall iopMemWrite32(u32 mem, u32 value)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
 	
 	if (t == 0x1f80)
 	{
-		if (mem < 0x1f801000)
+		switch( mem & 0xf000 )
+		{
+			case 0x1000: IopMemory::iopHwWrite32_Page1(mem,value); break;
+			case 0x3000: IopMemory::iopHwWrite32_Page3(mem,value); break;
+			case 0x8000: IopMemory::iopHwWrite32_Page8(mem,value); break;
+			
+			default:
 			psxHu32(mem) = value;
-		else
-			psxHwWrite32(mem, value);
+			break;
+		}
 	} else
 	{
 		//see also Hw.c
@@ -404,43 +431,48 @@ void iopMemWrite32(u32 mem, u32 value)
 			if (t == 0x1d00)
 			{
 				MEM_LOG("iop Sif reg write %x value %x", mem, value);
-				switch (mem & 0xf0)
+				switch (mem & 0x8f0)
 				{
 					case 0x00:		// EE write path (EE/IOP readable)
 						return;		// this is the IOP, so read-only (do nothing)
 
 					case 0x10:		// IOP write path (EE/IOP readable)
-						psHu32(0x1000F210) = value;
+						psHu32(SBUS_F210) = value;
 						return;
 
 					case 0x20:		// Bits cleared when written from IOP.
-						psHu32(0x1000F220) &= ~value;
+						psHu32(SBUS_F220) &= ~value;
 						return;
 
 					case 0x30:		// bits set when written from IOP
-						psHu32(0x1000F230) |= value;
+						psHu32(SBUS_F230) |= value;
 						return;
 
 					case 0x40:		// Control Register
 					{
 						u32 temp = value & 0xF0;
-						if(value & 0x20 || value & 0x80)
+						if (value & 0x20 || value & 0x80)
 						{
-							psHu32(0x1000F240) &= ~0xF000;
-							psHu32(0x1000F240) |= 0x2000;
+							psHu32(SBUS_F240) &= ~0xF000;
+							psHu32(SBUS_F240) |= 0x2000;
 						}
 
 						
-						if(psHu32(0x1000F240) & temp)
-							psHu32(0x1000F240) &= ~temp;
+						if (psHu32(SBUS_F240) & temp)
+							psHu32(SBUS_F240) &= ~temp;
 						else
-							psHu32(0x1000F240) |= temp;
+							psHu32(SBUS_F240) |= temp;
 						return;
 					}
 
 					case 0x60:
-						psHu32(0x1000F260) = 0;
+						psHu32(SBUS_F260) = 0;
 					return;
+
+					case 0x800:
+						Pcsx2HostFSwrite32(mem, value);
+						return;
+
 				}
 				psxSu32(mem) = value; 
 

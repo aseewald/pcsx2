@@ -1,20 +1,18 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
+
 
 /**************************
 *
@@ -40,12 +38,12 @@ BOOL CALLBACK PatchBDlgProc(HWND hW, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	switch(uMsg) {
 
 		case WM_INITDIALOG:
-            SetWindowText(hW, _("Patches Browser"));
-            Button_SetText(GetDlgItem(hW,IDC_REFRESHPATCHLIST), _("Refresh List"));
-            Button_SetText(GetDlgItem(hW,IDC_NEWPATCH), _("New Patch"));
-			Button_SetText(GetDlgItem(hW,IDC_SAVEPATCH), _("Save Patch"));
-			Button_SetText(GetDlgItem(hW,IDC_EXITPB), _("Exit"));
-            Static_SetText(GetDlgItem(hW,IDC_GAMENAMESEARCH), _("Search game name patch:")); 
+            SetWindowText(hW, "Patches Browser");
+            Button_SetText(GetDlgItem(hW,IDC_REFRESHPATCHLIST), "Refresh List");
+            Button_SetText(GetDlgItem(hW,IDC_NEWPATCH), "New Patch");
+			Button_SetText(GetDlgItem(hW,IDC_SAVEPATCH), "Save Patch");
+			Button_SetText(GetDlgItem(hW,IDC_EXITPB), "Exit");
+            Static_SetText(GetDlgItem(hW,IDC_GAMENAMESEARCH), "Search game name patch:"); 
 			//List Patches
 			ListPatches ((HWND) hW);
 			return TRUE;

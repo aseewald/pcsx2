@@ -1,28 +1,22 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-#ifndef __DEBUG_H__
-#define __DEBUG_H__
-
-#include "Pcsx2Config.h"
+#pragma once
 
 extern FILE *emuLog;
+extern wxString emuLogName;
 
 extern char* disVU0MicroUF(u32 code, u32 pc);
 extern char* disVU0MicroLF(u32 code, u32 pc);
@@ -71,28 +65,22 @@ namespace R3000A
 	extern char* disR3000AF(u32 code, u32 pc);
 }
 
-extern bool enableLogging;
 #ifdef PCSX2_DEVBUILD
 
-extern u32 varLog;
-extern bool enableLogging;
-
-void SourceLog( u16 protocol, u8 source, u32 cpuPc, u32 cpuCycle, const char *fmt, ...);
-void __Log( const char* fmt, ... );
+extern void SourceLog( u16 protocol, u8 source, u32 cpuPc, u32 cpuCycle, const char *fmt, ...);
+extern void __Log( const char* fmt, ... );
 
 extern bool SrcLog_CPU( const char* fmt, ... );
 extern bool SrcLog_COP0( const char* fmt, ... );
-extern bool SrcLog_FPU( const char* fmt, ... );
-extern bool SrcLog_MMI( const char* fmt, ... );
 
 extern bool SrcLog_MEM( const char* fmt, ... );
 extern bool SrcLog_HW( const char* fmt, ... );
 extern bool SrcLog_DMA( const char* fmt, ... );
 extern bool SrcLog_BIOS( const char* fmt, ... );
-extern bool SrcLog_ELF( const char* fmt, ... );
 extern bool SrcLog_VU0( const char* fmt, ... );
 
 extern bool SrcLog_VIF( const char* fmt, ... );
+extern bool SrcLog_VIFUNPACK( const char* fmt, ... );
 extern bool SrcLog_SPR( const char* fmt, ... );
 extern bool SrcLog_GIF( const char* fmt, ... );
 extern bool SrcLog_SIF( const char* fmt, ... );
@@ -100,6 +88,7 @@ extern bool SrcLog_IPU( const char* fmt, ... );
 extern bool SrcLog_VUM( const char* fmt, ... );
 extern bool SrcLog_RPC( const char* fmt, ... );
 extern bool SrcLog_EECNT( const char* fmt, ... );
+extern bool SrcLog_ISOFS( const char* fmt, ... );
 
 extern bool SrcLog_PSXCPU( const char* fmt, ... );
 extern bool SrcLog_PSXMEM( const char* fmt, ... );
@@ -110,77 +99,82 @@ extern bool SrcLog_PSXCNT( const char* fmt, ... );
 
 extern bool SrcLog_MEMCARDS( const char* fmt, ... );
 extern bool SrcLog_PAD( const char* fmt, ... );
-extern bool SrcLog_GTE( const char* fmt, ... );
 extern bool SrcLog_CDR( const char* fmt, ... );
+extern bool SrcLog_CDVD( const char* fmt, ... );
 extern bool SrcLog_GPU( const char* fmt, ... );
+extern bool SrcLog_CACHE( const char* fmt, ... );
 
-#define CPU_LOG  (varLog & 0x00000001) && SrcLog_CPU
-#define MEM_LOG  (varLog & 0x00000002) && SrcLog_MEM
-#define HW_LOG   (varLog & 0x00000004) && SrcLog_HW
-#define DMA_LOG  (varLog & 0x00000008) && SrcLog_DMA
-#define BIOS_LOG (varLog & 0x00000010) && SrcLog_BIOS
-#define ELF_LOG  (varLog & 0x00000020) && SrcLog_ELF
-#define FPU_LOG  (varLog & 0x00000040) && SrcLog_FPU
-#define MMI_LOG  (varLog & 0x00000080) && SrcLog_MMI
-#define VU0_LOG  (varLog & 0x00000100) && SrcLog_VU0
-#define COP0_LOG (varLog & 0x00000200) && SrcLog_COP0
-#define VIF_LOG  (varLog & 0x00000400) && SrcLog_VIF
-#define SPR_LOG  (varLog & 0x00000800) && SrcLog_SPR
-#define GIF_LOG  (varLog & 0x00001000) && SrcLog_GIF
-#define SIF_LOG  (varLog & 0x00002000) && SrcLog_SIF
-#define IPU_LOG  (varLog & 0x00004000) && SrcLog_IPU
-#define VUM_LOG  (varLog & 0x00008000) && SrcLog_VUM
-#define RPC_LOG  (varLog & 0x00010000) && SrcLog_RPC
-#define EECNT_LOG (varLog & 0x40000000) && SrcLog_EECNT
+// Helper macro for cut&paste.  Note that we intentionally use a top-level *inline* bitcheck
+// against Trace.Enabled, to avoid extra overhead in Debug builds when logging is disabled.
+#define macTrace EmuConfig.Trace.Enabled && EmuConfig.Trace
 
-#define PSXCPU_LOG  (varLog & 0x00100000) && SrcLog_PSXCPU
-#define PSXMEM_LOG  (varLog & 0x00200000) && SrcLog_PSXMEM
-#define PSXHW_LOG   (varLog & 0x00400000) && SrcLog_PSXHW
-#define PSXBIOS_LOG (varLog & 0x00800000) && SrcLog_PSXBIOS
-#define PSXDMA_LOG  (varLog & 0x01000000) && SrcLog_PSXDMA
-#define PSXCNT_LOG  (varLog & 0x20000000) && SrcLog_PSXCNT
+#define CPU_LOG			(macTrace.EE.R5900())		&& SrcLog_CPU
+#define MEM_LOG			(macTrace.EE.Memory())		&& SrcLog_MEM
+#define CACHE_LOG		(macTrace.EE.Cache)			&& SrcLog_CACHE
+#define HW_LOG			(macTrace.EE.KnownHw())		&& SrcLog_HW
+#define UnknownHW_LOG	(macTrace.EE.KnownHw())		&& SrcLog_HW
+#define DMA_LOG			(macTrace.EE.DMA())			&& SrcLog_DMA
 
-//memcard has the same number as PAD_LOG for now
-#define MEMCARDS_LOG (varLog & 0x02000000) && SrcLog_MEMCARDS
-#define PAD_LOG  (varLog & 0x02000000) && SrcLog_PAD
-#define GTE_LOG  (varLog & 0x04000000) && SrcLog_GTE
-#define CDR_LOG  (varLog & 0x08000000) && SrcLog_CDR
-#define GPU_LOG  (varLog & 0x10000000) && SrcLog_GPU
+#define BIOS_LOG		(macTrace.EE.Bios())		&& SrcLog_BIOS
+#define VU0_LOG			(macTrace.EE.VU0())			&& SrcLog_VU0
+#define SysCtrl_LOG		(macTrace.EE.SysCtrl())		&& SrcLog_COP0
+#define COP0_LOG		(macTrace.EE.COP0())		&& SrcLog_COP0
+#define VIF_LOG			(macTrace.EE.VIF())			&& SrcLog_VIF
+#define SPR_LOG			(macTrace.EE.SPR())			&& SrcLog_SPR
+#define GIF_LOG			(macTrace.EE.GIF())			&& SrcLog_GIF
+#define SIF_LOG			(macTrace.SIF)				&& SrcLog_SIF
+#define IPU_LOG			(macTrace.EE.IPU())			&& SrcLog_IPU
+#define VUM_LOG			(macTrace.EE.COP2())		&& SrcLog_VUM
 
-// fixme - currently we don't log cache
-#define CACHE_LOG 0&&
+#define EECNT_LOG		(macTrace.EE.Counters())	&& SrcLog_EECNT
+#define VIFUNPACK_LOG	(macTrace.EE.VIFunpack())	&& SrcLog_VIFUNPACK
+
+
+#define PSXCPU_LOG		(macTrace.IOP.R3000A())		&& SrcLog_PSXCPU
+#define PSXMEM_LOG		(macTrace.IOP.Memory())		&& SrcLog_PSXMEM
+#define PSXHW_LOG		(macTrace.IOP.KnownHw())	&& SrcLog_PSXHW
+#define PSXUnkHW_LOG	(macTrace.IOP.UnknownHw())	&& SrcLog_PSXHW
+#define PSXBIOS_LOG		(macTrace.IOP.Bios())		&& SrcLog_PSXBIOS
+#define PSXDMA_LOG		(macTrace.IOP.DMA())		&& SrcLog_PSXDMA
+#define PSXCNT_LOG		(macTrace.IOP.Counters())	&& SrcLog_PSXCNT
+
+#define MEMCARDS_LOG	(macTrace.IOP.Memcards())	&& SrcLog_MEMCARDS
+#define PAD_LOG			(macTrace.IOP.PAD())		&& SrcLog_PAD
+#define GPU_LOG			(macTrace.IOP.GPU())		&& SrcLog_GPU
+#define CDVD_LOG		(macTrace.IOP.CDVD())		&& SrcLog_CDVD
 
 #else // PCSX2_DEVBUILD
-
-#define varLog 0
 
 #define CPU_LOG  0&&
 #define MEM_LOG  0&&
 #define HW_LOG   0&&
 #define DMA_LOG  0&&
 #define BIOS_LOG 0&&
-#define ELF_LOG  0&&
 #define FPU_LOG  0&&
 #define MMI_LOG  0&&
 #define VU0_LOG  0&&
 #define COP0_LOG 0&&
+#define SysCtrl_LOG 0&&
+#define UnknownHW_LOG 0&&
 #define VIF_LOG  0&&
+#define VIFUNPACK_LOG  0&&
 #define SPR_LOG  0&&
 #define GIF_LOG  0&&
 #define SIF_LOG  0&&
 #define IPU_LOG  0&&
 #define VUM_LOG  0&&
-#define RPC_LOG  0&&
+#define ISOFS_LOG  0&&
 
 #define PSXCPU_LOG  0&&
 #define PSXMEM_LOG  0&&
 #define PSXHW_LOG   0&&
+#define PSXUnkHW_LOG   0&&
 #define PSXBIOS_LOG 0&&
 #define PSXDMA_LOG  0&&
 
 #define PAD_LOG  0&&
-#define GTE_LOG  0&&
 #define CDR_LOG  0&&
+#define CDVD_LOG  0&&
 #define GPU_LOG  0&&
 #define PSXCNT_LOG 0&&
 #define EECNT_LOG 0&&
@@ -190,12 +184,4 @@ extern bool SrcLog_GPU( const char* fmt, ... );
 #define MEMCARDS_LOG 0&&
 #endif
 
-//#define VIFUNPACKDEBUG //enable unpack debugging output
-
-#ifdef VIFUNPACKDEBUG
-#define VIFUNPACK_LOG VIF_LOG
-#else
-#define VIFUNPACK_LOG 0&&
-#endif
-
-#endif /* __DEBUG_H__ */
+#define ELF_LOG  (EmuConfig.Log.ELF) && DevCon.WriteLn

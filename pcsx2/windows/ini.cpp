@@ -24,7 +24,7 @@
 static const u32 IniVersion = 102;
 
 const char* g_CustomConfigFile;
-char g_WorkingFolder[g_MaxPath];		// Working folder at application startup
+//char g_WorkingFolder[g_MaxPath];		// Working folder at application startup
 
 // Returns TRUE if the user has invoked the -cfg command line option.
 static bool hasCustomConfig()
@@ -33,12 +33,12 @@ static bool hasCustomConfig()
 }
 
 // Returns the FULL (absolute) path and filename of the configuration file.
-static string GetConfigFilename()
+static wxString GetConfigFilename()
 {
 	// Load a user-specified configuration, or use the ini relative to the application's working directory.
 	// (Our current working directory can change, so we use the one we detected at startup)
 
-	return Path::Combine( g_WorkingFolder, hasCustomConfig() ? g_CustomConfigFile : (DEFAULT_INIS_DIR "\\pcsx2.ini") );
+	return Path::Combine( Config.Paths.Working, hasCustomConfig() ? g_CustomConfigFile : (DEFAULT_INIS_DIR "\\pcsx2.ini") );
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -50,7 +50,7 @@ IniFileLoader::IniFileLoader() : IniFile(),
 {
 }
 
-void IniFileLoader::Entry( const string& var, string& value, const string& defvalue )
+void IniFileLoader::Entry( const wxString& var, wxString& value, const wxString& defvalue )
 {
 	int retval = GetPrivateProfileString(
 		m_section.c_str(), var.c_str(), defvalue.c_str(), m_workspace.GetPtr(), m_workspace.GetLength(), m_filename.c_str()
@@ -62,7 +62,7 @@ void IniFileLoader::Entry( const string& var, string& value, const string& defva
 	value = m_workspace.GetPtr();
 }
 
-void IniFileLoader::Entry( const string& var, char (&value)[g_MaxPath], const string& defvalue )
+void IniFileLoader::Entry( const wxString& var, char (&value)[g_MaxPath], const wxString& defvalue )
 {
 	int retval = GetPrivateProfileString(
 		m_section.c_str(), var.c_str(), defvalue.c_str(), value, sizeof( value ), m_filename.c_str()
@@ -72,30 +72,30 @@ void IniFileLoader::Entry( const string& var, char (&value)[g_MaxPath], const st
 		Console::Notice( "Loadini Warning > Possible truncated value on key '%hs'", params &var );
 }
 
-void IniFileLoader::Entry( const string& var, int& value, const int defvalue )
+void IniFileLoader::Entry( const wxString& var, int& value, const int defvalue )
 {
-	string retval;
+	wxString retval;
 	Entry( var, retval, to_string( defvalue ) );
 	value = atoi( retval.c_str() );
 }
 
-void IniFileLoader::Entry( const string& var, uint& value, const uint defvalue )
+void IniFileLoader::Entry( const wxString& var, uint& value, const uint defvalue )
 {
-	string retval;
+	wxString retval;
 	Entry( var, retval, to_string( defvalue ) );
 	value = atoi( retval.c_str() );
 }
 
-void IniFileLoader::Entry( const string& var, bool& value, const bool defvalue )
+void IniFileLoader::Entry( const wxString& var, bool& value, const bool defvalue )
 {
-	string retval;
+	wxString retval;
 	Entry( var, retval, defvalue ? "enabled" : "disabled" );
 	value = (retval == "enabled");
 }
 
-void IniFileLoader::EnumEntry( const string& var, int& value, const char* const* enumArray, const int defvalue )
+void IniFileLoader::EnumEntry( const wxString& var, int& value, const char* const* enumArray, const int defvalue )
 {
-	string retval;
+	wxString retval;
 	Entry( var, retval, enumArray[defvalue] );
 
 	int i=0;
@@ -123,37 +123,37 @@ IniFileSaver::IniFileSaver() : IniFile()
 	WritePrivateProfileString( "Misc", "IniVersion", versionStr, m_filename.c_str() );
 }
 
-void IniFileSaver::Entry( const string& var, const string& value, const string& defvalue )
+void IniFileSaver::Entry( const wxString& var, const wxString& value, const wxString& defvalue )
 {
 	WritePrivateProfileString( m_section.c_str(), var.c_str(), value.c_str(), m_filename.c_str() );
 }
 
-void IniFileSaver::Entry( const string& var, string& value, const string& defvalue )
+void IniFileSaver::Entry( const wxString& var, wxString& value, const wxString& defvalue )
 {
 	WritePrivateProfileString( m_section.c_str(), var.c_str(), value.c_str(), m_filename.c_str() );
 }
 
-void IniFileSaver::Entry( const string& var, char (&value)[g_MaxPath], const string& defvalue )
+void IniFileSaver::Entry( const wxString& var, char (&value)[g_MaxPath], const wxString& defvalue )
 {
 	WritePrivateProfileString( m_section.c_str(), var.c_str(), value, m_filename.c_str() );
 }
 
-void IniFileSaver::Entry( const string& var, int& value, const int defvalue )
+void IniFileSaver::Entry( const wxString& var, int& value, const int defvalue )
 {
 	Entry( var, to_string( value ) );
 }
 
-void IniFileSaver::Entry( const string& var, uint& value, const uint defvalue )
+void IniFileSaver::Entry( const wxString& var, uint& value, const uint defvalue )
 {
 	Entry( var, to_string( value ) );
 }
 
-void IniFileSaver::Entry( const string& var, bool& value, const bool defvalue )
+void IniFileSaver::Entry( const wxString& var, bool& value, const bool defvalue )
 {
 	Entry( var, value ? "enabled" : "disabled" );
 }
 
-void IniFileSaver::EnumEntry( const string& var, int& value, const char* const* enumArray, const int defvalue )
+void IniFileSaver::EnumEntry( const wxString& var, int& value, const char* const* enumArray, const int defvalue )
 {
 	Entry( var, enumArray[value] );
 }
@@ -166,7 +166,7 @@ IniFile::IniFile() : m_filename( GetConfigFilename() ), m_section("Misc")
 {
 }
 
-void IniFile::SetCurrentSection( const string& newsection )
+void IniFile::SetCurrentSection( const wxString& newsection )
 {
 	m_section = newsection;
 }
@@ -175,20 +175,23 @@ void IniFile::DoConfig( PcsxConfig& Conf )
 {
 	SetCurrentSection( "Misc" );
 
+	Entry( "Blockdump", Conf.Blockdump, false );
+
 	Entry( "Patching", Conf.Patch, false );
 	Entry( "GameFixes", Conf.GameFixes);
+
 #ifdef PCSX2_DEVBUILD
-	Entry( "DevLogFlags", varLog );
+	Entry( "DevLogFlags", (uint&)varLog );
 #endif
 
 	//interface
 	SetCurrentSection( "Interface" );
 	Entry( "Bios", Conf.Bios );
 	Entry( "Language", Conf.Lang );
-	string plug = DEFAULT_PLUGINS_DIR;
-	Entry( "PluginsDir", Conf.PluginsDir, plug );
-	string bios = DEFAULT_BIOS_DIR;
-	Entry( "BiosDir", Conf.BiosDir, bios );
+	wxString plug = DEFAULT_PLUGINS_DIR;
+	Entry( "PluginsDir", Conf.Paths.Plugins, plug );
+	wxString bios = DEFAULT_BIOS_DIR;
+	Entry( "BiosDir", Conf.Paths.Bios, bios );
 	Entry( "CloseGsOnEscape", Conf.closeGSonEsc, true );
 
 	SetCurrentSection( "Console" );
@@ -206,14 +209,14 @@ void IniFile::DoConfig( PcsxConfig& Conf )
 
 	SetCurrentSection( "Plugins" );
 
-	Entry( "GS", Conf.GS );
-	Entry( "SPU2", Conf.SPU2 );
-	Entry( "CDVD", Conf.CDVD );
-	Entry( "PAD1", Conf.PAD1 );
-	Entry( "PAD2", Conf.PAD2 );
-	Entry( "DEV9", Conf.DEV9 );
-	Entry( "USB", Conf.USB );
-	Entry( "FW", Conf.FW );
+	Entry( "GS", Conf.Plugins.GS );
+	Entry( "SPU2", Conf.Plugins.SPU2 );
+	Entry( "CDVD", Conf.Plugins.CDVD );
+	Entry( "PAD1", Conf.Plugins.PAD1 );
+	Entry( "PAD2", Conf.Plugins.PAD2 );
+	Entry( "DEV9", Conf.Plugins.DEV9 );
+	Entry( "USB", Conf.Plugins.USB );
+	Entry( "FW", Conf.Plugins.FW );
 
 	//cpu
 	SetCurrentSection( "Cpu" );
@@ -228,9 +231,11 @@ void IniFile::DoConfig( PcsxConfig& Conf )
 	if (Config.Hacks.EECycleRate > 2)
 		Config.Hacks.EECycleRate = 2;
 	Entry("IOPCycleDouble", Config.Hacks.IOPCycleDouble);
-	Entry("WaitCycleExt", Config.Hacks.WaitCycleExt);
+	//Entry("WaitCycleExt",	Config.Hacks.WaitCycleExt);
 	Entry("INTCSTATSlow", Config.Hacks.INTCSTATSlow);
 	Entry("VUCycleSteal", Config.Hacks.VUCycleSteal);
+	Entry("vuFlagHack",		Config.Hacks.vuFlagHack);
+	Entry("vuMinMax",		Config.Hacks.vuMinMax);
 	Entry("IdleLoopFF", Config.Hacks.IdleLoopFF);
 	if (Conf.Hacks.VUCycleSteal < 0 || Conf.Hacks.VUCycleSteal > 4)
 		Conf.Hacks.VUCycleSteal = 0;
@@ -244,7 +249,7 @@ bool LoadConfig()
 {
 	bool status  = true;
 
-	string szIniFile( GetConfigFilename() );
+	wxString szIniFile( GetConfigFilename() );
 
 	if( !Path::Exists( szIniFile ) )
 	{
@@ -257,7 +262,7 @@ bool LoadConfig()
 		}
 
 		// standard mode operation.  Create the directory.
-		CreateDirectory( "inis", NULL ); 
+		Path::CreateDirectory( "inis" ); 
 		status = false;		// inform caller that we're not configured.
 	}
 	else
@@ -265,7 +270,7 @@ bool LoadConfig()
 		// sanity check to make sure the user doesn't have some kind of
 		// crazy ass setup... why not!
 
-		if( Path::isDirectory( szIniFile ) )
+		if( Path::IsDirectory( szIniFile ) )
 			throw Exception::Stream( 
 				"Cannot open or create the Pcsx2 ini file because a directory of\n"
 				"the same name already exists!  Please delete it or reinstall Pcsx2\n"
@@ -297,15 +302,6 @@ bool LoadConfig()
 
 	IniFileLoader().DoConfig( Config );
 
-#ifdef ENABLE_NLS
-	{
-		string text;
-		extern int _nl_msg_cat_cntr;
-		ssprintf(text, "LANGUAGE=%s", Config.Lang);
-		gettext_putenv(text.c_str());
-	}
-#endif
-
 	return status;
 }
 
@@ -313,14 +309,14 @@ void SaveConfig()
 {
 	PcsxConfig tmpConf = Config;
 
-	strcpy( tmpConf.GS, winConfig.GS );
-	strcpy( tmpConf.SPU2, winConfig.SPU2 );
-	strcpy( tmpConf.CDVD, winConfig.CDVD );
-	strcpy( tmpConf.PAD1, winConfig.PAD1 );
-	strcpy( tmpConf.PAD2, winConfig.PAD2 );
-	strcpy( tmpConf.DEV9, winConfig.DEV9 );
-	strcpy( tmpConf.USB, winConfig.USB );
-	strcpy( tmpConf.FW, winConfig.FW );
+	strcpy( tmpConf.Plugins.GS, winConfig.Plugins.GS );
+	strcpy( tmpConf.Plugins.SPU2, winConfig.Plugins.SPU2 );
+	strcpy( tmpConf.Plugins.CDVD, winConfig.Plugins.CDVD );
+	strcpy( tmpConf.Plugins.PAD1, winConfig.Plugins.PAD1 );
+	strcpy( tmpConf.Plugins.PAD2, winConfig.Plugins.PAD2 );
+	strcpy( tmpConf.Plugins.DEV9, winConfig.Plugins.DEV9 );
+	strcpy( tmpConf.Plugins.USB, winConfig.Plugins.USB );
+	strcpy( tmpConf.Plugins.FW, winConfig.Plugins.FW );
 
 	IniFileSaver().DoConfig( tmpConf );
 }

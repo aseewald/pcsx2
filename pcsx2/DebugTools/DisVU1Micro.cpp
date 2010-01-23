@@ -1,20 +1,18 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
+
 
 #include "PrecompiledHeader.h"
 
@@ -33,7 +31,7 @@ typedef char* (*TdisR5900F)DisFInterface;
 // These macros are used to assemble the disassembler functions
 #define MakeDisF(fn, b) \
 	char* fn DisFInterface { \
-		if( !CHECK_VU1REC ) sprintf (ostr, "%8.8x %8.8x:", pc, code); \
+		if( !!CpuVU1->IsInterpreter ) sprintf (ostr, "%8.8x %8.8x:", pc, code); \
 		else ostr[0] = 0; \
 		b; /*ostr[(strlen(ostr) - 1)] = 0;*/ return ostr; \
 	}
@@ -42,6 +40,9 @@ typedef char* (*TdisR5900F)DisFInterface;
 #define _Ft_ ((code >> 16) & 0x1F)  // The rt part of the instruction register 
 #define _Fs_ ((code >> 11) & 0x1F)  // The rd part of the instruction register 
 #define _Fd_ ((code >>  6) & 0x1F)  // The sa part of the instruction register
+#define _It_ (_Ft_ & 15)
+#define _Is_ (_Fs_ & 15)
+#define _Id_ (_Fd_ & 15)
 
 #define dName(i) sprintf(ostr, "%s %-12s", ostr, i); \
 
@@ -51,47 +52,47 @@ typedef char* (*TdisR5900F)DisFInterface;
 }
 
 #define dCP2128f(i) { \
-	if( CHECK_VU1REC ) sprintf(ostr, "%s %s,", ostr, disRNameCP2f[i]); \
+	if( !CpuVU1->IsInterpreter ) sprintf(ostr, "%s %s,", ostr, disRNameCP2f[i]); \
 	else sprintf(ostr, "%s w=%f (%8.8x) z=%f (%8.8x) y=%f (%8.8xl) x=%f (%8.8x) (%s),", ostr, VU1.VF[i].f.w, VU1.VF[i].UL[3], VU1.VF[i].f.z, VU1.VF[i].UL[2], VU1.VF[i].f.y, VU1.VF[i].UL[1], VU1.VF[i].f.x, VU1.VF[i].UL[0], disRNameCP2f[i]); \
 } \
 
 #define dCP232x(i) { \
-	if( CHECK_VU1REC ) sprintf(ostr, "%s %s,", ostr, disRNameCP2f[i]); \
+	if( !CpuVU1->IsInterpreter ) sprintf(ostr, "%s %s,", ostr, disRNameCP2f[i]); \
 	else sprintf(ostr, "%s x=%f (%s),", ostr, VU1.VF[i].f.x, disRNameCP2f[i]); \
 } \
 
 #define dCP232y(i) { \
-	if( CHECK_VU1REC ) sprintf(ostr, "%s %s,", ostr, disRNameCP2f[i]); \
+	if( !CpuVU1->IsInterpreter ) sprintf(ostr, "%s %s,", ostr, disRNameCP2f[i]); \
 	else sprintf(ostr, "%s y=%f (%s),", ostr, VU1.VF[i].f.y, disRNameCP2f[i]); \
 } \
 
 #define dCP232z(i) { \
-	if( CHECK_VU1REC ) sprintf(ostr, "%s %s,", ostr, disRNameCP2f[i]); \
+	if( !CpuVU1->IsInterpreter ) sprintf(ostr, "%s %s,", ostr, disRNameCP2f[i]); \
 	else sprintf(ostr, "%s z=%f (%s),", ostr, VU1.VF[i].f.z, disRNameCP2f[i]); \
 } 
 
 #define dCP232w(i) { \
-	if( CHECK_VU1REC ) sprintf(ostr, "%s %s,", ostr, disRNameCP2f[i]); \
+	if( !CpuVU1->IsInterpreter ) sprintf(ostr, "%s %s,", ostr, disRNameCP2f[i]); \
 	else sprintf(ostr, "%s w=%f (%s),", ostr, VU1.VF[i].f.w, disRNameCP2f[i]); \
 }
 
 #define dCP2ACCf() { \
-	if( CHECK_VU1REC ) sprintf(ostr, "%s ACC,", ostr); \
+	if( !CpuVU1->IsInterpreter ) sprintf(ostr, "%s ACC,", ostr); \
 	else sprintf(ostr, "%s w=%f z=%f y=%f x=%f (ACC),", ostr, VU1.ACC.f.w, VU1.ACC.f.z, VU1.ACC.f.y, VU1.ACC.f.x); \
 } \
 
 #define dCP232i(i) { \
-	if( CHECK_VU1REC ) sprintf(ostr, "%s %s,", ostr, disRNameCP2i[i]); \
+	if( !CpuVU1->IsInterpreter ) sprintf(ostr, "%s %s,", ostr, disRNameCP2i[i]); \
 	else sprintf(ostr, "%s %8.8x (%s),", ostr, VU1.VI[i].UL, disRNameCP2i[i]); \
 }
 
 #define dCP232iF(i) { \
-	if( CHECK_VU1REC ) sprintf(ostr, "%s %s,", ostr, disRNameCP2i[i]); \
+	if( !CpuVU1->IsInterpreter ) sprintf(ostr, "%s %s,", ostr, disRNameCP2i[i]); \
 	else sprintf(ostr, "%s %f (%s),", ostr, VU1.VI[i].F, disRNameCP2i[i]); \
 }
 
 #define dCP232f(i, j) { \
-	if( CHECK_VU1REC ) sprintf(ostr, "%s %s%s,", ostr, disRNameCP2f[i], CP2VFnames[j]); \
+	if( !CpuVU1->IsInterpreter ) sprintf(ostr, "%s %s%s,", ostr, disRNameCP2f[i], CP2VFnames[j]); \
 	else sprintf(ostr, "%s %s=%f (%s),", ostr, CP2VFnames[j], VU1.VF[i].F[j], disRNameCP2f[i]); \
 }
 

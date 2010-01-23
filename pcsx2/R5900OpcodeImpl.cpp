@@ -1,29 +1,28 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "PrecompiledHeader.h"
 
+#include "PrecompiledHeader.h"
 #include "Common.h"
+
+#include <float.h>
+
 #include "R5900.h"
 #include "R5900OpcodeTables.h"
 #include "R5900Exceptions.h"
 
-#include <float.h>
 
 static __forceinline s64 _add64_Overflow( s64 x, s64 y )
 {
@@ -34,12 +33,12 @@ static __forceinline s64 _add64_Overflow( s64 x, s64 y )
 	// other method below is like 5-10 times slower).
 
 	if( ((~(x^y))&(x^result)) < 0 )
-		throw R5900Exception::Overflow();
+		cpuException(0x30, cpuRegs.branch);		// fixme: is 0x30 right for overflow??
 
 	// the not-as-fast style!
 	//if( ((x >= 0) && (y >= 0) && (result <  0)) ||
 	//	((x <  0) && (y <  0) && (result >= 0)) )
-	//	throw R5900Exception::Overflow();
+	//	cpuException(0x30, cpuRegs.branch);
 
 	return result;
 }
@@ -54,7 +53,7 @@ static __forceinline s64 _add32_Overflow( s32 x, s32 y )
 
 	// If bit32 != bit31 then we have an overflow.
 	if( (result.UL[0]>>31) != (result.UL[1] & 1) )
-		throw R5900Exception::Overflow();
+		cpuException(0x30, cpuRegs.branch);
 
 	return result.SD[0];
 }
@@ -138,9 +137,9 @@ void Unknown() {
 	CPU_LOG("%8.8lx: Unknown opcode called", cpuRegs.pc);
 }
 
-void MMI_Unknown() { Console::Notice("Unknown MMI opcode called"); }
-void COP0_Unknown() { Console::Notice("Unknown COP0 opcode called"); }
-void COP1_Unknown() { Console::Notice("Unknown FPU/COP1 opcode called"); }
+void MMI_Unknown() { Console.Warning("Unknown MMI opcode called"); }
+void COP0_Unknown() { Console.Warning("Unknown COP0 opcode called"); }
+void COP1_Unknown() { Console.Warning("Unknown FPU/COP1 opcode called"); }
 
 
 
@@ -513,7 +512,7 @@ void LWR()
 
 // dummy variable used as a destination address for writes to the zero register, so
 // that the zero register always stays zero.
-PCSX2_ALIGNED16( static GPR_reg m_dummy_gpr_zero );
+static __aligned16 GPR_reg m_dummy_gpr_zero;
 
 // Returns the x86 address of the requested GPR, which is safe for writing. (includes
 // special handling for returning a dummy var for GPR0(zero), so that it's value is
@@ -733,7 +732,6 @@ void MOVN() {
 * Format:  OP                                            *
 *********************************************************/
 
-#include "Sifcmd.h"
 /*
 int __Deci2Call(int call, u32 *addr);
 */
@@ -743,6 +741,8 @@ char deci2buffer[256];
 
 /*
  *	int Deci2Call(int, u_int *);
+ *
+ *  HLE implementation of the Deci2 interface.
  */
 
 int __Deci2Call(int call, u32 *addr)
@@ -763,7 +763,7 @@ int __Deci2Call(int call, u32 *addr)
 			else
 			{
 				deci2handler = NULL;
-				DevCon::Notice( "Deci2Call.Open > NULL address ignored." );
+				DevCon.Warning( "Deci2Call.Open > NULL address ignored." );
 			}
 			return 1;
 
@@ -782,17 +782,19 @@ int __Deci2Call(int call, u32 *addr)
 				deci2addr[3], deci2addr[2], deci2addr[1], deci2addr[0]);
 
 //			cpuRegs.pc = deci2handler;
-//			Console::WriteLn("deci2msg: %s",  params (char*)PSM(deci2addr[4]+0xc));
+//			Console.WriteLn("deci2msg: %s",  (char*)PSM(deci2addr[4]+0xc));
 			if (deci2addr == NULL) return 1;
 			if (deci2addr[1]>0xc){
 				u8* pdeciaddr = (u8*)dmaGetAddr(deci2addr[4]+0xc);
 				if( pdeciaddr == NULL )
 					pdeciaddr = (u8*)PSM(deci2addr[4]+0xc);
 				else
-					pdeciaddr += (deci2addr[4]+0xc)%16;
+					pdeciaddr += (deci2addr[4]+0xc) % 16;
 				memcpy(deci2buffer, pdeciaddr, deci2addr[1]-0xc);
-				deci2buffer[deci2addr[1]-0xc>=255?255:deci2addr[1]-0xc]='\0';
-				Console::Write( Color_Cyan, deci2buffer );
+				deci2buffer[(deci2addr[1]-0xc>=255) ? 255 : (deci2addr[1]-0xc)] = '\0';
+
+				if( EmuConfig.Log.Deci2 )
+					Console.Write( ConColor_EE, L"%s", ShiftJIS_ConvertString(deci2buffer).c_str() );
 			}
 			deci2addr[3] = 0;
 			return 1;
@@ -810,14 +812,16 @@ int __Deci2Call(int call, u32 *addr)
 			return 1;
 
 		case 0x10://kputs
-			if( addr != NULL )
-				Console::Write( Color_Cyan, "%s", params PSM(*addr));
+			if( addr != NULL && EmuConfig.Log.Deci2 )
+				Console.Write( ConColor_EE, L"%s", ShiftJIS_ConvertString((char*)PSM(*addr)).c_str() );
 			return 1;
 	}
 
 	return 0;
 }
 
+// This function is the only one that uses Sifcmd.h in Pcsx2.
+#include "Sifcmd.h"
 
 void SYSCALL()
 {
@@ -833,12 +837,14 @@ void SYSCALL()
 	if (call == 0x7c)
 	{
 		if(cpuRegs.GPR.n.a0.UL[0] == 0x10)
-			Console::Write( Color_Cyan, (char*)PSM(memRead32(cpuRegs.GPR.n.a1.UL[0])) );
+			Console.Write( ConColor_EE, L"%s", ShiftJIS_ConvertString((char*)PSM(memRead32(cpuRegs.GPR.n.a1.UL[0]))).c_str() );
 		else
 			__Deci2Call( cpuRegs.GPR.n.a0.UL[0], (u32*)PSM(cpuRegs.GPR.n.a1.UL[0]) );
 	}
 
-	if (call == 0x77)
+	// The only thing this code is used for is the one log message, so don't execute it if we aren't logging bios messages.
+#ifdef PCSX2_DEVBUILD
+	if (macTrace.EE.Bios() && (call == 0x77))
 	{
 		t_sif_dma_transfer *dmat;
 		//struct t_sif_cmd_header	*hdr;
@@ -860,6 +866,7 @@ void SYSCALL()
 				dmat->dest, dmat->src);
 		}
 	}
+#endif
 
 	cpuRegs.pc -= 4;
 	cpuException(0x20, cpuRegs.branch);

@@ -1,20 +1,18 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
+
 
 #include "PrecompiledHeader.h"
 
@@ -57,59 +55,10 @@ void recADDI_const( void )
 
 void recADDI_(int info) 
 {
-	assert( !(info&PROCESS_EE_XMM) );
+	pxAssert( !(info&PROCESS_EE_XMM) );
 	EEINST_SETSIGNEXT(_Rt_);
 	EEINST_SETSIGNEXT(_Rs_);
 
-	if ( info & PROCESS_EE_MMX ) {
-		if ( _Imm_ != 0 ) {
-
-			u32* ptempmem = recAllocStackMem(8, 8);
-			ptempmem[0] = (s32)_Imm_;
-			ptempmem[1] = 0;
-
-			if ( EEREC_T != EEREC_S ) MOVQRtoR(EEREC_T, EEREC_S);
-			PADDDMtoR(EEREC_T, (u32)ptempmem);
-			if ( EEINST_ISLIVE1(_Rt_) ) _signExtendGPRtoMMX(EEREC_T, _Rt_, 0);
-			else EEINST_RESETHASLIVE1(_Rt_);
-		}
-		else {
-			// just move and sign extend
-			if ( !EEINST_HASLIVE1(_Rs_) ) {
-				if ( EEINST_ISLIVE1(_Rt_) ) _signExtendGPRMMXtoMMX(EEREC_T, _Rt_, EEREC_S, _Rs_);
-				else EEINST_RESETHASLIVE1(_Rt_);
-			}
-			else if ( EEREC_T != EEREC_S ) MOVQRtoR(EEREC_T, EEREC_S);
-		}
-		return;
-	}
-
-	if ( (g_pCurInstInfo->regs[_Rt_]&EEINST_MMX) && (_Rt_ != _Rs_) ) {
-		int rtreg = _allocMMXreg(-1, MMX_GPR+_Rt_, MODE_WRITE);
-		SetMMXstate();
-
-		if ( _Imm_ != 0 ) {
-			u32* ptempmem = recAllocStackMem(8, 8);
-			ptempmem[0] = (s32)_Imm_;
-			ptempmem[1] = 0;
-
-			MOVDMtoMMX(rtreg, (int)&cpuRegs.GPR.r[ _Rs_ ].UL[ 0 ]);
-			PADDDMtoR(rtreg, (u32)ptempmem);
-
-			if ( EEINST_ISLIVE1(_Rt_) ) _signExtendGPRtoMMX(rtreg, _Rt_, 0);
-			else EEINST_RESETHASLIVE1(_Rt_);
-		}
-		else {
-			// just move and sign extend
-			if ( !EEINST_HASLIVE1(_Rs_) ) {
-				MOVDMtoMMX(rtreg, (int)&cpuRegs.GPR.r[ _Rs_ ].UL[ 0 ]);
-				if ( EEINST_ISLIVE1(_Rt_) ) _signExtendGPRtoMMX(rtreg, _Rt_, 0);
-				else EEINST_RESETHASLIVE1(_Rt_);
-			}
-			else MOVQMtoR(rtreg, (int)&cpuRegs.GPR.r[ _Rs_ ].UL[ 0 ]);
-		}
-	}
-	else {
 		if ( _Rt_ == _Rs_ ) {
 			if ( EEINST_ISLIVE1(_Rt_) )
 			{
@@ -138,7 +87,6 @@ void recADDI_(int info)
 				MOV32RtoM( (int)&cpuRegs.GPR.r[ _Rt_ ].UL[ 0 ], EAX );
 			}
 		}
-	}
 }
 
 EERECOMPILE_CODEX(eeRecompileCode1, ADDI);
@@ -157,38 +105,8 @@ void recDADDI_const( void )
 
 void recDADDI_(int info) 
 {
-	assert( !(info&PROCESS_EE_XMM) );
-
-	if( info & PROCESS_EE_MMX ) {
-
-		if( _Imm_ != 0 ) {
-
-			// flush
-			u32* ptempmem = recAllocStackMem(8, 8);
-			ptempmem[0] = _Imm_;
-			ptempmem[1] = _Imm_ >= 0 ? 0 : 0xffffffff;
-			if( EEREC_T != EEREC_S ) MOVQRtoR(EEREC_T, EEREC_S);
-			PADDQMtoR(EEREC_T, (u32)ptempmem);
-		}
-		else {
-			if( EEREC_T != EEREC_S ) MOVQRtoR(EEREC_T, EEREC_S);
-		}
-		return;
-	}
+	pxAssert( !(info&PROCESS_EE_XMM) );
 	
-	if( (g_pCurInstInfo->regs[_Rt_]&EEINST_MMX) ) {
-		int rtreg;
-		u32* ptempmem = recAllocStackMem(8, 8);
-		ptempmem[0] = _Imm_;
-		ptempmem[1] = _Imm_ >= 0 ? 0 : 0xffffffff;
-
-		rtreg = _allocMMXreg(-1, MMX_GPR+_Rt_, MODE_WRITE);
-		SetMMXstate();
-		
-		MOVQMtoR(rtreg, (int)&cpuRegs.GPR.r[ _Rs_ ].UL[ 0 ]);
-		PADDQMtoR(rtreg, (u32)ptempmem);
-	}
-	else {
 		if( _Rt_ == _Rs_ ) {
 			ADD32ItoM((int)&cpuRegs.GPR.r[ _Rt_ ].UL[ 0 ], _Imm_);
 			ADC32ItoM((int)&cpuRegs.GPR.r[ _Rt_ ].UL[ 1 ], _Imm_<0?0xffffffff:0);
@@ -215,7 +133,6 @@ void recDADDI_(int info)
 			else
 				EEINST_RESETHASLIVE1(_Rt_);
 		}
-	}
 }
 
 EERECOMPILE_CODEX(eeRecompileCode1, DADDI);
@@ -237,25 +154,7 @@ extern u32 s_sltone;
 
 void recSLTIU_(int info)
 {
-	if( info & PROCESS_EE_MMX ) {
-		if( EEINST_ISSIGNEXT(_Rs_) ) {
-			u32* ptempmem = recAllocStackMem(8,4);
-			ptempmem[0] = ((s32)(_Imm_))^0x80000000;
-			ptempmem[1] = 0;
-			recSLTmemconstt(EEREC_T, EEREC_S, (u32)ptempmem, 0);
-			EEINST_SETSIGNEXT(_Rt_);
-			return;
-		}
-
-		if( info & PROCESS_EE_MODEWRITES ) {
-			MOVQRtoM((u32)&cpuRegs.GPR.r[_Rs_], EEREC_S);
-			if( mmxregs[EEREC_S].reg == MMX_GPR+_Rs_ ) mmxregs[EEREC_S].mode &= ~MODE_WRITE;
-		}
-		mmxregs[EEREC_T].mode |= MODE_WRITE; // in case EEREC_T==EEREC_S
-	}
-
-	if( info & PROCESS_EE_MMX ) MOVDMtoMMX(EEREC_T, (u32)&s_sltone);
-	else MOV32ItoR(EAX, 1);
+	MOV32ItoR(EAX, 1);
 
 	CMP32ItoM( (int)&cpuRegs.GPR.r[ _Rs_ ].UL[ 1 ], _Imm_ >= 0 ? 0 : 0xffffffff);
 	j8Ptr[0] = JB8( 0 );
@@ -265,17 +164,15 @@ void recSLTIU_(int info)
 	j8Ptr[1] = JB8(0);
 	
 	x86SetJ8(j8Ptr[2]);
-	if( info & PROCESS_EE_MMX ) PXORRtoR(EEREC_T, EEREC_T);
-	else XOR32RtoR(EAX, EAX);
+	XOR32RtoR(EAX, EAX);
 	
 	x86SetJ8(j8Ptr[0]);
 	x86SetJ8(j8Ptr[1]);
 
-	if( !(info & PROCESS_EE_MMX) ) {
 		MOV32RtoM( (int)&cpuRegs.GPR.r[ _Rt_ ].UL[ 0 ], EAX );
 		if( EEINST_ISLIVE1(_Rt_) ) MOV32ItoM( (int)&cpuRegs.GPR.r[ _Rt_ ].UL[ 1 ], 0 );
 		else EEINST_RESETHASLIVE1(_Rt_);
-	}
+	
 	EEINST_SETSIGNEXT(_Rt_);
 }
 
@@ -289,27 +186,8 @@ void recSLTI_const()
 
 void recSLTI_(int info)
 {
-	if( info & PROCESS_EE_MMX) {
-		
-		if( EEINST_ISSIGNEXT(_Rs_) ) {
-			u32* ptempmem = recAllocStackMem(8,4);
-			ptempmem[0] = _Imm_;
-			ptempmem[1] = 0;
-			recSLTmemconstt(EEREC_T, EEREC_S, (u32)ptempmem, 1);
-			EEINST_SETSIGNEXT(_Rt_);
-			return;
-		}
-
-		if( info & PROCESS_EE_MODEWRITES ) {
-			MOVQRtoM((u32)&cpuRegs.GPR.r[_Rs_], EEREC_S);
-			if( mmxregs[EEREC_S].reg == MMX_GPR+_Rs_ ) mmxregs[EEREC_S].mode &= ~MODE_WRITE;
-		}
-		mmxregs[EEREC_T].mode |= MODE_WRITE; // in case EEREC_T==EEREC_S
-	}
-
 	// test silent hill if modding
-	if( info & PROCESS_EE_MMX ) MOVDMtoMMX(EEREC_T, (u32)&s_sltone);
-	else MOV32ItoR(EAX, 1);
+	MOV32ItoR(EAX, 1);
 
 	CMP32ItoM( (int)&cpuRegs.GPR.r[ _Rs_ ].UL[ 1 ], _Imm_ >= 0 ? 0 : 0xffffffff);
 	j8Ptr[0] = JL8( 0 );
@@ -319,17 +197,15 @@ void recSLTI_(int info)
 	j8Ptr[1] = JB8(0);
 	
 	x86SetJ8(j8Ptr[2]);
-	if( info & PROCESS_EE_MMX ) PXORRtoR(EEREC_T, EEREC_T);
-	else XOR32RtoR(EAX, EAX);
+	XOR32RtoR(EAX, EAX);
 	
 	x86SetJ8(j8Ptr[0]);
 	x86SetJ8(j8Ptr[1]);
 	
-	if( !(info & PROCESS_EE_MMX) ) {
 		MOV32RtoM( (int)&cpuRegs.GPR.r[ _Rt_ ].UL[ 0 ], EAX );
 		if( EEINST_ISLIVE1(_Rt_) ) MOV32ItoM( (int)&cpuRegs.GPR.r[ _Rt_ ].UL[ 1 ], 0 );
 		else EEINST_RESETHASLIVE1(_Rt_);
-	}
+	
 	EEINST_SETSIGNEXT(_Rt_);
 }
 
@@ -343,49 +219,6 @@ void recANDI_const()
 
 void recLogicalOpI(int info, int op)
 {
-	if( info & PROCESS_EE_MMX ) {
-		SetMMXstate();
-
-		if( _ImmU_ != 0 ) {
-			u32* ptempmem = recAllocStackMem(8, 8);
-			ptempmem[0] = _ImmU_;
-			ptempmem[1] = 0;
-
-			if( EEREC_T != EEREC_S ) MOVQRtoR(EEREC_T, EEREC_S);
-			LogicalOpMtoR(EEREC_T, (u32)ptempmem, op);
-		}
-		else {
-			if( op == 0 ) PXORRtoR(EEREC_T, EEREC_T);
-			else if( EEREC_T != EEREC_S ) MOVQRtoR(EEREC_T, EEREC_S);
-		}
-		return;
-	}
-
-	if( (g_pCurInstInfo->regs[_Rt_]&EEINST_MMX) && ((_Rt_ != _Rs_) || (_ImmU_==0)) ) {
-		int rtreg = _allocMMXreg(-1, MMX_GPR+_Rt_, MODE_WRITE);
-		SetMMXstate();
-
-		if( op == 0 ) {
-			if ( _ImmU_ != 0 ) {
-				u32* ptempmem = recAllocStackMem(8, 8);
-				ptempmem[0] = _ImmU_;
-				ptempmem[1] = 0;
-				MOVDMtoMMX(rtreg, (int)&cpuRegs.GPR.r[ _Rs_ ].UL[ 0 ]);
-				PANDMtoR(rtreg, (u32)ptempmem);
-			}
-			else PXORRtoR(rtreg, rtreg);
-		}
-		else {
-			MOVQMtoR(rtreg, (int)&cpuRegs.GPR.r[ _Rs_ ].UL[ 0 ]);
-			if ( _ImmU_ != 0 ) {
-				u32* ptempmem = recAllocStackMem(8, 8);
-				ptempmem[0] = _ImmU_;
-				ptempmem[1] = 0;
-				LogicalOpMtoR(rtreg, (u32)ptempmem, op);
-			}
-		}
-	}
-	else {
 		if ( _ImmU_ != 0 )
 		{
 			if( _Rt_ == _Rs_ ) {
@@ -426,7 +259,6 @@ void recLogicalOpI(int info, int op)
 
 			if( !EEINST_ISLIVE1(_Rt_) ) EEINST_RESETHASLIVE1(_Rt_);
 		}
-	}
 }
 
 void recANDI_(int info)

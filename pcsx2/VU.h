@@ -1,38 +1,38 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #pragma once
 #include "Vif.h"
 
-#define REG_STATUS_FLAG	16
-#define REG_MAC_FLAG	17
-#define REG_CLIP_FLAG	18
-#define REG_ACC_FLAG	19 // dummy flag that indicates that VFACC is written/read (nothing to do with VI[19])
-#define REG_R			20
-#define REG_I			21
-#define REG_Q			22
-#define REG_P           23 // only exists in micromode 
-#define REG_VF0_FLAG	24 // dummy flag that indicates VF0 is read (nothing to do with VI[24])
-#define REG_TPC			26
-#define REG_CMSAR0		27
-#define REG_FBRST		28
-#define REG_VPU_STAT	29
-#define REG_CMSAR1		31
+enum VURegFlags
+{
+    REG_STATUS_FLAG	= 16,
+    REG_MAC_FLAG	= 17,
+    REG_CLIP_FLAG	= 18,
+    REG_ACC_FLAG	= 19, // dummy flag that indicates that VFACC is written/read (nothing to do with VI[19])
+    REG_R			= 20,
+    REG_I			= 21,
+    REG_Q			= 22,
+    REG_P           = 23, // only exists in micromode 
+    REG_VF0_FLAG	= 24, // dummy flag that indicates VF0 is read (nothing to do with VI[24])
+    REG_TPC			= 26,
+    REG_CMSAR0		= 27,
+    REG_FBRST		= 28,
+    REG_VPU_STAT	= 29,
+    REG_CMSAR1		= 31
+};
 
 //interpreter hacks, WIP
 //#define INT_VUSTALLHACK //some games work without those, big speedup
@@ -78,7 +78,7 @@ struct REG_VI {
 					// VU0 mem, with only lower 16 bits valid, and the upper 112bits are hardwired to 0 (cottonvibes)
 };
 
-#define VUFLAG_BREAKONMFLAG		0x00000001
+//#define VUFLAG_BREAKONMFLAG		0x00000001
 #define VUFLAG_MFLAGSET			0x00000002
 
 struct fdivPipe {
@@ -153,17 +153,16 @@ struct VURegs {
 	{
 	}
 };
-
-#define VUPIPE_NONE		0
-#define VUPIPE_FMAC		1
-#define VUPIPE_FDIV		2
-#define VUPIPE_EFU		3
-#define VUPIPE_IALU		4
-#define VUPIPE_BRANCH	5
-#define VUPIPE_XGKICK	6
-
-#define VUREG_READ		0x1
-#define VUREG_WRITE		0x2
+enum VUPipeState
+{
+    VUPIPE_NONE = 0,
+    VUPIPE_FMAC,
+    VUPIPE_FDIV,
+    VUPIPE_EFU,
+    VUPIPE_IALU,
+    VUPIPE_BRANCH,
+    VUPIPE_XGKICK
+};
 
 struct _VURegsNum {
 	u8 pipe; // if 0xff, COP2
@@ -179,27 +178,9 @@ struct _VURegsNum {
 };
 
 extern VURegs* g_pVU1;
-PCSX2_ALIGNED16_EXTERN(VURegs VU0);
+extern __aligned16 VURegs VU0;
 
 #define VU1 (*g_pVU1)
 
+extern u32* GET_VU_MEM(VURegs* VU, u32 addr);
 
-#ifdef _WIN32
-extern __forceinline u32* GET_VU_MEM(VURegs* VU, u32 addr)
-#else
-static __forceinline u32* GET_VU_MEM(VURegs* VU, u32 addr)
-#endif
-{
-	if( VU == g_pVU1 ) return (u32*)(VU1.Mem+(addr&0x3fff));
-	
-	if( addr >= 0x4000 ) return (u32*)(VU0.Mem+(addr&0x43f0)); // get VF and VI regs (they're mapped to 0x4xx0 in VU0 mem!)
-	
-	return (u32*)(VU0.Mem+(addr&0x0fff)); // for addr 0x0000 to 0x4000 just wrap around
-}
-
-
-// various fixes to enable per game (all are off by default)
-#define VUFIX_SIGNEDZERO        1
-#define VUFIX_EXTRAFLAGS        2
-#define VUFIX_XGKICKDELAY2      4
-extern int g_VUGameFixes;

@@ -1,23 +1,21 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __PSXMEMORY_H__
-#define __PSXMEMORY_H__
+#pragma once
+
+#include "MemoryTypes.h"
 
 extern u8 *psxM;
 extern u8 *psxP;
@@ -56,7 +54,7 @@ static __forceinline u8* iopPhysMem( u32 addr )
 	return &psxM[addr & 0x1fffff];
 }
 
-#define psxSs8(mem)		psxS[(mem) & 0xffff]
+#define psxSs8(mem)		psxS[(mem) & 0x00ff]
 #define psxSs16(mem)	(*(s16*)&psxS[(mem) & 0x00ff])
 #define psxSs32(mem)	(*(s32*)&psxS[(mem) & 0x00ff])
 #define psxSu8(mem)		(*(u8*) &psxS[(mem) & 0x00ff])
@@ -77,34 +75,53 @@ static __forceinline u8* iopPhysMem( u32 addr )
 #define psxHu16(mem)	(*(u16*)&psxH[(mem) & 0xffff])
 #define psxHu32(mem)	(*(u32*)&psxH[(mem) & 0xffff])
 
-void psxMemAlloc();
-void psxMemReset();
-void psxMemShutdown();
+extern void psxMemAlloc();
+extern void psxMemReset();
+extern void psxMemShutdown();
 
-u8   iopMemRead8 (u32 mem);
-u16  iopMemRead16(u32 mem);
-u32  iopMemRead32(u32 mem);
-void iopMemWrite8 (u32 mem, u8 value);
-void iopMemWrite16(u32 mem, u16 value);
-void iopMemWrite32(u32 mem, u32 value);
+extern u8   __fastcall iopMemRead8 (u32 mem);
+extern u16  __fastcall iopMemRead16(u32 mem);
+extern u32  __fastcall iopMemRead32(u32 mem);
+extern void __fastcall iopMemWrite8 (u32 mem, u8 value);
+extern void __fastcall iopMemWrite16(u32 mem, u16 value);
+extern void __fastcall iopMemWrite32(u32 mem, u32 value);
 
-// x86reg and mmreg are always x86 regs
-void psxRecMemRead8();
-int psxRecMemConstRead8(u32 x86reg, u32 mem, u32 sign);
+namespace IopMemory
+{
+	// Sif functions not made yet (will for future Iop improvements):
+	extern mem8_t __fastcall SifRead8( u32 iopaddr );
+	extern mem16_t __fastcall SifRead16( u32 iopaddr );
+	extern mem32_t __fastcall SifRead32( u32 iopaddr );
 
-void psxRecMemRead16();
-int psxRecMemConstRead16(u32 x86reg, u32 mem, u32 sign);
+	extern void __fastcall SifWrite8( u32 iopaddr, mem8_t data );
+	extern void __fastcall SifWrite16( u32 iopaddr, mem16_t data );
+	extern void __fastcall SifWrite32( u32 iopaddr, mem32_t data );
 
-void psxRecMemRead32();
-int psxRecMemConstRead32(u32 x86reg, u32 mem);
+	extern mem8_t __fastcall iopHwRead8_generic( u32 addr );
+	extern mem16_t __fastcall iopHwRead16_generic( u32 addr );
+	extern mem32_t __fastcall iopHwRead32_generic( u32 addr );
+	extern void __fastcall iopHwWrite8_generic( u32 addr, mem8_t val );
+	extern void __fastcall iopHwWrite16_generic( u32 addr, mem16_t val );
+	extern void __fastcall iopHwWrite32_generic( u32 addr, mem32_t val );
 
-void psxRecMemWrite8();
-int psxRecMemConstWrite8(u32 mem, int mmreg);
 
-void psxRecMemWrite16();
-int psxRecMemConstWrite16(u32 mem, int mmreg);
+	extern mem8_t __fastcall iopHwRead8_Page1( u32 iopaddr );
+	extern mem8_t __fastcall iopHwRead8_Page3( u32 iopaddr );
+	extern mem8_t __fastcall iopHwRead8_Page8( u32 iopaddr );
+	extern mem16_t __fastcall iopHwRead16_Page1( u32 iopaddr );
+	extern mem16_t __fastcall iopHwRead16_Page3( u32 iopaddr );
+	extern mem16_t __fastcall iopHwRead16_Page8( u32 iopaddr );
+	extern mem32_t __fastcall iopHwRead32_Page1( u32 iopaddr );
+	extern mem32_t __fastcall iopHwRead32_Page3( u32 iopaddr );
+	extern mem32_t __fastcall iopHwRead32_Page8( u32 iopaddr );
 
-void psxRecMemWrite32();
-int psxRecMemConstWrite32(u32 mem, int mmreg);
-
-#endif /* __PSXMEMORY_H__ */
+	extern void __fastcall iopHwWrite8_Page1( u32 iopaddr, mem8_t data );
+	extern void __fastcall iopHwWrite8_Page3( u32 iopaddr, mem8_t data );
+	extern void __fastcall iopHwWrite8_Page8( u32 iopaddr, mem8_t data );
+	extern void __fastcall iopHwWrite16_Page1( u32 iopaddr, mem16_t data );
+	extern void __fastcall iopHwWrite16_Page3( u32 iopaddr, mem16_t data );
+	extern void __fastcall iopHwWrite16_Page8( u32 iopaddr, mem16_t data );
+	extern void __fastcall iopHwWrite32_Page1( u32 iopaddr, mem32_t data );
+	extern void __fastcall iopHwWrite32_Page3( u32 iopaddr, mem32_t data );
+	extern void __fastcall iopHwWrite32_Page8( u32 iopaddr, mem32_t data );
+}

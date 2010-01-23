@@ -1,24 +1,24 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "PrecompiledHeader.h"
 
+#include "PrecompiledHeader.h"
 #include "IopCommon.h"
+
+#include "Sio.h"
+#include "sio_internal.h"
 
 sio2Struct sio2;
 
@@ -54,8 +54,8 @@ only recv2 & dataout influences padman
 
 
 void sio2Reset() {
-	DevCon::Status( "Sio2 Reset" );
-	memzero_obj(sio2);
+	DevCon.WriteLn( "Sio2 Reset" );
+	memzero(sio2);
 	sio2.packet.recvVal1 = 0x1D100; // Nothing is connected at start
 }
 
@@ -157,7 +157,7 @@ void sio2_serialIn(u8 value){
 	sioWrite8(value);
 	
 	if (sio2.packet.sendSize > BUFSIZE) {//asadr
-		Console::Notice("*PCSX2*: sendSize >= %d", params BUFSIZE);
+		Console.Warning("*PCSX2*: sendSize >= %d", BUFSIZE);
 	} else {
 		sio2.buf[sio2.packet.sendSize] = sioRead8();
 		sio2.packet.sendSize++;
@@ -184,7 +184,7 @@ void sio2_fifoIn(u8 value){
 	SIODMAWrite(value);
 	
 	if (sio2.packet.sendSize > BUFSIZE) {//asadr
-		Console::WriteLn("*PCSX2*: sendSize >= %d", params BUFSIZE);
+		Console.WriteLn("*PCSX2*: sendSize >= %d", BUFSIZE);
 	} else {
 		sio2.buf[sio2.packet.sendSize] = sioRead8();
 		sio2.packet.sendSize++;
@@ -196,12 +196,12 @@ u8 sio2_fifoOut(){
 		//PAD_LOG("READING %x\n",sio2.buf[sio2.recvIndex]);
 		return sio2.buf[sio2.recvIndex++];
 	} else {
-		Console::Error( "*PCSX2*: buffer overrun" );
+		Console.Error( "*PCSX2*: buffer overrun" );
 	}
 	return 0; // No Data
 }
 
-void SaveState::sio2Freeze()
+void SaveStateBase::sio2Freeze()
 {
 	FreezeTag( "sio2" );
 	Freeze(sio2);
@@ -214,6 +214,7 @@ void SaveState::sio2Freeze()
 
 s32 sio2DmaRead(s32 channel, u32* tdata, u32 bytesLeft, u32* bytesProcessed)
 {
+#ifdef ENABLE_NEW_IOPDMA_SIO
 	u8* data = (u8*)tdata;
 
 	if(channel!=12)
@@ -236,11 +237,13 @@ s32 sio2DmaRead(s32 channel, u32* tdata, u32 bytesLeft, u32* bytesProcessed)
 	}
 
 	*bytesProcessed = read;
+#endif
 	return 0;
 }
 
 s32 sio2DmaWrite(s32 channel, u32* tdata, u32 bytesLeft, u32* bytesProcessed)
 {
+#ifdef ENABLE_NEW_IOPDMA_SIO
 	u8* data = (u8*)tdata;
 
 	if(channel!=11)
@@ -263,13 +266,17 @@ s32 sio2DmaWrite(s32 channel, u32* tdata, u32 bytesLeft, u32* bytesProcessed)
 	}
 
 	*bytesProcessed = written;
+#endif
 	return 0;
 }
 
 void sio2DmaInterrupt(s32 channel)
 {
+#ifdef ENABLE_NEW_IOPDMA_SIO
+#endif
 }
 
+//#else
 #endif
 
 void psxDma11(u32 madr, u32 bcr, u32 chcr) {
@@ -325,3 +332,5 @@ void psxDMA12Interrupt()
 	HW_DMA12_CHCR &= ~0x01000000;
 	psxDmaInterrupt2(5);
 }
+
+//#endif

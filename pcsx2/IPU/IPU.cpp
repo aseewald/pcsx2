@@ -1,33 +1,30 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "PrecompiledHeader.h"
+// ----------------------------------------------------------------------------
+// PCH Warning!  This file, when compiled with PCH + Optimizations, fails in very curious
+// and unexpected ways (most obvious is a freeze in the middle of the New Game video of
+// Final Fantasy XII).  So make sure to force-disable PCH for this file at ALL times.
+// ----------------------------------------------------------------------------
 
+#include "PrecompiledHeader.h"
 #include "Common.h"
 
 #include "IPU.h"
-#include "mpeg2lib/Mpeg.h"
 #include "yuv2rgb.h"
-#include "coroutine.h"
-
 #include "Vif.h"
-
-using namespace std;			// for min / max
 
 // Zero cycle IRQ schedules aren't really good, but the IPU uses them.
 // Better to throw the IRQ inline:
@@ -36,7 +33,7 @@ using namespace std;			// for min / max
 //#define IPU_INT0_FROM()  CPU_INT( DMAC_FROM_IPU, 0 )
 
 // IPU Inline'd IRQs : Calls the IPU interrupt handlers directly instead of
-// feeding them through the EE's branch test. (see IPU.H for details)
+// feeding them through the EE's branch test. (see IPU.h for details)
 
 #ifdef IPU_INLINE_IRQS
 #	define IPU_INT_TO( cycles )  ipu1Interrupt()
@@ -48,30 +45,21 @@ using namespace std;			// for min / max
 #	define IPU_FORCEINLINE __forceinline
 #endif
 
-#define IPU_DMA_GIFSTALL 1
-#define IPU_DMA_TIE0 2
-#define IPU_DMA_TIE1 4
-#define IPU_DMA_ACTV1 8
-#define IPU_DMA_DOTIE1 16
-#define IPU_DMA_FIREINT0 32
-#define IPU_DMA_FIREINT1 64
-#define IPU_DMA_VIFSTALL 128
+static tIPU_DMA g_nDMATransfer(0);
 
 // FIXME - g_nIPU0Data and Pointer are not saved in the savestate, which breaks savestates for some
 // FMVs at random (if they get saved during the half frame of a 30fps rate).  The fix is complicated
 // since coroutine is such a pita.  (air)
 
-static int g_nDMATransfer = 0;
 int g_nIPU0Data = 0; // data left to transfer
 u8* g_pIPU0Pointer = NULL;
 int g_nCmdPos[2] = {0}, g_nCmdIndex = 0;
 int ipuCurCmd = 0xffffffff;
 
-
 int FOreadpos = 0, FOwritepos = 0;
 static int FIreadpos = 0, FIwritepos = 0;
-PCSX2_ALIGNED16(u32 fifo_input[32]);
-PCSX2_ALIGNED16(u32 fifo_output[32]);
+__aligned16 u32 fifo_input[32];
+__aligned16 u32 fifo_output[32];
 
 void ReorderBitstream();
 
@@ -81,7 +69,6 @@ static coroutine_t s_routine; // used for executing BDEC/IDEC
 static int s_RoutineDone = 0;
 static u32 s_tempstack[0x4000]; // 64k
 
-void IPUCMD_WRITE(u32 val);
 void IPUWorker();
 int IPU0dma();
 int IPU1dma();
@@ -97,13 +84,13 @@ static u8 iq[64];			//intraquant matrix
 u16 vqclut[16];			//clut conversion table
 static u8 s_thresh[2];		//thresholds for color conversions
 int coded_block_pattern = 0;
-PCSX2_ALIGNED16(macroblock_8  mb8);
-PCSX2_ALIGNED16(macroblock_16 mb16);
-PCSX2_ALIGNED16(macroblock_rgb32 rgb32);
-PCSX2_ALIGNED16(macroblock_rgb16 rgb16);
+__aligned16 macroblock_8 mb8;
+__aligned16 macroblock_16 mb16;
+__aligned16 macroblock_rgb32 rgb32;
+__aligned16 macroblock_rgb16 rgb16;
 
 u8 indx4[16*16/2];
-bool	mpeg2_inited = FALSE;		//mpeg2_idct_init() must be called only once
+bool mpeg2_inited = false;		//mpeg2_idct_init() must be called only once
 u8 PCT[] = {'r', 'I', 'P', 'B', 'D', '-', '-', '-'};
 decoder_t g_decoder;						//static, only to place it in bss
 decoder_t tempdec;
@@ -114,10 +101,8 @@ extern "C"
 	extern u8 mpeg2_scan_alt[64];
 }
 
-PCSX2_ALIGNED16(u8 _readbits[80]);	//local buffer (ring buffer)
+__aligned16 u8 _readbits[80];	//local buffer (ring buffer)
 u8* readbits = _readbits; // always can decrement by one 1qw
-
-#define SATURATE_4BITS(val) ((val)>15 ? 15 : (val))
 
 __forceinline void IPUProcessInterrupt()
 {
@@ -143,13 +128,13 @@ __forceinline void mpeg2_init()
 	{
 		mpeg2_idct_init();
 		yuv2rgb_init();
-		memzero_obj(mb8.Y);
-		memzero_obj(mb8.Cb);
-		memzero_obj(mb8.Cr);
-		memzero_obj(mb16.Y);
-		memzero_obj(mb16.Cb);
-		memzero_obj(mb16.Cr);
-		mpeg2_inited = TRUE;
+		memzero(mb8.Y);
+		memzero(mb8.Cb);
+		memzero(mb8.Cr);
+		memzero(mb16.Y);
+		memzero(mb16.Cb);
+		memzero(mb16.Cr);
+		mpeg2_inited = true;
 	}
 }
 
@@ -157,26 +142,48 @@ __forceinline void mpeg2_init()
 // Register accesses (run on EE thread)
 int ipuInit()
 {
-	memzero_obj(*ipuRegs);
-	memzero_obj(g_BP);
+	memzero(*ipuRegs);
+	memzero(g_BP);
 	init_g_decoder();
+	g_nDMATransfer.reset();
 
 	return 0;
 }
 
 void ipuReset()
 {
-	memzero_obj(*ipuRegs);
-	g_nDMATransfer = 0;
+	memzero(*ipuRegs);
+	g_nDMATransfer.reset();
 }
 
 void ipuShutdown()
 {
 }
 
+void ReportIPU()
+{
+	Console.WriteLn("g_nDMATransfer = 0x%x.", g_nDMATransfer._u32);
+	Console.WriteLn("FIreadpos = 0x%x, FIwritepos = 0x%x.", FIreadpos, FIwritepos);
+	Console.WriteLn("fifo_input = 0x%x.", fifo_input);
+	Console.WriteLn("FOreadpos = 0x%x, FOwritepos = 0x%x.", FOreadpos, FOwritepos);
+	Console.WriteLn("fifo_output = 0x%x.", fifo_output);
+	Console.WriteLn("g_BP = 0x%x.", g_BP);
+	Console.WriteLn("niq = 0x%x, iq = 0x%x.", niq, iq);
+	Console.WriteLn("vqclut = 0x%x.", vqclut);
+	Console.WriteLn("s_thresh = 0x%x.", s_thresh);
+	Console.WriteLn("coded_block_pattern = 0x%x.", coded_block_pattern);
+	Console.WriteLn("g_decoder = 0x%x.", g_decoder);
+	Console.WriteLn("mpeg2_scan_norm = 0x%x, mpeg2_scan_alt = 0x%x.", mpeg2_scan_norm, mpeg2_scan_alt);
+	Console.WriteLn("g_nCmdPos = 0x%x.", g_nCmdPos);
+	Console.WriteLn("g_nCmdIndex = 0x%x.", g_nCmdIndex);
+	Console.WriteLn("ipuCurCmd = 0x%x.", ipuCurCmd);
+	Console.WriteLn("_readbits = 0x%x.", _readbits);
+	Console.WriteLn("temp will equal 0x%x.", readbits - _readbits);
+	Console.WriteLn("");
+}
 // fixme - ipuFreeze looks fairly broken. Should probably take a closer look at some point.
 
-void SaveState::ipuFreeze()
+void SaveStateBase::ipuFreeze()
 {
 	IPUProcessInterrupt();
 
@@ -185,7 +192,7 @@ void SaveState::ipuFreeze()
 	// old versions saved the IPU regs, but they're already saved as part of HW!
 	//FreezeMem(ipuRegs, sizeof(IPUregisters));
 
-	Freeze(g_nDMATransfer);
+	Freeze(g_nDMATransfer._u32);
 	Freeze(FIreadpos);
 	Freeze(FIwritepos);
 	Freeze(fifo_input);
@@ -220,7 +227,7 @@ void SaveState::ipuFreeze()
 
 bool ipuCanFreeze()
 {
-	return ipuCurCmd == 0xffffffff;
+	return (ipuCurCmd == -1);
 }
 
 __forceinline u32 ipuRead32(u32 mem)
@@ -235,7 +242,7 @@ __forceinline u32 ipuRead32(u32 mem)
 
 	switch (mem)
 	{
-		case 0x10: // IPU_CTRL
+		ipucase(IPU_CTRL): // IPU_CTRL
 			ipuRegs->ctrl.IFC = g_BP.IFC;
 			ipuRegs->ctrl.CBP = coded_block_pattern;
 
@@ -244,8 +251,7 @@ __forceinline u32 ipuRead32(u32 mem)
 
 			return ipuRegs->ctrl._u32;
 
-		case 0x20: // IPU_BP
-
+		ipucase(IPU_BP): // IPU_BP
 			ipuRegs->ipubp = g_BP.BP & 0x7f;
 			ipuRegs->ipubp |= g_BP.IFC << 8;
 			ipuRegs->ipubp |= (g_BP.FP + g_BP.bufferhasnew) << 16;
@@ -269,20 +275,20 @@ __forceinline u64 ipuRead64(u32 mem)
 
 	switch (mem)
 	{
-		case 0x00: // IPU_CMD
-			if (ipuRegs->cmd.DATA&0xffffff)
+		ipucase(IPU_CMD): // IPU_CMD
+			if (ipuRegs->cmd.DATA & 0xffffff)
 				IPU_LOG("Ipu read64: IPU_CMD=BUSY=%x, DATA=%08X", ipuRegs->cmd.BUSY ? 1 : 0, ipuRegs->cmd.DATA);
 			break;
 
-		case 0x10:
-			DevCon::Notice("reading 64bit IPU ctrl");
+		ipucase(IPU_CTRL):
+			DevCon.Warning("reading 64bit IPU ctrl");
 			break;
 
-		case 0x20:
-			DevCon::Notice("reading 64bit IPU top");
+		ipucase(IPU_BP):
+			DevCon.Warning("reading 64bit IPU top");
 			break;
 
-		case 0x30: // IPU_TOP
+		ipucase(IPU_TOP): // IPU_TOP
 			IPU_LOG("Ipu read64: IPU_TOP=%x,  bp = %d", ipuRegs->top, g_BP.BP);
 			break;
 
@@ -296,21 +302,20 @@ __forceinline u64 ipuRead64(u32 mem)
 void ipuSoftReset()
 {
 	mpeg2_init();
-
 	FIFOto_clear();
-	memzero_obj(fifo_output);
-	FOwritepos = 0;
-	FOreadpos = 0;
+	FIFOfrom_clear();
+
 	coded_block_pattern = 0;
 
-	ipuRegs->ctrl._u32 = 0;
+	ipuRegs->ctrl.reset();
+	ipuRegs->top = 0;
+	ipuCurCmd = 0xffffffff;
+
 	g_BP.BP = 0;
-	g_BP.IFC = 0;
 	g_BP.FP = 0;
 	g_BP.bufferhasnew = 0;
-	ipuRegs->top = 0;
+
 	g_nCmdIndex = 0;
-	ipuCurCmd = 0xffffffff;
 	g_nCmdPos[0] = 0;
 	g_nCmdPos[1] = 0;
 }
@@ -327,20 +332,22 @@ __forceinline void ipuWrite32(u32 mem, u32 value)
 
 	switch (mem)
 	{
-		case 0x00: // IPU_CMD
+		ipucase(IPU_CMD): // IPU_CMD
 			IPU_LOG("Ipu write32: IPU_CMD=0x%08X", value);
 			IPUCMD_WRITE(value);
 			break;
 
-		case 0x10: // IPU_CTRL
-			ipuRegs->ctrl._u32 = (value & 0x47f30000) | (ipuRegs->ctrl._u32 & 0x8000ffff);
+		ipucase(IPU_CTRL): // IPU_CTRL
+            // CTRL = the first 16 bits of ctrl [0x8000ffff], + value for the next 16 bits,
+            // minus the reserved bits. (18-19; 27-29) [0x47f30000]
+			ipuRegs->ctrl.write(value);
 			if (ipuRegs->ctrl.IDP == 3)
 			{
-				Console::WriteLn("IPU Invalid Intra DC Precision, switching to 9 bits");
+				Console.WriteLn("IPU Invalid Intra DC Precision, switching to 9 bits");
 				ipuRegs->ctrl.IDP = 1;
 			}
 
-			if (ipuRegs->ctrl.RST & 0x1) ipuSoftReset(); // RESET
+			if (ipuRegs->ctrl.RST) ipuSoftReset(); // RESET
 
 			IPU_LOG("Ipu write32: IPU_CTRL=0x%08X", value);
 			break;
@@ -364,7 +371,7 @@ __forceinline void ipuWrite64(u32 mem, u64 value)
 
 	switch (mem)
 	{
-		case 0x00:
+		ipucase(IPU_CMD):
 			IPU_LOG("Ipu write64: IPU_CMD=0x%08X", value);
 			IPUCMD_WRITE((u32)value);
 			break;
@@ -383,10 +390,10 @@ __forceinline void ipuWrite64(u32 mem, u64 value)
 static void ipuBCLR(u32 val)
 {
 	FIFOto_clear();
+
 	g_BP.BP = val & 0x7F;
 	g_BP.FP = 0;
 	g_BP.bufferhasnew = 0;
-	g_BP.IFC = 0;
 	ipuRegs->ctrl.BUSY = 0;
 	ipuRegs->cmd.BUSY = 0;
 	memzero_ptr<80>(readbits);
@@ -429,28 +436,26 @@ static __forceinline BOOL ipuIDEC(u32 val)
 	g_decoder.intra_vlc_format = ipuRegs->ctrl.IVF;
 	g_decoder.scan = ipuRegs->ctrl.AS ? mpeg2_scan_alt : mpeg2_scan_norm;
 	g_decoder.intra_dc_precision = ipuRegs->ctrl.IDP;
+	
 	//from IDEC value
 	g_decoder.quantizer_scale = idec.QSC;
 	g_decoder.frame_pred_frame_dct = !idec.DTD;
 	g_decoder.sgn = idec.SGN;
 	g_decoder.dte = idec.DTE;
 	g_decoder.ofm = idec.OFM;
+	
 	//other stuff
-	g_decoder.dcr = 1;//resets DC prediction value
+	g_decoder.dcr = 1; // resets DC prediction value
 
 	s_routine = so_create(mpeg2sliceIDEC, &s_RoutineDone, s_tempstack, sizeof(s_tempstack));
-	assert(s_routine != NULL);
+	pxAssert(s_routine != NULL);
 	so_call(s_routine);
 	if (s_RoutineDone) s_routine = NULL;
 
 	return s_RoutineDone;
 }
 
-#ifdef _DEBUG
 static int s_bdec = 0;
-#else
-#define s_bdec 0
-#endif
 
 static __forceinline BOOL ipuBDEC(u32 val)
 {
@@ -476,9 +481,8 @@ static __forceinline BOOL ipuBDEC(u32 val)
 
 	IPU_LOG(" Quantizer step=0x%X", bdec.QSC);
 
-#ifdef _DEBUG
+	if( IsDebugBuild )
 	s_bdec++;
-#endif
 
 	g_BP.BP += bdec.FB;//skip FB bits
 	g_decoder.coding_type = I_TYPE;
@@ -487,6 +491,7 @@ static __forceinline BOOL ipuBDEC(u32 val)
 	g_decoder.intra_vlc_format = ipuRegs->ctrl.IVF;
 	g_decoder.scan = ipuRegs->ctrl.AS ? mpeg2_scan_alt : mpeg2_scan_norm;
 	g_decoder.intra_dc_precision = ipuRegs->ctrl.IDP;
+	
 	//from BDEC value
 	/* JayteeMaster: the quantizer (linear/non linear) depends on the q_scale_type */
 	g_decoder.quantizer_scale = g_decoder.q_scale_type ? non_linear_quantizer_scale [bdec.QSC] : bdec.QSC << 1;
@@ -494,11 +499,11 @@ static __forceinline BOOL ipuBDEC(u32 val)
 	g_decoder.dcr = bdec.DCR;
 	g_decoder.macroblock_modes |= bdec.MBI ? MACROBLOCK_INTRA : MACROBLOCK_PATTERN;
 
-	memzero_obj(mb8);
-	memzero_obj(mb16);
+	memzero(mb8);
+	memzero(mb16);
 
 	s_routine = so_create(mpeg2_slice, &s_RoutineDone, s_tempstack, sizeof(s_tempstack));
-	assert(s_routine != NULL);
+	pxAssert(s_routine != NULL);
 	so_call(s_routine);
 
 	if (s_RoutineDone) s_routine = NULL;
@@ -539,6 +544,7 @@ static BOOL __fastcall ipuVDEC(u32 val)
 			}
 
 			g_BP.BP += (g_decoder.bitstream_bits + 16);
+			
 			if ((int)g_BP.BP < 0)
 			{
 				g_BP.BP += 128;
@@ -660,7 +666,7 @@ static BOOL __fastcall ipuCSC(u32 val)
 
 	if (csc.DTE) IPU_LOG("Dithering enabled.");
 
-	//Console::WriteLn("CSC");
+	//Console.WriteLn("CSC");
 	for (;g_nCmdIndex < (int)csc.MBC; g_nCmdIndex++)
 	{
 
@@ -671,7 +677,7 @@ static BOOL __fastcall ipuCSC(u32 val)
 			if (g_nCmdPos[0] < 3072 / 8) return FALSE;
 
 			ipu_csc(&mb8, &rgb32, 0);
-			if (csc.OFM) ipu_dither2(&rgb32, &rgb16, csc.DTE);
+			if (csc.OFM) ipu_dither(&rgb32, &rgb16, csc.DTE);
 		}
 
 		if (csc.OFM)
@@ -725,7 +731,7 @@ static BOOL ipuPACK(u32 val)
 			if (g_nCmdPos[0] < 64) return FALSE;
 
 			ipu_csc(&mb8, &rgb32, 0);
-			ipu_dither2(&rgb32, &rgb16, csc.DTE);
+			ipu_dither(&rgb32, &rgb16, csc.DTE);
 
 			if (csc.OFM) ipu_vq(&rgb16, indx4);
 		}
@@ -767,9 +773,8 @@ __forceinline void IPU_INTERRUPT() //dma
 
 void IPUCMD_WRITE(u32 val)
 {
-
 	// don't process anything if currently busy
-	if (ipuRegs->ctrl.BUSY) Console::WriteLn("IPU BUSY!"); // wait for thread
+	if (ipuRegs->ctrl.BUSY) Console.WriteLn("IPU BUSY!"); // wait for thread
 
 	ipuRegs->ctrl.ECD = 0;
 	ipuRegs->ctrl.SCD = 0; //clear ECD/SCD
@@ -796,7 +801,7 @@ void IPUCMD_WRITE(u32 val)
 
 		case SCE_IPU_FDEC:
 			IPU_LOG("IPU FDEC command. Skip 0x%X bits, FIFO 0x%X qwords, BP 0x%X, FP %d, CHCR 0x%x, %x",
-			        val & 0x3f, g_BP.IFC, (int)g_BP.BP, g_BP.FP, ((DMACh*)&PS2MEM_HW[0xb400])->chcr, cpuRegs.pc);
+			        val & 0x3f, g_BP.IFC, (int)g_BP.BP, g_BP.FP, ipu1dma->chcr._u32, cpuRegs.pc);
 			g_BP.BP += val & 0x3F;
 			if (ipuFDEC(val)) return;
 			ipuRegs->cmd.BUSY = 0x80000000;
@@ -825,7 +830,7 @@ void IPUCMD_WRITE(u32 val)
 
 			if (ipuCSC(ipuRegs->cmd.DATA))
 			{
-				if (ipu0dma->qwc > 0 && (ipu0dma->chcr & 0x100))  IPU_INT0_FROM();
+				if (ipu0dma->qwc > 0 && ipu0dma->chcr.STR)  IPU_INT0_FROM();
 				return;
 			}
 			break;
@@ -840,7 +845,7 @@ void IPUCMD_WRITE(u32 val)
 			if (ipuIDEC(val))
 			{
 				// idec done, ipu0 done too
-				if (ipu0dma->qwc > 0 && (ipu0dma->chcr & 0x100)) IPU_INT0_FROM();
+				if (ipu0dma->qwc > 0 && ipu0dma->chcr.STR) IPU_INT0_FROM();
 				return;
 			}
 			ipuRegs->topbusy = 0x80000000;
@@ -852,7 +857,7 @@ void IPUCMD_WRITE(u32 val)
 		case SCE_IPU_BDEC:
 			if (ipuBDEC(val))
 			{
-				if (ipu0dma->qwc > 0 && (ipu0dma->chcr & 0x100)) IPU_INT0_FROM();
+				if (ipu0dma->qwc > 0 && ipu0dma->chcr.STR) IPU_INT0_FROM();
 				if (ipuRegs->ctrl.SCD || ipuRegs->ctrl.ECD) hwIntcIrq(INTC_IPU);
 				return;
 			}
@@ -870,7 +875,7 @@ void IPUCMD_WRITE(u32 val)
 
 void IPUWorker()
 {
-	assert(ipuRegs->ctrl.BUSY);
+	pxAssert(ipuRegs->ctrl.BUSY);
 
 	switch (ipuCurCmd)
 	{
@@ -916,7 +921,7 @@ void IPUWorker()
 				hwIntcIrq(INTC_IPU);
 				return;
 			}
-			if ((ipu0dma->qwc > 0) && (ipu0dma->chcr & 0x100))  IPU_INT0_FROM();
+			if (ipu0dma->qwc > 0 && ipu0dma->chcr.STR)  IPU_INT0_FROM();
 			break;
 
 		case SCE_IPU_PACK:
@@ -942,7 +947,7 @@ void IPUWorker()
 			ipuCurCmd = 0xffffffff;
 
 			// CHECK!: IPU0dma remains when IDEC is done, so we need to clear it
-			if ((ipu0dma->qwc > 0) && (ipu0dma->chcr & 0x100)) IPU_INT0_FROM();
+			if (ipu0dma->qwc > 0 && ipu0dma->chcr.STR) IPU_INT0_FROM();
 			s_routine = NULL;
 			break;
 
@@ -959,13 +964,13 @@ void IPUWorker()
 			ipuRegs->cmd.BUSY = 0;
 			ipuCurCmd = 0xffffffff;
 
-			if ((ipu0dma->qwc > 0) && (ipu0dma->chcr & 0x100)) IPU_INT0_FROM();
+			if (ipu0dma->qwc > 0 && ipu0dma->chcr.STR) IPU_INT0_FROM();
 			s_routine = NULL;
 			if (ipuRegs->ctrl.SCD || ipuRegs->ctrl.ECD) hwIntcIrq(INTC_IPU);
 			return;
 
 		default:
-			Console::WriteLn("Unknown IPU command: %x", params ipuRegs->cmd.CMD);
+			Console.WriteLn("Unknown IPU command: %x", ipuRegs->cmd.CMD);
 			break;
 	}
 
@@ -1001,7 +1006,7 @@ u8* prev_readbits()
 {
 	if (readbits < _readbits + 16) return _readbits + 48 - (readbits - _readbits);
 
-	return readbits -16;
+	return readbits - 16;
 }
 
 void ReorderBitstream()
@@ -1030,7 +1035,7 @@ u16 __fastcall FillInternalBuffer(u32 * pointer, u32 advance, u32 size)
 
 	if (*(int*)pointer >= 128)
 	{
-		assert(g_BP.FP >= 1);
+		pxAssert(g_BP.FP >= 1);
 
 		if (g_BP.FP > 1) inc_readbits();
 
@@ -1263,7 +1268,7 @@ void __fastcall ipu_csc(macroblock_8 *mb8, macroblock_rgb32 *rgb32, int sgn)
 	}
 }
 
-void __fastcall ipu_dither2(const macroblock_rgb32* rgb32, macroblock_rgb16 *rgb16, int dte)
+void __fastcall ipu_dither(const macroblock_rgb32* rgb32, macroblock_rgb16 *rgb16, int dte)
 {
 	int i, j;
 	for (i = 0; i < 16; ++i)
@@ -1278,14 +1283,9 @@ void __fastcall ipu_dither2(const macroblock_rgb32* rgb32, macroblock_rgb16 *rgb
 	}
 }
 
-void __fastcall ipu_dither(macroblock_8 *mb8, macroblock_rgb16 *rgb16, int dte)
-{
-	//Console::Error("IPU: Dither not implemented");
-}
-
 void __fastcall ipu_vq(macroblock_rgb16 *rgb16, u8* indx4)
 {
-	Console::Error("IPU: VQ not implemented");
+	Console.Error("IPU: VQ not implemented");
 }
 
 void __fastcall ipu_copy(const macroblock_8 *mb8, macroblock_16 *mb16)
@@ -1301,7 +1301,7 @@ void __fastcall ipu_copy(const macroblock_8 *mb8, macroblock_16 *mb16)
 ///////////////////// IPU DMA ////////////////////////
 void FIFOto_clear()
 {
-	memzero_obj(fifo_input);
+	memzero(fifo_input);
 	g_BP.IFC = 0;
 	ipuRegs->ctrl.IFC = 0;
 	FIreadpos = 0;
@@ -1313,19 +1313,18 @@ int FIFOto_read(void *value)
 	// wait until enough data
 	if (g_BP.IFC == 0)
 	{
+		// This is the only spot that wants a return value for IPU1dma.
 		if (IPU1dma() == 0) return 0;
-		assert(g_BP.IFC > 0);
+		pxAssert(g_BP.IFC > 0);
 	}
 
 	// transfer 1 qword, split into two transfers
-	((u32*)value)[0] = fifo_input[FIreadpos];
-	fifo_input[FIreadpos] = 0;
-	((u32*)value)[1] = fifo_input[FIreadpos+1];
-	fifo_input[FIreadpos+1] = 0;
-	((u32*)value)[2] = fifo_input[FIreadpos+2];
-	fifo_input[FIreadpos+2] = 0;
-	((u32*)value)[3] = fifo_input[FIreadpos+3];
-	fifo_input[FIreadpos+3] = 0;
+	for (int i = 0; i <= 3; i++)
+	{
+		((u32*)value)[i] = fifo_input[FIreadpos + i];
+		fifo_input[FIreadpos + i] = 0;
+	}
+
 	FIreadpos = (FIreadpos + 4) & 31;
 	g_BP.IFC--;
 	return 1;
@@ -1341,10 +1340,10 @@ int FIFOto_write(u32* pMem, int size)
 
 	while (transsize-- > 0)
 	{
-		fifo_input[FIwritepos] = pMem[0];
-		fifo_input[FIwritepos+1] = pMem[1];
-		fifo_input[FIwritepos+2] = pMem[2];
-		fifo_input[FIwritepos+3] = pMem[3];
+		for (int i = 0; i <= 3; i++)
+		{
+			fifo_input[FIwritepos + i] = pMem[i];
+		}
 		FIwritepos = (FIwritepos + 4) & 31;
 		pMem += 4;
 	}
@@ -1352,235 +1351,252 @@ int FIFOto_write(u32* pMem, int size)
 	return firsttrans;
 }
 
-// To do: convert this into a static inlined function.
-#define IPU1chain() { \
-	if (ipu1dma->qwc > 0)	\
-	{	\
-		int qwc = ipu1dma->qwc; \
-		pMem = (u32*)dmaGetAddr(ipu1dma->madr); \
-		if (pMem == NULL) { Console::Error("ipu1dma NULL!"); return totalqwc; } \
-		qwc = FIFOto_write(pMem, qwc); \
-		ipu1dma->madr += qwc<< 4; \
-		ipu1dma->qwc -= qwc; \
-		totalqwc += qwc; \
-		if( ipu1dma->qwc > 0 ) { \
-			g_nDMATransfer |= IPU_DMA_ACTV1; \
-			return totalqwc; \
-		} \
-	} \
+static __forceinline bool IPU1chain(int &totalqwc)
+{
+	if (ipu1dma->qwc > 0)
+	{
+		int qwc = ipu1dma->qwc;
+		tDMA_TAG *pMem;
+
+		pMem = dmaGetAddr(ipu1dma->madr);
+
+		if (pMem == NULL)
+		{
+			Console.Error("ipu1dma NULL!");
+			return true;
+		}
+
+		qwc = FIFOto_write((u32*)pMem, qwc);
+		ipu1dma->madr += qwc<< 4;
+		ipu1dma->qwc -= qwc;
+		totalqwc += qwc;
+
+		if (ipu1dma->qwc > 0)
+		{
+			g_nDMATransfer.ACTV1 = true;
+			return true;
+		}
+	}
+	return false;
+}
+
+static __forceinline bool ipuDmacPartialChain(tDMA_TAG tag)
+{
+	switch (tag.ID)
+	{
+		case TAG_REFE:  // refe
+			ipu1dma->tadr += 16;
+			return true;
+
+		case TAG_END: // end
+			ipu1dma->tadr = ipu1dma->madr;
+			return true;
+	}
+	return false;
 }
 
 extern void gsInterrupt();
 
-int IPU1dma()
+static __forceinline bool ipuDmacSrcChain(DMACh *tag, tDMA_TAG *ptag)
 {
-	u32 *ptag, *pMem;
-	bool done = FALSE;
-	int ipu1cycles = 0;
-	int totalqwc = 0;
-
-	assert(!(ipu1dma->chcr & 0x40));
-
-	if (!(ipu1dma->chcr & 0x100) || (cpuRegs.interrupt & (1 << DMAC_TO_IPU))) return 0;
-
-	assert(!(g_nDMATransfer & IPU_DMA_TIE1));
-
-	//We need to make sure GIF has flushed before sending IPU data, it seems to REALLY screw FFX videos
-	while(gif->chcr & 0x100) 
+	switch (ptag->ID)
 	{
-		GIF_LOG("Flushing gif chcr %x tadr %x madr %x qwc %x", gif->chcr, gif->tadr, gif->madr, gif->qwc);
-		gsInterrupt();
+		case TAG_REFE: // refe
+			// do not change tadr
+			tag->madr = ptag[1]._u32;
+			return true;
+			break;
+
+		case TAG_CNT: // cnt
+			tag->madr = tag->tadr + 16;
+			// Set the taddr to the next tag
+			tag->tadr += 16 + (tag->qwc << 4);
+			break;
+
+		case TAG_NEXT: // next
+			tag->madr = tag->tadr + 16;
+			tag->tadr = ptag[1]._u32;
+			break;
+
+		case TAG_REF: // ref
+			tag->madr = ptag[1]._u32;
+			tag->tadr += 16;
+			break;
+
+		case TAG_END: // end
+			// do not change tadr
+			tag->madr = tag->tadr + 16;
+			return true;
+			break;
+
+		default:
+			Console.Error("IPU ERROR: different transfer mode!, Please report to PCSX2 Team");
+			break;
 	}
 
-	// in kh, qwc == 0 when dma_actv1 is set
-	if ((g_nDMATransfer & IPU_DMA_ACTV1) && ipu1dma->qwc > 0)
+	return false;
+}
+
+static __forceinline void flushGIF()
+{
+	while(gif->chcr.STR && (vif1Regs->mskpath3 == 0))
 	{
-		IPU1chain();
+		GIF_LOG("Flushing gif chcr %x tadr %x madr %x qwc %x", gif->chcr._u32, gif->tadr, gif->madr, gif->qwc);
+		gsInterrupt();
+	}
+}
+
+int IPU1dma()
+{
+	tDMA_TAG *ptag;
+	bool done = false;
+	int ipu1cycles = 0, totalqwc = 0;
+
+	pxAssert(!ipu1dma->chcr.TTE);
+
+	if (!(ipu1dma->chcr.STR) || (cpuRegs.interrupt & (1 << DMAC_TO_IPU))) return 0;
+
+	pxAssert(g_nDMATransfer.TIE1 == false);
+
+	//We need to make sure GIF has flushed before sending IPU data, it seems to REALLY screw FFX videos
+	flushGIF();
+
+	// in kh, qwc == 0 when dma_actv1 is set
+	if ((g_nDMATransfer.ACTV1) && ipu1dma->qwc > 0)
+	{
+		if (IPU1chain(totalqwc)) return totalqwc;
 
 		//Check TIE bit of CHCR and IRQ bit of tag
-		if ((ipu1dma->chcr & 0x80) && (g_nDMATransfer&IPU_DMA_DOTIE1))
+		if (ipu1dma->chcr.TIE && g_nDMATransfer.DOTIE1)
 		{
-			Console::WriteLn("IPU1 TIE");
+			Console.WriteLn("IPU1 TIE");
 
-			IPU_INT_TO(totalqwc*BIAS);
-			g_nDMATransfer &= ~(IPU_DMA_ACTV1 | IPU_DMA_DOTIE1);
-			g_nDMATransfer |= IPU_DMA_TIE1;
+			IPU_INT_TO(totalqwc * BIAS);
+			g_nDMATransfer.TIE1 = true;
+			g_nDMATransfer.DOTIE1 = false;
+			g_nDMATransfer.ACTV1 = false;
+
 			return totalqwc;
 		}
 
-		if ((ipu1dma->chcr&0xc) == 0)
+		if (ipu1dma->chcr.MOD == NORMAL_MODE) // If mode is normal mode.
 		{
-			IPU_INT_TO(totalqwc*BIAS);
+			IPU_INT_TO(totalqwc * BIAS);
 			return totalqwc;
 		}
 		else
 		{
-			u32 tag = ipu1dma->chcr; // upper bits describe current tag
+			// Chain mode.
+			tDMA_TAG tag = ipu1dma->chcr._u32; // upper bits describe current tag
 
-			if ((ipu1dma->chcr & 0x80) && (tag&0x80000000))
+			if (ipu1dma->chcr.TIE && tag.IRQ)
 			{
-				ptag = (u32*)dmaGetAddr(ipu1dma->tadr);
+				ptag = dmaGetAddr(ipu1dma->tadr);
 
-				switch (tag&0x70000000)
-				{
-					case 0x00000000:
-						ipu1dma->tadr += 16;
-						break;
-					case 0x70000000:
-						ipu1dma->tadr = ipu1dma->madr;
-						break;
-				}
+				ipuDmacPartialChain(tag);
 
-				ipu1dma->chcr = (ipu1dma->chcr & 0xFFFF) | ((*ptag) & 0xFFFF0000);
+                ipu1dma->chcrTransfer(ptag);
+
 				IPU_LOG("IPU dmaIrq Set");
-				IPU_INT_TO(totalqwc*BIAS);
-				g_nDMATransfer |= IPU_DMA_TIE1;
+				IPU_INT_TO(totalqwc * BIAS);
+				g_nDMATransfer.TIE1 = true;
 				return totalqwc;
 			}
 
-			switch (tag&0x70000000)
+			if (ipuDmacPartialChain(tag))
 			{
-				case 0x00000000:
-					ipu1dma->tadr += 16;
-					IPU_INT_TO((1 + totalqwc)*BIAS);
-					return totalqwc;
-
-				case 0x70000000:
-					ipu1dma->tadr = ipu1dma->madr;
 					IPU_INT_TO((1 + totalqwc)*BIAS);
 					return totalqwc;
 			}
 		}
 
-		g_nDMATransfer &= ~(IPU_DMA_ACTV1 | IPU_DMA_DOTIE1);
+		g_nDMATransfer.DOTIE1 = false;
+		g_nDMATransfer.ACTV1 = false;
 	}
 
-	if ((ipu1dma->chcr & 0xc) == 0 && ipu1dma->qwc == 0)   // Normal Mode
+	// Normal Mode & qwc is finished
+	if ((ipu1dma->chcr.MOD == NORMAL_MODE) && (ipu1dma->qwc == 0))
 	{
-		//Console::WriteLn("ipu1 normal empty qwc?");
+		//Console.WriteLn("ipu1 normal empty qwc?");
 		return totalqwc;
 	}
 
 	// Transfer Dn_QWC from Dn_MADR to GIF
-
-	if ((ipu1dma->chcr & 0xc) == 0 ||  ipu1dma->qwc > 0)   // Normal Mode
+	if (ipu1dma->qwc > 0)
 	{
 		IPU_LOG("dmaIPU1 Normal size=%d, addr=%lx, fifosize=%x",
 		        ipu1dma->qwc, ipu1dma->madr, 8 - g_BP.IFC);
-		IPU1chain();
-		IPU_INT_TO((ipu1cycles + totalqwc)*BIAS);
+
+		if (!IPU1chain(totalqwc)) IPU_INT_TO((ipu1cycles + totalqwc) * BIAS);
+
 		return totalqwc;
 	}
 	else
 	{
-		// Chain Mode
-		ptag = (u32*)dmaGetAddr(ipu1dma->tadr);  //Set memory pointer to TADR
-		if (ptag == NULL)  					 //Is ptag empty?
-		{
-			Console::Error("IPU1 BUSERR");
-			ipu1dma->chcr = (ipu1dma->chcr & 0xFFFF) | ((*ptag) & 0xFFFF0000);      //Transfer upper part of tag to CHCR bits 31-15
-			psHu32(DMAC_STAT) |= 1 << 15;		 //If yes, set BEIS (BUSERR) in DMAC_STAT register
-			return totalqwc;
-		}
+		// Chain Mode & ipu1dma->qwc is 0
+		ptag = dmaGetAddr(ipu1dma->tadr);  //Set memory pointer to TADR
+
+		// Transfer the tag.
+		if (!ipu1dma->transfer("IPU1", ptag)) return totalqwc;
 
 		ipu1cycles += 1; // Add 1 cycles from the QW read for the tag
 
-		ipu1dma->chcr = (ipu1dma->chcr & 0xFFFF) | ((*ptag) & 0xFFFF0000);      //Transfer upper part of tag to CHCR bits 31-15
-		ipu1dma->qwc  = (u16)ptag[0];			    //QWC set to lower 16bits of the tag
-
-		switch (ptag[0] & 0x70000000)
-		{
-			case 0x00000000: // refe
-				// do not change tadr
-				ipu1dma->madr = ptag[1];
-				done = TRUE;
-				break;
-
-			case 0x10000000: // cnt
-				ipu1dma->madr = ipu1dma->tadr + 16;
-				// Set the taddr to the next tag
-				ipu1dma->tadr += 16 + (ipu1dma->qwc << 4);
-				break;
-
-			case 0x20000000: // next
-				ipu1dma->madr = ipu1dma->tadr + 16;
-				ipu1dma->tadr = ptag[1];
-				break;
-
-			case 0x30000000: // ref
-				ipu1dma->madr = ptag[1];
-				ipu1dma->tadr += 16;
-				break;
-
-			case 0x70000000: // end
-				// do not change tadr
-				ipu1dma->madr = ipu1dma->tadr + 16;
-				done = TRUE;
-				break;
-
-			default:
-				Console::Error("IPU ERROR: different transfer mode!, Please report to PCSX2 Team");
-				break;
-		}
+		done = ipuDmacSrcChain(ipu1dma, ptag);
 
 		IPU_LOG("dmaIPU1 dmaChain %8.8x_%8.8x size=%d, addr=%lx, fifosize=%x",
-		        ptag[1], ptag[0], ipu1dma->qwc, ipu1dma->madr, 8 - g_BP.IFC);
+		        ptag[1]._u32, ptag[0]._u32, ipu1dma->qwc, ipu1dma->madr, 8 - g_BP.IFC);
 
-		if ((ipu1dma->chcr & 0x80) && ptag[0] & 0x80000000)
-			g_nDMATransfer |= IPU_DMA_DOTIE1;
-		else
-			g_nDMATransfer &= ~IPU_DMA_DOTIE1;
-
-		//Britney Dance beat does a blank NEXT tag, for some odd reason the fix doesnt work if after IPU1Chain O_o
-		if ((ipu1dma->qwc == 0) && (!done) && !(g_nDMATransfer & IPU_DMA_DOTIE1)) IPU1dma();
-
-		IPU1chain();
-
-		if ((ipu1dma->chcr & 0x80) && (ptag[0]&0x80000000)  && ipu1dma->qwc == 0)  			 //Check TIE bit of CHCR and IRQ bit of tag
-		{
-			Console::WriteLn("IPU1 TIE");
-
-			if (done)
-			{
-				ptag = (u32*)dmaGetAddr(ipu1dma->tadr);
-
-				switch (ptag[0]&0x70000000)
-				{
-					case 0x00000000:
-						ipu1dma->tadr += 16;
-						break;
-					case 0x70000000:
-						ipu1dma->tadr = ipu1dma->madr;
-						break;
-				}
-
-				ipu1dma->chcr = (ipu1dma->chcr & 0xFFFF) | ((*ptag) & 0xFFFF0000);
-			}
-
-			IPU_INT_TO(ipu1cycles + totalqwc*BIAS);
-			g_nDMATransfer |= IPU_DMA_TIE1;
-			return totalqwc;
-		}
+		g_nDMATransfer.DOTIE1 = (ipu1dma->chcr.TIE && ptag->IRQ);
 
 		if (ipu1dma->qwc == 0)
 		{
-			switch (ptag[0]&0x70000000)
+			//Check TIE bit of CHCR and IRQ bit of tag
+			if (g_nDMATransfer.DOTIE1)
 			{
-				case 0x00000000:
-					ipu1dma->tadr += 16;
-					break;
+				Console.WriteLn("IPU1 TIE");
 
-				case 0x70000000:
-					ipu1dma->tadr = ipu1dma->madr;
-					break;
+				if (IPU1chain(totalqwc)) return totalqwc;
+
+			if (done)
+			{
+					ptag = dmaGetAddr(ipu1dma->tadr);
+
+					ipuDmacPartialChain(ptag[0]);
+
+					// Transfer the last of ptag into chcr.
+					ipu1dma->chcrTransfer(ptag);
 			}
+
+				IPU_INT_TO(ipu1cycles + totalqwc * BIAS);  // Should it be (ipu1cycles + totalqwc) * BIAS?
+				g_nDMATransfer.TIE1 = true;
+			return totalqwc;
+		}
+			else
+		{
+				//Britney Dance beat does a blank NEXT tag, for some odd reason the fix doesnt work if after IPU1Chain O_o
+				if (!done) IPU1dma();
+				if (IPU1chain(totalqwc)) return totalqwc;
+			}
+
+			ipuDmacPartialChain(ptag[0]);
+			}
+		else
+		{
+			if (IPU1chain(totalqwc)) return totalqwc;
 		}
 	}
 
-	IPU_INT_TO((ipu1cycles + totalqwc)*BIAS);
+	IPU_INT_TO((ipu1cycles + totalqwc) * BIAS);
 	return totalqwc;
 }
 
+void FIFOfrom_clear()
+{
+	memzero(fifo_output);
+	ipuRegs->ctrl.OFC = 0;
+	FOreadpos = 0;
+	FOwritepos = 0;
+}
 
 int FIFOfrom_write(const u32 *value, int size)
 {
@@ -1593,17 +1609,17 @@ int FIFOfrom_write(const u32 *value, int size)
 
 	while (transsize-- > 0)
 	{
-		fifo_output[FOwritepos] = ((u32*)value)[0];
-		fifo_output[FOwritepos+1] = ((u32*)value)[1];
-		fifo_output[FOwritepos+2] = ((u32*)value)[2];
-		fifo_output[FOwritepos+3] = ((u32*)value)[3];
+		for (int i = 0; i <= 3; i++)
+		{
+			fifo_output[FOwritepos + i] = ((u32*)value)[i];
+		}
 		FOwritepos = (FOwritepos + 4) & 31;
 		value += 4;
 	}
 
 	ipuRegs->ctrl.OFC += firsttrans;
 	IPU0dma();
-	//Console::WriteLn("Written %d qwords, %d", params firsttrans,ipuRegs->ctrl.OFC);
+	//Console.WriteLn("Written %d qwords, %d", firsttrans,ipuRegs->ctrl.OFC);
 
 	return firsttrans;
 }
@@ -1611,14 +1627,11 @@ int FIFOfrom_write(const u32 *value, int size)
 static __forceinline void _FIFOfrom_readsingle(void *value)
 {
 	// transfer 1 qword, split into two transfers
-	((u32*)value)[0] = fifo_output[FOreadpos];
-	fifo_output[FOreadpos] = 0;
-	((u32*)value)[1] = fifo_output[FOreadpos+1];
-	fifo_output[FOreadpos+1] = 0;
-	((u32*)value)[2] = fifo_output[FOreadpos+2];
-	fifo_output[FOreadpos+2] = 0;
-	((u32*)value)[3] = fifo_output[FOreadpos+3];
-	fifo_output[FOreadpos+3] = 0;
+	for (int i = 0; i <= 3; i++)
+	{
+		((u32*)value)[i] = fifo_output[FOreadpos + i];
+		fifo_output[FOreadpos + i] = 0;
+	}
 	FOreadpos = (FOreadpos + 4) & 31;
 }
 
@@ -1642,43 +1655,57 @@ void FIFOfrom_read(void *value, int size)
 	}
 }
 
-
-
 int IPU0dma()
 {
 	int readsize;
-	void* pMem;
+	static int totalsize = 0;
+	tDMA_TAG* pMem;
 
-	if ((!(ipu0dma->chcr & 0x100) || (cpuRegs.interrupt & (1 << DMAC_FROM_IPU))) || (ipu0dma->qwc == 0))
+	if ((!(ipu0dma->chcr.STR) || (cpuRegs.interrupt & (1 << DMAC_FROM_IPU))) || (ipu0dma->qwc == 0))
 		return 0;
 
-	assert(!(ipu0dma->chcr&0x40));
+	pxAssert(!(ipu0dma->chcr.TTE));
 
 	IPU_LOG("dmaIPU0 chcr = %lx, madr = %lx, qwc  = %lx",
-	        ipu0dma->chcr, ipu0dma->madr, ipu0dma->qwc);
+	        ipu0dma->chcr._u32, ipu0dma->madr, ipu0dma->qwc);
 
-	assert((ipu0dma->chcr & 0xC) == 0);
-	pMem = (u32*)dmaGetAddr(ipu0dma->madr);
+	pxAssert(ipu0dma->chcr.MOD == NORMAL_MODE);
+	
+	pMem = dmaGetAddr(ipu0dma->madr);
+
 	readsize = min(ipu0dma->qwc, (u16)ipuRegs->ctrl.OFC);
+	totalsize+=readsize;
 	FIFOfrom_read(pMem, readsize);
+
 	ipu0dma->madr += readsize << 4;
 	ipu0dma->qwc -= readsize; // note: qwc is u16
+
 	if (ipu0dma->qwc == 0)
 	{
-		if ((psHu32(DMAC_CTRL) & 0x30) == 0x30)   // STS == fromIPU
+		if (dmacRegs->ctrl.STS == STS_fromIPU)   // STS == fromIPU
 		{
-			psHu32(DMAC_STADR) = ipu0dma->madr;
-			switch (psHu32(DMAC_CTRL) & 0xC0)
+			dmacRegs->stadr.ADDR = ipu0dma->madr;
+			switch (dmacRegs->ctrl.STD)
 			{
-				case 0x80: // GIF
-					g_nDMATransfer |= IPU_DMA_GIFSTALL;
+				case NO_STD:
 					break;
-				case 0x40: // VIF
-					g_nDMATransfer |= IPU_DMA_VIFSTALL;
+				case STD_GIF: // GIF
+					g_nDMATransfer.GIFSTALL = true;
+					break;
+				case STD_VIF1: // VIF
+					g_nDMATransfer.VIFSTALL = true;
+					break;
+				case STD_SIF1:
+					g_nDMATransfer.SIFSTALL = true;
 					break;
 			}
 		}
-		IPU_INT_FROM(readsize*BIAS);
+		//Fixme ( voodoocycles ):
+		//This was IPU_INT_FROM(readsize*BIAS );
+		//This broke vids in Digital Devil Saga
+		//Note that interrupting based on totalsize is just guessing..
+		IPU_INT_FROM(totalsize*BIAS );
+		totalsize = 0;
 	}
 
 	return readsize;
@@ -1701,33 +1728,42 @@ void ipu0Interrupt()
 {
 	IPU_LOG("ipu0Interrupt: %x", cpuRegs.cycle);
 
-	if (g_nDMATransfer & IPU_DMA_FIREINT0)
+	if (g_nDMATransfer.FIREINT0)
 	{
+		g_nDMATransfer.FIREINT0 = false;
 		hwIntcIrq(INTC_IPU);
-		g_nDMATransfer &= ~IPU_DMA_FIREINT0;
 	}
 
-	if (g_nDMATransfer & IPU_DMA_GIFSTALL)
+	if (g_nDMATransfer.GIFSTALL)
 	{
 		// gif
-		g_nDMATransfer &= ~IPU_DMA_GIFSTALL;
-		if (((DMACh*)&PS2MEM_HW[0xA000])->chcr & 0x100) GIFdma();
+		g_nDMATransfer.GIFSTALL = false;
+		if (gif->chcr.STR) GIFdma();
 	}
 
-	if (g_nDMATransfer & IPU_DMA_VIFSTALL)
+	if (g_nDMATransfer.VIFSTALL)
 	{
 		// vif
-		g_nDMATransfer &= ~IPU_DMA_VIFSTALL;
-		if (((DMACh*)&PS2MEM_HW[0x9000])->chcr & 0x100)dmaVIF1();
+		g_nDMATransfer.VIFSTALL = false;
+		if (vif1ch->chcr.STR) dmaVIF1();
 	}
 
-	if (g_nDMATransfer & IPU_DMA_TIE0)
+	if (g_nDMATransfer.SIFSTALL)
 	{
-		g_nDMATransfer &= ~IPU_DMA_TIE0;
+		// sif
+		g_nDMATransfer.SIFSTALL = false;
+
+		// Not totally sure whether this needs to be done or not, so I'm
+		// leaving it commented out for the moment.
+		//if (sif1dma->chcr.STR) SIF1Dma();
 	}
 
-	ipu0dma->chcr &= ~0x100;
+	if (g_nDMATransfer.TIE0)
+	{
+		g_nDMATransfer.TIE0 = false;
+	}
 
+	ipu0dma->chcr.STR = false;
 	hwDmacIrq(DMAC_FROM_IPU);
 }
 
@@ -1735,16 +1771,16 @@ IPU_FORCEINLINE void ipu1Interrupt()
 {
 	IPU_LOG("ipu1Interrupt %x:", cpuRegs.cycle);
 
-	if (g_nDMATransfer & IPU_DMA_FIREINT1)
+	if (g_nDMATransfer.FIREINT1)
 	{
 		hwIntcIrq(INTC_IPU);
-		g_nDMATransfer &= ~IPU_DMA_FIREINT1;
+		g_nDMATransfer.FIREINT1 = false;
 	}
 
-	if (g_nDMATransfer & IPU_DMA_TIE1)
-		g_nDMATransfer &= ~IPU_DMA_TIE1;
+	if (g_nDMATransfer.TIE1)
+		g_nDMATransfer.TIE1 = false;
 	else
-		ipu1dma->chcr &= ~0x100;
+		ipu1dma->chcr.STR = false;
 
 	hwDmacIrq(DMAC_TO_IPU);
 }

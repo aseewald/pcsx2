@@ -1,20 +1,18 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
+
 
 #include "PrecompiledHeader.h"
 
@@ -22,6 +20,8 @@
 #include "R5900OpcodeTables.h"
 #include "iR5900.h"
 #include "iFPU.h"
+
+using namespace x86Emitter;
 
 //------------------------------------------------------------------
 namespace R5900 {
@@ -75,10 +75,11 @@ void recRSQRT_S_xmm(int info);
 #define FPUflagSO	0X00000010
 #define FPUflagSU	0X00000008
 
-#define FPU_ADD_SUB_HACK 1 // Add/Sub opcodes produce more ps2-like results if set to 1
+// Add/Sub opcodes produce the same results as the ps2
+#define FPU_CORRECT_ADD_SUB 1 
 
-static u32 PCSX2_ALIGNED16(s_neg[4]) = { 0x80000000, 0xffffffff, 0xffffffff, 0xffffffff };
-static u32 PCSX2_ALIGNED16(s_pos[4]) = { 0x7fffffff, 0xffffffff, 0xffffffff, 0xffffffff };
+static const __aligned16 u32 s_neg[4] = { 0x80000000, 0xffffffff, 0xffffffff, 0xffffffff };
+static const __aligned16 u32 s_pos[4] = { 0x7fffffff, 0xffffffff, 0xffffffff, 0xffffffff };
 
 #define REC_FPUBRANCH(f) \
 	void f(); \
@@ -369,7 +370,7 @@ REC_FPUFUNC(RSQRT_S);
 // Clamp Functions (Converts NaN's and Infinities to Normal Numbers)
 //------------------------------------------------------------------
 
-PCSX2_ALIGNED16(u64 FPU_FLOAT_TEMP[2]);
+static __aligned16 u64 FPU_FLOAT_TEMP[2];
 __forceinline void fpuFloat4(int regd) { // +NaN -> +fMax, -NaN -> -fMax, +Inf -> +fMax, -Inf -> -fMax
 	int t1reg = _allocTempXMMreg(XMMT_FPS, -1);
 	if (t1reg >= 0) {
@@ -381,7 +382,7 @@ __forceinline void fpuFloat4(int regd) { // +NaN -> +fMax, -NaN -> -fMax, +Inf -
 		_freeXMMreg(t1reg);
 	}
 	else {
-		Console::Error("fpuFloat2() allocation error"); 
+		Console.Error("fpuFloat2() allocation error"); 
 		t1reg = (regd == 0) ? 1 : 0; // get a temp reg thats not regd
 		SSE_MOVAPS_XMM_to_M128( (uptr)&FPU_FLOAT_TEMP[0], t1reg ); // backup data in t1reg to a temp address
 		SSE_MOVSS_XMM_to_XMM(t1reg, regd);
@@ -461,9 +462,9 @@ void FPU_ADD_SUB(int regd, int regt, int issub)
 	int temp2 = _allocX86reg(-1, X86TYPE_TEMP, 0, 0); //receives regt
 	int xmmtemp = _allocTempXMMreg(XMMT_FPS, -1); //temporary for anding with regd/regt
  
-	if (tempecx != ECX)	{ Console::Error("FPU: ADD/SUB Allocation Error!"); tempecx = ECX;}
-	if (temp2 == -1)	{ Console::Error("FPU: ADD/SUB Allocation Error!"); temp2 = EAX;}
-	if (xmmtemp == -1)	{ Console::Error("FPU: ADD/SUB Allocation Error!"); xmmtemp = XMM0;}
+	if (tempecx != ECX)	{ Console.Error("FPU: ADD/SUB Allocation Error!"); tempecx = ECX;}
+	if (temp2 == -1)	{ Console.Error("FPU: ADD/SUB Allocation Error!"); temp2 = EAX;}
+	if (xmmtemp == -1)	{ Console.Error("FPU: ADD/SUB Allocation Error!"); xmmtemp = XMM0;}
 
 	SSE2_MOVD_XMM_to_R(tempecx, regd); 
 	SSE2_MOVD_XMM_to_R(temp2, regt);
@@ -546,95 +547,54 @@ void FPU_ADD_SUB(int regd, int regt, int issub)
 }
 
 void FPU_ADD(int regd, int regt) {
-	if (FPU_ADD_SUB_HACK) FPU_ADD_SUB(regd, regt, 0);
+	if (FPU_CORRECT_ADD_SUB) FPU_ADD_SUB(regd, regt, 0);
 	else SSE_ADDSS_XMM_to_XMM(regd, regt);
 }
  
 void FPU_SUB(int regd, int regt) {
-	if (FPU_ADD_SUB_HACK) FPU_ADD_SUB(regd, regt, 1);
+	if (FPU_CORRECT_ADD_SUB) FPU_ADD_SUB(regd, regt, 1);
 	else SSE_SUBSS_XMM_to_XMM(regd, regt);
 }
 
 //------------------------------------------------------------------
-// FPU_MUL (Used to approximate PS2's FPU mul behavior)
+// Note: PS2's multiplication uses some variant of booth multiplication with wallace trees:
+// It cuts off some bits, resulting in inaccurate and non-commutative results.
+// The PS2's result mantissa is either equal to x86's rounding to zero result mantissa
+// or SMALLER (by 0x1). (this means that x86's other rounding modes are only less similar to PS2's mul)
 //------------------------------------------------------------------
-// PS2's multiplication uses some modification (possibly not the one used in this function)
-// of booth multiplication with wallace trees (not used in this function)
-// it cuts of some bits, resulting in inaccurate and non-commutative results.
-// This function attempts to replicate this. It is currently inaccurate. But still not too bad.
-//------------------------------------------------------------------
-// Tales of Destiny hangs in a (very) certain place without this function. Probably its only use.
-// Can be optimized, of course. 
-// shouldn't be compiled with SSE/MMX optimizations (but none of PCSX2 should be, right?)
-u32 __fastcall FPU_MUL_MANTISSA(u32 s, u32 t)
+
+u32 __fastcall FPU_MUL_HACK(u32 s, u32 t)
 {
-	s = (s & 0x7fffff) | 0x800000;
-	t = (t & 0x7fffff) | 0x800000;
-	t<<=1;
-	u32 part[13]; //partial products
-	u32 bit[13]; //more partial products. 0 or 1.
-	for (int i = 0; i <= 12; i++, t>>=2)
-	{
-		u32 test = t & 7;
-		if (test == 0 || test == 7)
-		{
-			part[i] = 0;
-			bit[i] = 0;
-		}
-		else if (test == 3)
-		{
-			part[i] = (s<<1);
-			bit[i] = 0;
-		}
-		else if (test == 4)
-		{
-			part[i] = ~(s<<1);
-			bit[i] = 1;
-		}
-		else if (test < 4)
-		{
-			part[i] = s;
-			bit[i] = 0;
-		}
-		else
-		{
-			part[i] = ~s;
-			bit[i] = 1;
-		}
-	}
-	s64 res = 0;
-	u64 mask = 0;
-	mask = (~mask) << 12; //mask
-	for (int i=0; i<=12; i++)
-	{
-		res += (s64)(s32)part[i]<<(i*2);
-		res &= mask;
-		res += bit[i]<<(i*2);
-	}
-	u32 man_res = (res >> 23);
-	if (man_res & (1 << 24))
-		man_res >>= 1;
-	man_res &= 0x7fffff;
-	return man_res;
+	if ((s == 0x3e800000) && (t == 0x40490fdb))
+		return 0x3f490fda; // needed for Tales of Destiny Remake (only in a very specific room late-game)
+	else 
+		return 0;
 }
 
-void FPU_MUL(int regd, int regt)
+void FPU_MUL(int regd, int regt, bool reverseOperands)
 {
+	u8 *noHack, *endMul;
+
 	if (CHECK_FPUMULHACK)
 	{
-		SSE2_MOVD_XMM_to_R(ECX, regd);
-		SSE2_MOVD_XMM_to_R(EDX, regt);
-		SSE_MULSS_XMM_to_XMM(regd, regt);
-		CALLFunc( (uptr)&FPU_MUL_MANTISSA );
-		SSE2_MOVD_XMM_to_R(ECX, regd);
-		AND32ItoR(ECX, 0xff800000);
-		OR32RtoR(EAX, ECX);
+		SSE2_MOVD_XMM_to_R(ECX, reverseOperands ? regt : regd);
+		SSE2_MOVD_XMM_to_R(EDX, reverseOperands ? regd : regt);
+		CALLFunc( (uptr)&FPU_MUL_HACK ); //returns the hacked result or 0
+		TEST32RtoR(EAX, EAX);
+		noHack = JZ8(0);
 		SSE2_MOVD_R_to_XMM(regd, EAX);
+			endMul = JMP8(0);
+		x86SetJ8(noHack);
 	}
-	else
+
 		SSE_MULSS_XMM_to_XMM(regd, regt);
+	
+	if (CHECK_FPUMULHACK) 
+		x86SetJ8(endMul);
 }
 
+void FPU_MUL(int regd, int regt) { FPU_MUL(regd, regt, false); }
+void FPU_MUL_REV(int regd, int regt) { FPU_MUL(regd, regt, true); } //reversed operands
 
 //------------------------------------------------------------------
 // CommutativeOp XMM (used for ADD, MUL, MAX, and MIN opcodes)
@@ -642,13 +602,16 @@ void FPU_MUL(int regd, int regt)
 static void (*recComOpXMM_to_XMM[] )(x86SSERegType, x86SSERegType) = {
 	FPU_ADD, FPU_MUL, SSE_MAXSS_XMM_to_XMM, SSE_MINSS_XMM_to_XMM };
 
+static void (*recComOpXMM_to_XMM_REV[] )(x86SSERegType, x86SSERegType) = { //reversed operands
+	FPU_ADD, FPU_MUL_REV, SSE_MAXSS_XMM_to_XMM, SSE_MINSS_XMM_to_XMM };    
+
 //static void (*recComOpM32_to_XMM[] )(x86SSERegType, uptr) = {
 //	SSE_ADDSS_M32_to_XMM, SSE_MULSS_M32_to_XMM, SSE_MAXSS_M32_to_XMM, SSE_MINSS_M32_to_XMM };
 
 int recCommutativeOp(int info, int regd, int op) 
 {
 	int t0reg = _allocTempXMMreg(XMMT_FPS, -1);
-    //if (t0reg == -1) {Console::WriteLn("FPU: CommutativeOp Allocation Error!");}
+    //if (t0reg == -1) {Console.WriteLn("FPU: CommutativeOp Allocation Error!");}
 
 	switch(info & (PROCESS_EE_S|PROCESS_EE_T) ) {
 		case PROCESS_EE_S:
@@ -660,14 +623,14 @@ int recCommutativeOp(int info, int regd, int op)
 			else {
 				SSE_MOVSS_M32_to_XMM(regd, (uptr)&fpuRegs.fpr[_Ft_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW || (op >= 2)) { fpuFloat2(regd); fpuFloat2(EEREC_S); }
-				recComOpXMM_to_XMM[op](regd, EEREC_S);
+				recComOpXMM_to_XMM_REV[op](regd, EEREC_S);
 			}
 			break;
 		case PROCESS_EE_T:
 			if (regd == EEREC_T) {
 				SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Fs_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW || (op >= 2)) { fpuFloat2(regd); fpuFloat2(t0reg); }
-				recComOpXMM_to_XMM[op](regd, t0reg);
+				recComOpXMM_to_XMM_REV[op](regd, t0reg);
 			}
 			else {
 				SSE_MOVSS_M32_to_XMM(regd, (uptr)&fpuRegs.fpr[_Fs_]);
@@ -678,7 +641,7 @@ int recCommutativeOp(int info, int regd, int op)
 		case (PROCESS_EE_S|PROCESS_EE_T):
 			if (regd == EEREC_T) {
 				if (CHECK_FPU_EXTRA_OVERFLOW || (op >= 2)) { fpuFloat2(regd); fpuFloat2(EEREC_S); }
-				recComOpXMM_to_XMM[op](regd, EEREC_S);
+				recComOpXMM_to_XMM_REV[op](regd, EEREC_S);
 			}
 			else {
 				SSE_MOVSS_XMM_to_XMM(regd, EEREC_S);
@@ -687,7 +650,7 @@ int recCommutativeOp(int info, int regd, int op)
 			}
 			break;
 		default:
-			Console::Status("FPU: recCommutativeOp case 4");
+			Console.WriteLn(Color_Magenta, "FPU: recCommutativeOp case 4");
 			SSE_MOVSS_M32_to_XMM(regd, (uptr)&fpuRegs.fpr[_Fs_]);
 			SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Ft_]);
 			if (CHECK_FPU_EXTRA_OVERFLOW || (op >= 2)) { fpuFloat2(regd); fpuFloat2(t0reg); }
@@ -772,7 +735,7 @@ void recC_EQ_xmm(int info)
 	int tempReg;
 	int t0reg;
 
-	//Console::WriteLn("recC_EQ_xmm()");
+	//Console.WriteLn("recC_EQ_xmm()");
 
 	switch(info & (PROCESS_EE_S|PROCESS_EE_T) ) {
 		case PROCESS_EE_S: 
@@ -803,9 +766,9 @@ void recC_EQ_xmm(int info)
 			SSE_UCOMISS_XMM_to_XMM(EEREC_S, EEREC_T); 
 			break;
 		default: 
-			Console::Status("recC_EQ_xmm: Default");
+			Console.WriteLn(Color_Magenta, "recC_EQ_xmm: Default");
 			tempReg = _allocX86reg(-1, X86TYPE_TEMP, 0, 0);
-			if (tempReg < 0) {Console::Error("FPU: DIV Allocation Error!"); tempReg = EAX;}
+			if (tempReg < 0) {Console.Error("FPU: DIV Allocation Error!"); tempReg = EAX;}
 			MOV32MtoR(tempReg, (uptr)&fpuRegs.fpr[_Fs_]);
 			CMP32MtoR(tempReg, (uptr)&fpuRegs.fpr[_Ft_]); 
 
@@ -842,7 +805,7 @@ void recC_LE_xmm(int info )
 	int tempReg; //tempX86reg
 	int t0reg; //tempXMMreg
 
-	//Console::WriteLn("recC_LE_xmm()");
+	//Console.WriteLn("recC_LE_xmm()");
 
 	switch(info & (PROCESS_EE_S|PROCESS_EE_T) ) {
 		case PROCESS_EE_S: 
@@ -883,9 +846,9 @@ void recC_LE_xmm(int info )
 			SSE_UCOMISS_XMM_to_XMM(EEREC_S, EEREC_T); 
 			break;
 		default: // Untested and incorrect, but this case is never reached AFAIK (cottonvibes)
-			Console::Status("recC_LE_xmm: Default");
+			Console.WriteLn(Color_Magenta, "recC_LE_xmm: Default");
 			tempReg = _allocX86reg(-1, X86TYPE_TEMP, 0, 0);
-			if (tempReg < 0) {Console::Error("FPU: DIV Allocation Error!"); tempReg = EAX;}
+			if (tempReg < 0) {Console.Error("FPU: DIV Allocation Error!"); tempReg = EAX;}
 			MOV32MtoR(tempReg, (uptr)&fpuRegs.fpr[_Fs_]);
 			CMP32MtoR(tempReg, (uptr)&fpuRegs.fpr[_Ft_]); 
 			
@@ -916,7 +879,7 @@ void recC_LT_xmm(int info)
 	int tempReg;
 	int t0reg;
 
-	//Console::WriteLn("recC_LT_xmm()");
+	//Console.WriteLn("recC_LT_xmm()");
 	
 	switch(info & (PROCESS_EE_S|PROCESS_EE_T) ) {
 		case PROCESS_EE_S:
@@ -959,9 +922,9 @@ void recC_LT_xmm(int info)
 			SSE_UCOMISS_XMM_to_XMM(EEREC_S, EEREC_T); 
 			break;
 		default:
-			Console::Status("recC_LT_xmm: Default");
+			Console.WriteLn(Color_Magenta, "recC_LT_xmm: Default");
 			tempReg = _allocX86reg(-1, X86TYPE_TEMP, 0, 0);
-			if (tempReg < 0) {Console::Error("FPU: DIV Allocation Error!"); tempReg = EAX;}
+			if (tempReg < 0) {Console.Error("FPU: DIV Allocation Error!"); tempReg = EAX;}
 			MOV32MtoR(tempReg, (uptr)&fpuRegs.fpr[_Fs_]);
 			CMP32MtoR(tempReg, (uptr)&fpuRegs.fpr[_Ft_]); 
 			
@@ -1051,8 +1014,8 @@ void recDIVhelper1(int regd, int regt) // Sets flags
 	u32 *ajmp32, *bjmp32;
 	int t1reg = _allocTempXMMreg(XMMT_FPS, -1);
 	int tempReg = _allocX86reg(-1, X86TYPE_TEMP, 0, 0);
-	//if (t1reg == -1) {Console::Error("FPU: DIV Allocation Error!");}
-	if (tempReg == -1) {Console::Error("FPU: DIV Allocation Error!"); tempReg = EAX;}
+	//if (t1reg == -1) {Console.Error("FPU: DIV Allocation Error!");}
+	if (tempReg == -1) {Console.Error("FPU: DIV Allocation Error!"); tempReg = EAX;}
 
 	AND32ItoM((uptr)&fpuRegs.fprc[31], ~(FPUflagI|FPUflagD)); // Clear I and D flags
 
@@ -1102,32 +1065,52 @@ void recDIVhelper2(int regd, int regt) // Doesn't sets flags
 	ClampValues(regd);
 }
 
+static __aligned16 SSE_MXCSR roundmode_nearest, roundmode_neg;
+
 void recDIV_S_xmm(int info)
 {
-	static u32 PCSX2_ALIGNED16(roundmode_temp[4]) = { 0x00000000, 0x00000000, 0x00000000, 0x00000000 };
-	int roundmodeFlag = 0;
+	bool roundmodeFlag = false;
 	int t0reg = _allocTempXMMreg(XMMT_FPS, -1);
-    //if (t0reg == -1) {Console::Error("FPU: DIV Allocation Error!");}
-    //Console::WriteLn("DIV");
+    //if (t0reg == -1) {Console.Error("FPU: DIV Allocation Error!");}
+    //Console.WriteLn("DIV");
 
-	if ((g_sseMXCSR & 0x00006000) != 0x00000000) { // Set roundmode to nearest if it isn't already
-		//Console::WriteLn("div to nearest");
-		roundmode_temp[0] = (g_sseMXCSR & 0xFFFF9FFF); // Set new roundmode
-		roundmode_temp[1] = g_sseMXCSR; // Backup old Roundmode
-		SSE_LDMXCSR ((uptr)&roundmode_temp[0]); // Recompile Roundmode Change
-		roundmodeFlag = 1;
+	if( CHECK_FPUNEGDIVHACK )
+	{
+		if (g_sseMXCSR.GetRoundMode() != SSEround_NegInf)
+		{
+			// Set roundmode to nearest since it isn't already
+			//Console.WriteLn("div to negative inf");
+
+			roundmode_neg = g_sseMXCSR;
+			roundmode_neg.SetRoundMode( SSEround_NegInf );
+			xLDMXCSR( roundmode_neg );
+			roundmodeFlag = true;
+	}
+	}
+	else
+	{
+		if (g_sseMXCSR.GetRoundMode() != SSEround_Nearest)
+		{
+			// Set roundmode to nearest since it isn't already
+			//Console.WriteLn("div to nearest");
+			
+			roundmode_nearest = g_sseMXCSR;
+			roundmode_nearest.SetRoundMode( SSEround_Nearest );
+			xLDMXCSR( roundmode_nearest );
+			roundmodeFlag = true;
+		}
 	}
 
 	switch(info & (PROCESS_EE_S|PROCESS_EE_T) ) {
 		case PROCESS_EE_S:
-			//Console::WriteLn("FPU: DIV case 1");
+			//Console.WriteLn("FPU: DIV case 1");
 			SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_S);
 			SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Ft_]);
 			if (CHECK_FPU_EXTRA_FLAGS) recDIVhelper1(EEREC_D, t0reg);
 			else recDIVhelper2(EEREC_D, t0reg);
 			break;
 		case PROCESS_EE_T:
-			//Console::WriteLn("FPU: DIV case 2");
+			//Console.WriteLn("FPU: DIV case 2");
 			if (EEREC_D == EEREC_T) {
 				SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_T);
 				SSE_MOVSS_M32_to_XMM(EEREC_D, (uptr)&fpuRegs.fpr[_Fs_]);
@@ -1141,7 +1124,7 @@ void recDIV_S_xmm(int info)
 			}
 			break;
 		case (PROCESS_EE_S|PROCESS_EE_T):
-			//Console::WriteLn("FPU: DIV case 3");
+			//Console.WriteLn("FPU: DIV case 3");
 			if (EEREC_D == EEREC_T) {
 				SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_T);
 				SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_S);
@@ -1155,16 +1138,14 @@ void recDIV_S_xmm(int info)
 			}
 			break;
 		default:
-			//Console::WriteLn("FPU: DIV case 4");
+			//Console.WriteLn("FPU: DIV case 4");
 			SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Ft_]);
 			SSE_MOVSS_M32_to_XMM(EEREC_D, (uptr)&fpuRegs.fpr[_Fs_]);
 			if (CHECK_FPU_EXTRA_FLAGS) recDIVhelper1(EEREC_D, t0reg);
 			else recDIVhelper2(EEREC_D, t0reg);
 			break;
 	}
-	if (roundmodeFlag == 1) { // Set roundmode back if it was changed
-		SSE_LDMXCSR ((uptr)&roundmode_temp[1]);
-	}
+	if (roundmodeFlag) xLDMXCSR (g_sseMXCSR);
 	_freeXMMreg(t0reg);
 }
 
@@ -1186,7 +1167,7 @@ void recMADDtemp(int info, int regd)
 			if(regd == EEREC_S) {
 				SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Ft_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(t0reg); }
-				FPU_MUL(regd, t0reg);
+				SSE_MULSS_XMM_to_XMM(regd, t0reg);
 				if (info & PROCESS_EE_ACC) {
 					if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(EEREC_ACC); fpuFloat(regd); }
 					FPU_ADD(regd, EEREC_ACC);
@@ -1200,14 +1181,14 @@ void recMADDtemp(int info, int regd)
 			else if (regd == EEREC_ACC){
 				SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Ft_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(EEREC_S); fpuFloat2(t0reg); }
-				FPU_MUL(t0reg, EEREC_S);
+				SSE_MULSS_XMM_to_XMM(t0reg, EEREC_S);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
 				FPU_ADD(regd, t0reg);
 			} 
 			else {
 				SSE_MOVSS_M32_to_XMM(regd, (uptr)&fpuRegs.fpr[_Ft_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(EEREC_S); }
-				FPU_MUL(regd, EEREC_S);
+				SSE_MULSS_XMM_to_XMM(regd, EEREC_S);
 				if (info & PROCESS_EE_ACC) {
 					if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(EEREC_ACC); fpuFloat(regd); }
 					FPU_ADD(regd, EEREC_ACC);
@@ -1223,7 +1204,7 @@ void recMADDtemp(int info, int regd)
 			if(regd == EEREC_T) {
 				SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Fs_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(t0reg); }
-				FPU_MUL(regd, t0reg);
+				SSE_MULSS_XMM_to_XMM(regd, t0reg);
 				if (info & PROCESS_EE_ACC) {
 					if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(EEREC_ACC); fpuFloat(regd); }
 					FPU_ADD(regd, EEREC_ACC);
@@ -1237,14 +1218,14 @@ void recMADDtemp(int info, int regd)
 			else if (regd == EEREC_ACC){
 				SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Fs_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(EEREC_T); fpuFloat2(t0reg); }
-				FPU_MUL(t0reg, EEREC_T);
+				SSE_MULSS_XMM_to_XMM(t0reg, EEREC_T);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
 				FPU_ADD(regd, t0reg);
 			} 
 			else {
 				SSE_MOVSS_M32_to_XMM(regd, (uptr)&fpuRegs.fpr[_Fs_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(EEREC_T); }
-				FPU_MUL(regd, EEREC_T);
+				SSE_MULSS_XMM_to_XMM(regd, EEREC_T);
 				if (info & PROCESS_EE_ACC) {
 					if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(EEREC_ACC); fpuFloat(regd); }
 					FPU_ADD(regd, EEREC_ACC);
@@ -1259,7 +1240,7 @@ void recMADDtemp(int info, int regd)
 		case (PROCESS_EE_S|PROCESS_EE_T):
 			if(regd == EEREC_S) {
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(EEREC_T); }
-				FPU_MUL(regd, EEREC_T);
+				SSE_MULSS_XMM_to_XMM(regd, EEREC_T);
 				if (info & PROCESS_EE_ACC) {
 					if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(EEREC_ACC); }
 					FPU_ADD(regd, EEREC_ACC);
@@ -1272,7 +1253,7 @@ void recMADDtemp(int info, int regd)
 			} 
 			else if(regd == EEREC_T) {
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(EEREC_S); }
-				FPU_MUL(regd, EEREC_S);
+				SSE_MULSS_XMM_to_XMM(regd, EEREC_S);
 				if (info & PROCESS_EE_ACC) {
 					if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(EEREC_ACC); }
 					FPU_ADD(regd, EEREC_ACC);
@@ -1286,14 +1267,14 @@ void recMADDtemp(int info, int regd)
 			else if(regd == EEREC_ACC) {
 				SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_S);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(t0reg); fpuFloat2(EEREC_T); }
-				FPU_MUL(t0reg, EEREC_T);
+				SSE_MULSS_XMM_to_XMM(t0reg, EEREC_T);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
 				FPU_ADD(regd, t0reg);
 			} 
 			else {
 				SSE_MOVSS_XMM_to_XMM(regd, EEREC_S);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(EEREC_T); }
-				FPU_MUL(regd, EEREC_T);
+				SSE_MULSS_XMM_to_XMM(regd, EEREC_T);
 				if (info & PROCESS_EE_ACC) {
 					if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(EEREC_ACC); }
 					FPU_ADD(regd, EEREC_ACC);
@@ -1311,7 +1292,7 @@ void recMADDtemp(int info, int regd)
 				SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Fs_]);
 				SSE_MOVSS_M32_to_XMM(t1reg, (uptr)&fpuRegs.fpr[_Ft_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(t0reg); fpuFloat2(t1reg); }
-				FPU_MUL(t0reg, t1reg);
+				SSE_MULSS_XMM_to_XMM(t0reg, t1reg);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
 				FPU_ADD(regd, t0reg);
 				_freeXMMreg(t1reg);
@@ -1321,7 +1302,7 @@ void recMADDtemp(int info, int regd)
 				SSE_MOVSS_M32_to_XMM(regd, (uptr)&fpuRegs.fpr[_Fs_]);
 				SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Ft_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(t0reg); }
-				FPU_MUL(regd, t0reg);
+				SSE_MULSS_XMM_to_XMM(regd, t0reg);
 				if (info & PROCESS_EE_ACC) {
 					if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(EEREC_ACC); }
 					FPU_ADD(regd, EEREC_ACC);
@@ -1404,7 +1385,7 @@ int t1reg;
 			if(regd == EEREC_S) {
 				SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Ft_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(t0reg); }
-				FPU_MUL(regd, t0reg);
+				SSE_MULSS_XMM_to_XMM(regd, t0reg);
 				if (info & PROCESS_EE_ACC) { SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_ACC); }
 				else { SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.ACC); }
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
@@ -1414,14 +1395,14 @@ int t1reg;
 			else if (regd == EEREC_ACC){
 				SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Ft_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(EEREC_S); fpuFloat2(t0reg); }
-				FPU_MUL(t0reg, EEREC_S);
+				SSE_MULSS_XMM_to_XMM(t0reg, EEREC_S);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
 				FPU_SUB(regd, t0reg);
 			} 
 			else {
 				SSE_MOVSS_M32_to_XMM(regd, (uptr)&fpuRegs.fpr[_Ft_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(EEREC_S); }
-				FPU_MUL(regd, EEREC_S);
+				SSE_MULSS_XMM_to_XMM(regd, EEREC_S);
 				if (info & PROCESS_EE_ACC) { SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_ACC); }
 				else { SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.ACC); }
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
@@ -1433,7 +1414,7 @@ int t1reg;
 			if(regd == EEREC_T) {
 				SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Fs_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(t0reg); }
-				FPU_MUL(regd, t0reg);
+				SSE_MULSS_XMM_to_XMM(regd, t0reg);
 				if (info & PROCESS_EE_ACC) { SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_ACC); }
 				else { SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.ACC); }
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
@@ -1443,14 +1424,14 @@ int t1reg;
 			else if (regd == EEREC_ACC){
 				SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Fs_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(EEREC_T); fpuFloat2(t0reg); }
-				FPU_MUL(t0reg, EEREC_T);
+				SSE_MULSS_XMM_to_XMM(t0reg, EEREC_T);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
 				FPU_SUB(regd, t0reg);
 			} 
 			else {
 				SSE_MOVSS_M32_to_XMM(regd, (uptr)&fpuRegs.fpr[_Fs_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(EEREC_T); }
-				FPU_MUL(regd, EEREC_T);
+				SSE_MULSS_XMM_to_XMM(regd, EEREC_T);
 				if (info & PROCESS_EE_ACC) { SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_ACC); }
 				else { SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.ACC); }
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
@@ -1461,7 +1442,7 @@ int t1reg;
 		case (PROCESS_EE_S|PROCESS_EE_T):
 			if(regd == EEREC_S) {
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(EEREC_T); }
-				FPU_MUL(regd, EEREC_T);
+				SSE_MULSS_XMM_to_XMM(regd, EEREC_T);
 				if (info & PROCESS_EE_ACC) { SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_ACC); }
 				else { SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.ACC); }
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
@@ -1470,7 +1451,7 @@ int t1reg;
 			} 
 			else if(regd == EEREC_T) {
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(EEREC_S); }
-				FPU_MUL(regd, EEREC_S);
+				SSE_MULSS_XMM_to_XMM(regd, EEREC_S);
 				if (info & PROCESS_EE_ACC) { SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_ACC); }
 				else { SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.ACC); }
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
@@ -1480,14 +1461,14 @@ int t1reg;
 			else if(regd == EEREC_ACC) {
 				SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_S);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(t0reg); fpuFloat2(EEREC_T); }
-				FPU_MUL(t0reg, EEREC_T);
+				SSE_MULSS_XMM_to_XMM(t0reg, EEREC_T);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
 				FPU_SUB(regd, t0reg);
 			} 
 			else {
 				SSE_MOVSS_XMM_to_XMM(regd, EEREC_S);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(EEREC_T); }
-				FPU_MUL(regd, EEREC_T);
+				SSE_MULSS_XMM_to_XMM(regd, EEREC_T);
 				if (info & PROCESS_EE_ACC) { SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_ACC); }
 				else { SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.ACC); }
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
@@ -1501,7 +1482,7 @@ int t1reg;
 				SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Fs_]);
 				SSE_MOVSS_M32_to_XMM(t1reg, (uptr)&fpuRegs.fpr[_Ft_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(t0reg); fpuFloat2(t1reg); }
-				FPU_MUL(t0reg, t1reg);
+				SSE_MULSS_XMM_to_XMM(t0reg, t1reg);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
 				FPU_SUB(regd, t0reg);
 				_freeXMMreg(t1reg);
@@ -1511,7 +1492,7 @@ int t1reg;
 				SSE_MOVSS_M32_to_XMM(regd, (uptr)&fpuRegs.fpr[_Fs_]);
 				SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Ft_]);
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat2(regd); fpuFloat2(t0reg); }
-				FPU_MUL(regd, t0reg);
+				SSE_MULSS_XMM_to_XMM(regd, t0reg);
 				if (info & PROCESS_EE_ACC)  { SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_ACC); } 
 				else { SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.ACC); }
 				if (CHECK_FPU_EXTRA_OVERFLOW) { fpuFloat(regd); fpuFloat(t0reg); }
@@ -1593,19 +1574,19 @@ void recSUBhelper(int regd, int regt)
 void recSUBop(int info, int regd)
 {
 	int t0reg = _allocTempXMMreg(XMMT_FPS, -1);
-    //if (t0reg == -1) {Console::Error("FPU: SUB Allocation Error!");}
+    //if (t0reg == -1) {Console.Error("FPU: SUB Allocation Error!");}
 
 	//AND32ItoM((uptr)&fpuRegs.fprc[31], ~(FPUflagO|FPUflagU)); // Clear O and U flags
 
 	switch(info & (PROCESS_EE_S|PROCESS_EE_T) ) {
 		case PROCESS_EE_S:
-			//Console::WriteLn("FPU: SUB case 1");
+			//Console.WriteLn("FPU: SUB case 1");
 			if (regd != EEREC_S) SSE_MOVSS_XMM_to_XMM(regd, EEREC_S);
 			SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Ft_]);
 			recSUBhelper(regd, t0reg);
 			break;
 		case PROCESS_EE_T:
-			//Console::WriteLn("FPU: SUB case 2");
+			//Console.WriteLn("FPU: SUB case 2");
 			if (regd == EEREC_T) {
 				SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_T);
 				SSE_MOVSS_M32_to_XMM(regd, (uptr)&fpuRegs.fpr[_Fs_]);
@@ -1617,7 +1598,7 @@ void recSUBop(int info, int regd)
 			}
 			break;
 		case (PROCESS_EE_S|PROCESS_EE_T):
-			//Console::WriteLn("FPU: SUB case 3");
+			//Console.WriteLn("FPU: SUB case 3");
 			if (regd == EEREC_T) {
 				SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_T);
 				SSE_MOVSS_XMM_to_XMM(regd, EEREC_S);
@@ -1629,7 +1610,7 @@ void recSUBop(int info, int regd)
 			}
 			break;
 		default:
-			Console::Notice("FPU: SUB case 4");
+			Console.Warning("FPU: SUB case 4");
 			SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Ft_]);
 			SSE_MOVSS_M32_to_XMM(regd, (uptr)&fpuRegs.fpr[_Fs_]);
 			recSUBhelper(regd, t0reg);
@@ -1663,16 +1644,17 @@ FPURECOMPILE_CONSTCODE(SUBA_S, XMMINFO_WRITEACC|XMMINFO_READS|XMMINFO_READT);
 void recSQRT_S_xmm(int info)
 {
 	u8* pjmp;
-	static u32 PCSX2_ALIGNED16(roundmode_temp[4]) = { 0x00000000, 0x00000000, 0x00000000, 0x00000000 };
-	int roundmodeFlag = 0;
-	//Console::WriteLn("FPU: SQRT");
+	bool roundmodeFlag = false;
+	//Console.WriteLn("FPU: SQRT");
 	
-	if ((g_sseMXCSR & 0x00006000) != 0x00000000) { // Set roundmode to nearest if it isn't already
-		//Console::WriteLn("sqrt to nearest");
-		roundmode_temp[0] = (g_sseMXCSR & 0xFFFF9FFF); // Set new roundmode
-		roundmode_temp[1] = g_sseMXCSR; // Backup old Roundmode
-		SSE_LDMXCSR ((uptr)&roundmode_temp[0]); // Recompile Roundmode Change
-		roundmodeFlag = 1;
+	if (g_sseMXCSR.GetRoundMode() != SSEround_Nearest)
+	{
+		// Set roundmode to nearest if it isn't already
+		//Console.WriteLn("sqrt to nearest");
+		roundmode_nearest = g_sseMXCSR;
+		roundmode_nearest.SetRoundMode( SSEround_Nearest );
+		xLDMXCSR (roundmode_nearest);
+		roundmodeFlag = true;
 	}
 
 	if( info & PROCESS_EE_T ) SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_T); 
@@ -1680,7 +1662,7 @@ void recSQRT_S_xmm(int info)
 
 	if (CHECK_FPU_EXTRA_FLAGS) {
 		int tempReg = _allocX86reg(-1, X86TYPE_TEMP, 0, 0);
-		if (tempReg == -1) {Console::Error("FPU: SQRT Allocation Error!"); tempReg = EAX;}
+		if (tempReg == -1) {Console.Error("FPU: SQRT Allocation Error!"); tempReg = EAX;}
 
 		AND32ItoM((uptr)&fpuRegs.fprc[31], ~(FPUflagI|FPUflagD)); // Clear I and D flags
 
@@ -1700,9 +1682,7 @@ void recSQRT_S_xmm(int info)
 	SSE_SQRTSS_XMM_to_XMM(EEREC_D, EEREC_D);
 	if (CHECK_FPU_EXTRA_OVERFLOW) ClampValues(EEREC_D); // Shouldn't need to clamp again since SQRT of a number will always be smaller than the original number, doing it just incase :/
 	
-	if (roundmodeFlag == 1) { // Set roundmode back if it was changed
-		SSE_LDMXCSR ((uptr)&roundmode_temp[1]);
-	}
+	if (roundmodeFlag) xLDMXCSR (g_sseMXCSR);
 }
 
 FPURECOMPILE_CONSTCODE(SQRT_S, XMMINFO_WRITED|XMMINFO_READT);
@@ -1719,8 +1699,8 @@ void recRSQRThelper1(int regd, int t0reg) // Preforms the RSQRT function when re
 	u8 *qjmp1, *qjmp2;
 	int t1reg = _allocTempXMMreg(XMMT_FPS, -1);
 	int tempReg = _allocX86reg(-1, X86TYPE_TEMP, 0, 0);
-	//if (t1reg == -1) {Console::Error("FPU: RSQRT Allocation Error!");}
-	if (tempReg == -1) {Console::Error("FPU: RSQRT Allocation Error!"); tempReg = EAX;}
+	//if (t1reg == -1) {Console.Error("FPU: RSQRT Allocation Error!");}
+	if (tempReg == -1) {Console.Error("FPU: RSQRT Allocation Error!"); tempReg = EAX;}
 
 	AND32ItoM((uptr)&fpuRegs.fprc[31], ~(FPUflagI|FPUflagD)); // Clear I and D flags
 
@@ -1785,34 +1765,37 @@ void recRSQRThelper2(int regd, int t0reg) // Preforms the RSQRT function when re
 
 void recRSQRT_S_xmm(int info)
 {
+	// iFPUd (Full mode) sets roundmode to nearest for rSQRT.
+	// Should this do the same, or should Full mode leave roundmode alone? --air
+
 	int t0reg = _allocTempXMMreg(XMMT_FPS, -1);
-	//if (t0reg == -1) {Console::Error("FPU: RSQRT Allocation Error!");}
-	//Console::WriteLn("FPU: RSQRT");
+	//if (t0reg == -1) {Console.Error("FPU: RSQRT Allocation Error!");}
+	//Console.WriteLn("FPU: RSQRT");
 
 	switch(info & (PROCESS_EE_S|PROCESS_EE_T) ) {
 		case PROCESS_EE_S:
-			//Console::WriteLn("FPU: RSQRT case 1");
+			//Console.WriteLn("FPU: RSQRT case 1");
 			SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_S);
 			SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Ft_]);
 			if (CHECK_FPU_EXTRA_FLAGS) recRSQRThelper1(EEREC_D, t0reg);
 			else recRSQRThelper2(EEREC_D, t0reg);
 			break;
 		case PROCESS_EE_T:	
-			//Console::WriteLn("FPU: RSQRT case 2");
+			//Console.WriteLn("FPU: RSQRT case 2");
 			SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_T);
 			SSE_MOVSS_M32_to_XMM(EEREC_D, (uptr)&fpuRegs.fpr[_Fs_]);
 			if (CHECK_FPU_EXTRA_FLAGS) recRSQRThelper1(EEREC_D, t0reg);
 			else recRSQRThelper2(EEREC_D, t0reg);
 			break;
 		case (PROCESS_EE_S|PROCESS_EE_T):
-			//Console::WriteLn("FPU: RSQRT case 3");
+			//Console.WriteLn("FPU: RSQRT case 3");
 			SSE_MOVSS_XMM_to_XMM(t0reg, EEREC_T);		
 			SSE_MOVSS_XMM_to_XMM(EEREC_D, EEREC_S);
 			if (CHECK_FPU_EXTRA_FLAGS) recRSQRThelper1(EEREC_D, t0reg);
 			else recRSQRThelper2(EEREC_D, t0reg);
 			break;
 		default:
-			//Console::WriteLn("FPU: RSQRT case 4");
+			//Console.WriteLn("FPU: RSQRT case 4");
 			SSE_MOVSS_M32_to_XMM(t0reg, (uptr)&fpuRegs.fpr[_Ft_]);
 			SSE_MOVSS_M32_to_XMM(EEREC_D, (uptr)&fpuRegs.fpr[_Fs_]);		
 			if (CHECK_FPU_EXTRA_FLAGS) recRSQRThelper1(EEREC_D, t0reg);

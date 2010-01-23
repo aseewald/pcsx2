@@ -1,26 +1,21 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "PrecompiledHeader.h"
 
+#include "PrecompiledHeader.h"
 #include "Common.h"
-#include "R5900.h"
-#include "R5900OpcodeTables.h"
 
 u32 s_iLastCOP0Cycle = 0;
 u32 s_iLastPERFCycle[2] = { 0, 0 };
@@ -40,7 +35,7 @@ __releaseinline void UpdateCP0Status() {
 	cpuTestHwInts();
 }
 
-void WriteCP0Status(u32 value) {
+void __fastcall WriteCP0Status(u32 value) {
 	cpuRegs.CP0.n.Status.val = value;
     UpdateCP0Status();
 }
@@ -50,13 +45,13 @@ void MapTLB(int i)
 	u32 mask, addr;
 	u32 saddr, eaddr;
 
-	DevCon::WriteLn("MAP TLB %d: %08x-> [%08x %08x] S=%d G=%d ASID=%d Mask= %03X", params
+	DevCon.WriteLn("MAP TLB %d: %08x-> [%08x %08x] S=%d G=%d ASID=%d Mask= %03X",
 		i,tlb[i].VPN2,tlb[i].PFN0,tlb[i].PFN1,tlb[i].S,tlb[i].G,tlb[i].ASID,tlb[i].Mask);
 
 	if (tlb[i].S)
 	{
-		DevCon::WriteLn("OMG SPRAM MAPPING %08X %08X\n",params tlb[i].VPN2,tlb[i].Mask);
-		vtlb_VMapBuffer(tlb[i].VPN2,psS,0x4000);
+		DevCon.WriteLn("OMG SPRAM MAPPING %08X %08X\n", tlb[i].VPN2,tlb[i].Mask);
+		vtlb_VMapBuffer(tlb[i].VPN2, psS, 0x4000);
 	}
 
 	if (tlb[i].VPN2 == 0x70000000) return; //uh uhh right ...
@@ -69,7 +64,7 @@ void MapTLB(int i)
 		for (addr=saddr; addr<eaddr; addr++) {
 			if ((addr & mask) == ((tlb[i].VPN2 >> 12) & mask)) { //match
 				memSetPageAddr(addr << 12, tlb[i].PFN0 + ((addr - saddr) << 12));
-				Cpu->Clear(addr << 12, 1);
+				Cpu->Clear(addr << 12, 0x400);
 			}
 		}
 	}
@@ -82,7 +77,7 @@ void MapTLB(int i)
 		for (addr=saddr; addr<eaddr; addr++) {
 			if ((addr & mask) == ((tlb[i].VPN2 >> 12) & mask)) { //match
 				memSetPageAddr(addr << 12, tlb[i].PFN1 + ((addr - saddr) << 12));
-				Cpu->Clear(addr << 12, 1);
+				Cpu->Clear(addr << 12, 0x400);
 			}
 		}
 	}
@@ -90,7 +85,7 @@ void MapTLB(int i)
 
 void UnmapTLB(int i)
 {
-	//Console::WriteLn("Clear TLB %d: %08x-> [%08x %08x] S=%d G=%d ASID=%d Mask= %03X", params i,tlb[i].VPN2,tlb[i].PFN0,tlb[i].PFN1,tlb[i].S,tlb[i].G,tlb[i].ASID,tlb[i].Mask);
+	//Console.WriteLn("Clear TLB %d: %08x-> [%08x %08x] S=%d G=%d ASID=%d Mask= %03X", i,tlb[i].VPN2,tlb[i].PFN0,tlb[i].PFN1,tlb[i].S,tlb[i].G,tlb[i].ASID,tlb[i].Mask);
 	u32 mask, addr;
 	u32 saddr, eaddr;
 
@@ -105,11 +100,11 @@ void UnmapTLB(int i)
 		mask  = ((~tlb[i].Mask) << 1) & 0xfffff;
 		saddr = tlb[i].VPN2 >> 12;
 		eaddr = saddr + tlb[i].Mask + 1;
-	//	Console::WriteLn("Clear TLB: %08x ~ %08x",params saddr,eaddr-1);
+	//	Console.WriteLn("Clear TLB: %08x ~ %08x",saddr,eaddr-1);
 		for (addr=saddr; addr<eaddr; addr++) {
 			if ((addr & mask) == ((tlb[i].VPN2 >> 12) & mask)) { //match
 				memClearPageAddr(addr << 12);
-				Cpu->Clear(addr << 12, 1);
+				Cpu->Clear(addr << 12, 0x400);
 			}
 		}
 	}
@@ -118,11 +113,11 @@ void UnmapTLB(int i)
 		mask  = ((~tlb[i].Mask) << 1) & 0xfffff;
 		saddr = (tlb[i].VPN2 >> 12) + tlb[i].Mask + 1;
 		eaddr = saddr + tlb[i].Mask + 1;
-	//	Console::WriteLn("Clear TLB: %08x ~ %08x",params saddr,eaddr-1);
+	//	Console.WriteLn("Clear TLB: %08x ~ %08x",saddr,eaddr-1);
 		for (addr=saddr; addr<eaddr; addr++) {
 			if ((addr & mask) == ((tlb[i].VPN2 >> 12) & mask)) { //match
 				memClearPageAddr(addr << 12);
-				Cpu->Clear(addr << 12, 1);
+				Cpu->Clear(addr << 12, 0x400);
 			}
 		}
 	}
@@ -212,20 +207,20 @@ static __forceinline bool PERF_ShouldCountEvent( uint evt )
 void COP0_DiagnosticPCCR()
 {
 	if( cpuRegs.PERF.n.pccr.b.Event0 >= 7 && cpuRegs.PERF.n.pccr.b.Event0 <= 10 )
-		Console::Notice( "PERF/PCR0 Unsupported Update Event Mode = 0x%x", params cpuRegs.PERF.n.pccr.b.Event0 );
+		Console.Warning( "PERF/PCR0 Unsupported Update Event Mode = 0x%x", cpuRegs.PERF.n.pccr.b.Event0 );
 
 	if( cpuRegs.PERF.n.pccr.b.Event1 >= 7 && cpuRegs.PERF.n.pccr.b.Event1 <= 10 )
-		Console::Notice( "PERF/PCR1 Unsupported Update Event Mode = 0x%x", params cpuRegs.PERF.n.pccr.b.Event1 );
+		Console.Warning( "PERF/PCR1 Unsupported Update Event Mode = 0x%x", cpuRegs.PERF.n.pccr.b.Event1 );
 }
-
+extern int branch;
 __forceinline void COP0_UpdatePCCR()
 {
-	if( cpuRegs.CP0.n.Status.b.ERL || !cpuRegs.PERF.n.pccr.b.CTE ) return;
+	//if( cpuRegs.CP0.n.Status.b.ERL || !cpuRegs.PERF.n.pccr.b.CTE ) return;
 
 	// TODO : Implement memory mode checks here (kernel/super/user)
-	// For now we just assume user mode.
+	// For now we just assume kernel mode.
 	
-	if( cpuRegs.PERF.n.pccr.b.U0 )
+	if( cpuRegs.PERF.n.pccr.val & 0xf )
 	{
 		// ----------------------------------
 		//    Update Performance Counter 0
@@ -243,24 +238,25 @@ __forceinline void COP0_UpdatePCCR()
 			
 			//prev ^= (1UL<<31);		// XOR is fun!
 			//if( (prev & cpuRegs.PERF.n.pcr0) & (1UL<<31) )
-			if( cpuRegs.PERF.n.pcr0 & 0x80000000 )
+			if( (cpuRegs.PERF.n.pcr0 & 0x80000000) && (cpuRegs.CP0.n.Status.b.ERL == 1) && cpuRegs.PERF.n.pccr.b.CTE)
 			{
 				// TODO: Vector to the appropriate exception here.
 				// This code *should* be correct, but is untested (and other parts of the emu are
 				// not prepared to handle proper Level 2 exception vectors yet)
 				
-				/*if( delay_slot )
+				//branch == 1 is probably not the best way to check for the delay slot, but it beats nothing! (Refraction)
+			/*	if( branch == 1 )
 				{
-					cpuRegs.CP0.ErrorEPC = cpuRegs.pc - 4;
-					cpuRegs.CP0.Cause.BD2 = 1;
+					cpuRegs.CP0.n.ErrorEPC = cpuRegs.pc - 4;
+					cpuRegs.CP0.n.Cause |= 0x40000000;
 				}
 				else
 				{
-					cpuRegs.CP0.ErrorEPC = cpuRegs.pc;
-					cpuRegs.CP0.Cause.BD2 = 0;
+					cpuRegs.CP0.n.ErrorEPC = cpuRegs.pc;
+					cpuRegs.CP0.n.Cause &= ~0x40000000;
 				}
 				
-				if( cpuRegs.CP0.Status.DEV )
+				if( cpuRegs.CP0.n.Status.b.DEV )
 				{
 					// Bootstrap vector
 					cpuRegs.pc = 0xbfc00280;
@@ -269,8 +265,8 @@ __forceinline void COP0_UpdatePCCR()
 				{
 					cpuRegs.pc = 0x80000080;
 				}
-				cpuRegs.CP0.Status.ERL = 1;
-				cpuRegs.CP0.Cause.EXC2 = 2;*/
+				cpuRegs.CP0.n.Status.b.ERL = 1;
+				cpuRegs.CP0.n.Cause |= 0x20000;*/
 			}
 		}
 	}
@@ -289,9 +285,36 @@ __forceinline void COP0_UpdatePCCR()
 			cpuRegs.PERF.n.pcr1 += incr;
 			s_iLastPERFCycle[1] = cpuRegs.cycle;
 
-			if( cpuRegs.PERF.n.pcr1 & 0x80000000 )
+			if( (cpuRegs.PERF.n.pcr1 & 0x80000000) && (cpuRegs.CP0.n.Status.b.ERL == 1) && cpuRegs.PERF.n.pccr.b.CTE)
 			{
-				// See PCR0 comments for notes on exceptions
+				// TODO: Vector to the appropriate exception here.
+				// This code *should* be correct, but is untested (and other parts of the emu are
+				// not prepared to handle proper Level 2 exception vectors yet)
+				
+				//branch == 1 is probably not the best way to check for the delay slot, but it beats nothing! (Refraction)
+
+				/*if( branch == 1 )
+				{
+					cpuRegs.CP0.n.ErrorEPC = cpuRegs.pc - 4;
+					cpuRegs.CP0.n.Cause |= 0x40000000;
+			}
+				else
+				{
+					cpuRegs.CP0.n.ErrorEPC = cpuRegs.pc;
+					cpuRegs.CP0.n.Cause &= ~0x40000000;
+		}
+				
+				if( cpuRegs.CP0.n.Status.b.DEV )
+				{
+					// Bootstrap vector
+					cpuRegs.pc = 0xbfc00280;
+	}
+				else
+				{
+					cpuRegs.pc = 0x80000080;
+				}
+				cpuRegs.CP0.n.Status.b.ERL = 1;
+				cpuRegs.CP0.n.Cause |= 0x20000;*/
 			}
 		}
 	}
@@ -311,7 +334,7 @@ void MFC0()
 	if ((_Rd_ != 9) && !_Rt_ ) return;
 	if (_Rd_ != 9) { COP0_LOG("%s", disR5900Current.getCString() ); }
 	
-	//if(bExecBIOS == FALSE && _Rd_ == 25) Console::WriteLn("MFC0 _Rd_ %x = %x", params _Rd_, cpuRegs.CP0.r[_Rd_]);
+	//if(bExecBIOS == FALSE && _Rd_ == 25) Console.WriteLn("MFC0 _Rd_ %x = %x", _Rd_, cpuRegs.CP0.r[_Rd_]);
 	switch (_Rd_)
 	{
 		case 12:
@@ -335,12 +358,12 @@ void MFC0()
 					cpuRegs.GPR.r[_Rt_].SD[0] = (s32)cpuRegs.PERF.n.pcr1;
 				break;
 		    }
-		    /*Console::WriteLn("MFC0 PCCR = %x PCR0 = %x PCR1 = %x IMM= %x",  params
+		    /*Console.WriteLn("MFC0 PCCR = %x PCR0 = %x PCR1 = %x IMM= %x",  params
 		    cpuRegs.PERF.n.pccr, cpuRegs.PERF.n.pcr0, cpuRegs.PERF.n.pcr1, _Imm_ & 0x3F);*/
 		break;
 
 		case 24: 
-			Console::WriteLn("MFC0 Breakpoint debug Registers code = %x", params cpuRegs.code & 0x3FF);
+			Console.WriteLn("MFC0 Breakpoint debug Registers code = %x", cpuRegs.code & 0x3FF);
 		break;
 
 		case 9:
@@ -360,7 +383,7 @@ void MFC0()
 void MTC0()
 {
 	COP0_LOG("%s\n", disR5900Current.getCString());
-	//if(bExecBIOS == FALSE && _Rd_ == 25) Console::WriteLn("MTC0 _Rd_ %x = %x", params _Rd_, cpuRegs.CP0.r[_Rd_]);
+	//if(bExecBIOS == FALSE && _Rd_ == 25) Console.WriteLn("MTC0 _Rd_ %x = %x", _Rd_, cpuRegs.CP0.r[_Rd_]);
 	switch (_Rd_)
 	{
 		case 9:
@@ -373,11 +396,11 @@ void MTC0()
 		break;
 		
 		case 24: 
-			Console::WriteLn("MTC0 Breakpoint debug Registers code = %x", params cpuRegs.code & 0x3FF);
+			Console.WriteLn("MTC0 Breakpoint debug Registers code = %x", cpuRegs.code & 0x3FF);
 		break;
 		
 		case 25: 
-			/*if(bExecBIOS == FALSE && _Rd_ == 25) Console::WriteLn("MTC0 PCCR = %x PCR0 = %x PCR1 = %x IMM= %x", params
+			/*if(bExecBIOS == FALSE && _Rd_ == 25) Console.WriteLn("MTC0 PCCR = %x PCR0 = %x PCR1 = %x IMM= %x", params
 				cpuRegs.PERF.n.pccr, cpuRegs.PERF.n.pcr0, cpuRegs.PERF.n.pcr1, _Imm_ & 0x3F);*/
 			switch(_Imm_ & 0x3F)
 			{
@@ -407,30 +430,18 @@ void MTC0()
 }
 
 int CPCOND0() {
-	return (((psHu16(DMAC_STAT) | ~psHu16(DMAC_PCR)) & 0x3ff) == 0x3ff);
+	return ((dmacRegs->stat.CIS | ~dmacRegs->pcr.CPC) == 0x3ff);
 }
 
 //#define CPCOND0	1
 
-/*#define BC0(cond) \
-	if (CPCOND0() cond) { \
-		intDoBranch(_BranchTarget_); \
-	}*/
-
 void BC0F() {
 	if (CPCOND0() == 0) intDoBranch(_BranchTarget_); 
-	COP0_LOG( "COP0 > BC0F" );
 }
 
 void BC0T() {
 	if (CPCOND0() == 1) intDoBranch(_BranchTarget_); 
-	COP0_LOG( "COP0 > BC0T" );
 }
-
-/*#define BC0L(cond) \
-	if (CPCOND0() cond) { \
-		intDoBranch(_BranchTarget_); \
-	} else cpuRegs.pc+= 4;*/
 	
 void BC0FL() {
 	if (CPCOND0() == 0) 
@@ -438,7 +449,6 @@ void BC0FL() {
 	else 
 		cpuRegs.pc+= 4;
 	
-	COP0_LOG( "COP0 > BC0FL" );
 }
 
 void BC0TL() {
@@ -446,7 +456,6 @@ void BC0TL() {
 		intDoBranch(_BranchTarget_); 
 	else 
 		cpuRegs.pc+= 4;
-	COP0_LOG( "COP0 > BCOTL" );
 }
 
 void TLBR() {
@@ -456,7 +465,6 @@ void TLBR() {
 
 	int i = cpuRegs.CP0.n.Index&0x1f;
 
-	COP0_LOG("COP0 > TLBR");
 	cpuRegs.CP0.n.PageMask = tlb[i].PageMask;
 	cpuRegs.CP0.n.EntryHi = tlb[i].EntryHi&~(tlb[i].PageMask|0x1f00);
 	cpuRegs.CP0.n.EntryLo0 = (tlb[i].EntryLo0&~1)|((tlb[i].EntryHi>>12)&1);

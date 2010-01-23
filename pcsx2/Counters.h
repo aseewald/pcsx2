@@ -1,19 +1,16 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifndef __COUNTERS_H__
@@ -95,7 +92,7 @@ struct SyncCounter
 //------------------------------------------------------------------
 // NTSC Timing Information!!! (some scanline info is guessed)
 //------------------------------------------------------------------
-#define FRAMERATE_NTSC			2997// frames per second * 100 (29.97)
+#define FRAMERATE_NTSC			29.97 // frames per second
 
 #define SCANLINES_TOTAL_NTSC	525 // total number of scanlines
 #define SCANLINES_VSYNC_NTSC	3   // scanlines that are used for syncing every half-frame
@@ -106,7 +103,7 @@ struct SyncCounter
 //------------------------------------------------------------------
 // PAL Timing Information!!! (some scanline info is guessed)
 //------------------------------------------------------------------
-#define FRAMERATE_PAL			2500// frames per second * 100 (25)
+#define FRAMERATE_PAL			25.0// frames per second * 100 (25)
 
 #define SCANLINES_TOTAL_PAL		625 // total number of scanlines per frame
 #define SCANLINES_VSYNC_PAL		5   // scanlines that are used for syncing every half-frame
@@ -133,10 +130,11 @@ extern SyncCounter vsyncCounter;
 
 extern s32 nextCounter;		// delta until the next counter event (must be signed)
 extern u32 nextsCounter;
+extern uint g_FrameCount;
 
 extern void rcntUpdate_hScanline();
-extern bool rcntUpdate_vSync();
-extern bool rcntUpdate();
+extern void rcntUpdate_vSync();
+extern void rcntUpdate();
 
 extern void rcntInit();
 extern void rcntStartGate(bool mode, u32 sCycle);
@@ -148,7 +146,7 @@ extern void rcntWhold(int index, u32 value);
 extern u32	rcntRcount(int index);
 extern u32	rcntCycle(int index);
 
-u32 UpdateVSyncRate();
-void frameLimitReset();
+extern u32 UpdateVSyncRate();
+extern void frameLimitReset();
 
 #endif /* __COUNTERS_H__ */

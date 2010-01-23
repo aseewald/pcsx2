@@ -1,23 +1,22 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "PrecompiledHeader.h"
 #include "IopCommon.h"
+
+#include "Sif.h"
 
 using namespace R3000A;
 
@@ -26,18 +25,17 @@ using namespace R3000A;
 // Dma8     in PsxSpd.c
 // Dma11/12 in PsxSio2.c
 
-// Should be a bool, and will be next time I break savestate. --arcum42
-int iopsifbusy[2] = { 0, 0 };
-extern int eesifbusy[2];
+bool iopsifbusy[2] = { false, false };
+extern bool eesifbusy[2];
 
-#if 0
+#ifndef ENABLE_NEW_IOPDMA_SPU2
 static void __fastcall psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore, _SPU2writeDMA4Mem spu2WriteFunc, _SPU2readDMA4Mem spu2ReadFunc)
 {
 	const char dmaNum = spuCore ? '7' : '4';
 
-	/*if (chcr & 0x400) DevCon::Status("SPU 2 DMA %c linked list chain mode! chcr = %x madr = %x bcr = %x\n", dmaNum, chcr, madr, bcr);
-	if (chcr & 0x40000000) DevCon::Notice("SPU 2 DMA %c Unusual bit set on 'to' direction chcr = %x madr = %x bcr = %x\n", dmaNum, chcr, madr, bcr);
-	if ((chcr & 0x1) == 0) DevCon::Status("SPU 2 DMA %c loading from spu2 memory chcr = %x madr = %x bcr = %x\n", dmaNum, chcr, madr, bcr);*/
+	/*if (chcr & 0x400) DevCon.Status("SPU 2 DMA %c linked list chain mode! chcr = %x madr = %x bcr = %x\n", dmaNum, chcr, madr, bcr);
+	if (chcr & 0x40000000) DevCon.Warning("SPU 2 DMA %c Unusual bit set on 'to' direction chcr = %x madr = %x bcr = %x\n", dmaNum, chcr, madr, bcr);
+	if ((chcr & 0x1) == 0) DevCon.Status("SPU 2 DMA %c loading from spu2 memory chcr = %x madr = %x bcr = %x\n", dmaNum, chcr, madr, bcr);*/
 
 	const int size = (bcr >> 16) * (bcr & 0xFFFF);
 
@@ -46,7 +44,7 @@ static void __fastcall psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore, _
 	if (SPU2async)
 	{
 		SPU2async(psxRegs.cycle - psxCounters[6].sCycleT);
-		//Console::Status("cycles sent to SPU2 %x\n", psxRegs.cycle - psxCounters[6].sCycleT);
+		//Console.Status("cycles sent to SPU2 %x\n", psxRegs.cycle - psxCounters[6].sCycleT);
 
 		psxCounters[6].sCycleT = psxRegs.cycle;
 		psxCounters[6].CycleT = size * 3;
@@ -55,8 +53,14 @@ static void __fastcall psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore, _
 		psxNextsCounter = psxRegs.cycle;
 		if (psxCounters[6].CycleT < psxNextCounter)
 			psxNextCounter = psxCounters[6].CycleT;
-	}
 
+		if((g_psxNextBranchCycle - psxNextsCounter) > (u32)psxNextCounter)
+		{
+			//DevCon.Warning("SPU2async Setting new counter branch, old %x new %x ((%x - %x = %x) > %x delta)", g_psxNextBranchCycle, psxNextsCounter + psxNextCounter, g_psxNextBranchCycle, psxNextsCounter, (g_psxNextBranchCycle - psxNextsCounter), psxNextCounter);
+			g_psxNextBranchCycle = psxNextsCounter + psxNextCounter;
+		}
+	}
+    
 	switch (chcr)
 	{
 		case 0x01000201: //cpu to spu2 transfer
@@ -71,7 +75,7 @@ static void __fastcall psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore, _
 			break;
 
 		default:
-			Console::Error("*** DMA %c - SPU unknown *** %x addr = %x size = %x", params dmaNum, chcr, madr, bcr);
+			Console.Error("*** DMA %c - SPU unknown *** %x addr = %x size = %x", dmaNum, chcr, madr, bcr);
 			break;
 	}
 }
@@ -85,7 +89,7 @@ void psxDma2(u32 madr, u32 bcr, u32 chcr)		// GPU
 
 /*  psxDma3 is in CdRom.cpp */
 
-#if 0
+#ifndef ENABLE_NEW_IOPDMA_SPU2
 void psxDma4(u32 madr, u32 bcr, u32 chcr)		// SPU2's Core 0
 {
 	psxDmaGeneric(madr, bcr, chcr, 0, SPU2writeDMA4Mem, SPU2readDMA4Mem);
@@ -125,7 +129,7 @@ void psxDma6(u32 madr, u32 bcr, u32 chcr)
 	psxDmaInterrupt(6);
 }
 
-#if 0
+#ifndef ENABLE_NEW_IOPDMA_SPU2
 void psxDma7(u32 madr, u32 bcr, u32 chcr)		// SPU2's Core 1
 {
 	psxDmaGeneric(madr, bcr, chcr, 1, SPU2writeDMA7Mem, SPU2readDMA7Mem);
@@ -142,7 +146,6 @@ int psxDma7Interrupt()
 
 void psxDma8(u32 madr, u32 bcr, u32 chcr)
 {
-
 	const int size = (bcr >> 16) * (bcr & 0xFFFF) * 8;
 
 	switch (chcr & 0x01000201)
@@ -169,14 +172,14 @@ void psxDma9(u32 madr, u32 bcr, u32 chcr)
 {
 	SIF_LOG("IOP: dmaSIF0 chcr = %lx, madr = %lx, bcr = %lx, tadr = %lx",	chcr, madr, bcr, HW_DMA9_TADR);
 
-	iopsifbusy[0] = 1;
-	psHu32(0x1000F240) |= 0x2000;
+	iopsifbusy[0] = true;
+	psHu32(SBUS_F240) |= 0x2000;
 
-	if (eesifbusy[0] == 1)
+	if (eesifbusy[0])
 	{
 		SIF0Dma();
-		psHu32(0x1000F240) &= ~0x20;
-		psHu32(0x1000F240) &= ~0x2000;
+		psHu32(SBUS_F240) &= ~0x20;
+		psHu32(SBUS_F240) &= ~0x2000;
 	}
 }
 
@@ -184,17 +187,17 @@ void psxDma10(u32 madr, u32 bcr, u32 chcr)
 {
 	SIF_LOG("IOP: dmaSIF1 chcr = %lx, madr = %lx, bcr = %lx",	chcr, madr, bcr);
 
-	iopsifbusy[1] = 1;
-	psHu32(0x1000F240) |= 0x4000;
+	iopsifbusy[1] = true;
+	psHu32(SBUS_F240) |= 0x4000;
 
-	if (eesifbusy[1] == 1)
+	if (eesifbusy[1])
 	{
-		FreezeXMMRegs(1);
+        XMMRegisters::Freeze();
 		SIF1Dma();
-		psHu32(0x1000F240) &= ~0x40;
-		psHu32(0x1000F240) &= ~0x100;
-		psHu32(0x1000F240) &= ~0x4000;
-		FreezeXMMRegs(0);
+		psHu32(SBUS_F240) &= ~0x40;
+		psHu32(SBUS_F240) &= ~0x100;
+		psHu32(SBUS_F240) &= ~0x4000;
+        XMMRegisters::Thaw();
 	}
 }
 
@@ -232,7 +235,7 @@ void fwIrq()
 	hwIntcIrq(INTC_SBUS);
 }
 
-#if 0
+#ifndef ENABLE_NEW_IOPDMA_SPU2
 void spu2DMA4Irq()
 {
 	SPU2interruptDMA4();
@@ -269,21 +272,32 @@ void iopIntcIrq(uint irqType)
 
 s32  spu2DmaRead(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed)
 {
+#ifdef ENABLE_NEW_IOPDMA_SPU2
 	return SPU2dmaRead(channel,data,bytesLeft,bytesProcessed);
+#else
+	return 0;
+#endif
 }
 
 s32  spu2DmaWrite(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed)
 {
+#ifdef ENABLE_NEW_IOPDMA_SPU2
 	return SPU2dmaWrite(channel,data,bytesLeft,bytesProcessed);
+#else
+	return 0;
+#endif
 }
 
 void spu2DmaInterrupt(s32 channel)
 {
+#ifdef ENABLE_NEW_IOPDMA_SPU2
 	SPU2dmaInterrupt(channel);
+#endif
 }
 
 //typedef s32(* DmaHandler)(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed);
 //typedef void (* DmaIHandler)(s32 channel);
+
 extern s32 sio2DmaRead(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed);
 extern s32 sio2DmaWrite(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed);
 extern void sio2DmaInterrupt(s32 channel);
@@ -437,7 +451,7 @@ void IopDmaUpdate(u32 elapsed)
 
 s32 errDmaRead(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed)
 {
-	Console::Error("ERROR: Tried to read using DMA %d (%s). Ignoring.", params 0, channel, IopDmaHandlers[channel].Name);
+	PSXDMA_LOG("ERROR: Tried to read using DMA %d (%s). Ignoring.", 0, channel, IopDmaHandlers[channel].Name);
 
 	*bytesProcessed = bytesLeft;
 	return 0;
@@ -445,7 +459,7 @@ s32 errDmaRead(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed)
 
 s32 errDmaWrite(s32 channel, u32* data, u32 bytesLeft, u32* bytesProcessed)
 {
-	Console::Error("ERROR: Tried to write using DMA %d (%s). Ignoring.", params 0, channel, IopDmaHandlers[channel].Name);
+	PSXDMA_LOG("ERROR: Tried to write using DMA %d (%s). Ignoring.", 0, channel, IopDmaHandlers[channel].Name);
 
 	*bytesProcessed = bytesLeft;
 	return 0;

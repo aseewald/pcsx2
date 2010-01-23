@@ -1,296 +1,356 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "PrecompiledHeader.h"
-
 #include "Common.h"
 #include "HostGui.h"
 
-#include "VUmicro.h"
-#include "iR5900.h"
-#include "R3000A.h"
-#include "IopMem.h"
-#include "iVUzerorec.h"		// for SuperVUReset
+#include "sVU_zerorec.h"		// for SuperVUDestroy
 
-#include "R5900Exceptions.h"
+#include "System/PageFaultSource.h"
+#include "Utilities/EventSource.inl"
 
-using namespace std;
-using namespace Console;
+template class EventSource< IEventListener_PageFault >;
 
-// disable all session overrides by default...
-SessionOverrideFlags g_Session = {false};
+SrcType_PageFault Source_PageFault;
 
-bool sysInitialized = false;
-
-namespace Exception
+IEventListener_PageFault::IEventListener_PageFault()
 {
-	BaseException::~BaseException() throw() {}
+	Source_PageFault.Add( *this );
+}
+
+IEventListener_PageFault::~IEventListener_PageFault() throw()
+{
+	Source_PageFault.Remove( *this );
+}
+
+void SrcType_PageFault::Dispatch( const PageFaultInfo& params )
+{
+	m_handled = false;
+	_parent::Dispatch( params );
+}
+
+void SrcType_PageFault::_DispatchRaw( ListenerIterator iter, const ListenerIterator& iend, const PageFaultInfo& evt )
+{
+	do {
+		(*iter)->DispatchEvent( evt, m_handled );
+	} while( (++iter != iend) && !m_handled );
 }
 
 
-// I can't believe I had to make my own version of trim.  C++'s STL is totally whack.
-// And I still had to fix it too.  I found three samples of trim online and *all* three
-// were buggy.  People really need to learn to code before they start posting trim
-// functions in their blogs.  (air)
-static void trim( string& line )
+#if _MSC_VER
+#	include "svnrev.h"
+#endif
+
+const Pcsx2Config EmuConfig;
+
+// Provides an accessor for quick modification of GS options.  All GS options are allowed to be
+// changed "on the fly" by the *main/gui thread only*.
+Pcsx2Config::GSOptions& SetGSConfig()
 {
-   if ( line.empty() )
-      return;
+	//DbgCon.WriteLn( "Direct modification of EmuConfig.GS detected" );
+	AffinityAssert_AllowFromMain();
+	return const_cast<Pcsx2Config::GSOptions&>(EmuConfig.GS);
+}
 
-   int string_size = line.length();
-   int beginning_of_string = 0;
-   int end_of_string = string_size - 1;
-   
-   bool encountered_characters = false;
-   
-   // find the start of characters in the string
-   while ( (beginning_of_string < string_size) && (!encountered_characters) )
-   {
-      if ( (line[ beginning_of_string ] != ' ') && (line[ beginning_of_string ] != '\t') )
-         encountered_characters = true;
-      else
-         ++beginning_of_string;
-   }
+ConsoleLogFilters& SetConsoleConfig()
+{
+	//DbgCon.WriteLn( "Direct modification of EmuConfig.Log detected" );
+	AffinityAssert_AllowFromMain();
+	return const_cast<ConsoleLogFilters&>(EmuConfig.Log);
+}
 
-   // test if no characters were found in the string
-   if ( beginning_of_string == string_size )
-      return;
-   
-   encountered_characters = false;
-
-   // find the character in the string
-   while ( (end_of_string > beginning_of_string) && (!encountered_characters) )
-   {
-      // if a space or tab was found then ignore it
-      if ( (line[ end_of_string ] != ' ') && (line[ end_of_string ] != '\t') )
-         encountered_characters = true;
-      else
-         --end_of_string;
-   }   
-   
-   // return the original string with all whitespace removed from its beginning and end
-   // + 1 at the end to add the space for the string delimiter
-   //line.substr( beginning_of_string, end_of_string - beginning_of_string + 1 );
-   line.erase( end_of_string+1, string_size );
-   line.erase( 0, beginning_of_string );
+TraceLogFilters& SetTraceConfig()
+{
+	//DbgCon.WriteLn( "Direct modification of EmuConfig.TraceLog detected" );
+	AffinityAssert_AllowFromMain();
+	return const_cast<TraceLogFilters&>(EmuConfig.Trace);
 }
 
 
-//////////////////////////////////////////////////////////////////////////////////////////
 // This function should be called once during program execution.
-void SysDetect()
+void SysLogMachineCaps()
 {
-	if( sysInitialized ) return;
-	sysInitialized = true;
-
-	Notice("PCSX2 " PCSX2_VERSION " - compiled on " __DATE__ );
-	Notice("Savestate version: %x", params g_SaveVersion);
-
-	// fixme: This line is here for the purpose of creating external ASM code.  Yah. >_<
-	DevCon::Notice( "EE pc offset: 0x%x, IOP pc offset: 0x%x", params (u32)&cpuRegs.pc - (u32)&cpuRegs, (u32)&psxRegs.pc - (u32)&psxRegs );
-
-	cpudetectInit();
-
-	string family( cpuinfo.x86Fam );
-	trim( family );
-
-	SetColor( Console::Color_White );
-
-	WriteLn( "x86Init:" );
-	WriteLn(
-		"\tCPU vendor name =  %s\n"
-		"\tFamilyID  =  %x\n"
-		"\tx86Family =  %s\n"
-		"\tCPU speed =  %d.%03d Ghz\n"
-		"\tCores     =  %d physical [%d logical]\n"
-		"\tx86PType  =  %s\n"
-		"\tx86Flags  =  %8.8x %8.8x\n"
-		"\tx86EFlags =  %8.8x\n", params
-			cpuinfo.x86ID, cpuinfo.x86StepID, family.c_str(), 
-			cpuinfo.cpuspeed / 1000, cpuinfo.cpuspeed%1000,
-			cpuinfo.PhysicalCores, cpuinfo.LogicalCores,
-			cpuinfo.x86Type, cpuinfo.x86Flags, cpuinfo.x86Flags2,
-			cpuinfo.x86EFlags
+	Console.WriteLn( Color_StrongGreen, "PCSX2 %d.%d.%d.r%d %s - compiled on " __DATE__, PCSX2_VersionHi, PCSX2_VersionMid, PCSX2_VersionLo,
+		SVN_REV, SVN_MODS ? "(modded)" : ""
 	);
 
-	WriteLn( "Features:" );
-	WriteLn(
-		"\t%sDetected MMX\n"
-		"\t%sDetected SSE\n"
-		"\t%sDetected SSE2\n"
-		"\t%sDetected SSE3\n"
-		"\t%sDetected SSSE3\n"
-		"\t%sDetected SSE4.1\n", params
-			cpucaps.hasMultimediaExtensions     ? "" : "Not ",
-			cpucaps.hasStreamingSIMDExtensions  ? "" : "Not ",
-			cpucaps.hasStreamingSIMD2Extensions ? "" : "Not ",
-			cpucaps.hasStreamingSIMD3Extensions ? "" : "Not ",
-			cpucaps.hasSupplementalStreamingSIMD3Extensions ? "" : "Not ",
-			cpucaps.hasStreamingSIMD4Extensions ? "" : "Not "
-	);
+	Console.WriteLn( "Savestate version: 0x%x", g_SaveVersion);
+	Console.Newline();
 
-	if ( cpuinfo.x86ID[0] == 'A' ) //AMD cpu
+	Console.WriteLn( Color_StrongBlack, "x86-32 Init:" );
+	
+	Console.Indent().WriteLn(
+		L"CPU vendor name  =  %s\n"
+		L"FamilyID         =  %x\n"
+		L"x86Family        =  %s\n"
+		L"CPU speed        =  %d.%03d ghz\n"
+		L"Cores            =  %d physical [%d logical]\n"
+		L"x86PType         =  %s\n"
+		L"x86Flags         =  %8.8x %8.8x\n"
+		L"x86EFlags        =  %8.8x",
+			fromUTF8( x86caps.VendorName ).c_str(), x86caps.StepID,
+			fromUTF8( x86caps.FamilyName ).Trim().Trim(false).c_str(),
+			x86caps.Speed / 1000, x86caps.Speed % 1000,
+			x86caps.PhysicalCores, x86caps.LogicalCores,
+			fromUTF8( x86caps.TypeName ).c_str(),
+			x86caps.Flags, x86caps.Flags2,
+			x86caps.EFlags
+	);
+	
+	Console.Newline();
+
+	wxArrayString features[2];	// 2 lines, for readability!
+
+	if( x86caps.hasMultimediaExtensions )			features[0].Add( L"MMX" );
+	if( x86caps.hasStreamingSIMDExtensions )		features[0].Add( L"SSE" );
+	if( x86caps.hasStreamingSIMD2Extensions )		features[0].Add( L"SSE2" );
+	if( x86caps.hasStreamingSIMD3Extensions )		features[0].Add( L"SSE3" );
+	if( x86caps.hasSupplementalStreamingSIMD3Extensions ) features[0].Add( L"SSSE3" );
+	if( x86caps.hasStreamingSIMD4Extensions )		features[0].Add( L"SSE4.1" );
+	if( x86caps.hasStreamingSIMD4Extensions2 )		features[0].Add( L"SSE4.2" );
+
+	if( x86caps.hasMultimediaExtensionsExt )		features[1].Add( L"MMX2  " );
+	if( x86caps.has3DNOWInstructionExtensions )		features[1].Add( L"3DNOW " );
+	if( x86caps.has3DNOWInstructionExtensionsExt )	features[1].Add( L"3DNOW2" );
+	if( x86caps.hasStreamingSIMD4ExtensionsA )		features[1].Add( L"SSE4a " );
+
+	wxString result[2];
+	JoinString( result[0], features[0], L".. " );
+	JoinString( result[1], features[1], L".. " );
+
+	Console.WriteLn( Color_StrongBlack,	L"x86 Features Detected:" );
+	Console.Indent().WriteLn( result[0] + (result[1].IsEmpty() ? L"" : (L"\n" + result[1])) );
+	Console.Newline();
+}
+
+template< typename CpuType >
+class CpuInitializer
+{
+public:
+	ScopedPtr<CpuType>	MyCpu;
+
+	CpuInitializer();
+	virtual ~CpuInitializer() throw();
+
+	bool IsAvailable() const
 	{
-		WriteLn( " Extended AMD Features:" );
-		WriteLn(
-			"\t%sDetected MMX2\n"
-			"\t%sDetected 3DNOW\n"
-			"\t%sDetected 3DNOW2\n", params
-			cpucaps.hasMultimediaExtensionsExt       ? "" : "Not ",
-			cpucaps.has3DNOWInstructionExtensions    ? "" : "Not ",
-			cpucaps.has3DNOWInstructionExtensionsExt ? "" : "Not "
-		);
+		return !!MyCpu;
 	}
 
-	Console::ClearColor();
+	CpuType* GetPtr() { return MyCpu.GetPtr(); }
+	const CpuType* GetPtr() const { return MyCpu.GetPtr(); }
+
+	operator CpuType*() { return GetPtr(); }
+	operator const CpuType*() const { return GetPtr(); }
+};
+
+// --------------------------------------------------------------------------------------
+//  CpuInitializer Template
+// --------------------------------------------------------------------------------------
+// Helper for initializing various PCSX2 CPU providers, and handing errors and cleanup.
+//
+template< typename CpuType >
+CpuInitializer< CpuType >::CpuInitializer()
+{
+	try {
+		MyCpu = new CpuType();
+		MyCpu->Allocate();
+	}
+	catch( Exception::RuntimeError& ex )
+	{
+		Console.Error( L"CPU provider error:\n\t" + ex.FormatDiagnosticMessage() );
+		if( MyCpu )
+			MyCpu = NULL;
+	}
+	catch( std::runtime_error& ex )
+	{
+		Console.Error( L"CPU provider error (STL Exception)\n\tDetails:" + fromUTF8( ex.what() ) );
+		if( MyCpu )
+			MyCpu = NULL;
+	}
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// Allocates memory for all PS2 systems.
-bool SysAllocateMem()
+template< typename CpuType >
+CpuInitializer< CpuType >::~CpuInitializer() throw()
 {
-	// Allocate PS2 system ram space (required by interpreters and recompilers both)
+	if( MyCpu )
+		MyCpu->Shutdown();
+}
+
+class CpuInitializerSet
+{
+public:
+	// Note: Allocate sVU first -- it's the most picky.
+
+	CpuInitializer<recSuperVU0>		superVU0;
+	CpuInitializer<recSuperVU1>		superVU1;
+
+	CpuInitializer<recMicroVU0>		microVU0;
+	CpuInitializer<recMicroVU1>		microVU1;
+
+	CpuInitializer<InterpVU0>		interpVU0;
+	CpuInitializer<InterpVU1>		interpVU1;
+	
+public:
+	CpuInitializerSet() {}
+	virtual ~CpuInitializerSet() throw() {}
+};
+
+
+
+// returns the translated error message for the Virtual Machine failing to allocate!
+static wxString GetMemoryErrorVM()
+{
+	return pxE( ".Popup Error:EmuCore::MemoryForVM",
+		L"PCSX2 is unable to allocate memory needed for the PS2 virtual machine. "
+		L"Close out some memory hogging background tasks and try again."
+	);
+}
+
+SysCoreAllocations::SysCoreAllocations()
+{
+	InstallSignalHandler();
+
+	Console.WriteLn( "Initializing PS2 virtual machine..." );
+
+	m_RecSuccessEE		= false;
+	m_RecSuccessIOP		= false;
 
 	try
 	{
+		vtlb_Core_Alloc();
 		memAlloc();
 		psxMemAlloc();
 		vuMicroMemAlloc();
 	}
+	// ----------------------------------------------------------------------------
 	catch( Exception::OutOfMemory& ex )
 	{
-		// Failures on the core initialization of memory is bad, since it means the emulator is
-		// completely non-functional.  If the failure is in the VM build then we can try running
-		// the VTLB build instead.  If it's the VTLB build then ... ouch.
-
-		// VTLB build must fail outright...
-		Msgbox::Alert( "Failed to allocate memory needed to run pcsx2.\n\nError: %s", params ex.cMessage() );
-		SysShutdownMem();
-
-		return false;
+		wxString newmsg( ex.UserMsg() + L"\n\n" + GetMemoryErrorVM() );
+		ex.UserMsg() = newmsg;
+		CleanupMess();
+		throw;
 	}
-
-	return true;
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////
-// Allocates memory for all recompilers, and force-disables any recs that fail to initialize.
-// This should be done asap, since the recompilers tend to demand a lot of system resources,
-// and prefer to have those resources at specific address ranges.  The sooner memory is
-// allocated, the better.
-//
-// Returns FALSE on *critical* failure (GUI should issue a msg and exit).
-void SysAllocateDynarecs()
-{
-	// Attempt to initialize the recompilers.
-	// Most users want to use recs anyway, and if they are using interpreters I don't think the
-	// extra few megs of allocation is going to be an issue.
-
-	try
+	catch( std::bad_alloc& ex )
 	{
-		// R5900 and R3000a must be rec-enabled together for now so if either fails they both fail.
-		recCpu.Allocate();
-		psxRec.Allocate();
-	}
-	catch( Exception::BaseException& ex )
-	{
-		Msgbox::Alert(
-			"The EE/IOP recompiler failed to initialize with the following error:\n\n"
-			"%s"
-			"\n\nThe EE/IOP interpreter will be used instead (slow!).", params
-			ex.cMessage()
+		CleanupMess();
+
+		// re-throw std::bad_alloc as something more friendly.  This is needed since
+		// much of the code uses new/delete internally, which throw std::bad_alloc on fail.
+
+		throw Exception::OutOfMemory(
+			L"std::bad_alloc caught while trying to allocate memory for the PS2 Virtual Machine.\n"
+			L"Error Details: " + fromUTF8( ex.what() ),
+
+			GetMemoryErrorVM()	// translated
 		);
+	}
 
-		g_Session.ForceDisableEErec = true;
+	Console.WriteLn( "Allocating memory for recompilers..." );
 
+	CpuProviders = new CpuInitializerSet();
+
+	try {
+		recCpu.Allocate();
+		m_RecSuccessEE = true;
+			}
+	catch( Exception::RuntimeError& ex )
+		{
+		Console.Error( L"EE Recompiler Allocation Failed:\n" + ex.FormatDiagnosticMessage() );
 		recCpu.Shutdown();
+			}
+
+	try {
+		psxRec.Allocate();
+		m_RecSuccessIOP = true;
+		}
+	catch( Exception::RuntimeError& ex )
+	{
+		Console.Error( L"IOP Recompiler Allocation Failed:\n" + ex.FormatDiagnosticMessage() );
 		psxRec.Shutdown();
 	}
 
-	try
-	{
-		VU0micro::recAlloc();
-	}
-	catch( Exception::BaseException& ex )
-	{
-		Msgbox::Alert(
-			"The VU0 recompiler failed to initialize with the following error:\n\n"
-			"%s"
-			"\n\nThe VU0 interpreter will be used for this session (may slow down some games).", params
-			ex.cMessage()
-		);
+	// hmm! : VU0 and VU1 pre-allocations should do sVU and mVU separately?  Sounds complicated. :(
 
-		g_Session.ForceDisableVU0rec = true;
-		VU0micro::recShutdown();
-	}
+	// If both VUrecs failed, then make sure the SuperVU is totally closed out, because it
+	// actually initializes everything once and then shares it between both VU recs.
+	if( !IsRecAvailable_SuperVU0() && !IsRecAvailable_SuperVU1() )
+		SuperVUDestroy( -1 );
+}
 
-	try
-	{
-		VU1micro::recAlloc();
-	}
-	catch( Exception::BaseException& ex )
-	{
-		Msgbox::Alert(
-			"The VU1 recompiler failed to initialize with the following error:\n\n"
-			"%s"
-			"\n\nThe VU1 interpreter will be used for this session (will slow down most games).", params 
-			ex.cMessage()
-		);
+bool SysCoreAllocations::IsRecAvailable_MicroVU0() const { return CpuProviders->microVU0.IsAvailable(); }
+bool SysCoreAllocations::IsRecAvailable_MicroVU1() const { return CpuProviders->microVU1.IsAvailable(); }
 
-		g_Session.ForceDisableVU1rec = true;
-		VU1micro::recShutdown();
-	}
+bool SysCoreAllocations::IsRecAvailable_SuperVU0() const { return CpuProviders->superVU0.IsAvailable(); }
+bool SysCoreAllocations::IsRecAvailable_SuperVU1() const { return CpuProviders->superVU1.IsAvailable(); }
 
-	// If both VUrecs failed, then make sure the SuperVU is totally closed out:
-	if( !CHECK_VU0REC && !CHECK_VU1REC)
+
+void SysCoreAllocations::CleanupMess() throw()
+{
+		try
+		{
+		// Special SuperVU "complete" terminator (stupid hacky recompiler)
 		SuperVUDestroy( -1 );
 
+		psxRec.Shutdown();
+		recCpu.Shutdown();
+
+		vuMicroMemShutdown();
+		psxMemShutdown();
+		memShutdown();
+		vtlb_Core_Shutdown();
+			}
+	DESTRUCTOR_CATCHALL
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// This should be called last thing before Pcsx2 exits.
-void SysShutdownMem()
+SysCoreAllocations::~SysCoreAllocations() throw()
 {
-	cpuShutdown();
-
-	vuMicroMemShutdown();
-	psxMemShutdown();
-	memShutdown();
+	CleanupMess();
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// This should generally be called right before calling SysShutdownMem(), although you can optionally
-// use it in conjunction with SysAllocDynarecs to allocate/free the dynarec resources on the fly (as
-// risky as it might be, since dynarecs could very well fail on the second attempt).
-void SysShutdownDynarecs()
+bool SysCoreAllocations::HadSomeFailures( const Pcsx2Config::RecompilerOptions& recOpts ) const
 {
-	// Special SuperVU "complete" terminator.
-	SuperVUDestroy( -1 );
+	return	(recOpts.EnableEE && !IsRecAvailable_EE()) ||
+			(recOpts.EnableIOP && !IsRecAvailable_IOP()) ||
+			(recOpts.EnableVU0 && recOpts.UseMicroVU0 && !IsRecAvailable_MicroVU0()) ||
+			(recOpts.EnableVU1 && recOpts.UseMicroVU0 && !IsRecAvailable_MicroVU1()) ||
+			(recOpts.EnableVU0 && !recOpts.UseMicroVU0 && !IsRecAvailable_SuperVU0()) ||
+			(recOpts.EnableVU1 && !recOpts.UseMicroVU1 && !IsRecAvailable_SuperVU1());
 
-	psxRec.Shutdown();
-	recCpu.Shutdown();
+}
+
+BaseVUmicroCPU* CpuVU0 = NULL;
+BaseVUmicroCPU* CpuVU1 = NULL;
+
+void SysCoreAllocations::SelectCpuProviders() const
+{
+	Cpu		= CHECK_EEREC	? &recCpu : &intCpu;
+	psxCpu	= CHECK_IOPREC	? &psxRec : &psxInt;
+
+	CpuVU0 = CpuProviders->interpVU0;
+	CpuVU1 = CpuProviders->interpVU1;
+
+	if( EmuConfig.Cpu.Recompiler.EnableVU0 )
+		CpuVU0 = EmuConfig.Cpu.Recompiler.UseMicroVU0 ? (BaseVUmicroCPU*)CpuProviders->microVU0 : (BaseVUmicroCPU*)CpuProviders->superVU0;
+
+	if( EmuConfig.Cpu.Recompiler.EnableVU1 )
+		CpuVU1 = EmuConfig.Cpu.Recompiler.UseMicroVU1 ? (BaseVUmicroCPU*)CpuProviders->microVU1 : (BaseVUmicroCPU*)CpuProviders->superVU1;
 }
 
 
-bool g_ReturnToGui = false;			// set to exit the execution of the emulator and return control to the GUI
-bool g_EmulationInProgress = false;	// Set TRUE if a game is actively running (set to false on reset)
-
-//////////////////////////////////////////////////////////////////////////////////////////
 // Resets all PS2 cpu execution caches, which does not affect that actual PS2 state/condition.
 // This can be called at any time outside the context of a Cpu->Execute() block without
 // bad things happening (recompilers will slow down for a brief moment since rec code blocks
@@ -298,173 +358,32 @@ bool g_EmulationInProgress = false;	// Set TRUE if a game is actively running (s
 // Use this method to reset the recs when important global pointers like the MTGS are re-assigned.
 void SysClearExecutionCache()
 {
-	if( CHECK_EEREC )
-	{
-		Cpu = &recCpu;
-		psxCpu = &psxRec;
-	}
-	else
-	{
-		Cpu = &intCpu;
-		psxCpu = &psxInt;
-	}
+	GetSysCoreAlloc().SelectCpuProviders();
+
+	// SuperVUreset will do nothing is none of the recs are initialized.
+	// But it's needed if one or the other is initialized.
+	SuperVUReset(-1);
 
 	Cpu->Reset();
 	psxCpu->Reset();
 
-	vuMicroCpuReset();
-
-	// make sure the VU1 doesn't have lingering "skip" enabled.
-	vu1MicroDisableSkip();
+	CpuVU0->Reset();
+	CpuVU1->Reset();
 }
 
-__forceinline void SysUpdate()
-{
-#ifdef __LINUX__
-	// Doing things the other way results in no keys functioning under Linux!
-	HostGui::KeyEvent(PAD1keyEvent());
-	HostGui::KeyEvent(PAD2keyEvent());
-#else
-	keyEvent* ev1 = PAD1keyEvent();
-	keyEvent* ev2 = PAD2keyEvent();
-
-	HostGui::KeyEvent( (ev1 != NULL) ? ev1 : ev2);
-#endif
-}
-
-void SysExecute()
-{
-	g_EmulationInProgress = true;
-	g_ReturnToGui = false;
-
-	// Optimization: We hardcode two versions of the EE here -- one for recs and one for ints.
-	// This is because recs are performance critical, and being able to inline them into the
-	// function here helps a small bit (not much but every small bit counts!).
-
-	try
-	{
-		if( CHECK_EEREC )
-		{
-			while( !g_ReturnToGui )
-			{
-				recExecute();
-				SysUpdate();
-			}
-		}
-		else
-		{
-			while( !g_ReturnToGui )
-			{
-				Cpu->Execute();
-				SysUpdate();
-			}
-		}
-	}
-	catch( R5900Exception::BaseExcept& ex )
-	{
-		Console::Error( ex.cMessage() );
-		Console::Error( fmt_string( "(EE) PC: 0x%8.8x  \tCycle: 0x%8.8x", ex.cpuState.pc, ex.cpuState.cycle ).c_str() );
-	}
-}
-
-// Function provided to escape the emulation state, by shutting down plugins and saving
-// the GS state.  The execution state is effectively preserved, and can be resumed with a
-// call to SysExecute.
-void SysEndExecution()
-{
-	if( Config.closeGSonEsc )
-		StateRecovery::MakeGsOnly();
-
-	ClosePlugins( Config.closeGSonEsc );
-	g_ReturnToGui = true;
-}
-
-// Runs an ELF image directly (ISO or ELF program or BIN)
-// Used by Run::FromCD, and Run->Execute when no active emulation state is present.
-// elf_file - if NULL, the CDVD plugin is queried for the ELF file.
-// use_bios - forces the game to boot through the PS2 bios, instead of bypassing it.
-void SysPrepareExecution( const char* elf_file, bool use_bios )
-{
-	if( !g_EmulationInProgress )
-	{
-		try
-		{
-			cpuReset();
-		}
-		catch( Exception::BaseException& ex )
-		{
-			Msgbox::Alert( ex.cMessage() );
-			return;
-		}
-
-		if (OpenPlugins(NULL) == -1)
-			return;
-
-		if( elf_file == NULL )
-		{
-			if( !StateRecovery::HasState() )
-			{
-				// Not recovering a state, so need to execute the bios and load the ELF information.
-				// (note: gsRecoveries are done from ExecuteCpu)
-
-				char ename[g_MaxPath];
-				ename[0] = 0;
-				if( !use_bios )
-					GetPS2ElfName( ename );
-
-				loadElfFile( ename );
-			}
-		}
-		else
-		{
-			// Custom ELF specified (not using CDVD).
-			// Run the BIOS and load the ELF.
-
-			loadElfFile( elf_file );
-		}
-	}
-
-	StateRecovery::Recover();
-	HostGui::BeginExecution();
-}
-
-void SysRestorableReset()
-{
-	if( !g_EmulationInProgress ) return;
-	StateRecovery::MakeFull();
-}
-
-void SysReset()
-{
-	// fixme - this code  sets the statusbar but never returns control to the window message pump
-	// so the status bar won't receive the WM_PAINT messages needed to update itself anyway.
-	// Oops! (air)
-
-	HostGui::Notice(_("Resetting..."));
-	Console::SetTitle(_("Resetting..."));
-
-	g_EmulationInProgress = false;
-	StateRecovery::Clear();
-
-	cpuShutdown();
-	ShutdownPlugins();
-
-	ElfCRC = 0;
-
-	// Note : No need to call cpuReset() here.  It gets called automatically before the
-	// emulator resumes execution.
-
-	HostGui::Notice(_("Ready"));
-	Console::SetTitle(_("*PCSX2* Emulation state is reset."));
-}
-
+// Maps a block of memory for use as a recompiled code buffer, and ensures that the
+// allocation is below a certain memory address (specified in "bounds" parameter).
+// The allocated block has code execution privileges.
+// Returns NULL on allocation failure.
 u8 *SysMmapEx(uptr base, u32 size, uptr bounds, const char *caller)
 {
 	u8 *Mem = (u8*)HostSys::Mmap( base, size );
 
 	if( (Mem == NULL) || (bounds != 0 && (((uptr)Mem + size) > bounds)) )
 	{
-		DevCon::Notice( "First try failed allocating %s at address 0x%x", params caller, base );
+		if( base != NULL )
+		{
+			DbgCon.Warning( "First try failed allocating %s at address 0x%x", caller, base );
 
 		// memory allocation *must* have the top bit clear, so let's try again
 		// with NULL (let the OS pick something for us).
@@ -472,9 +391,11 @@ u8 *SysMmapEx(uptr base, u32 size, uptr bounds, const char *caller)
 		SafeSysMunmap( Mem, size );
 
 		Mem = (u8*)HostSys::Mmap( NULL, size );
+		}
+
 		if( bounds != 0 && (((uptr)Mem + size) > bounds) )
 		{
-			DevCon::Error( "Fatal Error:\n\tSecond try failed allocating %s, block ptr 0x%x does not meet required criteria.", params caller, Mem );
+			DevCon.Warning( "Second try failed allocating %s, block ptr 0x%x does not meet required criteria.", caller, Mem );
 			SafeSysMunmap( Mem, size );
 
 			// returns NULL, caller should throw an exception.
@@ -482,8 +403,3 @@ u8 *SysMmapEx(uptr base, u32 size, uptr bounds, const char *caller)
 	}
 	return Mem;
 }
-
-void *SysLoadLibrary(const char *lib) { return HostSys::LoadLibrary( lib ); }
-void *SysLoadSym(void *lib, const char *sym) { return HostSys::LoadSym( lib, sym ); }
-const char *SysLibError() { return HostSys::LibError(); }
-void SysCloseLibrary(void *lib) { HostSys::CloseLibrary( lib ); }

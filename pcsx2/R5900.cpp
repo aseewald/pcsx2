@@ -1,58 +1,45 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
+
 #include "PrecompiledHeader.h"
-
 #include "Common.h"
-#include "Counters.h"
 
-#include "Memory.h"
-#include "Hw.h"
-#include "DebugTools/Debug.h"
+#include "R5900.h"
 #include "R3000A.h"
 #include "VUmicro.h"
 #include "COP0.h"
 
-#include "GS.h"
-#include "IPU/IPU.h"
-#include "Vif.h"
-#include "VifDma.h"
-#include "SPR.h"
-#include "Sif.h"
-
-#include "Paths.h"
-
+#include "System/SysThreads.h"
 #include "R5900Exceptions.h"
+
+#include "Hardware.h"
 
 using namespace R5900;	// for R5900 disasm tools
 
 s32 EEsCycle;		// used to sync the IOP to the EE
 u32 EEoCycle;
 
-PCSX2_ALIGNED16(cpuRegisters cpuRegs);
-PCSX2_ALIGNED16(fpuRegisters fpuRegs);
-PCSX2_ALIGNED16(tlbs tlb[48]);
+__aligned16 cpuRegisters cpuRegs;
+__aligned16 fpuRegisters fpuRegs;
+__aligned16 tlbs tlb[48];
 R5900cpu *Cpu = NULL;
 
-u32 bExecBIOS = 0; // set if the BIOS has already been executed
+bool g_ExecBiosHack = false; // set if the BIOS has already been executed
 
-static bool cpuIsInitialized = false;
-static uint eeWaitCycles = 1024;
+static const uint eeWaitCycles = 3072;
 
 bool eeEventTestIsActive = false;
 
@@ -61,20 +48,20 @@ R5900Exception::BaseExcept::~BaseExcept() throw (){}
 
 void cpuReset()
 {
-	mtgsWaitGS();		// GS better be done processing before we reset the EE, just in case.
-	cpuIsInitialized = true;
+	if( GetMTGS().IsOpen() )
+		GetMTGS().WaitGS();		// GS better be done processing before we reset the EE, just in case.
 
 	memReset();
 	psxMemReset();
 	vuMicroMemReset();
 
-	memzero_obj(cpuRegs);
-	memzero_obj(fpuRegs);
-	memzero_obj(tlb);
+	memzero(cpuRegs);
+	memzero(fpuRegs);
+	memzero(tlb);
 
-	cpuRegs.pc = 0xbfc00000; ///set pc reg to stack 
+	cpuRegs.pc				= 0xbfc00000; //set pc reg to stack 
 	cpuRegs.CP0.n.Config = 0x440;
-	cpuRegs.CP0.n.Status.val = 0x70400004; //0x10900000 <-- wrong; // COP0 enabled | BEV = 1 | TS = 1
+	cpuRegs.CP0.n.Status.val= 0x70400004; //0x10900000 <-- wrong; // COP0 enabled | BEV = 1 | TS = 1
 	cpuRegs.CP0.n.PRid   = 0x00002e20; // PRevID = Revision ID, same as R5900
 	fpuRegs.fprc[0]   = 0x00002e00; // fpu Revision..
 	fpuRegs.fprc[31]  = 0x01000001; // fpu Status/Control
@@ -82,12 +69,6 @@ void cpuReset()
 	g_nextBranchCycle = cpuRegs.cycle + 4;
 	EEsCycle = 0;
 	EEoCycle = cpuRegs.cycle;
-	eeWaitCycles = Config.Hacks.WaitCycleExt ? 3072 : 768;
-
-	// Cyclerate hacks effectively speed up the rate of event tests, so we can safely boost
-	// the WaitCycles value here for x2 and x3 modes:
-	if( Config.Hacks.EECycleRate > 1 )
-		eeWaitCycles += 1024;
 
 	hwReset();
 	vif0Reset();
@@ -96,21 +77,12 @@ void cpuReset()
 	psxReset();
 }
 
-void cpuShutdown()
-{
-	mtgsWaitGS();
-
-	hwShutdown();
-//	biosShutdown();
-	psxShutdown();
-	disR5900FreeSyms();
-}
-
 __releaseinline void cpuException(u32 code, u32 bd)
 {
-	cpuRegs.branch = 0;		// Tells the interpreter that an exception occurred during a branch.
 	bool errLevel2, checkStatus;
 	u32 offset;
+	
+    cpuRegs.branch = 0;		// Tells the interpreter that an exception occurred during a branch.
 	cpuRegs.CP0.n.Cause = code & 0xffff;
 
 	if(cpuRegs.CP0.n.Status.b.ERL == 0)
@@ -132,12 +104,12 @@ __releaseinline void cpuException(u32 code, u32 bd)
 		errLevel2 = TRUE;
 		checkStatus = (cpuRegs.CP0.n.Status.b.DEV == 0); // for perf/debug exceptions
 		
-		Console::Error("*PCSX2* FIX ME: Level 2 cpuException");
+		Console.Error("*PCSX2* FIX ME: Level 2 cpuException");
 		if ((code & 0x38000) <= 0x8000 ) 
 		{
 			//Reset / NMI
 			cpuRegs.pc = 0xBFC00000;
-			Console::Notice("Reset request");
+			Console.Warning("Reset request");
 			UpdateCP0Status();
 			return;
 		} 
@@ -146,7 +118,7 @@ __releaseinline void cpuException(u32 code, u32 bd)
 		else if((code & 0x38000) == 0x18000)  
 			offset = 0x100; //Debug
 		else 
-			Console::Error("Unknown Level 2 Exception!! Cause %x", params code);
+			Console.Error("Unknown Level 2 Exception!! Cause %x", code);
 	}
 	
 	if (cpuRegs.CP0.n.Status.b.EXL == 0) 
@@ -154,7 +126,7 @@ __releaseinline void cpuException(u32 code, u32 bd)
 		cpuRegs.CP0.n.Status.b.EXL = 1;
 		if (bd) 
 		{
-			Console::Notice("branch delay!!");
+			Console.Warning("branch delay!!");
 			cpuRegs.CP0.n.EPC = cpuRegs.pc - 4;
 			cpuRegs.CP0.n.Cause |= 0x80000000;
 		} 
@@ -167,7 +139,7 @@ __releaseinline void cpuException(u32 code, u32 bd)
 	else 
 	{
 		offset = 0x180; //Override the cause		
-		if (errLevel2) Console::Notice("cpuException: Status.EXL = 1 cause %x", params code);
+		if (errLevel2) Console.Warning("cpuException: Status.EXL = 1 cause %x", code);
 	}
 	
 	if (checkStatus)
@@ -180,12 +152,12 @@ __releaseinline void cpuException(u32 code, u32 bd)
 
 void cpuTlbMiss(u32 addr, u32 bd, u32 excode) 
 {
-	Console::Error("cpuTlbMiss pc:%x, cycl:%x, addr: %x, status=%x, code=%x",
-		params cpuRegs.pc, cpuRegs.cycle, addr, cpuRegs.CP0.n.Status.val, excode);
+	Console.Error("cpuTlbMiss pc:%x, cycl:%x, addr: %x, status=%x, code=%x",
+		cpuRegs.pc, cpuRegs.cycle, addr, cpuRegs.CP0.n.Status.val, excode);
 		
-	if (bd) Console::Notice("branch delay!!");
+	if (bd) Console.Warning("branch delay!!");
 
-	assert(0); // temporary
+	pxFail( "TLB Miss handler is uninished code." ); // temporary
 
 	cpuRegs.CP0.n.BadVAddr = addr;
 	cpuRegs.CP0.n.Context &= 0xFF80000F;
@@ -220,7 +192,7 @@ __forceinline void _cpuTestMissingINTC() {
 	if (cpuRegs.CP0.n.Status.val & 0x400 &&
 		psHu32(INTC_STAT) & psHu32(INTC_MASK)) {
 		if ((cpuRegs.interrupt & (1 << 30)) == 0) {
-			Console::Error("*PCSX2*: Error, missing INTC Interrupt");
+			Console.Error("*PCSX2*: Error, missing INTC Interrupt");
 		}
 	}
 }
@@ -230,7 +202,7 @@ __forceinline void _cpuTestMissingDMAC() {
 		(psHu16(0xe012) & psHu16(0xe010) || 
 		 psHu16(0xe010) & 0x8000)) {
 		if ((cpuRegs.interrupt & (1 << 31)) == 0) {
-			Console::Error("*PCSX2*: Error, missing DMAC Interrupt");
+			Console.Error("*PCSX2*: Error, missing DMAC Interrupt");
 		}
 	}
 }
@@ -338,7 +310,7 @@ static __forceinline void _cpuTestTIMR()
 	if ( (cpuRegs.CP0.n.Status.val & 0x8000) &&
 		cpuRegs.CP0.n.Count >= cpuRegs.CP0.n.Compare && cpuRegs.CP0.n.Count < cpuRegs.CP0.n.Compare+1000 )
 	{
-		Console::Status("timr intr: %x, %x", params cpuRegs.CP0.n.Count, cpuRegs.CP0.n.Compare);
+		Console.WriteLn( Color_Magenta, "timr intr: %x, %x", cpuRegs.CP0.n.Count, cpuRegs.CP0.n.Compare);
 		cpuException(0x808000, cpuRegs.branch);
 	}
 }
@@ -369,26 +341,23 @@ u32 g_nextBranchCycle = 0;
 
 // Shared portion of the branch test, called from both the Interpreter
 // and the recompiler.  (moved here to help alleviate redundant code)
-__forceinline bool _cpuBranchTest_Shared()
+__forceinline void _cpuBranchTest_Shared()
 {
 	eeEventTestIsActive = true;
 	g_nextBranchCycle = cpuRegs.cycle + eeWaitCycles;
 
-	EEsCycle += cpuRegs.cycle - EEoCycle;
-	EEoCycle = cpuRegs.cycle;
-
-	if( EEsCycle > 0 )
-		iopBranchAction = true;
-
 	// ---- Counters -------------
-	bool vsyncEvent = false;
-	rcntUpdate_hScanline();
+	// Important: the vsync counter must be the first to be checked.  It includes emulation
+	// escape/suspend hooks, and it's really a good idea to suspend/resume emulation before
+	// doing any actual meaninful branchtest logic.
 
 	if( cpuTestCycle( nextsCounter, nextCounter ) )
 	{
-		vsyncEvent = rcntUpdate();
+		rcntUpdate();
 		_cpuTestPERF();
 	}
+
+	rcntUpdate_hScanline();
 
 	_cpuTestTIMR();
 
@@ -407,12 +376,18 @@ __forceinline bool _cpuBranchTest_Shared()
 	// * The IOP cannot always be run.  If we run IOP code every time through the
 	//   cpuBranchTest, the IOP generally starts to run way ahead of the EE.
 
+	EEsCycle += cpuRegs.cycle - EEoCycle;
+	EEoCycle = cpuRegs.cycle;
+
+	if( EEsCycle > 0 )
+		iopBranchAction = true;
+
 	psxBranchTest();
 
 	if( iopBranchAction )
 	{
 		//if( EEsCycle < -450 )
-		//	Console::WriteLn( " IOP ahead by: %d cycles", params -EEsCycle );
+		//	Console.WriteLn( " IOP ahead by: %d cycles", -EEsCycle );
 
 		// Experimental and Probably Unnecessry Logic -->
 		// Check if the EE already has an exception pending, and if so we shouldn't
@@ -436,7 +411,7 @@ __forceinline bool _cpuBranchTest_Shared()
 			int cycleCount = std::min( EEsCycle, (s32)(eeWaitCycles>>4) );
 			int cyclesRun = cycleCount - psxCpu->ExecuteBlock( cycleCount );
 			EEsCycle -= cyclesRun;
-			//Console::Notice( "IOP Exception-Pending Execution -- EEsCycle: %d", params EEsCycle );
+			//Console.Warning( "IOP Exception-Pending Execution -- EEsCycle: %d", EEsCycle );
 		}
 		else*/
 		{
@@ -452,7 +427,7 @@ __forceinline bool _cpuBranchTest_Shared()
 	{
 		// We're in a BranchTest.  All dynarec registers are flushed
 		// so there is no need to freeze registers here.
-		CpuVU0.ExecuteBlock();
+		CpuVU0->ExecuteBlock();
 
 		// This might be needed to keep the EE and VU0 in sync.
 		// A better fix will require hefty changes to the VU recs. -_-
@@ -472,7 +447,7 @@ __forceinline bool _cpuBranchTest_Shared()
 		// IOP extra timeslices in short order.
 
 		cpuSetNextBranchDelta( 48 );
-		//Console::Notice( "EE ahead of the IOP -- Rapid Branch!  %d", params EEsCycle );
+		//Console.Warning( "EE ahead of the IOP -- Rapid Branch!  %d", EEsCycle );
 	}
 
 	// The IOP could be running ahead/behind of us, so adjust the iop's next branch by its
@@ -498,8 +473,6 @@ __forceinline bool _cpuBranchTest_Shared()
 		TESTINT(30, intcInterrupt);
 		TESTINT(31, dmacInterrupt);
 	}
-
-	return vsyncEvent;
 }
 
 __releaseinline void cpuTestINTCInts()
@@ -560,52 +533,16 @@ __forceinline void cpuTestHwInts() {
 	cpuTestTIMRInts();
 }
 
-// This function performs a "hackish" execution of the BIOS stub, which initializes EE
-// memory and hardware.  It forcefully breaks execution when the stub is finished, prior
-// to the PS2 logos being displayed.  This allows us to "shortcut" right into a game
-// without having to wait through the logos or endure game/bios localization checks.
-void cpuExecuteBios()
-{
-	// Set the video mode to user's default request:
-	// (right now we always default to NTSC)
-	gsSetVideoRegionType( Config.PsxType & 1 );
-
-	Console::Notice( "* PCSX2 *: ExecuteBios" );
-
-	bExecBIOS = TRUE;
-	while (cpuRegs.pc != 0x00200008 &&
-		   cpuRegs.pc != 0x00100008) {
-		g_nextBranchCycle = cpuRegs.cycle;
-		Cpu->ExecuteBlock();
-	}
-
-	bExecBIOS = FALSE;
-//    {
-//        FILE* f = fopen("eebios.bin", "wb");
-//        fwrite(PSM(0x80000000), 0x100000, 1, f);
-//        fclose(f);
-//        exit(0);
-
-//        f = fopen("iopbios.bin", "wb");
-//        fwrite(PS2MEM_PSX, 0x80000, 1, f);
-//        fclose(f);
-//    }
-
-//	REC_CLEARM(0x00200008);
-//	REC_CLEARM(0x00100008);
-//	REC_CLEARM(cpuRegs.pc);
-
-	// Reset the EErecs here, because the bios generates "slow" blocks that have hacky
-	// bBiosEnd checks in them and stuff.  This deletes them so that the recs replace them
-	// with new faster versions:
-	Cpu->Reset();
-
-	Console::Notice("* PCSX2 *: ExecuteBios Complete");
-	//GSprintf(5, "PCSX2 " PCSX2_VERSION "\nExecuteBios Complete\n");
-}
-
 __forceinline void CPU_INT( u32 n, s32 ecycle)
 {
+	if( n != 2 && cpuRegs.interrupt & (1<<n) ){ //2 is Gif, and every path 3 masking game triggers this :/
+		DevCon.Warning( "***** EE > Twice-thrown int on IRQ %d", n );
+	}
+
+	//if (ecycle > 8192 && n != DMAC_TO_IPU && n != DMAC_FROM_IPU) {
+	//	DevCon.Warning( "EE cycles high: %d, n %d", ecycle, n );
+	//}
+
 	cpuRegs.interrupt|= 1 << n;
 	cpuRegs.sCycle[n] = cpuRegs.cycle;
 	cpuRegs.eCycle[n] = ecycle;

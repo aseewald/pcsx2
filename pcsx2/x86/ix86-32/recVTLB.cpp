@@ -1,20 +1,18 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
+
 
 #include "PrecompiledHeader.h"
 
@@ -27,27 +25,83 @@
 using namespace vtlb_private;
 using namespace x86Emitter;
 
-// NOTICE: This function *destroys* EAX!!
-// Moves 128 bits of memory from the source register ptr to the dest register ptr.
-// (used as an equivalent to movaps, when a free XMM register is unavailable for some reason)
-void MOV128_MtoM( x86IntRegType destRm, x86IntRegType srcRm )
+//////////////////////////////////////////////////////////////////////////////////////////
+// iAllocRegSSE -- allocates an xmm register.  If no xmm register is available, xmm0 is
+// saved into g_globalXMMData and returned as a free register.
+//
+class iAllocRegSSE
 {
-	// (this is one of my test cases for the new emitter --air)
+protected:
+	xRegisterSSE m_reg;
+	bool m_free;
 
-	xAddressReg src( srcRm );
-	xAddressReg dest( destRm );
+public:
+	iAllocRegSSE() :
+		m_reg( xmm0 ),
+		m_free( !!_hasFreeXMMreg() )
+	{
+		if( m_free )
+			m_reg = xRegisterSSE( _allocTempXMMreg( XMMT_INT, -1 ) );
+		else
+			xStoreReg( m_reg );
+	}
 
-	xMOV( eax, ptr[src] );
-	xMOV( ptr[dest], eax );
+	~iAllocRegSSE()
+	{
+		if( m_free )
+			_freeXMMreg( m_reg.Id );
+		else
+			xRestoreReg( m_reg );
+	}
+	
+	operator xRegisterSSE() const { return m_reg; }
+};
 
-	xMOV( eax, ptr[src+4] );
-	xMOV( ptr[dest+4], eax );
+//////////////////////////////////////////////////////////////////////////////////////////
+// Moves 128 bits from point B to point A, using SSE's MOVAPS (or MOVDQA).
+// This instruction always uses an SSE register, even if all registers are allocated!  It
+// saves an SSE register to memory first, performs the copy, and restores the register.
+//
+void iMOV128_SSE( const ModSibBase& destRm, const ModSibBase& srcRm )
+{
+	iAllocRegSSE reg;
+	xMOVDQA( reg, srcRm );
+	xMOVDQA( destRm, reg );
+}
 
-	xMOV( eax, ptr[src+8] );
-	xMOV( ptr[dest+8], eax );
+//////////////////////////////////////////////////////////////////////////////////////////
+// Moves 64 bits of data from point B to point A, using either MMX, SSE, or x86 registers
+// if neither MMX nor SSE is available to the task.
+//
+// Optimizations: This method uses MMX is the cpu is in MMX mode, or SSE if it's in FPU
+// mode (saving on potential EMMS uses).
+//
+void iMOV64_Smart( const ModSibBase& destRm, const ModSibBase& srcRm )
+{
+	if( (x86FpuState == FPU_STATE) && _hasFreeXMMreg() )
+	{
+		// Move things using MOVLPS:
+		xRegisterSSE reg( _allocTempXMMreg( XMMT_INT, -1 ) );
+		xMOVL.PS( reg, srcRm );
+		xMOVL.PS( destRm, reg );
+		_freeXMMreg( reg.Id );
+		return;
+	}
 
-	xMOV( eax, ptr[src+12] );
-	xMOV( ptr[dest+12], eax );
+	if( _hasFreeMMXreg() )
+	{
+		xRegisterMMX reg( _allocMMXreg(-1, MMX_TEMP, 0) );
+		xMOVQ( reg, srcRm );
+		xMOVQ( destRm, reg );
+		_freeMMXreg( reg.Id );		
+	}
+	else
+	{
+		xMOV( eax, srcRm );
+		xMOV( destRm, eax );
+		xMOV( eax, srcRm+4 );
+		xMOV( destRm+4, eax );
+	}		
 }
 
 /*
@@ -67,7 +121,7 @@ void MOV128_MtoM( x86IntRegType destRm, x86IntRegType srcRm )
 		//has to: translate, find function, call function
 		u32 hand=(u8)vmv;
 		u32 paddr=ppf-hand+0x80000000;
-		//Console::WriteLn("Translated 0x%08X to 0x%08X",params addr,paddr);
+		//Console.WriteLn("Translated 0x%08X to 0x%08X",params addr,paddr);
 		return reinterpret_cast<TemplateHelper<DataSize,false>::HandlerType*>(RWFT[TemplateHelper<DataSize,false>::sidx][0][hand])(paddr,data);
 	}
 
@@ -99,77 +153,120 @@ void MOV128_MtoM( x86IntRegType destRm, x86IntRegType srcRm )
 	cont:
 	........
 
-	*/
+*/
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//                            Dynarec Load Implementations
-
-static void _vtlb_DynGen_DirectRead( u32 bits, bool sign )
+namespace vtlb_private
 {
+	// ------------------------------------------------------------------------
+	// Prepares eax, ecx, and, ebx for Direct or Indirect operations.
+	// Returns the writeback pointer for ebx (return address from indirect handling)
+	//
+	static uptr* DynGen_PrepRegs()
+	{
+		xMOV( eax, ecx );
+		xSHR( eax, VTLB_PAGE_BITS );
+		xMOV( eax, ptr[(eax*4) + vtlbdata.vmap] );
+		xMOV( ebx, 0xcdcdcdcd );
+		uptr* writeback = ((uptr*)xGetPtr()) - 1;
+		xADD( ecx, eax );
+
+		return writeback;
+	}
+
+	// ------------------------------------------------------------------------
+	static void DynGen_DirectRead( u32 bits, bool sign )
+	{
 	switch( bits )
 	{
 		case 8:
 			if( sign )
-				MOVSX32Rm8toR(EAX,ECX);
+					xMOVSX( eax, ptr8[ecx] );
 			else
-				MOVZX32Rm8toR(EAX,ECX);
+					xMOVZX( eax, ptr8[ecx] );
 		break;
 
 		case 16:
 			if( sign )
-				MOVSX32Rm16toR(EAX,ECX);
+					xMOVSX( eax, ptr16[ecx] );
 			else
-				MOVZX32Rm16toR(EAX,ECX);
+					xMOVZX( eax, ptr16[ecx] );
 		break;
 
 		case 32:
-			MOV32RmtoR(EAX,ECX);
+				xMOV( eax, ptr[ecx] );
 		break;
 
 		case 64:
-			if( _hasFreeMMXreg() )
-			{
-				const int freereg = _allocMMXreg(-1, MMX_TEMP, 0);
-				MOVQRmtoR(freereg,ECX);
-				MOVQRtoRm(EDX,freereg);
-				_freeMMXreg(freereg);
-			}
-			else
-			{
-				MOV32RmtoR(EAX,ECX);
-				MOV32RtoRm(EDX,EAX);
-
-				MOV32RmtoR(EAX,ECX,4);
-				MOV32RtoRm(EDX,EAX,4);
-			}
+				iMOV64_Smart( ptr[edx], ptr[ecx] );
 		break;
 
 		case 128:
-			if( _hasFreeXMMreg() )
-			{
-				const int freereg = _allocTempXMMreg( XMMT_INT, -1 );
-				SSE2_MOVDQARmtoR(freereg,ECX);
-				SSE2_MOVDQARtoRm(EDX,freereg);
-				_freeXMMreg(freereg);
-			}
-			else
-			{
-				// Could put in an MMX optimization here as well, but no point really.
-				// It's almost never used since there's almost always a free XMM reg.
+				iMOV128_SSE( ptr[edx], ptr[ecx] );
+			break;
 
-				MOV128_MtoM( EDX, ECX );		// dest <- src!
+			jNO_DEFAULT
 			}
+	}
+
+	// ------------------------------------------------------------------------
+	static void DynGen_DirectWrite( u32 bits )
+			{
+		switch(bits)
+		{
+			//8 , 16, 32 : data on EDX
+			case 8:
+				xMOV( ptr[ecx], dl );
+			break;
+
+			case 16:
+				xMOV( ptr[ecx], dx );
 		break;
 
-		jNO_DEFAULT
+			case 32:
+				xMOV( ptr[ecx], edx );
+			break;
+
+			case 64:
+				iMOV64_Smart( ptr[ecx], ptr[edx] );
+			break;
+
+			case 128:
+				iMOV128_SSE( ptr[ecx], ptr[edx] );
+			break;
+	}
 	}
 }
 
 // ------------------------------------------------------------------------
-static void _vtlb_DynGen_IndirectRead( u32 bits )
+// allocate one page for our naked indirect dispatcher function.
+// this *must* be a full page, since we'll give it execution permission later.
+// If it were smaller than a page we'd end up allowing execution rights on some
+// other vars additionally (bad!).
+//
+static __pagealigned u8 m_IndirectDispatchers[__pagesize];
+
+// ------------------------------------------------------------------------
+// mode        - 0 for read, 1 for write!
+// operandsize - 0 thru 4 represents 8, 16, 32, 64, and 128 bits.
+//
+static u8* GetIndirectDispatcherPtr( int mode, int operandsize )
+{
+	// Each dispatcher is aligned to 64 bytes.  The actual dispatchers are only like
+	// 20-some bytes each, but 64 byte alignment on functions that are called
+	// more frequently than a hot sex hotline at 1:15am is probably a good thing.
+
+	// 5*64?  Because 5 operand types per each mode :D
+
+	return &m_IndirectDispatchers[(mode*(5*64)) + (operandsize*64)];
+}
+
+// ------------------------------------------------------------------------
+// Generates a JS instruction that targets the appropriate templated instance of
+// the vtlb Indirect Dispatcher.
+//
+static void DynGen_IndirectDispatch( int mode, int bits )
 {
 	int szidx;
-
 	switch( bits )
 	{
 		case 8:  szidx=0;	break;
@@ -177,38 +274,55 @@ static void _vtlb_DynGen_IndirectRead( u32 bits )
 		case 32: szidx=2;	break;
 		case 64: szidx=3;	break;
 		case 128: szidx=4;	break;
-		jNO_DEFAULT
+		jNO_DEFAULT;
 	}
-
-	MOVZX32R8toR(EAX,EAX);
-	SUB32RtoR(ECX,EAX);
-	//eax=[funct+eax]
-	MOV32RmSOffsettoR(EAX,EAX,(int)vtlbdata.RWFT[szidx][0],2);
-	SUB32ItoR(ECX,0x80000000);
-	CALL32R(EAX);
+	xJS( GetIndirectDispatcherPtr( mode, szidx ) );
 }
 
-// ------------------------------------------------------------------------
-// Recompiled input registers:
-//   ecx = source addr to read from
-//   edx = ptr to dest to write to
+//////////////////////////////////////////////////////////////////////////////////////////
+// One-time initialization procedure.  Calling it multiple times shouldn't
+// hurt anything tho.
+//
+void vtlb_dynarec_init()
+{
+	// In case init gets called multiple times:
+	HostSys::MemProtectStatic( m_IndirectDispatchers, Protect_ReadWrite, false );
+
+	// clear the buffer to 0xcc (easier debugging).
+	memset_8<0xcc,0x1000>( m_IndirectDispatchers );
+
+	for( int mode=0; mode<2; ++mode )
+	{
+		for( int bits=0; bits<5; ++bits )
+		{
+			xSetPtr( GetIndirectDispatcherPtr( mode, bits ) );
+
+			xMOVZX( eax, al );
+			xSUB( ecx, 0x80000000 );
+			xSUB( ecx, eax );
+
+			// jump to the indirect handler, which is a __fastcall C++ function.
+			// [ecx is address, edx is data]
+			xCALL( ptr32[(eax*4) + vtlbdata.RWFT[bits][mode]] );
+			xJMP( ebx );
+		}
+	}
+
+	HostSys::MemProtectStatic( m_IndirectDispatchers, Protect_ReadOnly, true );
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//                            Dynarec Load Implementations
 void vtlb_DynGenRead64(u32 bits)
 {
 	jASSUME( bits == 64 || bits == 128 );
 
-	MOV32RtoR(EAX,ECX);
-	SHR32ItoR(EAX,VTLB_PAGE_BITS);
-	MOV32RmSOffsettoR(EAX,EAX,(int)vtlbdata.vmap,2);
-	ADD32RtoR(ECX,EAX);
-	xForwardJS8 _fullread;
+	uptr* writeback = DynGen_PrepRegs();
 
-	_vtlb_DynGen_DirectRead( bits, false );
-	xForwardJump8 cont;
-
-	_fullread.SetTarget();
+	DynGen_IndirectDispatch( 0, bits );
+	DynGen_DirectRead( bits, false );
 	
-	_vtlb_DynGen_IndirectRead( bits );
-	cont.SetTarget();
+	*writeback = (uptr)xGetPtr();		// return target for indirect's call/ret
 }
 
 // ------------------------------------------------------------------------
@@ -219,35 +333,29 @@ void vtlb_DynGenRead32(u32 bits, bool sign)
 {
 	jASSUME( bits <= 32 );
 
-	MOV32RtoR(EAX,ECX);
-	SHR32ItoR(EAX,VTLB_PAGE_BITS);
-	MOV32RmSOffsettoR(EAX,EAX,(int)vtlbdata.vmap,2);
-	ADD32RtoR(ECX,EAX);
-	xForwardJS8 _fullread;
+	uptr* writeback = DynGen_PrepRegs();
 
-	_vtlb_DynGen_DirectRead( bits, sign );
-	xForwardJump8 cont;
+	DynGen_IndirectDispatch( 0, bits );
+	DynGen_DirectRead( bits, sign );
 
-	_fullread.SetTarget();
-	_vtlb_DynGen_IndirectRead( bits );
+	*writeback = (uptr)xGetPtr();
 
 	// perform sign extension on the result:
 
-	if( bits==8 )
+	if( bits == 8 )
 	{
 		if( sign )
-			MOVSX32R8toR(EAX,EAX);
+			xMOVSX( eax, al );
 		else
-			MOVZX32R8toR(EAX,EAX);
+			xMOVZX( eax, al );
 	}
-	else if( bits==16 )
+	else if( bits == 16 )
 	{
 		if( sign )
-			MOVSX32R16toR(EAX,EAX);
+			xMOVSX( eax, ax );
 		else
-			MOVZX32R16toR(EAX,EAX);
+			xMOVZX( eax, ax );
 	}
-	cont.SetTarget();
 }
 
 // ------------------------------------------------------------------------
@@ -262,39 +370,11 @@ void vtlb_DynGenRead64_Const( u32 bits, u32 addr_const )
 		switch( bits )
 		{
 			case 64:
-				if( _hasFreeMMXreg() )
-				{
-					const int freereg = _allocMMXreg(-1, MMX_TEMP, 0);
-					MOVQMtoR(freereg,ppf);
-					MOVQRtoRm(EDX,freereg);
-					_freeMMXreg(freereg);
-				}
-				else
-				{
-					MOV32MtoR(EAX,ppf);
-					MOV32RtoRm(EDX,EAX);
-
-					MOV32MtoR(EAX,ppf+4);
-					MOV32RtoRm(EDX,EAX,4);
-				}
+				iMOV64_Smart( ptr[edx], ptr[ppf] );
 			break;
 
 			case 128:
-				if( _hasFreeXMMreg() )
-				{
-					const int freereg = _allocTempXMMreg( XMMT_INT, -1 );
-					SSE2_MOVDQA_M128_to_XMM( freereg, ppf );
-					SSE2_MOVDQARtoRm(EDX,freereg);
-					_freeXMMreg(freereg);
-				}
-				else
-				{
-					// Could put in an MMX optimization here as well, but no point really.
-					// It's almost never used since there's almost always a free XMM reg.
-
-					MOV32ItoR( ECX, ppf );
-					MOV128_MtoM( EDX, ECX );		// dest <- src!
-				}
+				iMOV128_SSE( ptr[edx], ptr[ppf] );
 			break;
 
 			jNO_DEFAULT
@@ -313,8 +393,8 @@ void vtlb_DynGenRead64_Const( u32 bits, u32 addr_const )
 			case 128:	szidx=4;	break;
 		}
 
-		MOV32ItoR( ECX, paddr );
-		CALLFunc( (int)vtlbdata.RWFT[szidx][0][handler] );
+		xMOV( ecx, paddr );
+		xCALL( vtlbdata.RWFT[szidx][0][handler] );
 	}
 }
 
@@ -325,6 +405,7 @@ void vtlb_DynGenRead64_Const( u32 bits, u32 addr_const )
 //
 // TLB lookup is performed in const, with the assumption that the COP0/TLB will clear the
 // recompiler if the TLB is changed.
+//
 void vtlb_DynGenRead32_Const( u32 bits, bool sign, u32 addr_const )
 {
 	u32 vmv_ptr = vtlbdata.vmap[addr_const>>VTLB_PAGE_BITS];
@@ -335,20 +416,20 @@ void vtlb_DynGenRead32_Const( u32 bits, bool sign, u32 addr_const )
 		{
 			case 8:
 				if( sign )
-					MOVSX32M8toR(EAX,ppf);
+					xMOVSX( eax, ptr8[ppf] );
 				else
-					MOVZX32M8toR(EAX,ppf);
+					xMOVZX( eax, ptr8[ppf] );					
 			break;
 
 			case 16:
 				if( sign )
-					MOVSX32M16toR(EAX,ppf);
+					xMOVSX( eax, ptr16[ppf] );
 				else
-					MOVZX32M16toR(EAX,ppf);
+					xMOVZX( eax, ptr16[ppf] );
 			break;
 
 			case 32:
-				MOV32MtoR(EAX,ppf);
+				xMOV( eax, ptr[ppf] );
 			break;
 		}
 	}
@@ -367,30 +448,30 @@ void vtlb_DynGenRead32_Const( u32 bits, bool sign, u32 addr_const )
 		}
 
 		// Shortcut for the INTC_STAT register, which many games like to spin on heavily.
-		if( (bits == 32) && !Config.Hacks.INTCSTATSlow && (paddr == INTC_STAT) )
+		if( (bits == 32) && !EmuConfig.Speedhacks.IntcStat && (paddr == INTC_STAT) )
 		{
-			MOV32MtoR( EAX, (uptr)&psHu32( INTC_STAT ) );
+			xMOV( eax, &psHu32( INTC_STAT ) );
 		}
 		else
 		{
-			MOV32ItoR( ECX, paddr );
-			CALLFunc( (int)vtlbdata.RWFT[szidx][0][handler] );
+			xMOV( ecx, paddr );
+			xCALL( vtlbdata.RWFT[szidx][0][handler] );
 
 			// perform sign extension on the result:
 
 			if( bits==8 )
 			{
 				if( sign )
-					MOVSX32R8toR(EAX,EAX);
+					xMOVSX( eax, al );
 				else
-					MOVZX32R8toR(EAX,EAX);
+					xMOVZX( eax, al );
 			}
 			else if( bits==16 )
 			{
 				if( sign )
-					MOVSX32R16toR(EAX,EAX);
+					xMOVSX( eax, ax );
 				else
-					MOVZX32R16toR(EAX,EAX);
+					xMOVZX( eax, ax );
 			}
 		}
 	}
@@ -399,94 +480,14 @@ void vtlb_DynGenRead32_Const( u32 bits, bool sign, u32 addr_const )
 //////////////////////////////////////////////////////////////////////////////////////////
 //                            Dynarec Store Implementations
 
-static void _vtlb_DynGen_DirectWrite( u32 bits )
-{
-	switch(bits)
-	{
-		//8 , 16, 32 : data on EDX
-		case 8:
-			MOV8RtoRm(ECX,EDX);
-		break;
-		case 16:
-			MOV16RtoRm(ECX,EDX);
-		break;
-		case 32:
-			MOV32RtoRm(ECX,EDX);
-		break;
-
-		case 64:
-			if( _hasFreeMMXreg() )
-			{
-				const int freereg = _allocMMXreg(-1, MMX_TEMP, 0);
-				MOVQRmtoR(freereg,EDX);
-				MOVQRtoRm(ECX,freereg);
-				_freeMMXreg( freereg );
-			}
-			else
-			{
-				MOV32RmtoR(EAX,EDX);
-				MOV32RtoRm(ECX,EAX);
-
-				MOV32RmtoR(EAX,EDX,4);
-				MOV32RtoRm(ECX,EAX,4);
-			}
-		break;
-
-		case 128:
-			if( _hasFreeXMMreg() )
-			{
-				const int freereg = _allocTempXMMreg( XMMT_INT, -1 );
-				SSE2_MOVDQARmtoR(freereg,EDX);
-				SSE2_MOVDQARtoRm(ECX,freereg);
-				_freeXMMreg( freereg );
-			}
-			else
-			{
-				// Could put in an MMX optimization here as well, but no point really.
-				// It's almost never used since there's almost always a free XMM reg.
-
-				MOV128_MtoM( ECX, EDX );	// dest <- src!
-			}
-		break;
-	}
-}
-
-// ------------------------------------------------------------------------
-static void _vtlb_DynGen_IndirectWrite( u32 bits )
-{
-	int szidx=0;
-	switch( bits )
-	{
-		case 8:  szidx=0;	break;
-		case 16:   szidx=1;	break;
-		case 32:   szidx=2;	break;
-		case 64:   szidx=3;	break;
-		case 128:   szidx=4; break;
-	}
-	MOVZX32R8toR(EAX,EAX);
-	SUB32RtoR(ECX,EAX);
-	//eax=[funct+eax]
-	MOV32RmSOffsettoR(EAX,EAX,(int)vtlbdata.RWFT[szidx][1],2);
-	SUB32ItoR(ECX,0x80000000);
-	CALL32R(EAX);
-}
-
-// ------------------------------------------------------------------------
 void vtlb_DynGenWrite(u32 sz)
 {
-	MOV32RtoR(EAX,ECX);
-	SHR32ItoR(EAX,VTLB_PAGE_BITS);
-	MOV32RmSOffsettoR(EAX,EAX,(int)vtlbdata.vmap,2);
-	ADD32RtoR(ECX,EAX);
-	xForwardJS8 _full;
+	uptr* writeback = DynGen_PrepRegs();
 
-	_vtlb_DynGen_DirectWrite( sz );
-	xForwardJump8 cont;
+	DynGen_IndirectDispatch( 1, sz );
+	DynGen_DirectWrite( sz );
 
-	_full.SetTarget();
-	_vtlb_DynGen_IndirectWrite( sz );
-
-	cont.SetTarget();
+	*writeback = (uptr)xGetPtr();
 }
 
 
@@ -504,49 +505,23 @@ void vtlb_DynGenWrite_Const( u32 bits, u32 addr_const )
 		{
 			//8 , 16, 32 : data on EDX
 			case 8:
-				MOV8RtoM(ppf,EDX);
+				xMOV( ptr[ppf], dl );
 			break;
+			
 			case 16:
-				MOV16RtoM(ppf,EDX);
+				xMOV( ptr[ppf], dx );
 			break;
+			
 			case 32:
-				MOV32RtoM(ppf,EDX);
+				xMOV( ptr[ppf], edx );
 			break;
 
 			case 64:
-				if( _hasFreeMMXreg() )
-				{
-					const int freereg = _allocMMXreg(-1, MMX_TEMP, 0);
-					MOVQRmtoR(freereg,EDX);
-					MOVQRtoM(ppf,freereg);
-					_freeMMXreg( freereg );
-				}
-				else
-				{
-					MOV32RmtoR(EAX,EDX);
-					MOV32RtoM(ppf,EAX);
-
-					MOV32RmtoR(EAX,EDX,4);
-					MOV32RtoM(ppf+4,EAX);
-				}
+				iMOV64_Smart( ptr[ppf], ptr[edx] );
 			break;
 
 			case 128:
-				if( _hasFreeXMMreg() )
-				{
-					const int freereg = _allocTempXMMreg( XMMT_INT, -1 );
-					SSE2_MOVDQARmtoR(freereg,EDX);
-					SSE2_MOVDQA_XMM_to_M128(ppf,freereg);
-					_freeXMMreg( freereg );
-				}
-				else
-				{
-					// Could put in an MMX optimization here as well, but no point really.
-					// It's almost never used since there's almost always a free XMM reg.
-
-					MOV32ItoR( ECX, ppf );
-					MOV128_MtoM( ECX, EDX );	// dest <- src!
-				}
+				iMOV128_SSE( ptr[ppf], ptr[edx] );
 			break;
 		}
 
@@ -567,7 +542,8 @@ void vtlb_DynGenWrite_Const( u32 bits, u32 addr_const )
 			case 128:   szidx=4; break;
 		}
 
-		MOV32ItoR( ECX, paddr );
-		CALLFunc( (int)vtlbdata.RWFT[szidx][1][handler] );
+		xMOV( ecx, paddr );
+		xCALL( vtlbdata.RWFT[szidx][1][handler] );
 	}
 }
+

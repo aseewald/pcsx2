@@ -1,26 +1,48 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __R5900_H__
-#define __R5900_H__
+#pragma once
+
+//////////////////////////////////////////////////////////////////////////////////////////
+#ifndef __LINUX__
+#pragma region Recompiler Stuffs
+#endif
+
+// This code section contains recompiler vars that are used in "shared" code. Placing
+// them in iR5900.h would mean having to include that into more files than I care to
+// right now, so we're sticking them here for now until a better solution comes along.
 
 extern bool g_EEFreezeRegs;
+extern bool g_ExecBiosHack;
 
+namespace Exception
+{
+	// Implementation Note: this exception has no meaningful type information and we don't
+	// care to have it be caught by any BaseException handlers lying about, so let's not
+	// derive from BaseException :D
+	class ExitCpuExecute
+	{
+	public:
+		explicit ExitCpuExecute() { }
+	};
+}
+#ifndef __LINUX__
+#pragma endregion
+#endif
+
+//////////////////////////////////////////////////////////////////////////////////////////
 // EE Bios function name tables.
 namespace R5900 {
 extern const char* const bios[256];
@@ -28,7 +50,6 @@ extern const char* const bios[256];
 
 extern s32 EEsCycle;
 extern u32 EEoCycle;
-extern u32 bExecBIOS;
 
 union GPR_reg {   // Declare union type GPR register
 	u64 UD[2];      //128 bits
@@ -56,7 +77,7 @@ union PERFregs {
 	{
 		union
 		{
-			struct  
+			struct
 			{
 				u32 pad0:1;			// LSB should always be zero (or undefined)
 				u32 EXL0:1;			// enable PCR0 during Level 1 exception handling
@@ -72,11 +93,11 @@ union PERFregs {
 				u32 S1:1;			// enable PCR1 during Supervisor mode execution
 				u32 U1:1;			// enable PCR1 during User-mode execution
 				u32 Event1:5;		// PCR1 event counter (all values except 1 ignored at this time)
-				
+
 				u32 Reserved:11;
 				u32 CTE:1;			// Counter enable bit, no counting if set to zero.
 			} b;
-			
+
 			u32 val;
 		} pccr;
 
@@ -95,7 +116,7 @@ union CP0regs {
 				u32 IE:1;		// Bit 0: Interrupt Enable flag.
 				u32 EXL:1;		// Bit 1: Exception Level, set on any exception not covered by ERL.
 				u32 ERL:1;		// Bit 2: Error level, set on Resetm NMI, perf/debug exceptions.
-				u32 KSU:2;		// Bits 3-4: Kernel [clear] / Supervisor [set] mode 
+				u32 KSU:2;		// Bits 3-4: Kernel [clear] / Supervisor [set] mode
 				u32 unused0:3;
 				u32 IM:8;		// Bits 10-15: Interrupt mask (bits 12,13,14 are unused)
 				u32 EIE:1;		// Bit 16: IE bit enabler.  When cleared, ints are disabled regardless of IE status.
@@ -161,7 +182,7 @@ union FPRreg {
 struct fpuRegisters {
 	FPRreg fpr[32];		// 32bit floating point registers
 	u32 fprc[32];		// 32bit floating point control registers
-	FPRreg ACC;			// 32 bit accumulator 
+	FPRreg ACC;			// 32 bit accumulator
 	u32 ACCflag;        // an internal accumulator overflow flag
 };
 
@@ -197,10 +218,10 @@ struct tlbs
 
 #define _PC_       cpuRegs.pc       // The next PC to be executed - only used in this header and R3000A.h
 
-#define _Funct_  ((cpuRegs.code      ) & 0x3F)  // The funct part of the instruction register 
-#define _Rd_     ((cpuRegs.code >> 11) & 0x1F)  // The rd part of the instruction register 
-#define _Rt_     ((cpuRegs.code >> 16) & 0x1F)  // The rt part of the instruction register 
-#define _Rs_     ((cpuRegs.code >> 21) & 0x1F)  // The rs part of the instruction register 
+#define _Funct_  ((cpuRegs.code      ) & 0x3F)  // The funct part of the instruction register
+#define _Rd_     ((cpuRegs.code >> 11) & 0x1F)  // The rd part of the instruction register
+#define _Rt_     ((cpuRegs.code >> 16) & 0x1F)  // The rt part of the instruction register
+#define _Rs_     ((cpuRegs.code >> 21) & 0x1F)  // The rs part of the instruction register
 #define _Sa_     ((cpuRegs.code >>  6) & 0x1F)  // The sa part of the instruction register
 #define _Im_     ((u16)cpuRegs.code) // The immediate part of the instruction register
 #define _Target_ (cpuRegs.code & 0x03ffffff)    // The target part of the instruction register
@@ -219,16 +240,15 @@ struct tlbs
 
 #endif
 
-PCSX2_ALIGNED16_EXTERN(cpuRegisters cpuRegs);
-PCSX2_ALIGNED16_EXTERN(fpuRegisters fpuRegs);
-PCSX2_ALIGNED16_EXTERN(tlbs tlb[48]);
+extern __aligned16 cpuRegisters cpuRegs;
+extern __aligned16 fpuRegisters fpuRegs;
+extern __aligned16 tlbs tlb[48];
 
 extern u32 g_nextBranchCycle;
 extern bool eeEventTestIsActive;
 extern u32 s_iLastCOP0Cycle;
 extern u32 s_iLastPERFCycle[2];
 
-bool intEventTest();
 void intSetBranch();
 
 // This is a special form of the interpreter's doBranch that is run from various
@@ -237,16 +257,116 @@ void __fastcall intDoBranch(u32 target);
 
 ////////////////////////////////////////////////////////////////////
 // R5900 Public Interface / API
-
+//
+// [TODO] : This is on the list to get converted to a proper C++ class.  I'm putting it
+// off until I get my new IOPint and IOPrec re-merged. --air
+//
 struct R5900cpu
 {
-	void (*Allocate)();		// throws exceptions on failure.
+	// Memory allocation function, for allocating virtual memory spaces needed by
+	// the emulator.  (ints/recs are free to allocate additional memory while running
+	// code, however any virtual mapped memory should always be allocated as soon
+	// as possible, to claim the memory before some plugin does..)
+	//
+	// Thread Affinity:
+	//   Can be called from any thread.  Execute status must be suspended or stopped
+	//   to prevent multi-thread race conditions.
+	//
+	// Notable Exception Throws:
+	//   OutOfMemory - Not enough memory, or the memory areas required were already
+	//                 reserved.
+	//
+	void (*Allocate)();
+	
+	// Deallocates ram allocated by Allocate and/or by runtime code execution.
+	// 
+	// Thread Affinity:
+	//   Can be called from any thread.  Execute status must be suspended or stopped
+	//   to prevent multi-thread race conditions.
+	//
+	// Exception Throws:  None.  This function is a destructor, and should not throw.
+	//
+	void (*Shutdown)();
+
+	// Initializes / Resets code execution states. Typically implementation is only
+	// needed for recompilers, as interpreters have no internal execution states and
+	// rely on the CPU/VM states almost entirely.
+	//
+	// Thread Affinity:
+	//   Can be called from any thread.  Execute status must be suspended or stopped
+	//   to prevent multi-thread race conditions.
+	//
+	// Exception Throws:  Emulator-defined.  Common exception types to look for:
+	//   OutOfMemory, Stream Exceptions
+	//
 	void (*Reset)();
+
+	// Steps a single instruction.  Meant to be used by debuggers.  Is currently unused
+	// and unimplemented.  Future note: recompiler "step" should *always* fall back
+	// on interpreters.
+	//
+	// Exception Throws:  [TODO] (possible execution-related throws to be added)
+	//
 	void (*Step)();
-	void (*Execute)();			/* executes up to a break */
-	void (*ExecuteBlock)();
+
+	// Executes code until a break is signaled.  Execution can be paused or suspended
+	// via thread-style signals that are handled by CheckExecutionState callbacks.
+	// Execution Breakages are handled the same way, where-by a signal causes the Execute
+	// call to return at the nearest state check (typically handled internally using
+	// either C++ exceptions or setjmp/longjmp).
+	//
+	// Exception Throws:  [TODO]  (possible execution-related throws to be added)
+	//
+	void (*Execute)();
+
+	// This function performs a "hackish" execution of the BIOS stub, which initializes
+	// EE memory and hardware.  It forcefully breaks execution when the stub is finished,
+	// prior to the PS2 logos being displayed.  This allows us to "shortcut" right into
+	// a game without having to wait through the logos or endure game/bios localization
+	// checks.
+	//
+	// Use of this function must be followed by the proper injection of the elf header's
+	// code execution entry point into cpuRegs.pc.  Failure to modify cpuRegs.pc will
+	// result in the bios continuing its normal unimpeded splash screen execution.
+	//
+	// Exception Throws:  [TODO]  (possible execution-related throws to be added)
+	//
+	void (*ExecuteBiosStub)();
+
+	// Checks for execution suspension or cancellation.  In pthreads terms this provides 
+	// a "cancellation point."  Execution state checks are typically performed at Vsyncs
+	// by the generic VM event handlers in R5900.cpp/Counters.cpp (applies to both recs
+	// and ints).
+	//
+	// Implementation note: Because of the nuances of recompiled code execution, setjmp
+	// may be used in place of thread cancellation or C++ exceptions (non-SEH exceptions 
+	// cannot unwind through the recompiled code stackframes).
+	//
+	// Thread Affinity:
+	//   Must be called on the same thread as Execute only.
+	//
+	// Exception Throws:
+	//   May throw threading/Pthreads cancellations if the compiler supports SEH.
+	//   ThreadTimedOut - For canceling VM execution in response to MTGS deadlock. (if the
+	//     core emulator does not support multithreaded GS then this will not be a throw
+	//     exception).
+	//
+	void (*CheckExecutionState)();
+
+	// Manual recompiled code cache clear; typically useful to recompilers only.  Size is
+	// in MIPS words (32 bits).  Dev note: this callback is nearly obsolete, and might be
+	// better off replaced with some generic API callbacks from VTLB block protection.
+	// Also: the calls from COP0's TLB remap code should be replaced with full recompiler
+	// resets, since TLB remaps affect more than just the code they contain (code that
+	// may reference the remaped blocks via memory loads/stores, for example).
+	//
+	// Thread Affinity Rule: 
+	//   Can be called from any thread (namely for being called from debugging threads)
+	//
+	// Exception Throws: [TODO] Emulator defined?  (probably shouldn't throw, probably
+	//   doesn't matter if we're stripping it out soon. ;)
+	//
 	void (*Clear)(u32 Addr, u32 Size);
-	void (*Shutdown)();		// deallocates memory reserved by Allocate
 };
 
 extern R5900cpu *Cpu;
@@ -255,8 +375,6 @@ extern R5900cpu recCpu;
 
 extern void cpuInit();
 extern void cpuReset();		// can throw Exception::FileNotFound.
-extern void cpuShutdown();
-extern void cpuExecuteBios();
 extern void cpuException(u32 code, u32 bd);
 extern void cpuTlbMissR(u32 addr, u32 bd);
 extern void cpuTlbMissW(u32 addr, u32 bd);
@@ -267,7 +385,7 @@ extern void cpuSetNextBranchDelta( s32 delta );
 extern int  cpuTestCycle( u32 startCycle, s32 delta );
 extern void cpuSetBranch();
 
-extern bool _cpuBranchTest_Shared();		// for internal use by the Dynarecs and Ints inside R5900:
+extern void _cpuBranchTest_Shared();		// for internal use by the Dynarecs and Ints inside R5900:
 
 extern void cpuTestINTCInts();
 extern void cpuTestDMACInts();
@@ -296,5 +414,3 @@ extern void cpuTestTIMRInts();
 #define EXC_CODE_WATCH  EXC_CODE(23)
 #define EXC_CODE__MASK  0x0000007c
 #define EXC_CODE__SHIFT 2
-
-#endif /* __R5900_H__ */

@@ -1,20 +1,18 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
+
 
 #include "PrecompiledHeader.h"
 
@@ -23,6 +21,9 @@
 #include "Vif.h"
 #include "VU.h"
 #include "R3000A.h"
+
+__tls_emit u8  *j8Ptr[32];
+__tls_emit u32 *j32Ptr[32];
 
 u16 g_x86AllocCounter = 0;
 u16 g_xmmAllocCounter = 0;
@@ -36,17 +37,10 @@ u32 g_cpuRegHasSignExt = 0, g_cpuPrevRegHasSignExt = 0; // set if upper 32 bits 
 // use FreezeMMXRegs, FreezeXMMRegs
 u32 g_recWriteback = 0;
 
-#ifdef _DEBUG
-char g_globalXMMLocked = 0;
-#endif
-
 _xmmregs xmmregs[iREGCNT_XMM], s_saveXMMregs[iREGCNT_XMM];
 
 // X86 caching
 _x86regs x86regs[iREGCNT_GPR], s_saveX86regs[iREGCNT_GPR];
-
-#include <vector>
-using namespace std;
 
 // XMM Caching
 #define VU_VFx_ADDR(x)  (uptr)&VU->VF[x].UL[0]
@@ -55,7 +49,7 @@ using namespace std;
 static int s_xmmchecknext = 0;
 
 void _initXMMregs() {
-	memzero_obj( xmmregs );
+	memzero( xmmregs );
 	g_xmmAllocCounter = 0;
 	s_xmmchecknext = 0;
 }
@@ -71,7 +65,7 @@ __forceinline void* _XMMGetAddr(int type, int reg, VURegs *VU)
 		
 		case XMMTYPE_GPRREG:
 			if( reg < 32 )
-				assert( !(g_cpuHasConstReg & (1<<reg)) || (g_cpuFlushedConstReg & (1<<reg)) );
+				pxAssert( !(g_cpuHasConstReg & (1<<reg)) || (g_cpuFlushedConstReg & (1<<reg)) );
 			return &cpuRegs.GPR.r[reg].UL[0];
 			
 		case XMMTYPE_FPREG:
@@ -103,7 +97,7 @@ int  _getFreeXMMreg()
 	for (i=0; i<iREGCNT_XMM; i++) {
 		if (xmmregs[i].needed) continue;
 		if (xmmregs[i].type == XMMTYPE_GPRREG ) {
-			if( !(g_pCurInstInfo->regs[xmmregs[i].reg] & (EEINST_LIVE0|EEINST_LIVE1|EEINST_LIVE2)) ) {
+			if (!(EEINST_ISLIVEXMM(xmmregs[i].reg))) {
 				_freeXMMreg(i);
 				return i;
 			}
@@ -142,18 +136,16 @@ int  _getFreeXMMreg()
 		_freeXMMreg(tempi);
 		return tempi;
 	}
-	Console::Error("*PCSX2*: XMM Reg Allocation Error in _getFreeXMMreg()!");
+	Console.Error("*PCSX2*: XMM Reg Allocation Error in _getFreeXMMreg()!");
 
 	return -1;
 }
 
 int _allocTempXMMreg(XMMSSEType type, int xmmreg) {
-	if (xmmreg == -1) {
+	if (xmmreg == -1) 
 		xmmreg = _getFreeXMMreg();
-	}
-	else {
+	else 
 		_freeXMMreg(xmmreg);
-	}
 
 	xmmregs[xmmreg].inuse = 1;
 	xmmregs[xmmreg].type = XMMTYPE_TEMP;
@@ -350,7 +342,7 @@ int _allocGPRtoXMMreg(int xmmreg, int gprreg, int mode)
 		if (xmmregs[i].type != XMMTYPE_GPRREG) continue;
 		if (xmmregs[i].reg != gprreg) continue;
 
-		assert( _checkMMXreg(MMX_GPR|gprreg, mode) == -1 );
+		pxAssert( _checkMMXreg(MMX_GPR|gprreg, mode) == -1 );
 
 		g_xmmtypes[i] = XMMT_INT;
 
@@ -362,7 +354,7 @@ int _allocGPRtoXMMreg(int xmmreg, int gprreg, int mode)
 			}
 			else 
 			{
-				//assert( !(g_cpuHasConstReg & (1<<gprreg)) || (g_cpuFlushedConstReg & (1<<gprreg)) );
+				//pxAssert( !(g_cpuHasConstReg & (1<<gprreg)) || (g_cpuFlushedConstReg & (1<<gprreg)) );
 				_flushConstReg(gprreg);
 				SSEX_MOVDQA_M128_to_XMM(i, (uptr)&cpuRegs.GPR.r[gprreg].UL[0]);
 			}
@@ -372,7 +364,7 @@ int _allocGPRtoXMMreg(int xmmreg, int gprreg, int mode)
 		if  ((mode & MODE_WRITE) && (gprreg < 32)) 
 		{
 			g_cpuHasConstReg &= ~(1<<gprreg);
-			//assert( !(g_cpuHasConstReg & (1<<gprreg)) );
+			//pxAssert( !(g_cpuHasConstReg & (1<<gprreg)) );
 		}
 
 		xmmregs[i].counter = g_xmmAllocCounter++; // update counter
@@ -385,7 +377,7 @@ int _allocGPRtoXMMreg(int xmmreg, int gprreg, int mode)
 	// fixme - do we really need to execute this both here and in the loop?
 	if ((mode & MODE_WRITE) && gprreg < 32) 
 	{
-		//assert( !(g_cpuHasConstReg & (1<<gprreg)) );
+		//pxAssert( !(g_cpuHasConstReg & (1<<gprreg)) );
 		g_cpuHasConstReg &= ~(1<<gprreg);
 	}
 
@@ -567,7 +559,7 @@ void _clearNeededXMMregs() {
 		}
 
 		if( xmmregs[i].inuse ) {
-			assert( xmmregs[i].type != XMMTYPE_TEMP );
+			pxAssert( xmmregs[i].type != XMMTYPE_TEMP );
 		}
 	}
 }
@@ -590,7 +582,7 @@ void _deleteVFtoXMMreg(int reg, int vu, int flush)
 				case 2:
 					if( xmmregs[i].mode & MODE_WRITE ) 
 					{
-						assert( reg != 0 );
+						pxAssert( reg != 0 );
 
 						if( xmmregs[i].mode & MODE_VUXYZ ) 
 						{
@@ -718,9 +710,9 @@ void _deleteGPRtoXMMreg(int reg, int flush)
 				case 1:
 				case 2:
 					if( xmmregs[i].mode & MODE_WRITE ) {
-						assert( reg != 0 );
+						pxAssert( reg != 0 );
 
-						//assert( g_xmmtypes[i] == XMMT_INT );
+						//pxAssert( g_xmmtypes[i] == XMMT_INT );
 						SSEX_MOVDQA_XMM_to_M128((uptr)&cpuRegs.GPR.r[reg].UL[0], i);
 						
 						// get rid of MODE_WRITE since don't want to flush again
@@ -767,7 +759,7 @@ void _deleteFPtoXMMreg(int reg, int flush)
 
 void _freeXMMreg(int xmmreg) 
 {
-	assert( xmmreg < iREGCNT_XMM );
+	pxAssert( xmmreg < iREGCNT_XMM );
 
 	if (!xmmregs[xmmreg].inuse) return;
 	
@@ -857,8 +849,8 @@ void _freeXMMreg(int xmmreg)
 		break;
 		
 		case XMMTYPE_GPRREG:
-			assert( xmmregs[xmmreg].reg != 0 );
-			//assert( g_xmmtypes[xmmreg] == XMMT_INT );
+			pxAssert( xmmregs[xmmreg].reg != 0 );
+			//pxAssert( g_xmmtypes[xmmreg] == XMMT_INT );
 			SSEX_MOVDQA_XMM_to_M128((uptr)&cpuRegs.GPR.r[xmmregs[xmmreg].reg].UL[0], xmmreg);
 			break;
 	
@@ -946,8 +938,8 @@ void _flushXMMregs()
 	for (i=0; i<iREGCNT_XMM; i++) {
 		if (xmmregs[i].inuse == 0) continue;
 
-		assert( xmmregs[i].type != XMMTYPE_TEMP );
-		assert( xmmregs[i].mode & (MODE_READ|MODE_WRITE) );
+		pxAssert( xmmregs[i].type != XMMTYPE_TEMP );
+		pxAssert( xmmregs[i].mode & (MODE_READ|MODE_WRITE) );
 
 		_freeXMMreg(i);
 		xmmregs[i].inuse = 1;
@@ -963,14 +955,13 @@ void _freeXMMregs()
 	for (i=0; i<iREGCNT_XMM; i++) {
 		if (xmmregs[i].inuse == 0) continue;
 
-		assert( xmmregs[i].type != XMMTYPE_TEMP );
-		//assert( xmmregs[i].mode & (MODE_READ|MODE_WRITE) );
+		pxAssert( xmmregs[i].type != XMMTYPE_TEMP );
+		//pxAssert( xmmregs[i].mode & (MODE_READ|MODE_WRITE) );
 
 		_freeXMMreg(i);
 	}
 }
 
-PCSX2_ALIGNED16(u32 s_zeros[4]) = {0};
 int _signExtendXMMtoM(u32 to, x86SSERegType from, int candestroy)
 {
 	int t0reg;
@@ -985,7 +976,7 @@ int _signExtendXMMtoM(u32 to, x86SSERegType from, int candestroy)
 	}
 	else {
 		// can't destroy and type is int
-		assert( g_xmmtypes[from] == XMMT_INT );
+		pxAssert( g_xmmtypes[from] == XMMT_INT );
 
 		
 		if( _hasFreeXMMreg() ) {
@@ -1009,7 +1000,7 @@ int _signExtendXMMtoM(u32 to, x86SSERegType from, int candestroy)
 		return 0;
 	}
 
-	assert(0);
+	pxAssert( false );
 }
 
 int _allocCheckGPRtoXMM(EEINST* pinst, int gprreg, int mode)
@@ -1036,9 +1027,9 @@ int _allocCheckGPRtoX86(EEINST* pinst, int gprreg, int mode)
 
 void _recClearInst(EEINST* pinst)
 {
-	memzero_obj( *pinst );
-	memset8_obj<EEINST_LIVE0|EEINST_LIVE1|EEINST_LIVE2>( pinst->regs );
-	memset8_obj<EEINST_LIVE0>( pinst->fpuregs );
+	memzero( *pinst );
+	memset8<EEINST_LIVE0|EEINST_LIVE1|EEINST_LIVE2>( pinst->regs );
+	memset8<EEINST_LIVE0>( pinst->fpuregs );
 }
 
 // returns nonzero value if reg has been written between [startpc, endpc-4]
@@ -1088,7 +1079,7 @@ void _recFillRegister(EEINST& pinst, int type, int reg, int write)
 				return;
 			}
 		}
-		assert(0);
+		pxAssert( false );
 	}
 	else {
 		for(i = 0; i < ArraySize(pinst.readType); ++i) {
@@ -1098,7 +1089,7 @@ void _recFillRegister(EEINST& pinst, int type, int reg, int write)
 				return;
 			}
 		}
-		assert(0);
+		pxAssert( false );
 	}
 }
 

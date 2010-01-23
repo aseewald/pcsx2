@@ -1,42 +1,38 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ * 
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifndef __IR5900_H__
 #define __IR5900_H__
 
-#include "ix86/ix86.h"
-#include "ix86/ix86_sse_helpers.h"
+#include "x86emitter/x86emitter.h"
+#include "x86emitter/sse_helpers.h"
 #include "R5900.h"
 #include "VU.h"
 #include "iCore.h"
-#include "Pcsx2Config.h"
-
-#define PC_GETBLOCK(x) PC_GETBLOCK_(x, recLUT)
 
 extern u32 pc;
 extern int branch;
-extern uptr recLUT[];
 
 extern u32 maxrecmem;
 extern u32 pc;			         // recompiler pc (also used by the SuperVU! .. why? (air))
 extern int branch;		         // set for branch (also used by the SuperVU! .. why? (air))
 extern u32 target;		         // branch target
 extern u32 s_nBlockCycles;		// cycles of current block recompiling
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//
 
 #define REC_FUNC( f ) \
    void rec##f( void ) \
@@ -90,13 +86,10 @@ void LoadBranchState();
 void recompileNextInstruction(int delayslot);
 void SetBranchReg( u32 reg );
 void SetBranchImm( u32 imm );
-u32 eeScaleBlockCycles();
 
 void iFlushCall(int flushtype);
 void recBranchCall( void (*func)() );
 void recCall( void (*func)(), int delreg );
-
-extern void recExecute();		// same as recCpu.Execute(), but faster (can be inline'd)
 
 namespace R5900{
 namespace Dynarec {
@@ -120,8 +113,7 @@ extern void recDoBranchImm_Likely( u32* jmpSkip );
 	if( (reg) < 32 ) g_cpuHasConstReg &= ~(1<<(reg)); \
 }
 
-extern void (*recBSC_co[64])();
-PCSX2_ALIGNED16_EXTERN(GPR_reg64 g_cpuConstRegs[32]);
+extern __aligned16 GPR_reg64 g_cpuConstRegs[32];
 extern u32 g_cpuHasConstReg, g_cpuFlushedConstReg;
 
 // gets a memory pointer to the constant reg
@@ -141,7 +133,7 @@ void _eeOnWriteReg(int reg, int signext);
 void _deleteEEreg(int reg, int flush);
 
 // allocates memory on the instruction size and returns the pointer
-u32* recAllocStackMem(int size, int align);
+u32* recGetImm64(u32 hi, u32 lo);
 
 void _vuRegsCOP22(VURegs * VU, _VURegsNum *VUregsn);
 

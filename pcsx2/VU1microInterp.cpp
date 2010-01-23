@@ -1,25 +1,22 @@
-/*  Pcsx2 - Pc Ps2 Emulator
- *  Copyright (C) 2002-2009  Pcsx2 Team
+/*  PCSX2 - PS2 Emulator for PCs
+ *  Copyright (C) 2002-2009  PCSX2 Dev Team
+ *  
+ *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU Lesser General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *  
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *  
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ *  PCSX2 is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with PCSX2.
+ *  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "PrecompiledHeader.h"
 
+#include "PrecompiledHeader.h"
 #include "Common.h"
-#include "DebugTools/Debug.h"
+
 #include "VUmicro.h"
 
 extern void _vuFlushAll(VURegs* VU);
@@ -104,19 +101,19 @@ static void _vu1Exec(VURegs* VU)
 		vfreg = 0; vireg = 0;
 		if (uregs.VFwrite) {
 			if (lregs.VFwrite == uregs.VFwrite) {
-//				Console::Notice("*PCSX2*: Warning, VF write to the same reg in both lower/upper cycle");
+//				Console.Warning("*PCSX2*: Warning, VF write to the same reg in both lower/upper cycle");
 				discard = 1;
 			}
 			if (lregs.VFread0 == uregs.VFwrite ||
 				lregs.VFread1 == uregs.VFwrite) {
-//				Console::WriteLn("saving reg %d at pc=%x", params i, VU->VI[REG_TPC].UL);
+//				Console.WriteLn("saving reg %d at pc=%x", i, VU->VI[REG_TPC].UL);
 				_VF = VU->VF[uregs.VFwrite];
 				vfreg = uregs.VFwrite;
 			}
 		}
 		if (uregs.VIread & (1 << REG_CLIP_FLAG)) {
 			if (lregs.VIwrite & (1 << REG_CLIP_FLAG)) {
-				Console::Notice("*PCSX2*: Warning, VI write to the same reg in both lower/upper cycle");
+				Console.Warning("*PCSX2*: Warning, VI write to the same reg in both lower/upper cycle");
 				discard = 1;
 			}
 			if (lregs.VIread & (1 << REG_CLIP_FLAG)) {
@@ -161,8 +158,8 @@ static void _vu1Exec(VURegs* VU)
 	if( VU->ebit > 0 ) {
 		if( VU->ebit-- == 1 ) {
 			_vuFlushAll(VU);
-			VU0.VI[REG_VPU_STAT].UL&= ~0x100;
-			vif1Regs->stat&= ~0x4;
+			VU0.VI[REG_VPU_STAT].UL &= ~0x100;
+			vif1Regs->stat.VEW = false;
 		}
 	}
 }
@@ -172,66 +169,42 @@ void vu1Exec(VURegs* VU)
 	_vu1Exec(VU);
 	VU->cycle++;
 
-	if (VU->VI[0].UL != 0) DbgCon::Error("VI[0] != 0!!!!\n");
-	if (VU->VF[0].f.x != 0.0f) DbgCon::Error("VF[0].x != 0.0!!!!\n");
-	if (VU->VF[0].f.y != 0.0f) DbgCon::Error("VF[0].y != 0.0!!!!\n");
-	if (VU->VF[0].f.z != 0.0f) DbgCon::Error("VF[0].z != 0.0!!!!\n");
-	if (VU->VF[0].f.w != 1.0f) DbgCon::Error("VF[0].w != 1.0!!!!\n");
+	if (VU->VI[0].UL != 0) DbgCon.Error("VI[0] != 0!!!!\n");
+	if (VU->VF[0].f.x != 0.0f) DbgCon.Error("VF[0].x != 0.0!!!!\n");
+	if (VU->VF[0].f.y != 0.0f) DbgCon.Error("VF[0].y != 0.0!!!!\n");
+	if (VU->VF[0].f.z != 0.0f) DbgCon.Error("VF[0].z != 0.0!!!!\n");
+	if (VU->VF[0].f.w != 1.0f) DbgCon.Error("VF[0].w != 1.0!!!!\n");
 }
 
-namespace VU1micro
+InterpVU1::InterpVU1()
 {
-	void intAlloc()
+	IsInterpreter = true;
+}
+
+void InterpVU1::Step()
+{
+	vu1Exec( &VU1 );
+}
+
+void InterpVU1::ExecuteBlock()
+{
+	for (int i = 128; i--;)
 	{
+		if ((VU0.VI[REG_VPU_STAT].UL & 0x100) == 0)
+	{
+			// See VU0Interp's version for details.  Or just read the comment below
+			// that simply reads "execute one more" and wonder: Why? Really... WHY?
+			// --air
+
+			if( (i < 0) && (VU1.branch || VU1.ebit) )
+	{
+				// execute one more
+				vu1Exec(&VU1);
 	}
-
-	void __fastcall intClear(u32 Addr, u32 Size)
-	{
-	}
-
-	void intShutdown()
-	{
-	}
-
-	static void intReset()
-	{
-	}
-
-	static void intStep()
-	{
-		vu1Exec( &VU1 );
-	}
-
-	static void intExecuteBlock()
-	{
-		int i;
-	#ifdef _DEBUG
-		int prevbranch;
-	#endif
-
-		for (i = 128; i--;) {
-			if ((VU0.VI[REG_VPU_STAT].UL & 0x100) == 0)
 				break;
-
-	#ifdef _DEBUG
-			prevbranch = vu1branch;
-	#endif
-			vu1Exec(&VU1);
 		}
 
-		if( i < 0 && (VU1.branch || VU1.ebit) ) {
-			// execute one more
 			vu1Exec(&VU1);
 		}
-	}
 }
 
-using namespace VU1micro;
-
-const VUmicroCpu intVU1 = 
-{
-	intReset
-,	intStep
-,	intExecuteBlock
-,	intClear
-};
