@@ -26,6 +26,7 @@
 #include "targets.h"
 #include "ZZoglFlushHack.h"
 #include "ZZoglShaders.h"
+#include "ZZClut.h"
 #include <math.h>
 
 //------------------ Defines
@@ -337,14 +338,9 @@ inline void VisualBufferMessage(int context)
 					 curvb.tex0.th, curvb.tex0.tcc, curvb.tex0.tfx, curvb.tex0.cbp,
 					 curvb.tex0.cpsm, curvb.tex0.csm, curvb.tex0.csa, curvb.tex0.cld);
 	char* Name;
-//	if (g_bSaveTex) {
-//		if (g_bSaveTex == 1)
 	Name = NamedSaveTex(&curvb.tex0, 1);
-//		else
-//			Name = NamedSaveTex(&curvb.tex0, 0);
 	ZZLog::Error_Log("TGA name '%s'.", Name);
 	free(Name);
-//	}
 	ZZLog::Debug_Log("buffer %ld.\n", BufferNumber);
 #endif
 }
@@ -455,13 +451,49 @@ inline bool FlushInitialTest(VB& curvb, const pixTest& curtest, int context)
 	return false;
 }
 
+inline void TargetLog(int& tbw, int& tbp0, int& tpsm, VB& curvb, bool miss)
+{
+#ifdef _DEBUG
+	if (tbp0 == 0x3600 && tbw == 0x100)
+	{
+		if (miss)
+		{
+			ZZLog::Debug_Log("Miss %x 0x%x %d", tbw, tbp0, tpsm);
+
+			typedef map<u32, CRenderTarget*> MAPTARGETS;
+
+			for (MAPTARGETS::iterator itnew = s_RTs.mapTargets.begin(); itnew != s_RTs.mapTargets.end(); ++itnew)
+			{
+				ZZLog::Debug_Log("\tRender %x 0x%x %x", itnew->second->fbw, itnew->second->fbp, itnew->second->psm);
+			}
+
+			for (MAPTARGETS::iterator itnew = s_DepthRTs.mapTargets.begin(); itnew != s_DepthRTs.mapTargets.end(); ++itnew)
+			{
+				ZZLog::Debug_Log("\tDepth %x 0x%x %x", itnew->second->fbw, itnew->second->fbp, itnew->second->psm);
+			}
+
+			ZZLog::Debug_Log("\tCurvb 0x%x 0x%x 0x%x %x", curvb.frame.fbp, curvb.prndr->end, curvb.prndr->fbp, curvb.prndr->fbw);
+		}
+		else
+			ZZLog::Debug_Log("Hit  %x 0x%x %x", tbw, tbp0, tpsm);
+	}
+#endif
+}
+
 // Try to different approach if texture target was not found
 inline CRenderTarget* FlushReGetTarget(int& tbw, int& tbp0, int& tpsm, VB& curvb)
 {
 	// This was incorrect code
 	CRenderTarget* ptextarg = NULL;
-
-	if ((ptextarg == NULL) && (tpsm == PSMT8) && (conf.settings().reget))
+	
+	if (PSMT_ISZTEX(tpsm))
+	{
+		// try depth
+		ptextarg = s_DepthRTs.GetTarg(tbp0, tbw);
+	}
+	
+	// I wonder if either of these hacks are useful, or if I can just remove them?
+	if ((conf.settings().reget) && (tpsm == PSMT8))
 	{
 		// check for targets with half the width. Break Valkyrie Chronicles
 		ptextarg = s_RTs.GetTarg(tbp0, tbw / 2);
@@ -486,14 +518,7 @@ inline CRenderTarget* FlushReGetTarget(int& tbw, int& tbp0, int& tpsm, VB& curvb
 		}
 	}
 
-
-	if (PSMT_ISZTEX(tpsm) && (ptextarg == NULL))
-	{
-		// try depth
-		ptextarg = s_DepthRTs.GetTarg(tbp0, tbw);
-	}
-
-	if ((ptextarg == NULL) && (conf.settings().texture_targs))
+	if ((conf.settings().texture_targs) && (ptextarg == NULL))
 	{
 		// check if any part of the texture intersects the current target
 		if (!PSMT_ISCLUT(tpsm) && (curvb.tex0.tbp0 >= curvb.frame.fbp) && ((curvb.tex0.tbp0) < curvb.prndr->end))
@@ -501,45 +526,20 @@ inline CRenderTarget* FlushReGetTarget(int& tbw, int& tbp0, int& tpsm, VB& curvb
 			ptextarg = curvb.prndr;
 		}
 	}
-
-#ifdef _DEBUG
-	if (tbp0 == 0x3600 && tbw == 0x100)
-	{
-		if (ptextarg == NULL)
-		{
-			ZZLog::Debug_Log("Miss %x 0x%x %d", tbw, tbp0, tpsm);
-
-			typedef map<u32, CRenderTarget*> MAPTARGETS;
-
-			for (MAPTARGETS::iterator itnew = s_RTs.mapTargets.begin(); itnew != s_RTs.mapTargets.end(); ++itnew)
-			{
-				ZZLog::Debug_Log("\tRender %x 0x%x %x", itnew->second->fbw, itnew->second->fbp, itnew->second->psm);
-			}
-
-			for (MAPTARGETS::iterator itnew = s_DepthRTs.mapTargets.begin(); itnew != s_DepthRTs.mapTargets.end(); ++itnew)
-			{
-				ZZLog::Debug_Log("\tDepth %x 0x%x %x", itnew->second->fbw, itnew->second->fbp, itnew->second->psm);
-			}
-
-			ZZLog::Debug_Log("\tCurvb 0x%x 0x%x 0x%x %x", curvb.frame.fbp, curvb.prndr->end, curvb.prndr->fbp, curvb.prndr->fbw);
-		}
-		else
-			ZZLog::Debug_Log("Hit  %x 0x%x %x", tbw, tbp0, tpsm);
-	}
-
-#endif
+	
+	TargetLog(tbw, tbp0, tpsm, curvb, (ptextarg == NULL));
 
 	return ptextarg;
 }
 
-// Find target to draw a texture, it's highly p
+// Find target to draw a texture.
 inline CRenderTarget* FlushGetTarget(VB& curvb)
 {
 	int tbw, tbp0, tpsm;
 
 	CRenderTarget* ptextarg = NULL;
 
-	if (!curvb.curprim.tme) return ptextarg;
+	if (!curvb.curprim.tme) return ptextarg; // Which would be NULL, currently.
 
 	if (curvb.bNeedTexCheck)
 	{
@@ -558,8 +558,7 @@ inline CRenderTarget* FlushGetTarget(VB& curvb)
 
 	ptextarg = s_RTs.GetTarg(tbp0, tbw);
 
-	if (ptextarg == NULL)
-		ptextarg = FlushReGetTarget(tbw, tbp0, tpsm, curvb);
+	if (ptextarg == NULL) ptextarg = FlushReGetTarget(tbw, tbp0, tpsm, curvb);
 
 	if ((ptextarg != NULL) && !(ptextarg->status & CRenderTarget::TS_NeedUpdate))
 	{
@@ -596,6 +595,7 @@ inline CRenderTarget* FlushGetTarget(VB& curvb)
 	}
 	else 
 	{
+		// If a texture needs updating, clear it.
 		ptextarg = NULL;
 	}
 
@@ -726,57 +726,19 @@ inline void FlushDecodeClut(VB& curvb, GLuint& ptexclut)
 
 	if (ptexclut != 0)
 	{
-
-		int nClutOffset = 0, clutsize;
+		int clutsize;
 		int entries = PSMT_IS8CLUT(curvb.tex0.psm) ? 256 : 16;
 
 		if (curvb.tex0.csm && curvb.tex0.csa)
 			ZZLog::Debug_Log("ERROR, csm1.");
 
-		if (PSMT_IS32BIT(curvb.tex0.cpsm))   // 32 bit
-		{
-			nClutOffset = 64 * curvb.tex0.csa;
+		if (PSMT_IS32BIT(curvb.tex0.cpsm)) {
 			clutsize = min(entries, 256 - curvb.tex0.csa * 16) * 4;
-		}
-		else
-		{
-			nClutOffset = 64 * (curvb.tex0.csa & 15) + (curvb.tex0.csa >= 16 ? 2 : 0);
+		    ClutBuffer_to_Array<u32>((u32*)&data[0], curvb.tex0.csa, clutsize);
+        } else {
 			clutsize = min(entries, 512 - curvb.tex0.csa * 16) * 2;
-		}
-
-		if (PSMT_IS32BIT(curvb.tex0.cpsm))   // 32 bit
-		{
-			memcpy_amd(&data[0], g_pbyGSClut + nClutOffset, clutsize);
-		}
-		else
-		{
-			u16* pClutBuffer = (u16*)(g_pbyGSClut + nClutOffset);
-			u16* pclut = (u16*) & data[0];
-			int left = ((u32)nClutOffset & 2) ? 0 : ((nClutOffset & 0x3ff) / 2) + clutsize - 512;
-
-			if (left > 0) clutsize -= left;
-
-			while (clutsize > 0)
-			{
-				pclut[0] = pClutBuffer[0];
-				pclut++;
-				pClutBuffer += 2;
-				clutsize -= 2;
-			}
-
-			if (left > 0)
-			{
-				pClutBuffer = (u16*)(g_pbyGSClut + 2);
-
-				while (left > 0)
-				{
-					pclut[0] = pClutBuffer[0];
-					left -= 2;
-					pClutBuffer += 2;
-					pclut++;
-				}
-			}
-		}
+		    ClutBuffer_to_Array<u16>((u16*)&data[0], curvb.tex0.csa, clutsize);
+        }
 
 		GLenum tempType = PSMT_ISHALF_STORAGE(curvb.tex0) ? GL_UNSIGNED_SHORT_5_5_5_1 : GL_UNSIGNED_BYTE;
 		Texture2D(4, 256, 1, GL_RGBA, tempType, &data[0]);
@@ -983,6 +945,7 @@ inline FRAGMENTSHADER* FlushMadeNewTarget(VB& curvb, int exactcolor, int context
 	// save the texture
 	if (g_bSaveTex)
 	{
+        // FIXME: I suspect one of g_bSaveTex test variable is wrong
 		if (g_bSaveTex == 1)
 		{
 			SaveTex(&curvb.tex0, 1);
@@ -1900,23 +1863,14 @@ void SetTexInt(int context, FRAGMENTSHADER* pfragment, int settexint)
 	{
 		tex0Info& tex0 = vb[context].tex0;
 
-		CMemoryTarget* pmemtarg = g_MemTargs.GetMemoryTarget(tex0, 1);
+        if (vb[context].bVarsTexSync) {
+            SetTexVariablesInt(context, GetTexFilter(vb[context].tex1), tex0, true, pfragment, s_bForceTexFlush);
+        } else {
+            SetTexVariablesInt(context, GetTexFilter(vb[context].tex1), tex0, false, pfragment, s_bForceTexFlush);
 
-		if (vb[context].bVarsTexSync)
-		{
-			if (vb[context].pmemtarg != pmemtarg)
-			{
-				SetTexVariablesInt(context, GetTexFilter(vb[context].tex1), tex0, true, pfragment, s_bForceTexFlush);
-				vb[context].bVarsTexSync = true;
-			}
-		}
-		else
-		{
-			SetTexVariablesInt(context, GetTexFilter(vb[context].tex1), tex0, false, pfragment, s_bForceTexFlush);
-			vb[context].bVarsTexSync = true;
-
-			INC_TEXVARS();
-		}
+            INC_TEXVARS();
+        }
+        vb[context].bVarsTexSync = true;
 	}
 	else
 	{

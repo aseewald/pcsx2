@@ -27,7 +27,6 @@ using std::min;
 // A three-way toggle used to determine if the GIF is stalling (transferring) or done (finished).
 // Should be a gifstate_t rather then int, but I don't feel like possibly interfering with savestates right now.
 static int gifstate = GIF_STATE_READY;
-static bool gifempty = false;
 
 static bool gspath3done = false;
 
@@ -47,14 +46,14 @@ static __fi void clearFIFOstuff(bool full)
 	else
 		CSRreg.FIFO = CSR_FIFO_EMPTY;
 }
-
+extern bool SIGNAL_IMR_Pending;
 void gsPath1Interrupt()
 {
 	//DevCon.Warning("Path1 flush W %x, R %x", Path1WritePos, Path1ReadPos);
 
 	
 
-	if((gifRegs.stat.APATH <= GIF_APATH1 || (gifRegs.stat.IP3 == true && gifRegs.stat.APATH == GIF_APATH3)) && Path1WritePos > 0 && !gifRegs.stat.PSE)
+	if((gifRegs.stat.APATH <= GIF_APATH1 || (gifRegs.stat.IP3 == true && gifRegs.stat.APATH == GIF_APATH3)) && Path1WritePos > 0 && !gifRegs.stat.PSE && SIGNAL_IMR_Pending == false)
 	{
 		gifRegs.stat.P1Q = false;
 
@@ -62,7 +61,7 @@ void gsPath1Interrupt()
 		{
 			GetMTGS().PrepDataPacket(GIF_PATH_1, size);
 			//DevCon.Warning("Flush Size = %x", size);
-			while(size > 0)
+			while(size > 0 && SIGNAL_IMR_Pending == false)
 			{
 				uint count = GIFPath_CopyTag(GIF_PATH_1, ((u128*)Path1Buffer) + Path1ReadPos, size);
 				Path1ReadPos += count;
@@ -79,13 +78,18 @@ void gsPath1Interrupt()
 			if(Path1ReadPos == Path1WritePos)
 			{
 				Path1WritePos = Path1ReadPos = 0;
+			} 
+			else 
+			{
+				//DevCon.Warning("Queue quitting early due to signal or EOP %x", size);
+				gifRegs.stat.P1Q = true;
 			}
 		}
 	}
 	else
 	{
 		if(gifRegs.stat.PSE) DevCon.Warning("Path1 paused by GIF_CTRL");
-		DevCon.Warning("Looping??? IP3 %x APATH %x OPH %x", gifRegs.stat.IP3, gifRegs.stat.APATH, gifRegs.stat.OPH);
+		//DevCon.Warning("Looping??? IP3 %x APATH %x OPH %x", gifRegs.stat.IP3, gifRegs.stat.APATH, gifRegs.stat.OPH);
 		//if(!(cpuRegs.interrupt & (1<<28)) && Path1WritePos > 0)CPU_INT(28, 128);
 	}
 	
@@ -95,7 +99,7 @@ extern bool SIGNAL_IMR_Pending;
 
 __fi void gsInterrupt()
 {
-	GIF_LOG("gsInterrupt: %8.8x", cpuRegs.cycle);
+	GIF_LOG("gsInterrupt caught!");
 
 	if (dmacRegs.ctrl.MFD == MFD_GIF)  // GIF MFIFO
 	{
@@ -711,7 +715,6 @@ void SaveStateBase::gifFreeze()
 	Freeze( gifqwc );
 	Freeze( gspath3done );
 	Freeze( gscycles );
-	//Freeze(gifempty);
 	// Note: mfifocycles is not a persistent var, so no need to save it here.
 
 	int bufsize = Path1WritePos - Path1ReadPos;

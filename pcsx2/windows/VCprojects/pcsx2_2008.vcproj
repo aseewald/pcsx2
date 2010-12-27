@@ -1997,14 +1997,6 @@
 					>
 				</File>
 				<File
-					RelativePath="..\..\gui\AdvancedDialog.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\..\gui\AdvancedDialog.h"
-					>
-				</File>
-				<File
 					RelativePath="..\..\gui\Dialogs\AssertionDialog.cpp"
 					>
 				</File>
@@ -2237,6 +2229,40 @@
 						<Tool
 							Name="VCCustomBuildTool"
 							Description=""
+							CommandLine="&quot;$(InputDir)\bin2cpp.cmd&quot; $(InputFileName)&#x0D;&#x0A;"
+							Outputs="&quot;$(InputDir)\$(InputName).h"
+						/>
+					</FileConfiguration>
+				</File>
+				<File
+					RelativePath="..\..\gui\Resources\ConfigIcon_Appearance.png"
+					>
+					<FileConfiguration
+						Name="Debug|Win32"
+						>
+						<Tool
+							Name="VCCustomBuildTool"
+							Description=""
+							CommandLine="&quot;$(InputDir)\bin2cpp.cmd&quot; $(InputFileName)&#x0D;&#x0A;"
+							Outputs="&quot;$(InputDir)\$(InputName).h"
+						/>
+					</FileConfiguration>
+					<FileConfiguration
+						Name="Devel|Win32"
+						>
+						<Tool
+							Name="VCCustomBuildTool"
+							Description="Compiling Bitmap Resource..."
+							CommandLine="&quot;$(InputDir)\bin2cpp.cmd&quot; $(InputFileName)&#x0D;&#x0A;"
+							Outputs="&quot;$(InputDir)\$(InputName).h"
+						/>
+					</FileConfiguration>
+					<FileConfiguration
+						Name="Release|Win32"
+						>
+						<Tool
+							Name="VCCustomBuildTool"
+							Description="Compiling Bitmap Resource..."
 							CommandLine="&quot;$(InputDir)\bin2cpp.cmd&quot; $(InputFileName)&#x0D;&#x0A;"
 							Outputs="&quot;$(InputDir)\$(InputName).h"
 						/>

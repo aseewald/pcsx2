@@ -212,6 +212,10 @@
 			<Add option="-m32" />
 			<Add option="-fvisibility=hidden" />
 			<Add option="-DWX_PRECOMP" />
+			<Add option="-DGDK_DISABLE_DEPRECATED" />
+			<Add option="-DGTK_DISABLE_DEPRECATED" />
+			<Add option="-DGTK_DISABLE_SINGLE_INCLUDES" />
+			<Add option="-DGSEAL_ENABLE" />
 			<Add directory="$(SvnRootDir)/common/include/" />
 			<Add directory="$(SvnRootDir)/3rdparty/" />
 			<Add directory="$(ProjectRootDir)" />
@@ -395,8 +399,6 @@
 		<Unit filename="../ZipTools/ThreadedZipTools.h" />
 		<Unit filename="../ZipTools/thread_gzip.cpp" />
 		<Unit filename="../ZipTools/thread_lzma.cpp" />
-		<Unit filename="../gui/AdvancedDialog.cpp" />
-		<Unit filename="../gui/AdvancedDialog.h" />
 		<Unit filename="../gui/App.h" />
 		<Unit filename="../gui/AppAccelerators.h" />
 		<Unit filename="../gui/AppAssert.cpp" />
@@ -508,6 +510,11 @@
 		</Unit>
 		<Unit filename="../gui/Resources/ButtonIcon_Camera.h" />
 		<Unit filename="../gui/Resources/ButtonIcon_Camera.png">
+			<Option compile="1" />
+			<Option weight="0" />
+			<Option compiler="gcc" use="1" buildCommand="$(SvnRootDir)/tools/bin2app.sh $(SvnRootDir) $file" />
+		</Unit>
+		<Unit filename="../gui/Resources/ConfigIcon_Appearance.png">
 			<Option compile="1" />
 			<Option weight="0" />
 			<Option compiler="gcc" use="1" buildCommand="$(SvnRootDir)/tools/bin2app.sh $(SvnRootDir) $file" />

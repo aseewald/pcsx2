@@ -27,7 +27,7 @@ using namespace pxSizerFlags;
 
 wxString GetMsg_McdNtfsCompress()
 {
-	return pxE( ".Panel:Mcd:NtfsCompress", 
+	return pxE( "!Panel:Mcd:NtfsCompress", 
 		L"NTFS compression is built-in, fast, and completely reliable; and typically compresses memory cards "
 		L"very well (this option is highly recommended)."
 	);
@@ -38,7 +38,7 @@ Panels::McdConfigPanel_Toggles::McdConfigPanel_Toggles(wxWindow *parent)
 {
 	m_check_Ejection = new pxCheckBox( this,
 		_("Auto-eject memory cards when loading savestates"),
-		pxE( ".Panel:Mcd:EnableEjection",
+		pxE( "!Panel:Mcd:EnableEjection",
 			L"Avoids memory card corruption by forcing games to re-index card contents after "
 			L"loading from savestates.  May not be compatible with all games (Guitar Hero)."
 		)
@@ -98,9 +98,6 @@ Dialogs::McdConfigDialog::McdConfigDialog( wxWindow* parent )
 	
 	// [TODO] : Plan here is to add an advanced tab which gives the user the ability
 	// to configure the names of each memory card slot.
-
-	//AddPage<McdConfigPanel_Toggles>		( wxLt("Settings"),		cfgid.MemoryCard );
-	//AddPage<McdConfigPanel_Standard>	( wxLt("Slots 1/2"),	cfgid.MemoryCard );
 
 	*this	+= Heading(_("Drag items over other items in the list to swap or copy memory cards."))	| StdExpand();
 	*this	+= StdPadding;

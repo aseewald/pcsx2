@@ -90,6 +90,21 @@ namespace Dialogs
 	};
 
 	// --------------------------------------------------------------------------------------
+	//  InterfaceConfigDialog
+	// --------------------------------------------------------------------------------------
+	class InterfaceConfigDialog : public BaseConfigurationDialog
+	{
+	public:
+		virtual ~InterfaceConfigDialog() throw() {}
+		InterfaceConfigDialog(wxWindow* parent=NULL);
+		static wxString GetNameStatic() { return L"InterfaceConfig"; }
+		wxString GetDialogName() const { return GetNameStatic(); }
+
+	protected:
+		virtual wxString& GetConfSettingsTabName() const { return g_Conf->AppSettingsTabName; }
+	};
+
+	// --------------------------------------------------------------------------------------
 	//  McdConfigDialog
 	// --------------------------------------------------------------------------------------
 	class McdConfigDialog : public BaseConfigurationDialog
@@ -142,7 +157,7 @@ namespace Dialogs
 		wxString GetDialogName() const { return GetNameStatic(); }
 
 	protected:
-		virtual wxString& GetConfSettingsTabName() const { return g_Conf->AppSettingsTabName; }
+		virtual wxString& GetConfSettingsTabName() const { return g_Conf->ComponentsTabName; }
 	};
 
 	// --------------------------------------------------------------------------------------
