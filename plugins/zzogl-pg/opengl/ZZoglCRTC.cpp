@@ -58,6 +58,16 @@ extern void ZZDestroy();
 extern void ChangeDeviceSize(int nNewWidth, int nNewHeight);
 
 extern GLuint vboRect;
+
+// I'm making this variable global for the moment in the course of fiddling with the interlace code 
+// to try and make it more straightforward.
+int bInterlace = 0;
+
+bool INTERLACE_COUNT()
+{
+	return (bInterlace && gs.interlace == (conf.interlace));
+}
+
 // Adjusts vertex shader BitBltPos vector v to preserve aspect ratio. It used to emulate 4:3 or 16:9.
 void AdjustTransToAspect(float4& v)
 {
@@ -151,7 +161,7 @@ inline void FrameSavingHelper()
 }
 
 // Function populated tex0Info[2] array
-inline void FrameObtainDispinfo(u32 bInterlace, tex0Info* dispinfo)
+inline void FrameObtainDispinfo(tex0Info* dispinfo)
 {
 	for (int i = 0; i < 2; ++i)
 	{
@@ -187,7 +197,7 @@ inline void FrameObtainDispinfo(u32 bInterlace, tex0Info* dispinfo)
 extern bool s_bWriteDepth;
 
 // Something should be done before Renderering the picture.
-inline void RenderStartHelper(u32 bInterlace)
+inline void RenderStartHelper()
 {
 	if (conf.mrtdepth && pvs[8] == NULL)
 	{
@@ -240,14 +250,14 @@ inline void RenderStartHelper(u32 bInterlace)
 // on image y coords. So if we write valpha.z * F + valpha.w + 0.5, it would be switching odd
 // and even strings at each frame.
 // valpha.x and y are used for image blending.
-inline float4 RenderGetForClip(u32 bInterlace, int interlace, int psm, FRAGMENTSHADER* prog)
+inline float4 RenderGetForClip(int psm, FRAGMENTSHADER* prog)
 {
 	SetShaderCaller("RenderGetForClip");
 
 	float4 valpha;
 	// first render the current render targets, then from ptexMem
 
-	if (psm == 1)
+	if (psm == PSMCT24)
 	{
 		valpha.x = 1;
 		valpha.y = 0;
@@ -260,7 +270,7 @@ inline float4 RenderGetForClip(u32 bInterlace, int interlace, int psm, FRAGMENTS
 
 	if (bInterlace)
 	{
-		if (interlace == (conf.interlace & 1))
+		if (gs.interlace == (conf.interlace & 1))
 		{
 			// pass if odd
 			valpha.z = 1.0f;
@@ -287,7 +297,7 @@ inline float4 RenderGetForClip(u32 bInterlace, int interlace, int psm, FRAGMENTS
 
 // Put interlaced texture in use for shader prog.
 // Note: if frame interlaced it's th is halved, so we should x2 it.
-inline void RenderCreateInterlaceTex(u32 bInterlace, int th, FRAGMENTSHADER* prog)
+inline void RenderCreateInterlaceTex(int th, FRAGMENTSHADER* prog)
 {
 	if (!bInterlace) return;
 
@@ -351,12 +361,12 @@ inline void RenderUpdateStencil(int i, bool* bUsingStencil)
 }
 
 // CRTC24 could not be rendered
-inline void RenderCRTC24helper(u32 bInterlace, int interlace, int psm)
+inline void RenderCRTC24helper(int psm)
 {
 	ZZLog::Debug_Log("ZZogl: CRTC24!!! I'm trying to show something.");
 	SetShaderCaller("RenderCRTC24helper");
 	// assume that data is already in ptexMem (do Resolve?)
-	RenderGetForClip(bInterlace, interlace, psm, &ppsCRTC24[bInterlace]);
+	RenderGetForClip(psm, &ppsCRTC24[bInterlace]);
 	ZZshSetPixelShader(ppsCRTC24[bInterlace].prog);
 	
 	DrawTriangleArray();
@@ -394,7 +404,7 @@ inline int RenderGetOffsets(int* dby, int* movy, tex0Info& texframe, CRenderTarg
 }
 
 // BltBit shader calculate vertex (4 coord's pixel) position at the viewport.
-inline float4 RenderSetTargetBitPos(int dh, int th, int movy, bool isInterlace)
+inline float4 RenderSetTargetBitPos(int dh, int th, int movy)
 {
 	SetShaderCaller("RenderSetTargetBitPos");
 	float4 v;
@@ -408,7 +418,7 @@ inline float4 RenderSetTargetBitPos(int dh, int th, int movy, bool isInterlace)
 
 	AdjustTransToAspect(v);
 
-	if (isInterlace)
+	if (INTERLACE_COUNT())
 	{
 		// move down by 1 pixel
 		v.w += 1.0f / (float)dh ;
@@ -423,7 +433,7 @@ inline float4 RenderSetTargetBitPos(int dh, int th, int movy, bool isInterlace)
 // For example, use tw / X and tw / X magnify the viewport.
 // Interlaced output is little out of VB, it could be seen as an evil blinking line on top
 // and bottom, so we try to remove it.
-inline float4 RenderSetTargetBitTex(float th, float tw, float dh, float dw, bool isInterlace)
+inline float4 RenderSetTargetBitTex(float th, float tw, float dh, float dw)
 {
 	SetShaderCaller("RenderSetTargetBitTex");
 
@@ -432,7 +442,7 @@ inline float4 RenderSetTargetBitTex(float th, float tw, float dh, float dw, bool
 
 	// Incorrect Aspect ratio on interlaced frames
 
-	if (isInterlace)
+	if (INTERLACE_COUNT())
 	{
 		v.y -= 1.0f / conf.height;
 		v.w += 1.0f / conf.height;
@@ -455,7 +465,7 @@ inline float4 RenderSetTargetBitTrans(int th)
 
 // use g_fInvTexDims to store inverse texture dims
 // Seems, that Targ shader does not use it
-inline float4 RenderSetTargetInvTex(int bInterlace, int tw, int th, FRAGMENTSHADER* prog)
+inline float4 RenderSetTargetInvTex(int tw, int th, FRAGMENTSHADER* prog)
 {
 	SetShaderCaller("RenderSetTargetInvTex");
 
@@ -496,10 +506,10 @@ inline bool RenderLookForABetterTarget(int fbp, int tbp, list<CRenderTarget*>& l
 	return false;
 }
 
-inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listTargs, int i, bool* bUsingStencil, int interlace, int bInterlace);
+inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listTargs, int i, bool* bUsingStencil);
 
 // First try to draw frame from targets. 
-inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& listTargs, int i, bool* bUsingStencil, int interlace, int bInterlace)
+inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& listTargs, int i, bool* bUsingStencil)
 {
 	// get the start and end addresses of the buffer
 	int bpp = RenderGetBpp(texframe.psm);
@@ -542,18 +552,18 @@ inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& list
 				SetShaderCaller("RenderCheckForTargets");
 
 				// Texture
-				float4 v = RenderSetTargetBitTex((float)RW(texframe.tw), (float)RH(dh), (float)RW(pfb->DBX), (float)RH(dby), INTERLACE_COUNT);
+				float4 v = RenderSetTargetBitTex((float)RW(texframe.tw), (float)RH(dh), (float)RW(pfb->DBX), (float)RH(dby));
 
 				// dest rect
-				v = RenderSetTargetBitPos(dh, texframe.th, movy, INTERLACE_COUNT);
+				v = RenderSetTargetBitPos(dh, texframe.th, movy);
 				v = RenderSetTargetBitTrans(ptarg->fbh);
-				v = RenderSetTargetInvTex(bInterlace, texframe.tbw, ptarg->fbh, &ppsCRTCTarg[bInterlace]) ; 	// FIXME. This is no use
+				v = RenderSetTargetInvTex(texframe.tbw, ptarg->fbh, &ppsCRTCTarg[bInterlace]) ; 	// FIXME. This is no use
 
-				float4 valpha = RenderGetForClip(bInterlace, interlace, texframe.psm, &ppsCRTCTarg[bInterlace]);
+				float4 valpha = RenderGetForClip(texframe.psm, &ppsCRTCTarg[bInterlace]);
 
 				// inside vb[0]'s target area, so render that region only
 				ZZshGLSetTextureParameter(ppsCRTCTarg[bInterlace].prog, ppsCRTCTarg[bInterlace].sFinal, ptarg->ptex, "CRTC target");
-				RenderCreateInterlaceTex(bInterlace, texframe.th, &ppsCRTCTarg[bInterlace]);
+				RenderCreateInterlaceTex(texframe.th, &ppsCRTCTarg[bInterlace]);
 
 				ZZshSetPixelShader(ppsCRTCTarg[bInterlace].prog);
 
@@ -571,14 +581,14 @@ inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& list
 
 		++it;
 	}
-	RenderCheckForMemory(texframe, listTargs, i, bUsingStencil, interlace, bInterlace);
+	RenderCheckForMemory(texframe, listTargs, i, bUsingStencil);
 }
 
 
 // The same as the previous, but from memory.
 // If you ever wondered why a picture from a minute ago suddenly flashes on the screen (say, in Mana Khemia),
 // this is the function that does it.
-inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listTargs, int i, bool* bUsingStencil, int interlace, int bInterlace)
+inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listTargs, int i, bool* bUsingStencil)
 {
 	float4 v;
 	
@@ -616,16 +626,16 @@ inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listT
 	
 	// Fixme: Why is this here?
 	// We should probably call RenderSetTargetBitTex instead.
-	v = RenderSetTargetBitTex(w1, h1, w2, h2, INTERLACE_COUNT);
+	v = RenderSetTargetBitTex(w1, h1, w2, h2);
 
 	// finally render from the memory (note that the stencil buffer will keep previous regions)
-	v = RenderSetTargetBitPos(1, 1, 0, INTERLACE_COUNT);
+	v = RenderSetTargetBitPos(1, 1, 0);
 	v = RenderSetTargetBitTrans(texframe.th);
-	v = RenderSetTargetInvTex(bInterlace, texframe.tw, texframe.th, &ppsCRTC[bInterlace]);
-	float4 valpha = RenderGetForClip(bInterlace, interlace, texframe.psm, &ppsCRTC[bInterlace]);
+	v = RenderSetTargetInvTex(texframe.tw, texframe.th, &ppsCRTC[bInterlace]);
+	float4 valpha = RenderGetForClip(texframe.psm, &ppsCRTC[bInterlace]);
 
 	ZZshGLSetTextureParameter(ppsCRTC[bInterlace].prog, ppsCRTC[bInterlace].sMemory, vb[0].pmemtarg->ptex->tex, "CRTC memory");
-	RenderCreateInterlaceTex(bInterlace, texframe.th, &ppsCRTC[bInterlace]);
+	RenderCreateInterlaceTex(texframe.th, &ppsCRTC[bInterlace]);
 	ZZshSetPixelShader(ppsCRTC[bInterlace].prog);
 	
 	DrawTriangleArray();
@@ -841,18 +851,18 @@ inline void AfterRendererAutoresetTargets()
 
 int count = 0;
 // The main renderer function
-void RenderCRTC(int interlace)
+void RenderCRTC()
 {
 	if (FrameSkippingHelper()) return;
 
-	u32 bInterlace = SMODE2->INT && SMODE2->FFMD && (conf.interlace < 2);
+	bInterlace = SMODE2->INT && SMODE2->FFMD && (conf.interlace < 2);
 
-	RenderStartHelper(bInterlace);
+	RenderStartHelper();
 
 	bool bUsingStencil = false;
 	tex0Info dispinfo[2];
 
-	FrameObtainDispinfo(bInterlace, dispinfo);
+	FrameObtainDispinfo(dispinfo);
 
 	// start from the last circuit
 	for (int i = !PMODE->SLBG; i >= 0; --i)
@@ -872,9 +882,9 @@ void RenderCRTC(int interlace)
 		if (i == 0) RenderSetupBlending();
 		if (bUsingStencil) RenderSetupStencil(i);
 
-		if (texframe.psm == 0x12)
+		if (texframe.psm == 0x12) // Probably broken - 0x12 isn't a valid psm. 24 bit is 1.
 		{
-			RenderCRTC24helper(bInterlace, interlace, texframe.psm);
+			RenderCRTC24helper(texframe.psm);
 			continue;
 		}
 
@@ -882,7 +892,7 @@ void RenderCRTC(int interlace)
 		list<CRenderTarget*> listTargs;
 
 		// if we could not draw image from target's do it from memory
-		RenderCheckForTargets(texframe, listTargs, i, &bUsingStencil, interlace, bInterlace);
+		RenderCheckForTargets(texframe, listTargs, i, &bUsingStencil);
 	}
 
 	GL_REPORT_ERRORD();

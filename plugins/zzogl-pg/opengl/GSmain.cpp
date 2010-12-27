@@ -81,7 +81,7 @@ extern int ZZSave(s8* pbydata);
 extern bool ZZLoad(s8* pbydata);
 
 // switches the render target to the real target, flushes the current render targets and renders the real image
-extern void RenderCRTC(int interlace);
+extern void RenderCRTC();
 
 #if defined(_WIN32) && defined(_DEBUG)
 HANDLE g_hCurrentThread = NULL;
@@ -468,7 +468,16 @@ static __forceinline void SetGSTitle()
 	GLWin.SetTitle(strtitle);
 }
 
-void CALLBACK GSvsync(int interlace)
+// This isn't implemented for some reason? Adding a field for it for the moment, till I get a chance to look closer.
+void CALLBACK GSsetVsync(int enabled)
+{
+	FUNCLOG
+
+	ZZLog::Debug_Log("Setting VSync to 0x%x.", enabled);
+	gs.vsync = enabled;
+}
+
+void CALLBACK GSvsync(int current_interlace)
 {
 	FUNCLOG
 
@@ -481,8 +490,9 @@ void CALLBACK GSvsync(int interlace)
 
 	g_nRealFrame++;
 
-	// !interlace? Hmmm... Fixme.
-	RenderCRTC(!interlace);
+	// The value passed seems to either be 0 or 0x2000, and we want 0 or 1. Perhaps !! would be better...
+	gs.interlace = !current_interlace;
+	RenderCRTC();
 
 	GLWin.ProcessEvents();
 

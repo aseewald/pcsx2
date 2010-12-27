@@ -540,6 +540,10 @@ typedef struct
 	GIFRegDIMX dimx;
 	GSMemory mem;
 	GSClut clut_buffer;
+	
+	// Subject to change.
+	int vsync, interlace;
+	
 	int primNext(int inc = 1)
 	{
         // Note: ArraySize(gsvertex) == 2^n => modulo is replaced by an and instruction
