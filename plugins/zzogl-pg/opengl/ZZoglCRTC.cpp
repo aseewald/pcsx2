@@ -399,17 +399,17 @@ inline int RenderGetBpp(int psm)
 
 // We want to draw ptarg on screen, that could be disaligned to viewport.
 // So we do aligning it by height.
-inline int RenderGetOffsets(int* dby, int* movy, tex0Info& texframe, CRenderTarget* ptarg, int bpp)
+inline int RenderGetOffsets(int& dby, int& movy, tex0Info& texframe, CRenderTarget* ptarg, int bpp)
 {
-	*dby += (256 / bpp) * (texframe.tbp0 - ptarg->fbp) / texframe.tbw;
+	dby += (256 / bpp) * (texframe.tbp0 - ptarg->fbp) / texframe.tbw;
 
-	if (*dby < 0)
+	if (dby < 0)
 	{
-		*movy = -*dby;
-		*dby = 0;
+		movy = -dby;
+		dby = 0;
 	}
 
-	return min(ptarg->fbh - *dby, texframe.th - *movy);
+	return min(ptarg->fbh - dby, texframe.th - movy);
 }
 
 // BltBit shader calculate vertex (4 coord's pixel) position at the viewport.
@@ -494,7 +494,7 @@ inline float4 RenderSetTargetInvTex(int tw, int th, CRTC_TYPE render_type)
 }
 
 // Metal Slug 5 hack (as was written). If target tbp not equal to framed fbp, than we look for a better possibility,
-// Note, than after true result iterator it could not be used.
+// Note, than after true result iterator, it could not be used.
 inline bool RenderLookForABetterTarget(int fbp, int tbp, list<CRenderTarget*>& listTargs, list<CRenderTarget*>::iterator& it)
 {
 	if (fbp == tbp) return false;
@@ -547,12 +547,12 @@ inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& list
 			if (RenderLookForABetterTarget(ptarg->fbp, texframe.tbp0, listTargs, it))
 			{
 				continue;
-			} 
+			}
 
 			if (g_bSaveFinalFrame) SaveTexture("frame1.tga", GL_TEXTURE_RECTANGLE_NV, ptarg->ptex, RW(ptarg->fbw), RH(ptarg->fbh));
 
 			// determine the rectangle to render
-			int dh = RenderGetOffsets(&dby, &movy, texframe, ptarg, bpp);
+			int dh = RenderGetOffsets(dby, movy, texframe, ptarg, bpp);
 
 			if (dh >= 64)
 			{
@@ -613,6 +613,7 @@ inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& list
 inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listTargs, int circuit)
 {
 	float4 v;
+	FRAGMENTSHADER* pps;
 	
 	for (list<CRenderTarget*>::iterator it = listTargs.begin(); it != listTargs.end(); ++it)
 	{
@@ -622,7 +623,7 @@ inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listT
 	// context has to be 0
 	if (interlace_mode >= 2) ZZLog::Error_Log("CRCR Check for memory shader fault.");
 
-	//if (!bUsingStencil) RenderUpdateStencil(i);
+	if (!bUsingStencil) RenderUpdateStencil(circuit);
 		
 	SetShaderCaller("RenderCheckForMemory");
 
@@ -655,10 +656,11 @@ inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listT
 	v = RenderSetTargetBitTrans(texframe.th);
 	v = RenderSetTargetInvTex(texframe.tw, texframe.th, CRTC_RENDER);
 	float4 valpha = RenderGetForClip(texframe.psm, CRTC_RENDER);
+	pps = curr_ppsCRTC();
 
-	ZZshGLSetTextureParameter(curr_ppsCRTC()->prog, curr_ppsCRTC()->sMemory, vb[0].pmemtarg->ptex->tex, "CRTC memory");
-	RenderCreateInterlaceTex(texframe.th, CRTC_RENDER_TARG);
-	ZZshSetPixelShader(curr_ppsCRTC()->prog);
+	ZZshGLSetTextureParameter(pps->prog, pps->sMemory, vb[0].pmemtarg->ptex->tex, "CRTC memory");
+	RenderCreateInterlaceTex(texframe.th, CRTC_RENDER);
+	ZZshSetPixelShader(pps->prog);
 	
 	DrawTriangleArray();
 }
@@ -730,7 +732,6 @@ void ZZReset()
 
 	ZZGSStateReset();
 	ZZDestroy();
-	//clear_drawfn();
 	if (ZZKick != NULL) delete ZZKick;
 }
 
@@ -859,8 +860,6 @@ inline void AfterRendererAutoresetTargets()
 		--s_nResolved;
 }
 
-int count = 0;
-
 // The main renderer function
 void RenderCRTC()
 {
@@ -881,32 +880,14 @@ void RenderCRTC()
 	{
 		if (!Circuit_Enabled(i)) continue;
 		tex0Info& texframe = dispinfo[i];
-
-		// I don't think this is neccessary, now that we make sure the ciruit we are working with is enabled.
-		/*if (texframe.th <= 1) 
-		{
-			continue;
-		}*/
 		
 		if (SMODE2->INT && SMODE2->FFMD) 
 		{
 			texframe.th >>= 1;
-			
-			// Final Fantasy X-2 issue here.
-			/*if (conf.interlace == 2 && texframe.th >= 512) 
-			{
-				texframe.th >>= 1;
-			}*/
 		}
 		
 		if (i == 0) RenderSetupBlending();
 		if (bUsingStencil) RenderSetupStencil(i);
-
-		/*if (texframe.psm == 0x12) // Probably broken - 0x12 isn't a valid psm. 24 bit is 1.
-		{
-			RenderCRTC24helper(texframe.psm);
-			continue;
-		}*/
 
 		// We shader targets between two functions, so declare it here;
 		list<CRenderTarget*> listTargs;
