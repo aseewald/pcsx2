@@ -96,7 +96,7 @@ float4 g_vdepth, vlogz;
 FRAGMENTSHADER ppsBitBlt[2], ppsBitBltDepth, ppsOne;
 FRAGMENTSHADER ppsBaseTexture, ppsConvert16to32, ppsConvert32to16;
 FRAGMENTSHADER ppsRegular[4], ppsTexture[NUM_SHADERS];
-FRAGMENTSHADER ppsCRTC[2], ppsCRTC24[2], ppsCRTCTarg[2];
+FRAGMENTSHADER ppsCRTC[2], /*ppsCRTC24[2],*/ ppsCRTCTarg[2];
 VERTEXSHADER pvsBitBlt;
 
 extern u32 ptexBlocks;		// holds information on block tiling. It's texture number in OpenGL -- if 0 than such texture
@@ -612,8 +612,8 @@ bool ZZshLoadExtraEffects()
 	if( !bLoadSuccess )
 		ZZLog::Error_Log("Failed to create CRTC shaders.");
 	
-	LOAD_PS(SH_CRTC24PS, ppsCRTC24[0]);
-	LOAD_PS(SH_CRTC24INTERPS, ppsCRTC24[1]);
+//	LOAD_PS(SH_CRTC24PS, ppsCRTC24[0]);
+//	LOAD_PS(SH_CRTC24INTERPS, ppsCRTC24[1]);
 	LOAD_PS(SH_ZEROPS, ppsOne);
 	LOAD_PS(SH_BASETEXTUREPS, ppsBaseTexture);
 	LOAD_PS(SH_CONVERT16TO32PS, ppsConvert16to32);
@@ -811,7 +811,7 @@ bool ZZshLoadExtraEffects()
 	if( !bLoadSuccess )
 		ZZLog::Error_Log("Failed to create CRTC shaders.");
 	
-	LOAD_PS("CRTC24PS", ppsCRTC24[0], cgfProf); LOAD_PS("CRTC24InterPS", ppsCRTC24[1], cgfProf);
+//	LOAD_PS("CRTC24PS", ppsCRTC24[0], cgfProf); LOAD_PS("CRTC24InterPS", ppsCRTC24[1], cgfProf);
 	LOAD_PS("ZeroPS", ppsOne, cgfProf);
 	LOAD_PS("BaseTexturePS", ppsBaseTexture, cgfProf);
 	LOAD_PS("Convert16to32PS", ppsConvert16to32, cgfProf);

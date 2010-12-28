@@ -681,7 +681,7 @@ inline void FlushSetColorMask(VB& curvb)
 	if (maskG == 0xff) s_dwColorWrite &= ~COLORMASK_GREEN;
 	if (maskB == 0xff) s_dwColorWrite &= ~COLORMASK_BLUE;
 
-	if ((maskA == 0xff) || (curvb.curprim.abe && (curvb.test.atst == 2 && curvb.test.aref == 128)))
+	if ((maskA == 0xff) || (curvb.curprim.abe && (curvb.test.atst == ATST_LESS && curvb.test.aref == 128)))
 		s_dwColorWrite &= ~COLORMASK_ALPHA;
 
 	GL_COLORMASK(s_dwColorWrite);
@@ -712,7 +712,7 @@ inline int FlushGetExactcolor(const pixTest curtest)
 {
 	if (!(g_nPixelShaderVer&SHADER_REDUCED))
 		// ffx2 breaks when ==7
-		return ((curtest.ate && curtest.aref <= 128) && (curtest.atst == 4));//||curtest.atst==7);
+		return ((curtest.ate && curtest.aref <= 128) && (curtest.atst == ATST_EQUAL));// || curtest.atst == ATST_NOTEQUAL);
 
 	return 0;
 }
@@ -1115,7 +1115,7 @@ inline u32 AlphaRenderAlpha(VB& curvb, const pixTest curtest, FRAGMENTSHADER* pf
 
 	if (curvb.curprim.abe)
 	{
-		if ((bNeedBlendFactorInAlpha || ((curtest.ate && curtest.atst > 1) && (curtest.aref > 0x80))))
+		if ((bNeedBlendFactorInAlpha || ((curtest.ate && curtest.atst > ATST_ALWAYS) && (curtest.aref > 0x80))))
 		{
 			// need special stencil processing for the alpha
 			RenderAlphaTest(curvb, pfragment->sOneColor);
@@ -1190,7 +1190,7 @@ inline void AlphaTest(VB& curvb)
 
 //	return;
 	// Zeydlitz changed this with a reason! It's an "Alpha more than 1 hack."
-	if (curvb.test.ate == 1 && curvb.test.atst == 1 && curvb.test.date == 1)
+	if (curvb.test.ate == 1 && curvb.test.atst == ATST_ALWAYS && curvb.test.date == 1)
 	{
 		if (curvb.test.datm == 1)
 		{
@@ -1203,7 +1203,7 @@ inline void AlphaTest(VB& curvb)
 		}
 	}
 
-	if (!curvb.test.ate || curvb.test.atst > 0)
+	if (!curvb.test.ate || curvb.test.atst > ATST_NEVER)
 	{
 		Draw(curvb);
 	}
@@ -1245,15 +1245,15 @@ inline void AlphaPabe(VB& curvb, FRAGMENTSHADER* pfragment, int exactcolor)
 // First three cases are trivial manual.
 inline bool AlphaFailureIgnore(const pixTest curtest)
 {
-	if ((!curtest.ate) || (curtest.atst == 1) || (curtest.afail == 0)) return true;
+	if ((!curtest.ate) || (curtest.atst == ATST_ALWAYS) || (curtest.afail == AFAIL_KEEP)) return true;
 
 	if (conf.settings().no_alpha_fail && ((s_dwColorWrite < 8) || (s_dwColorWrite == 15 && curtest.atst == 5 && (curtest.aref == 64))))
 		return true;
 
 //	old and seemingly incorrect code.
-//	if ((s_dwColorWrite < 8 && s_dwColorWrite !=8) && curtest.afail == 1)
+//	if ((s_dwColorWrite < 8 && s_dwColorWrite !=8) && curtest.afail == AFAIL_FB_ONLY)
 //		return true;
-//	if ((s_dwColorWrite == 0xf) && curtest.atst == 5 && curtest.afail == 1 && !(conf.settings() & GAME_REGETHACK))
+//	if ((s_dwColorWrite == 0xf) && curtest.atst == ATST_GEQUAL && curtest.afail == AFAIL_FB_ONLY && !(conf.settings() & GAME_REGETHACK))
 //		return true;
 	return false;
 }
@@ -1261,7 +1261,7 @@ inline bool AlphaFailureIgnore(const pixTest curtest)
 // more work on alpha failure case
 inline void AlphaFailureTestJob(VB& curvb, const pixTest curtest,  FRAGMENTSHADER* pfragment, int exactcolor, bool bCanRenderStencil, int oldabe)
 {
-	// Note, case when ate == 1, atst == 0 and afail > 0 in documentation wrote as failure case. But it seems that
+	// Note, case when ate == 1, atst == ATST_NEVER and afail > AFAIL_KEEP in documentation wrote as failure case. But it seems that
 	// either doc's are incorrect or this case has some issues.
 	if (AlphaFailureIgnore(curtest)) return;
 
@@ -1278,7 +1278,7 @@ inline void AlphaFailureTestJob(VB& curvb, const pixTest curtest,  FRAGMENTSHADE
 
 	if (curtest.afail & 1)     // front buffer update only
 	{
-		if (curtest.afail == 3) glColorMask(1, 1, 1, 0);// disable alpha
+		if (curtest.afail == AFAIL_RGB_ONLY) glColorMask(1, 1, 1, 0);// disable alpha
 
 		glDepthMask(0);
 
@@ -1552,7 +1552,7 @@ __forceinline void RenderAlphaTest(const VB& curvb, ZZshParameter sOneColor)
 {
 	if (!g_bUpdateStencil) return;
 
-	if ((curvb.test.ate) && (curvb.test.afail == 1)) glDisable(GL_ALPHA_TEST);
+	if ((curvb.test.ate) && (curvb.test.afail == AFAIL_FB_ONLY)) glDisable(GL_ALPHA_TEST);
 
 	glDepthMask(0);
 
@@ -1582,10 +1582,10 @@ __forceinline void RenderAlphaTest(const VB& curvb, ZZshParameter sOneColor)
 		GL_STENCILFUNC_SET();
 		Draw(curvb);
 
-		if (curvb.test.ate && curvb.test.afail != 1 && USEALPHATESTING) glEnable(GL_ALPHA_TEST);
+		if (curvb.test.ate && curvb.test.afail != AFAIL_FB_ONLY && USEALPHATESTING) glEnable(GL_ALPHA_TEST);
 	}
 
-	if (curvb.test.ate && curvb.test.atst > 1 && curvb.test.aref > 0x80)
+	if (curvb.test.ate && curvb.test.atst > ATST_ALWAYS && curvb.test.aref > 0x80)
 	{
 		v = float4(1,1,0,0);
 		ZZshSetParameter4fv(sOneColor, v, "g_fOneColor");
@@ -1723,7 +1723,7 @@ __forceinline void ProcessFBA(const VB& curvb, ZZshParameter sOneColor)
 	glStencilOp(GL_KEEP, GL_KEEP, GL_ZERO);
 	Draw(curvb);
 
-	if (curvb.test.atst && USEALPHATESTING)
+	if ((curvb.test.atst != ATST_NEVER) && USEALPHATESTING)
 	{
 		glEnable(GL_ALPHA_TEST);
 		glAlphaFunc(g_dwAlphaCmp[curvb.test.atst], AlphaReferedValue(curvb.test.aref));

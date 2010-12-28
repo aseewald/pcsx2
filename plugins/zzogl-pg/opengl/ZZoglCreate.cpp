@@ -821,8 +821,8 @@ void ZZDestroy()
 	SAFE_RELEASE_PROG(ppsCRTCTarg[1].prog);
 	SAFE_RELEASE_PROG(ppsCRTC[0].prog);
 	SAFE_RELEASE_PROG(ppsCRTC[1].prog);
-	SAFE_RELEASE_PROG(ppsCRTC24[0].prog);
-	SAFE_RELEASE_PROG(ppsCRTC24[1].prog);
+//	SAFE_RELEASE_PROG(ppsCRTC24[0].prog);
+//	SAFE_RELEASE_PROG(ppsCRTC24[1].prog);
 	SAFE_RELEASE_PROG(ppsOne.prog);
 
 	safe_delete(font_p);

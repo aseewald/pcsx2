@@ -183,8 +183,32 @@ struct VERTEXSHADER
 	extern FRAGMENTSHADER ppsBaseTexture, ppsConvert16to32, ppsConvert32to16;
 
 	extern FRAGMENTSHADER ppsRegular[4], ppsTexture[NUM_SHADERS];
-	extern FRAGMENTSHADER ppsCRTC[2], ppsCRTC24[2], ppsCRTCTarg[2];
+	extern FRAGMENTSHADER ppsCRTC[2], /*ppsCRTC24[2],*/ ppsCRTCTarg[2];
 
+	extern int bInterlace;
+
+	enum CRTC_TYPE
+	{
+		CRTC_RENDER,
+		//CRTC_RENDER_24,
+		CRTC_RENDER_TARG
+	};
+
+	static __forceinline FRAGMENTSHADER* curr_ppsCRTC() { return &ppsCRTC[bInterlace]; }
+	//static __forceinline FRAGMENTSHADER* curr_ppsCRTC24() { return &ppsCRTC24[bInterlace]; }
+	static __forceinline FRAGMENTSHADER* curr_ppsCRTCTarg() { return &ppsCRTCTarg[bInterlace]; }
+	
+	static __forceinline FRAGMENTSHADER* curr_pps(CRTC_TYPE render_type) 
+	{
+		switch (render_type)
+		{
+			case CRTC_RENDER: return curr_ppsCRTC();
+			//case CRTC_RENDER_24: return curr_ppsCRTC24();
+			case CRTC_RENDER_TARG: return curr_ppsCRTCTarg();
+			default: return NULL;
+		}
+		
+	}
 // ------------------------- Functions -------------------------------
 
 #ifdef NVIDIA_CG_API

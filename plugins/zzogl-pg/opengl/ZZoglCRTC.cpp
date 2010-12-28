@@ -62,6 +62,7 @@ extern GLuint vboRect;
 // I'm making this variable global for the moment in the course of fiddling with the interlace code 
 // to try and make it more straightforward.
 int bInterlace = 0;
+bool bUsingStencil = false;
 
 bool INTERLACE_COUNT()
 {
@@ -250,10 +251,10 @@ inline void RenderStartHelper()
 // on image y coords. So if we write valpha.z * F + valpha.w + 0.5, it would be switching odd
 // and even strings at each frame.
 // valpha.x and y are used for image blending.
-inline float4 RenderGetForClip(int psm, FRAGMENTSHADER* prog)
+inline float4 RenderGetForClip(int psm, CRTC_TYPE render_type)
 {
 	SetShaderCaller("RenderGetForClip");
-
+	FRAGMENTSHADER* prog = curr_pps(render_type);
 	float4 valpha;
 	// first render the current render targets, then from ptexMem
 
@@ -297,11 +298,15 @@ inline float4 RenderGetForClip(int psm, FRAGMENTSHADER* prog)
 
 // Put interlaced texture in use for shader prog.
 // Note: if frame interlaced it's th is halved, so we should x2 it.
-inline void RenderCreateInterlaceTex(int th, FRAGMENTSHADER* prog)
+inline void RenderCreateInterlaceTex(int th, CRTC_TYPE render_type)
 {
+	FRAGMENTSHADER* prog;
+	int interlacetex;
+	
 	if (!bInterlace) return;
-
-	int interlacetex = CreateInterlaceTex(2 * th);
+	
+	prog = curr_pps(render_type);
+	interlacetex = CreateInterlaceTex(2 * th);
 
 	ZZshGLSetTextureParameter(prog->prog, prog->sInterlace, interlacetex, "Interlace");
 }
@@ -348,11 +353,13 @@ inline void RenderSetupStencil(int i)
 }
 
 // do stencil check for each found target i -- texturing stage
-inline void RenderUpdateStencil(int i, bool* bUsingStencil)
+inline void RenderUpdateStencil(int i)
 {
-	if (!(*bUsingStencil)) glClear(GL_STENCIL_BUFFER_BIT);
-
-	*bUsingStencil = 1;
+	if (!bUsingStencil) 
+	{
+		glClear(GL_STENCIL_BUFFER_BIT);
+		bUsingStencil = true;
+	}
 
 	glEnable(GL_STENCIL_TEST);
 	GL_STENCILFUNC(GL_NOTEQUAL, 3, 1 << i);
@@ -361,16 +368,16 @@ inline void RenderUpdateStencil(int i, bool* bUsingStencil)
 }
 
 // CRTC24 could not be rendered
-inline void RenderCRTC24helper(int psm)
+/*inline void RenderCRTC24helper(int psm)
 {
 	ZZLog::Debug_Log("ZZogl: CRTC24!!! I'm trying to show something.");
 	SetShaderCaller("RenderCRTC24helper");
 	// assume that data is already in ptexMem (do Resolve?)
-	RenderGetForClip(psm, &ppsCRTC24[bInterlace]);
-	ZZshSetPixelShader(ppsCRTC24[bInterlace].prog);
+	RenderGetForClip(psm, CRTC_RENDER_24);
+	ZZshSetPixelShader(curr_ppsCRTC24()->prog);
 	
 	DrawTriangleArray();
-}
+}*/
 
 // Maybe I do this function global-defined. Calculate bits per pixel for
 // each psm. It's the only place with PSMCT16 which have a different bpp.
@@ -465,10 +472,11 @@ inline float4 RenderSetTargetBitTrans(int th)
 
 // use g_fInvTexDims to store inverse texture dims
 // Seems, that Targ shader does not use it
-inline float4 RenderSetTargetInvTex(int tw, int th, FRAGMENTSHADER* prog)
+inline float4 RenderSetTargetInvTex(int tw, int th, CRTC_TYPE render_type)
 {
 	SetShaderCaller("RenderSetTargetInvTex");
 
+	FRAGMENTSHADER* prog = curr_pps(render_type);
 	float4 v = float4(0, 0, 0, 0);
 
 	if (prog->sInvTexDims)
@@ -506,10 +514,10 @@ inline bool RenderLookForABetterTarget(int fbp, int tbp, list<CRenderTarget*>& l
 	return false;
 }
 
-inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listTargs, int i, bool* bUsingStencil);
+inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listTargs, int i);
 
 // First try to draw frame from targets. 
-inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& listTargs, int i, bool* bUsingStencil)
+inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& listTargs, int i)
 {
 	// get the start and end addresses of the buffer
 	int bpp = RenderGetBpp(texframe.psm);
@@ -540,8 +548,8 @@ inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& list
 			if (dh >= 64)
 			{
 
-				if (ptarg->fbh - dby < texframe.th - movy && !(*bUsingStencil))
-					RenderUpdateStencil(i, bUsingStencil);
+				if (ptarg->fbh - dby < texframe.th - movy && !bUsingStencil)
+					RenderUpdateStencil(i);
 				else if (ptarg->fbh - dby > 2 * ( texframe.th - movy )) 
 				{
 					// Sometimes calculated position onscreen is misaligned, ie in FFX-2 intro. In such case some part of image are out of
@@ -557,15 +565,15 @@ inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& list
 				// dest rect
 				v = RenderSetTargetBitPos(dh, texframe.th, movy);
 				v = RenderSetTargetBitTrans(ptarg->fbh);
-				v = RenderSetTargetInvTex(texframe.tbw, ptarg->fbh, &ppsCRTCTarg[bInterlace]) ; 	// FIXME. This is no use
+				v = RenderSetTargetInvTex(texframe.tbw, ptarg->fbh, CRTC_RENDER_TARG) ; 	// FIXME. This is no use
 
-				float4 valpha = RenderGetForClip(texframe.psm, &ppsCRTCTarg[bInterlace]);
+				float4 valpha = RenderGetForClip(texframe.psm, CRTC_RENDER_TARG);
 
 				// inside vb[0]'s target area, so render that region only
-				ZZshGLSetTextureParameter(ppsCRTCTarg[bInterlace].prog, ppsCRTCTarg[bInterlace].sFinal, ptarg->ptex, "CRTC target");
-				RenderCreateInterlaceTex(texframe.th, &ppsCRTCTarg[bInterlace]);
+				ZZshGLSetTextureParameter(curr_ppsCRTCTarg()->prog, curr_ppsCRTCTarg()->sFinal, ptarg->ptex, "CRTC target");
+				RenderCreateInterlaceTex(texframe.th, CRTC_RENDER_TARG);
 
-				ZZshSetPixelShader(ppsCRTCTarg[bInterlace].prog);
+				ZZshSetPixelShader(curr_ppsCRTCTarg()->prog);
 
 				DrawTriangleArray();
 
@@ -581,14 +589,14 @@ inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& list
 
 		++it;
 	}
-	RenderCheckForMemory(texframe, listTargs, i, bUsingStencil);
+	RenderCheckForMemory(texframe, listTargs, i);
 }
 
 
 // The same as the previous, but from memory.
 // If you ever wondered why a picture from a minute ago suddenly flashes on the screen (say, in Mana Khemia),
 // this is the function that does it.
-inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listTargs, int i, bool* bUsingStencil)
+inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listTargs, int i)
 {
 	float4 v;
 	
@@ -600,7 +608,7 @@ inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listT
 	// context has to be 0
 	if (bInterlace >= 2) ZZLog::Error_Log("CRCR Check for memory shader fault.");
 
-	//if (!(*bUsingStencil)) RenderUpdateStencil(i, bUsingStencil);
+	//if (!bUsingStencil) RenderUpdateStencil(i, bUsingStencil);
 		
 	SetShaderCaller("RenderCheckForMemory");
 
@@ -611,7 +619,7 @@ inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listT
 		h1 = texframe.th;
 		w2 = -0.5f;
 		h2 = -0.5f;
-		SetTexVariablesInt(0, 2, texframe, false, &ppsCRTC[bInterlace], 1);
+		SetTexVariablesInt(0, 2, texframe, false, curr_ppsCRTC(), 1);
 	}
 	else
 	{
@@ -619,7 +627,7 @@ inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listT
 		h1 = 1;
 		w2 = -0.5f / (float)texframe.tw;
 		h2 = -0.5f / (float)texframe.th;
-		SetTexVariablesInt(0, 0, texframe, false, &ppsCRTC[bInterlace], 1);
+		SetTexVariablesInt(0, 0, texframe, false, curr_ppsCRTC(), 1);
 	}
 	
 	if (g_bSaveFinalFrame) SaveTex(&texframe, g_bSaveFinalFrame - 1 > 0);
@@ -631,12 +639,12 @@ inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listT
 	// finally render from the memory (note that the stencil buffer will keep previous regions)
 	v = RenderSetTargetBitPos(1, 1, 0);
 	v = RenderSetTargetBitTrans(texframe.th);
-	v = RenderSetTargetInvTex(texframe.tw, texframe.th, &ppsCRTC[bInterlace]);
-	float4 valpha = RenderGetForClip(texframe.psm, &ppsCRTC[bInterlace]);
+	v = RenderSetTargetInvTex(texframe.tw, texframe.th, CRTC_RENDER);
+	float4 valpha = RenderGetForClip(texframe.psm, CRTC_RENDER);
 
-	ZZshGLSetTextureParameter(ppsCRTC[bInterlace].prog, ppsCRTC[bInterlace].sMemory, vb[0].pmemtarg->ptex->tex, "CRTC memory");
-	RenderCreateInterlaceTex(texframe.th, &ppsCRTC[bInterlace]);
-	ZZshSetPixelShader(ppsCRTC[bInterlace].prog);
+	ZZshGLSetTextureParameter(curr_ppsCRTC()->prog, curr_ppsCRTC()->sMemory, vb[0].pmemtarg->ptex->tex, "CRTC memory");
+	RenderCreateInterlaceTex(texframe.th, CRTC_RENDER_TARG);
+	ZZshSetPixelShader(curr_ppsCRTC()->prog);
 	
 	DrawTriangleArray();
 }
@@ -667,7 +675,7 @@ inline void DisplayFPS()
 	DrawText(str, left, top, 0xffc0ffff);
 }
 
-// SnapeShoot helper
+// Snapshot helper
 inline void MakeSnapshot()
 {
 	
@@ -825,18 +833,6 @@ inline void AfterRendererAutoresetTargets()
 
 				s_RTs.ResolveAll();
 				return;
-//				s_RTs.Destroy();
-//				s_DepthRTs.ResolveAll();
-//				s_DepthRTs.Destroy();
-//
-//				vb[0].prndr = NULL;
-//				vb[0].pdepth = NULL;
-//				vb[0].bNeedFrameCheck = 1;
-//				vb[0].bNeedZCheck = 1;
-//				vb[1].prndr = NULL;
-//				vb[1].pdepth = NULL;
-//				vb[1].bNeedFrameCheck = 1;
-//				vb[1].bNeedZCheck = 1;
 			}
 		}
 
@@ -850,17 +846,19 @@ inline void AfterRendererAutoresetTargets()
 }
 
 int count = 0;
+
 // The main renderer function
 void RenderCRTC()
 {
+	tex0Info dispinfo[2];
+	
 	if (FrameSkippingHelper()) return;
-
+	
+	// If we are in frame mode and interlacing, and we haven't forced interlacing off, bInterlace is 1.
 	bInterlace = SMODE2->INT && SMODE2->FFMD && (conf.interlace < 2);
+	bUsingStencil = false;
 
 	RenderStartHelper();
-
-	bool bUsingStencil = false;
-	tex0Info dispinfo[2];
 
 	FrameObtainDispinfo(dispinfo);
 
@@ -882,17 +880,17 @@ void RenderCRTC()
 		if (i == 0) RenderSetupBlending();
 		if (bUsingStencil) RenderSetupStencil(i);
 
-		if (texframe.psm == 0x12) // Probably broken - 0x12 isn't a valid psm. 24 bit is 1.
+		/*if (texframe.psm == 0x12) // Probably broken - 0x12 isn't a valid psm. 24 bit is 1.
 		{
 			RenderCRTC24helper(texframe.psm);
 			continue;
-		}
+		}*/
 
 		// We shader targets between two functions, so declare it here;
 		list<CRenderTarget*> listTargs;
 
 		// if we could not draw image from target's do it from memory
-		RenderCheckForTargets(texframe, listTargs, i, &bUsingStencil);
+		RenderCheckForTargets(texframe, listTargs, i);
 	}
 
 	GL_REPORT_ERRORD();
