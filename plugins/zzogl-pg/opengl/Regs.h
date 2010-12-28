@@ -763,7 +763,7 @@ REG128_SET(GIFPackedReg)
 	GIFPackedNOP	NOP;
 REG_SET_END
 
-// This is the background color. Theoretically it'd get blended with the image in some cases, but we don't appear to be
+// This register stores the background color. Theoretically it'd get blended with the image in some cases, but we don't appear to be
 // using it. See PMODE->SLBG. GSDx *is* using it.
 REG64_(GSReg, BGCOLOR)
 	u32 R:8;
@@ -773,7 +773,7 @@ REG64_(GSReg, BGCOLOR)
 	u32 _PAD2:32;
 REG_END
 
-// This switches the direction of Fifo. 0 - Host -> Local; 1 - Local -> Host. Fifo is supposed to be empty at the time.
+// This register switches the direction of Fifo. 0 - Host -> Local; 1 - Local -> Host. Fifo is supposed to be empty at the time.
 // Unchecked by GSdx or ZZOgl.
 REG64_(GSReg, BUSDIR)
 	u32 DIR:1;
@@ -802,7 +802,7 @@ REG64_(GSReg, CSR)
 	u32 _PAD3:32;
 REG_END
 
-// These are the settings for whichever circuit we're using. (Again, see PMODE.)
+// Settings for whichever circuit we're using. (Again, see PMODE.)
 //    --  FBP - Frame Buffer Pointer. address / 2048.
 //    --  FBW - Frame Buffer Width. width / 64.
 //    --  PSM - psm, but 5 bit. 0 - PSMCT32; 1 - PSMCT24; 2 - PSMCT16; 10 - PSMCT16S; 18  - PS-GPU24?
@@ -818,7 +818,7 @@ REG64_(GSReg, DISPFB) // (-1/2)
 	u32 _PAD2:10;
 REG_END
 
-// These are the settings for whichever display we're using.
+// Settings for whichever display we're using.
 //    --  DX - X position in the display area.
 //    --  DY - Y position in the display area.
 //    --  MAGH - Horizontal Magnification; x1 - x16.
@@ -837,7 +837,7 @@ REG64_(GSReg, DISPLAY) // (-1/2)
 	u32 _PAD2:9;
 REG_END
 
-// This is settings for the frame buffer when writing back. Thsi and the next two are unused in ZZOgl & GSDx.
+// This register has settings for the frame buffer when writing back. These next three registers are unused in ZZOgl & GSDx.
 //   --  EXBP - Base pointer of the buffer / 64.
 //   --  EXBW - Width of the buffer / 64.
 //   --  FBIN - Whether we use OUT1 or OUT2. 0 - 1; 1 - 2.
@@ -969,6 +969,8 @@ REG64_(GSReg, SIGBLID)
 	u32 LBLID;
 REG_END
 
+extern u8* g_pBasePS2Mem;
+
 #define PMODE ((GSRegPMODE*)(g_pBasePS2Mem+0x0000))
 #define SMODE1 ((GSRegSMODE1*)(g_pBasePS2Mem+0x0010))
 #define SMODE2 ((GSRegSMODE2*)(g_pBasePS2Mem+0x0020))
@@ -996,6 +998,21 @@ REG_END
 	(((tag).ai32[2 + ((reg) >> 3)] >> (((reg) & 7) << 2)) & 0xf)
 
 #define GET_GSFPS (((SMODE1->CMOD&1) ? 50 : 60) / (SMODE2->INT ? 1 : 2))
+
+static __forceinline GSRegDISPLAY* Display_Reg(int circuit)
+{
+	return (circuit) ? DISPLAY2 : DISPLAY1;
+}
+
+static __forceinline GSRegDISPFB* Dispfb_Reg(int circuit)
+{
+	return (circuit) ? DISPFB2 : DISPFB1;
+}
+
+static __forceinline bool Circuit_Enabled(int circuit)
+{
+	return (circuit) ? PMODE->EN2 : PMODE->EN1;
+}
 
 extern void WriteTempRegs();
 extern void SetFrameSkip(bool skip);

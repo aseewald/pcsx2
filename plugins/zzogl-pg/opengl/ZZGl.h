@@ -57,28 +57,39 @@ extern u32 s_stencilfunc, s_stencilref, s_stencilmask;
 #	define GL_TEXTURE_STENCIL_SIZE_EXT 0x88F1
 #endif
 
-#define GL_STENCILFUNC(func, ref, mask) { \
-	s_stencilfunc  = func; \
-	s_stencilref = ref; \
-	s_stencilmask = mask; \
-	glStencilFunc(func, ref, mask); \
+static __forceinline void GL_STENCILFUNC(GLenum func, GLint ref, GLuint mask)
+{
+	s_stencilfunc  = func; 
+	s_stencilref = ref; 
+	s_stencilmask = mask; 
+	glStencilFunc(func, ref, mask); 
 }
 
-#define GL_STENCILFUNC_SET() glStencilFunc(s_stencilfunc, s_stencilref, s_stencilmask)
-
+static __forceinline void GL_STENCILFUNC_SET()
+{
+	glStencilFunc(s_stencilfunc, s_stencilref, s_stencilmask); 
+}
 
 // sets the data stream
-#define SET_STREAM() { \
-	glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(VertexGPU), (void*)8); \
-	glSecondaryColorPointerEXT(4, GL_UNSIGNED_BYTE, sizeof(VertexGPU), (void*)12); \
-	glTexCoordPointer(3, GL_FLOAT, sizeof(VertexGPU), (void*)16); \
-	glVertexPointer(4, GL_SHORT, sizeof(VertexGPU), (void*)0); \
+static __forceinline void SET_STREAM()
+{
+	glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(VertexGPU), (void*)8);
+	glSecondaryColorPointerEXT(4, GL_UNSIGNED_BYTE, sizeof(VertexGPU), (void*)12);
+	glTexCoordPointer(3, GL_FLOAT, sizeof(VertexGPU), (void*)16);
+	glVertexPointer(4, GL_SHORT, sizeof(VertexGPU), (void*)0);
 }
-
 
 // global alpha blending settings
 extern GLenum g_internalRGBAFloat16Fmt;
 
+//static __forceinline void SAFE_RELEASE_TEX(u32& x)
+//{
+//	if (x != 0) 
+//	{ 
+//		glDeleteTextures(1, &x);
+//		x = 0; 
+//	}
+//}
 #define SAFE_RELEASE_TEX(x) { if( (x) != 0 ) { glDeleteTextures(1, &(x)); x = 0; } }
 
 // inline for an extremely often used sequence

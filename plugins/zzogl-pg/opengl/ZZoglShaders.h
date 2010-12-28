@@ -185,7 +185,7 @@ struct VERTEXSHADER
 	extern FRAGMENTSHADER ppsRegular[4], ppsTexture[NUM_SHADERS];
 	extern FRAGMENTSHADER ppsCRTC[2], /*ppsCRTC24[2],*/ ppsCRTCTarg[2];
 
-	extern int bInterlace;
+	extern int interlace_mode;
 
 	enum CRTC_TYPE
 	{
@@ -194,9 +194,9 @@ struct VERTEXSHADER
 		CRTC_RENDER_TARG
 	};
 
-	static __forceinline FRAGMENTSHADER* curr_ppsCRTC() { return &ppsCRTC[bInterlace]; }
-	//static __forceinline FRAGMENTSHADER* curr_ppsCRTC24() { return &ppsCRTC24[bInterlace]; }
-	static __forceinline FRAGMENTSHADER* curr_ppsCRTCTarg() { return &ppsCRTCTarg[bInterlace]; }
+	static __forceinline FRAGMENTSHADER* curr_ppsCRTC() { return &ppsCRTC[interlace_mode]; }
+	//static __forceinline FRAGMENTSHADER* curr_ppsCRTC24() { return &ppsCRTC24[interlace_mode]; }
+	static __forceinline FRAGMENTSHADER* curr_ppsCRTCTarg() { return &ppsCRTCTarg[interlace_mode]; }
 	
 	static __forceinline FRAGMENTSHADER* curr_pps(CRTC_TYPE render_type) 
 	{

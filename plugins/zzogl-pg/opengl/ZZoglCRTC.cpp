@@ -21,7 +21,7 @@
 // It draw picture direct on screen, so here we have interlacing and frame skipping.
 
 //------------------ Includes
- #include "Util.h"
+#include "Util.h"
 #include "ZZoglCRTC.h"
 #include "GLWin.h"
 #include "ZZoglShaders.h"
@@ -61,12 +61,12 @@ extern GLuint vboRect;
 
 // I'm making this variable global for the moment in the course of fiddling with the interlace code 
 // to try and make it more straightforward.
-int bInterlace = 0;
+int interlace_mode = 0; // 0 - not interlacing, 1 - interlacing.
 bool bUsingStencil = false;
 
 bool INTERLACE_COUNT()
 {
-	return (bInterlace && gs.interlace == (conf.interlace));
+	return (interlace_mode && (gs.interlace == conf.interlace));
 }
 
 // Adjusts vertex shader BitBltPos vector v to preserve aspect ratio. It used to emulate 4:3 or 16:9.
@@ -166,16 +166,16 @@ inline void FrameObtainDispinfo(tex0Info* dispinfo)
 {
 	for (int i = 0; i < 2; ++i)
 	{
-
-		if (!(*(u32*)(PMODE) & (1 << i)))
+		if (!Circuit_Enabled(i))
 		{
 			dispinfo[i].tw = 0;
 			dispinfo[i].th = 0;
 			continue;
 		}
 
-		GSRegDISPFB* pfb = i ? DISPFB2 : DISPFB1;
-		GSRegDISPLAY* pd = i ? DISPLAY2 : DISPLAY1;
+		GSRegDISPFB* pfb = Dispfb_Reg(i);
+		GSRegDISPLAY* pd = Display_Reg(i);
+		
 		int magh = pd->MAGH + 1;
 		int magv = pd->MAGV + 1;
 
@@ -188,7 +188,8 @@ inline void FrameObtainDispinfo(tex0Info* dispinfo)
 		// hack!!
 		// 2 * dispinfo[i].tw / dispinfo[i].th <= 1, metal slug 4
 
-		if (bInterlace && 2 * dispinfo[i].tw / dispinfo[i].th <= 1 && !(conf.settings().interlace_2x))
+		// Note: This is what causes the double image if interlace is off on the Final Fantasy X-2 opening.
+		if (interlace_mode && 2 * dispinfo[i].tw / dispinfo[i].th <= 1 && !(conf.settings().interlace_2x))
 		{
 			dispinfo[i].th >>= 1;
 		}
@@ -225,9 +226,8 @@ inline void RenderStartHelper()
 	glViewport(0, 0, GLWin.backbuffer.w, GLWin.backbuffer.h);
 
 	// if interlace, only clear every other vsync
-	if (!bInterlace)
+	if (!interlace_mode)
 	{
-		//u32 color = COLOR_ARGB(0, BGCOLOR->R, BGCOLOR->G, BGCOLOR->B);
 		glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 	}
 
@@ -243,7 +243,7 @@ inline void RenderStartHelper()
 
 	GL_REPORT_ERRORD();
 
-	if (bInterlace) g_PrevBitwiseTexX = -1;  // reset since will be using
+	if (interlace_mode) g_PrevBitwiseTexX = -1;  // reset since will be using
 }
 
 // Settings for interlace texture multiplied vector;
@@ -269,7 +269,7 @@ inline float4 RenderGetForClip(int psm, CRTC_TYPE render_type)
 		valpha.y = 1;
 	}
 
-	if (bInterlace)
+	if (interlace_mode)
 	{
 		if (gs.interlace == (conf.interlace & 1))
 		{
@@ -297,13 +297,13 @@ inline float4 RenderGetForClip(int psm, CRTC_TYPE render_type)
 }
 
 // Put interlaced texture in use for shader prog.
-// Note: if frame interlaced it's th is halved, so we should x2 it.
+// Note: if the frame is interlaced, its th is halved, so we should multiply it by 2.
 inline void RenderCreateInterlaceTex(int th, CRTC_TYPE render_type)
 {
 	FRAGMENTSHADER* prog;
 	int interlacetex;
 	
-	if (!bInterlace) return;
+	if (!interlace_mode) return;
 	
 	prog = curr_pps(render_type);
 	interlacetex = CreateInterlaceTex(2 * th);
@@ -311,7 +311,7 @@ inline void RenderCreateInterlaceTex(int th, CRTC_TYPE render_type)
 	ZZshGLSetTextureParameter(prog->prog, prog->sInterlace, interlacetex, "Interlace");
 }
 
-// Well, do blending setup prior to second pass of half-frame drawing
+// Do blending setup prior to second pass of half-frame drawing.
 inline void RenderSetupBlending()
 {
 	// setup right blending
@@ -320,12 +320,14 @@ inline void RenderSetupBlending()
 
 	if (PMODE->MMOD)
 	{
+		// Use the ALP register for alpha blending.
 		glBlendColorEXT(PMODE->ALP*(1 / 255.0f), PMODE->ALP*(1 / 255.0f), PMODE->ALP*(1 / 255.0f), 0.5f);
 		s_srcrgb = GL_CONSTANT_COLOR_EXT;
 		s_dstrgb = GL_ONE_MINUS_CONSTANT_COLOR_EXT;
 	}
 	else
 	{
+		// Use the alpha value of circuit 1 for alpha blending.
 		s_srcrgb = GL_SRC_ALPHA;
 		s_dstrgb = GL_ONE_MINUS_SRC_ALPHA;
 	}
@@ -347,8 +349,8 @@ inline void RenderSetupBlending()
 // each frame could be drawn in two stages, so blending should be different for them
 inline void RenderSetupStencil(int i)
 {
-	glStencilMask(1 << i);
 	s_stencilmask = 1 << i;
+	glStencilMask(s_stencilmask);
 	GL_STENCILFUNC_SET();
 }
 
@@ -514,17 +516,20 @@ inline bool RenderLookForABetterTarget(int fbp, int tbp, list<CRenderTarget*>& l
 	return false;
 }
 
-inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listTargs, int i);
+inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listTargs, int circuit);
 
 // First try to draw frame from targets. 
-inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& listTargs, int i)
+inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& listTargs, int circuit)
 {
 	// get the start and end addresses of the buffer
 	int bpp = RenderGetBpp(texframe.psm);
-	GSRegDISPFB* pfb = i ? DISPFB2 : DISPFB1;
+	GSRegDISPFB* pfb = Dispfb_Reg(circuit);
 
 	int start, end;
-	GetRectMemAddress(start, end, texframe.psm, 0, 0, texframe.tw, texframe.th, texframe.tbp0, texframe.tbw);
+	int tex_th = (interlace_mode) ? texframe.th * 2 : texframe.th;
+	
+	//ZZLog::WriteLn("Render checking for targets, circuit %d", circuit);
+	GetRectMemAddress(start, end, texframe.psm, 0, 0, texframe.tw, tex_th, texframe.tbp0, texframe.tbw);
 
 	// We need share list of targets between functions
 	s_RTs.GetTargs(start, end, listTargs);
@@ -535,10 +540,14 @@ inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& list
 
 		if (ptarg->fbw == texframe.tbw && !(ptarg->status&CRenderTarget::TS_NeedUpdate) && ((256 / bpp)*(texframe.tbp0 - ptarg->fbp)) % texframe.tbw == 0)
 		{
+			FRAGMENTSHADER* pps;
 			int dby = pfb->DBY;
 			int movy = 0;
 			
-			if (RenderLookForABetterTarget(ptarg->fbp, texframe.tbp0, listTargs, it)) continue;
+			if (RenderLookForABetterTarget(ptarg->fbp, texframe.tbp0, listTargs, it))
+			{
+				continue;
+			} 
 
 			if (g_bSaveFinalFrame) SaveTexture("frame1.tga", GL_TEXTURE_RECTANGLE_NV, ptarg->ptex, RW(ptarg->fbw), RH(ptarg->fbh));
 
@@ -547,37 +556,42 @@ inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& list
 
 			if (dh >= 64)
 			{
-
-				if (ptarg->fbh - dby < texframe.th - movy && !bUsingStencil)
-					RenderUpdateStencil(i);
-				else if (ptarg->fbh - dby > 2 * ( texframe.th - movy )) 
+				if (ptarg->fbh - dby < tex_th - movy && !bUsingStencil)
+				{
+					RenderUpdateStencil(circuit);
+				}
+				else if (ptarg->fbh - dby > 2 * ( tex_th - movy )) // I'm not sure this is needed any more.
 				{
 					// Sometimes calculated position onscreen is misaligned, ie in FFX-2 intro. In such case some part of image are out of
 					// border's and we should move it manually.
-					dby -= ((ptarg->fbh - dby) >> 2) -  ((texframe.th + movy) >> 1) ;
+					dby -= ((ptarg->fbh - dby) >> 2) -  ((tex_th + movy) >> 1);
 				}
 
 				SetShaderCaller("RenderCheckForTargets");
 
 				// Texture
 				float4 v = RenderSetTargetBitTex((float)RW(texframe.tw), (float)RH(dh), (float)RW(pfb->DBX), (float)RH(dby));
-
+				
 				// dest rect
 				v = RenderSetTargetBitPos(dh, texframe.th, movy);
 				v = RenderSetTargetBitTrans(ptarg->fbh);
-				v = RenderSetTargetInvTex(texframe.tbw, ptarg->fbh, CRTC_RENDER_TARG) ; 	// FIXME. This is no use
+				v = RenderSetTargetInvTex(texframe.tbw, ptarg->fbh, CRTC_RENDER_TARG); 	// FIXME. This is no use
 
 				float4 valpha = RenderGetForClip(texframe.psm, CRTC_RENDER_TARG);
+				pps = curr_ppsCRTCTarg();
 
 				// inside vb[0]'s target area, so render that region only
-				ZZshGLSetTextureParameter(curr_ppsCRTCTarg()->prog, curr_ppsCRTCTarg()->sFinal, ptarg->ptex, "CRTC target");
+				ZZshGLSetTextureParameter(pps->prog, pps->sFinal, ptarg->ptex, "CRTC target");
 				RenderCreateInterlaceTex(texframe.th, CRTC_RENDER_TARG);
 
-				ZZshSetPixelShader(curr_ppsCRTCTarg()->prog);
+				ZZshSetPixelShader(pps->prog);
 
 				DrawTriangleArray();
 
-				if (abs(dh - (int)texframe.th) <= 1) return;
+				if (abs(dh - (int)texframe.th) <= 1) 
+				{
+					return;
+				}
 
 				if (abs(dh - (int)ptarg->fbh) <= 1)
 				{
@@ -589,14 +603,14 @@ inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& list
 
 		++it;
 	}
-	RenderCheckForMemory(texframe, listTargs, i);
+	RenderCheckForMemory(texframe, listTargs, circuit);
 }
 
 
 // The same as the previous, but from memory.
 // If you ever wondered why a picture from a minute ago suddenly flashes on the screen (say, in Mana Khemia),
 // this is the function that does it.
-inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listTargs, int i)
+inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listTargs, int circuit)
 {
 	float4 v;
 	
@@ -606,9 +620,9 @@ inline void RenderCheckForMemory(tex0Info& texframe, list<CRenderTarget*>& listT
 	}
 
 	// context has to be 0
-	if (bInterlace >= 2) ZZLog::Error_Log("CRCR Check for memory shader fault.");
+	if (interlace_mode >= 2) ZZLog::Error_Log("CRCR Check for memory shader fault.");
 
-	//if (!bUsingStencil) RenderUpdateStencil(i, bUsingStencil);
+	//if (!bUsingStencil) RenderUpdateStencil(i);
 		
 	SetShaderCaller("RenderCheckForMemory");
 
@@ -854,27 +868,35 @@ void RenderCRTC()
 	
 	if (FrameSkippingHelper()) return;
 	
-	// If we are in frame mode and interlacing, and we haven't forced interlacing off, bInterlace is 1.
-	bInterlace = SMODE2->INT && SMODE2->FFMD && (conf.interlace < 2);
+	// If we are in frame mode and interlacing, and we haven't forced interlacing off, interlace_mode is 1.
+	interlace_mode = SMODE2->INT && SMODE2->FFMD && (conf.interlace < 2);
 	bUsingStencil = false;
 
 	RenderStartHelper();
 
 	FrameObtainDispinfo(dispinfo);
-
+	
 	// start from the last circuit
 	for (int i = !PMODE->SLBG; i >= 0; --i)
 	{
+		if (!Circuit_Enabled(i)) continue;
 		tex0Info& texframe = dispinfo[i];
 
-		if (texframe.th <= 1) continue;
+		// I don't think this is neccessary, now that we make sure the ciruit we are working with is enabled.
+		/*if (texframe.th <= 1) 
+		{
+			continue;
+		}*/
+		
 		if (SMODE2->INT && SMODE2->FFMD) 
 		{
 			texframe.th >>= 1;
-
+			
 			// Final Fantasy X-2 issue here.
-			if (conf.interlace == 2 && texframe.th >= 512) 
+			/*if (conf.interlace == 2 && texframe.th >= 512) 
+			{
 				texframe.th >>= 1;
+			}*/
 		}
 		
 		if (i == 0) RenderSetupBlending();
@@ -889,7 +911,7 @@ void RenderCRTC()
 		// We shader targets between two functions, so declare it here;
 		list<CRenderTarget*> listTargs;
 
-		// if we could not draw image from target's do it from memory
+		// if we could not draw image from target's, do it from memory
 		RenderCheckForTargets(texframe, listTargs, i);
 	}
 

@@ -664,9 +664,6 @@ inline void FlushSetStream(VB& curvb)
 	GL_REPORT_ERRORD();
 }
 
-int SetMaskR = 0x0;
-int SetMaskG = 0x0;
-int SetMaskB = 0x0;
 // Set color mask. Really, it's not as good as PS2 one.
 inline void FlushSetColorMask(VB& curvb)
 {
