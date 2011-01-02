@@ -101,7 +101,7 @@ class CRenderTarget
 			TS_Virtual = 4, // currently not mapped to memory
 			TS_FeedbackReady = 8, // feedback effect is ready and doesn't need to be updated
 			TS_NeedConvert32 = 16,
-			TS_NeedConvert16 = 32,
+			TS_NeedConvert16 = 32
 		};
 		inline float4 DefaultBitBltPos();
 		inline float4 DefaultBitBltTex();

@@ -17,16 +17,15 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
-#include "GS.h"
-
 #include <stdlib.h>
+#include <math.h>
 
+#include "GS.h"
 #include "Mem.h"
 #include "x86.h"
 #include "targets.h"
 #include "ZZoglShaders.h"
 #include "ZZClut.h"
-#include <math.h>
 #include "ZZoglVB.h"
 
 #ifdef ZEROGS_SSE2
@@ -1139,7 +1138,7 @@ void CRenderTargetMngr::DestroyAllTargs(int start, int end, int fbw)
 				}
 				else
 				{
-					FlushIfNecesary(it->second) ;
+					FlushIfNecesary(it->second);
 					it->second->status |= CRenderTarget::TS_Resolved;
 				}
 			}
@@ -1151,12 +1150,12 @@ void CRenderTargetMngr::DestroyAllTargs(int start, int end, int fbw)
 				}
 				else
 				{
-					FlushIfNecesary(it->second) ;
+					FlushIfNecesary(it->second);
 					it->second->status |= CRenderTarget::TS_Resolved;
 				}
 			}
 
-			DestroyAllTargetsHelper(it->second) ;
+			DestroyAllTargetsHelper(it->second);
 
 			u32 dummykey = GetFrameKeyDummy(it->second);
 
@@ -1181,7 +1180,7 @@ void CRenderTargetMngr::DestroyAllTargs(int start, int end, int fbw)
 void CRenderTargetMngr::DestroyTarg(CRenderTarget* ptarg)
 {
 	FUNCLOG
-	DestroyAllTargetsHelper(ptarg) ;
+	DestroyAllTargetsHelper(ptarg);
 	delete ptarg;
 }
 
@@ -1198,7 +1197,7 @@ void CRenderTargetMngr::DestroyIntersecting(CRenderTarget* prndr)
 		if ((it->second != prndr) && (it->second->start < end) && (start < it->second->end))
 		{
 			it->second->Resolve();
-			DestroyAllTargetsHelper(it->second) ;
+			DestroyAllTargetsHelper(it->second);
 			u32 dummykey = GetFrameKeyDummy(it->second);
 
 			if (mapDummyTargs.find(dummykey) == mapDummyTargs.end())
@@ -2158,9 +2157,6 @@ void CMemoryTargetMngr::ClearRange(int nbStartY, int nbEndY)
 	FUNCLOG
 	int starty = nbStartY / (4 * GPU_TEXWIDTH);
 	int endy = (nbEndY + 4 * GPU_TEXWIDTH - 1) / (4 * GPU_TEXWIDTH);
-	//int endy = (nbEndY+4096-1) / 4096;
-
-	//if( listTargets.size() < TARGET_THRESH ) {
 
 	for (list<CMemoryTarget>::iterator it = listTargets.begin(); it != listTargets.end();)
 	{
@@ -2188,41 +2184,6 @@ void CMemoryTargetMngr::ClearRange(int nbStartY, int nbEndY)
 
 		++it;
 	}
-
-//  }
-//  else {
-//	  for(list<CMemoryTarget>::iterator it = listTargets.begin(); it != listTargets.end(); ) {
-//
-//		  if( it->starty < endy && (it->starty+it->height) > starty ) {
-//			  int newstarty = 0;
-//			  if( starty <= it->starty ) {
-//				  if( endy < it->starty + it->height) {
-//					  // preserve end
-//					  it->height = it->starty+it->height-endy;
-//					  it->starty = endy;
-//					  assert(it->height > 0);
-//				  }
-//				  else {
-//					  // destroy
-//					  it->height = 0;
-//				  }
-//			  }
-//			  else {
-//				  // beginning can be preserved
-//				  it->height = starty-it->starty;
-//			  }
-//
-//			  assert( it->starty >= it->realy && it->starty+it->height<=it->realy+it->realheight );
-//			  if( it->height <= 0 ) {
-//				  list<CMemoryTarget>::iterator itprev = it; ++it;
-//				  listClearedTargets.splice(listClearedTargets.end(), listTargets, itprev);
-//				  continue;
-//			  }
-//		  }
-//
-//		  ++it;
-//	  }
-//  }
 }
 
 void CMemoryTargetMngr::DestroyCleared()
@@ -2562,6 +2523,86 @@ void ResolveInRange(int start, int end)
 //////////////////
 // Transferring //
 //////////////////
+void FlushTransferRange(CRenderTarget* ptarg, int start, int end, int texstart, int texend)
+{
+	int range_size = end - start;
+	
+	if (!(ptarg->start < texend && ptarg->end > texstart))
+	{
+		// check if target is currently being used
+
+		if (!(conf.settings().no_quick_resolve))
+		{
+			if (ptarg->fbp != vb[0].gsfb.fbp)
+			{
+				if (ptarg->fbp != vb[1].gsfb.fbp)
+				{
+					// this render target currently isn't used and is not in the texture's way, so can safely ignore
+					// resolving it. Also the range has to be big enough compared to the target to really call it resolved
+					// (ffx changing screens, shadowhearts)
+					// start == ptarg->start, used for kh to transfer text
+
+					if (ptarg->IsDepth() || range_size > 0x50000 || ((conf.settings().quick_resolve_1) && start == ptarg->start))
+						ptarg->status |= CRenderTarget::TS_NeedUpdate | CRenderTarget::TS_Resolved;
+
+					return;
+				}
+			}
+		}
+	}
+
+	// the first range check was very rough; some games (dragonball z) have the zbuf in the same page as textures (but not overlapping)
+	// so detect that condition
+	if (ptarg->fbh % m_Blocks[ptarg->psm].height)
+	{
+		// get start of left-most boundry page
+		int targstart, targend;
+		GetRectMemAddress(targstart, targend, ptarg->psm, 0, 0, ptarg->fbw, ptarg->fbh & ~(m_Blocks[ptarg->psm].height - 1), ptarg->fbp, ptarg->fbw);
+
+		if (start >= targend)
+		{
+			// don't bother
+			if ((ptarg->fbh % m_Blocks[ptarg->psm].height) <= 2) return;
+
+			// calc how many bytes of the block that the page spans
+		}
+	}
+	
+	if (start < ptarg->end && end > ptarg->start)
+	{
+		ptarg->status |= CRenderTarget::TS_Resolved;
+
+		if (conf.settings().no_depth_update || conf.settings().gust)
+		{
+			if (conf.settings().gust)
+			{
+				if (range_size > 0x40000) 
+				{
+					ptarg->status |= CRenderTarget::TS_NeedUpdate;
+					return;
+				}
+				/*else
+				{
+					ZZLog::WriteLn("FlushTransferRange: Gust Hack - No update!");
+				}*/
+			}
+				
+			if (conf.settings().no_depth_update)
+			{
+				if (!ptarg->IsDepth() || range_size > 0x1000)
+				{
+					ptarg->status |= CRenderTarget::TS_NeedUpdate;
+					return;
+				} 
+			}
+		}
+		else
+		{
+			ptarg->status |= CRenderTarget::TS_NeedUpdate;
+		}
+	}
+}
+
 void FlushTransferRanges(const tex0Info* ptex)
 {
 	FUNCLOG
@@ -2571,7 +2612,7 @@ void FlushTransferRanges(const tex0Info* ptex)
 
 	int texstart = -1, texend = -1;
 
-	if (ptex != NULL)
+	if (ptex != NULL) // If ptex is NULL, texstart & texend will be -1.
 	{
 		GetRectMemAddress(texstart, texend, ptex->psm, 0, 0, ptex->tw, ptex->th, ptex->tbp0, ptex->tbw);
 	}
@@ -2585,118 +2626,12 @@ void FlushTransferRanges(const tex0Info* ptex)
 		listTransmissionUpdateTargs.clear();
 		listTransmissionUpdateTargs = CreateTargetsList(start, end);
 
-		/*		s_DepthRTs.GetTargs(start, end, listTransmissionUpdateTargs);
-				s_RTs.GetTargs(start, end, listTransmissionUpdateTargs);*/
-
-//	  if( !bHasFlushed && listTransmissionUpdateTargs.size() > 0 ) {
-//		  FlushBoth();
-//
-//#ifdef _DEBUG
-//		  // make sure targets are still the same
-//		  list<CRenderTarget*>::iterator it;
-//		  FORIT(it, listTransmissionUpdateTargs) {
-//			  CRenderTargetMngr::MAPTARGETS::iterator itmap;
-//			  for(itmap = s_RTs.mapTargets.begin(); itmap != s_RTs.mapTargets.end(); ++itmap) {
-//				  if( itmap->second == *it )
-//					  break;
-//			  }
-//
-//			  if( itmap == s_RTs.mapTargets.end() ) {
-//
-//				  for(itmap = s_DepthRTs.mapTargets.begin(); itmap != s_DepthRTs.mapTargets.end(); ++itmap) {
-//					  if( itmap->second == *it )
-//						  break;
-//				  }
-//
-//				  assert( itmap != s_DepthRTs.mapTargets.end() );
-//			  }
-//		  }
-//#endif
-//	  }
-
 		for (list<CRenderTarget*>::iterator it = listTransmissionUpdateTargs.begin(); it != listTransmissionUpdateTargs.end(); ++it)
 		{
-
 			CRenderTarget* ptarg = *it;
 
 			if ((ptarg->status & CRenderTarget::TS_Virtual)) continue;
-
-			if (!(ptarg->start < texend && ptarg->end > texstart))
-			{
-				// check if target is currently being used
-
-				if (!(conf.settings().no_quick_resolve))
-				{
-					if (ptarg->fbp != vb[0].gsfb.fbp)   //&& (vb[0].prndr == NULL || ptarg->fbp != vb[0].prndr->fbp) ) {
-					{
-						if (ptarg->fbp != vb[1].gsfb.fbp)    //&& (vb[1].prndr == NULL || ptarg->fbp != vb[1].prndr->fbp) ) {
-						{
-							// this render target currently isn't used and is not in the texture's way, so can safely ignore
-							// resolving it. Also the range has to be big enough compared to the target to really call it resolved
-							// (ffx changing screens, shadowhearts)
-							// start == ptarg->start, used for kh to transfer text
-
-							if (ptarg->IsDepth() || end - start > 0x50000 || ((conf.settings().quick_resolve_1) && start == ptarg->start))
-								ptarg->status |= CRenderTarget::TS_NeedUpdate | CRenderTarget::TS_Resolved;
-
-							continue;
-						}
-					}
-				}
-			}
-			else
-			{
-//			  if( start <= texstart && end >= texend ) {
-//				  // texture taken care of so can skip!?
-//				  continue;
-//			  }
-			}
-
-			// the first range check was very rough; some games (dragonball z) have the zbuf in the same page as textures (but not overlapping)
-			// so detect that condition
-			if (ptarg->fbh % m_Blocks[ptarg->psm].height)
-			{
-
-				// get start of left-most boundry page
-				int targstart, targend;
-				GetRectMemAddress(targstart, targend, ptarg->psm, 0, 0, ptarg->fbw, ptarg->fbh & ~(m_Blocks[ptarg->psm].height - 1), ptarg->fbp, ptarg->fbw);
-
-				if (start >= targend)
-				{
-					// don't bother
-					if ((ptarg->fbh % m_Blocks[ptarg->psm].height) <= 2) continue;
-
-					// calc how many bytes of the block that the page spans
-				}
-			}
-
-			if (!(ptarg->status & CRenderTarget::TS_Virtual))
-			{
-
-				if (start < ptarg->end && end > ptarg->start)
-				{
-
-					// suikoden5 is faster with check, but too big of a value and kh screens mess up
-					/* Zeydlitz remove this check, it does not do anything good
-					if ((end - start > 0x8000) && (!(conf.settings() & GAME_GUSTHACK) || (end-start > 0x40000))) {
-						// intersects, do only one sided resolves
-						if( end-start > 4*ptarg->fbw ) { // at least it be greater than one scanline (spiro is faster)
-							if( start > ptarg->start ) {
-								ptarg->Resolve(ptarg->start, start);
-
-							}
-							else if( end < ptarg->end ) {
-								ptarg->Resolve(end, ptarg->end);
-							}
-						}
-					}*/
-
-					ptarg->status |= CRenderTarget::TS_Resolved;
-
-					if ((!ptarg->IsDepth() || (!(conf.settings().no_depth_update) || end - start > 0x1000)) && ((end - start > 0x40000) || !(conf.settings().gust)))
-						ptarg->status |= CRenderTarget::TS_NeedUpdate;
-				}
-			}
+			FlushTransferRange(ptarg, start, end, texstart, texend);
 		}
 
 		g_MemTargs.ClearRange(start, end);
