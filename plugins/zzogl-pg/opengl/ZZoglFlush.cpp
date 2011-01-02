@@ -39,9 +39,11 @@ bool g_bSaveResolved = false;
 #endif // !defined(ZEROGS_DEVBUILD)
 
 bool g_bSaveTrans = false;
-bool g_bUpdateStencil = true;
 bool s_bWriteDepth = false;
 bool s_bDestAlphaTest = false;
+
+bool g_bUpdateStencil = true;
+bool bCanRenderStencil = true;
 
 // local alpha blending settings
 GLenum s_rgbeq, s_alphaeq; // set by zgsBlendEquationSeparateEXT			// ZZ
@@ -841,7 +843,6 @@ inline void FlushSetTexture(VB& curvb, FRAGMENTSHADER* pfragment, CRenderTarget*
 	
 	if( pfragment->sMemory != NULL && s_ptexCurSet[context] != 0) 
 		ZZshGLSetTextureParameter(pfragment->sMemory, s_ptexCurSet[context], "Clamp memory");
-
 }
 
 // Reset program and texture variables;
@@ -897,9 +898,9 @@ inline bool AlphaCanRenderStencil(VB& curvb)
 		   !ZZOglGet_fbmHighByte(curvb.frame.fbm) && !(conf.settings().no_stencil);
 }
 
-inline void AlphaSetStencil(bool DoIt)
+inline void AlphaSetStencil()
 {
-	if (DoIt)
+	if (s_bDestAlphaTest && bCanRenderStencil)
 	{
 		glEnable(GL_STENCIL_TEST);
 		GL_STENCILFUNC(GL_ALWAYS, 0, 0);
@@ -957,7 +958,7 @@ inline u32 AlphaSetupBlendTest(VB& curvb)
 	return oldabe;
 }
 
-inline void AlphaRenderFBA(VB& curvb, FRAGMENTSHADER* pfragment, bool s_bDestAlphaTest, bool bCanRenderStencil)
+inline void AlphaRenderFBA(VB& curvb, FRAGMENTSHADER* pfragment)
 {
 	// needs to be before RenderAlphaTest
 	if ((gs.pabe) || (curvb.fba.fba && !ZZOglGet_fbmHighByte(curvb.frame.fbm)) || (s_bDestAlphaTest && bCanRenderStencil))
@@ -1003,7 +1004,7 @@ inline u32 AlphaRenderAlpha(VB& curvb, const pixTest curtest, FRAGMENTSHADER* pf
 	return dwUsingSpecialTesting;
 }
 
-inline void AlphaRenderStencil(VB& curvb, bool s_bDestAlphaTest, bool bCanRenderStencil, u32 dwUsingSpecialTesting)
+inline void AlphaRenderStencil(VB& curvb, u32 dwUsingSpecialTesting)
 {
 	if (s_bDestAlphaTest && bCanRenderStencil)
 	{
@@ -1118,7 +1119,7 @@ inline bool AlphaFailureIgnore(const pixTest curtest)
 }
 
 // more work on alpha failure case
-inline void AlphaFailureTestJob(VB& curvb, const pixTest curtest,  FRAGMENTSHADER* pfragment, int exactcolor, bool bCanRenderStencil, int oldabe)
+inline void AlphaFailureTestJob(VB& curvb, const pixTest curtest,  FRAGMENTSHADER* pfragment, int exactcolor, int oldabe)
 {
 	// Note, case when ate == 1, atst == ATST_NEVER and afail > AFAIL_KEEP in documentation wrote as failure case. But it seems that
 	// either doc's are incorrect or this case has some issues.
@@ -1241,26 +1242,25 @@ inline void AlphaSpecialTesting(VB& curvb, FRAGMENTSHADER* pfragment, u32 dwUsin
 	GL_REPORT_ERRORD();
 }
 
-inline void AlphaDestinationTest(VB& curvb, FRAGMENTSHADER* pfragment, bool s_bDestAlphaTest, bool bCanRenderStencil)
+inline void AlphaDestinationTest(VB& curvb, FRAGMENTSHADER* pfragment)
 {
-	if (s_bDestAlphaTest)
+	if (s_dwColorWrite & COLORMASK_ALPHA)
 	{
-		if ((s_dwColorWrite & COLORMASK_ALPHA))
+		if (curvb.fba.fba)
 		{
-			if (curvb.fba.fba)
-				ProcessFBA(curvb, pfragment->sOneColor);
-			else if (bCanRenderStencil)
-				// finally make sure all entries are 1 when the dest alpha >= 0x80 (if fba is 1, this is already the case)
-				ProcessStencil(curvb);
+			ProcessFBA(curvb, pfragment->sOneColor);
+		}
+		else if (s_bDestAlphaTest && bCanRenderStencil)
+		{
+			// finally make sure all entries are 1 when the dest alpha >= 0x80 (if fba is 1, this is already the case)
+			ProcessStencil(curvb);
 		}
 	}
-	else if ((s_dwColorWrite & COLORMASK_ALPHA) && curvb.fba.fba)
-		ProcessFBA(curvb, pfragment->sOneColor);
-
+				
 	if (bDestAlphaColor == 1)
 	{
 		// need to reset the dest colors to their original counter parts
-		//WARN_LOG("Need to reset dest alpha color\n");
+		//ZZLog::Warn_Log("Need to reset dest alpha color");
 	}
 }
 
@@ -1321,26 +1321,26 @@ void Flush(int context)
 
 	FRAGMENTSHADER* pfragment = FlushRendererStage(curvb, dwFilterOpts, ptextarg, exactcolor, context);
 
-	bool bCanRenderStencil = AlphaCanRenderStencil(curvb);
+	bCanRenderStencil = AlphaCanRenderStencil(curvb);
 
 	if (curtest.date || gs.pabe) SetDestAlphaTest();
 
-	AlphaSetStencil(s_bDestAlphaTest && bCanRenderStencil);
+	AlphaSetStencil();
 	AlphaSetDepthTest(curvb, curtest, pfragment);						// Error!
 	SetAlphaTest(curtest);
 
 	u32 oldabe = AlphaSetupBlendTest(curvb);					// Unavoidable
 
 	// needs to be before RenderAlphaTest
-	AlphaRenderFBA(curvb, pfragment, s_bDestAlphaTest, bCanRenderStencil);
+	AlphaRenderFBA(curvb, pfragment);
 
 	dwUsingSpecialTesting =	AlphaRenderAlpha(curvb, curtest, pfragment, exactcolor);			// Unavoidable
-	AlphaRenderStencil(curvb, s_bDestAlphaTest, bCanRenderStencil, dwUsingSpecialTesting);
+	AlphaRenderStencil(curvb, dwUsingSpecialTesting);
 	AlphaTest(curvb);								// Unavoidable
 	AlphaPabe(curvb, pfragment, exactcolor);
-	AlphaFailureTestJob(curvb, curtest, pfragment, exactcolor, bCanRenderStencil, oldabe);
+	AlphaFailureTestJob(curvb, curtest, pfragment, exactcolor, oldabe);
 	AlphaSpecialTesting(curvb, pfragment, dwUsingSpecialTesting, exactcolor);
-	AlphaDestinationTest(curvb, pfragment, s_bDestAlphaTest, bCanRenderStencil);
+	AlphaDestinationTest(curvb, pfragment);
 	AlphaSaveTarget(curvb);
 	
 	GL_REPORT_ERRORD();
