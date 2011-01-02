@@ -99,6 +99,7 @@ set(zzoglHeaders
     zerogs.h
     zpipe.h
     ZZClut.h
+    ZZoglFlush.h
     ZZGl.h
     ZZHacks.h
     ZZoglDrawing.h

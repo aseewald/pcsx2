@@ -37,38 +37,6 @@
 
 //------------------ Defines
 
-#ifdef _WIN32
-#define GL_LOADFN(name) { \
-		if( (*(void**)&name = (void*)wglGetProcAddress(#name)) == NULL ) { \
-		ZZLog::Error_Log("Failed to find %s, exiting.", #name); \
-	} \
-}
-#else
-// let GLEW take care of it
-#define GL_LOADFN(name)
-#endif
-
-#define GL_BLEND_RGB(src, dst) { \
-	s_srcrgb = src; \
-	s_dstrgb = dst; \
-	zgsBlendFuncSeparateEXT(s_srcrgb, s_dstrgb, s_srcalpha, s_dstalpha); \
-}
-
-#define GL_BLEND_ALPHA(src, dst) { \
-	s_srcalpha = src; \
-	s_dstalpha = dst; \
-	zgsBlendFuncSeparateEXT(s_srcrgb, s_dstrgb, s_srcalpha, s_dstalpha); \
-}
-
-#define GL_BLEND_ALL(srcrgb, dstrgb, srcalpha, dstalpha) { \
-	s_srcrgb = srcrgb; \
-	s_dstrgb = dstrgb; \
-	s_srcalpha = srcalpha; \
-	s_dstalpha = dstalpha; \
-	zgsBlendFuncSeparateEXT(s_srcrgb, s_dstrgb, s_srcalpha, s_dstalpha); \
-}
-
-#define GL_BLEND_SET() zgsBlendFuncSeparateEXT(s_srcrgb, s_dstrgb, s_srcalpha, s_dstalpha)
 #define VB_NUMBUFFERS			   512
 
 // ----------------- Types

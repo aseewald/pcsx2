@@ -159,6 +159,7 @@
 		<Unit filename="../../ZZoglDrawing.cpp" />
 		<Unit filename="../../ZZoglDrawing.h" />
 		<Unit filename="../../ZZoglFlush.cpp" />
+		<Unit filename="../../ZZoglFlush.h" />
 		<Unit filename="../../ZZoglFlushHack.cpp" />
 		<Unit filename="../../ZZoglFlushHack.h" />
 		<Unit filename="../../ZZoglMath.h" />

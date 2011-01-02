@@ -47,14 +47,28 @@ inline void* wglGetProcAddress(const char* x)
 
 #endif
 
+#include "Mem.h"
+
 extern u32 s_stencilfunc, s_stencilref, s_stencilmask;
-// Defines
+extern GLenum s_srcrgb, s_dstrgb, s_srcalpha, s_dstalpha; // set by zgsBlendFuncSeparateEXT
+extern GLenum s_rgbeq, s_alphaeq;
 
 #ifndef GL_DEPTH24_STENCIL8_EXT // allows FBOs to support stencils
 #	define GL_DEPTH_STENCIL_EXT 0x84F9
 #	define GL_UNSIGNED_INT_24_8_EXT 0x84FA
 #	define GL_DEPTH24_STENCIL8_EXT 0x88F0
 #	define GL_TEXTURE_STENCIL_SIZE_EXT 0x88F1
+#endif
+
+#ifdef _WIN32
+#define GL_LOADFN(name) { \
+		if( (*(void**)&name = (void*)wglGetProcAddress(#name)) == NULL ) { \
+		ZZLog::Error_Log("Failed to find %s, exiting.", #name); \
+	} \
+}
+#else
+// let GLEW take care of it
+#define GL_LOADFN(name)
 #endif
 
 static __forceinline void GL_STENCILFUNC(GLenum func, GLint ref, GLuint mask)
@@ -115,12 +129,161 @@ extern void (APIENTRY *zgsBlendEquationSeparateEXT)(GLenum, GLenum);
 extern void (APIENTRY *zgsBlendFuncSeparateEXT)(GLenum, GLenum, GLenum, GLenum);
 #endif
 
+static __forceinline void DrawTriangleArray()
+{
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	GL_REPORT_ERRORD();
+}
 
-// ------------------------ Types -------------------------
+static __forceinline void DrawBuffers(GLenum *buffer)
+{
+	if (glDrawBuffers != NULL) 
+	{
+		glDrawBuffers(1, buffer);
+	}
 
-/////////////////////
-// graphics resources
-extern GLenum s_srcrgb, s_dstrgb, s_srcalpha, s_dstalpha; // set by zgsBlendFuncSeparateEXT
+	GL_REPORT_ERRORD();
+}
+
+static __forceinline void FBTexture(int attach, int id = 0)
+{
+	glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT + attach, GL_TEXTURE_RECTANGLE_NV, id, 0);
+	GL_REPORT_ERRORD();
+}
+
+static __forceinline void ResetRenderTarget(int index)
+{
+	FBTexture(index);
+}
+
+static __forceinline void Texture2D(GLint iFormat, GLint width, GLint height, GLenum format, GLenum type, const GLvoid* pixels)
+{
+	glTexImage2D(GL_TEXTURE_2D, 0, iFormat, width, height, 0, format, type, pixels);
+}
+
+static __forceinline void Texture2D(GLint iFormat, GLenum format, GLenum type, const GLvoid* pixels)
+{
+	glTexImage2D(GL_TEXTURE_2D, 0, iFormat, BLOCK_TEXWIDTH, BLOCK_TEXHEIGHT, 0, format, type, pixels);
+}
+
+static __forceinline void Texture3D(GLint iFormat, GLint width, GLint height, GLint depth, GLenum format, GLenum type, const GLvoid* pixels)
+{
+	glTexImage3D(GL_TEXTURE_3D, 0, iFormat, width, height, depth, 0, format, type, pixels);
+}
+	
+static __forceinline void TextureRect(GLint iFormat, GLint width, GLint height, GLenum format, GLenum type, const GLvoid* pixels)
+{
+	glTexImage2D(GL_TEXTURE_RECTANGLE_NV, 0, iFormat, width, height, 0, format, type, pixels);
+}
+
+static __forceinline void TextureRect2(GLint iFormat, GLint width, GLint height, GLenum format, GLenum type, const GLvoid* pixels)
+{
+	glTexImage2D(GL_TEXTURE_RECTANGLE, 0, iFormat, width, height, 0, format, type, pixels);
+}
+
+static __forceinline void TextureRect(GLenum attach, GLuint id = 0)
+{
+	glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, attach, GL_RENDERBUFFER_EXT, id);
+}
+
+static __forceinline void setTex2DFilters(GLint type)
+{
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, type);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, type);
+}
+
+static __forceinline void setTex2DWrap(GLint type)
+{
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, type);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, type);
+}
+
+static __forceinline void setTex3DFilters(GLint type)
+{
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, type);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, type);
+}
+
+static __forceinline void setTex3DWrap(GLint type)
+{
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, type);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, type);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, type);
+}
+
+static __forceinline void setRectFilters(GLint type)
+{
+	glTexParameteri(GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_MAG_FILTER, type);
+	glTexParameteri(GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_MIN_FILTER, type);
+}
+
+static __forceinline void setRectWrap(GLint type)
+{
+	glTexParameteri(GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_WRAP_S, type);
+	glTexParameteri(GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_WRAP_T, type);
+}
+
+static __forceinline void setRectWrap2(GLint type)
+{
+	glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_WRAP_S, type);
+	glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_WRAP_T, type);
+}
+
+static __forceinline void GL_BLEND_SET()
+{
+	zgsBlendFuncSeparateEXT(s_srcrgb, s_dstrgb, s_srcalpha, s_dstalpha);
+}
+
+static __forceinline void GL_BLEND_RGB(GLenum src, GLenum dst)
+{
+	s_srcrgb = src;
+	s_dstrgb = dst;
+	GL_BLEND_SET();
+}
+
+static __forceinline void GL_BLEND_ALPHA(GLenum src, GLenum dst)
+{
+	s_srcalpha = src;
+	s_dstalpha = dst;
+	GL_BLEND_SET();
+}
+
+static __forceinline void GL_BLEND_ALL(GLenum srcrgb, GLenum dstrgb, GLenum srcalpha, GLenum dstalpha)
+{
+	s_srcrgb = srcrgb;
+	s_dstrgb = dstrgb;
+	s_srcalpha = srcalpha;
+	s_dstalpha = dstalpha;
+	GL_BLEND_SET();
+}
+
+static __forceinline void GL_ZTEST(bool enable)
+{
+	if (enable) 
+		glEnable(GL_DEPTH_TEST);
+	else 
+		glDisable(GL_DEPTH_TEST);
+}
+
+static __forceinline void GL_ALPHATEST(bool enable)
+{
+	if (enable) 
+		glEnable(GL_ALPHA_TEST);
+	else 
+		glDisable(GL_ALPHA_TEST);
+}
+
+static __forceinline void GL_BLENDEQ_RGB(GLenum eq)
+{
+	s_rgbeq = eq;
+	zgsBlendEquationSeparateEXT(s_rgbeq, s_alphaeq);
+}
+
+static __forceinline void GL_BLENDEQ_ALPHA(GLenum eq)
+{
+	s_alphaeq = eq;
+	zgsBlendEquationSeparateEXT(s_rgbeq, s_alphaeq);
+}
 
 // GL prototypes
 extern PFNGLISRENDERBUFFEREXTPROC glIsRenderbufferEXT;

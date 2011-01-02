@@ -20,6 +20,7 @@
 // Realization of Flush -- drawing function of GS
 
 #include <stdlib.h>
+#include <math.h>
 
 #include "GS.h"
 #include "Mem.h"
@@ -27,106 +28,23 @@
 #include "ZZoglFlushHack.h"
 #include "ZZoglShaders.h"
 #include "ZZClut.h"
-#include <math.h>
+#include "ZZoglFlush.h"
 
 //------------------ Defines
-#ifndef ZEROGS_DEVBUILD
 
-#define INC_GENVARS()
-#define INC_TEXVARS()
-#define INC_ALPHAVARS()
-#define INC_RESOLVE()
-
-#define g_bUpdateEffect 0
-#define g_bSaveTex 0
-bool g_bSaveTrans = 0;
-#define g_bSaveResolved 0
-
-#else // defined(ZEROGS_DEVBUILD)
-
-#define INC_GENVARS() ++g_nGenVars
-#define INC_TEXVARS() ++g_nTexVars
-#define INC_ALPHAVARS() ++g_nAlphaVars
-#define INC_RESOLVE() ++g_nResolve
-
-bool g_bSaveTrans = 0;
-bool g_bUpdateEffect = 0;
-bool g_bSaveTex = 0;	// saves the curent texture
-bool g_bSaveResolved = 0;
+#ifdef ZEROGS_DEVBUILD
+bool g_bUpdateEffect = false;
+bool g_bSaveTex = false;	// saves the current texture
+bool g_bSaveResolved = false;
 #endif // !defined(ZEROGS_DEVBUILD)
 
-#define STENCIL_ALPHABIT	1	   // if set, dest alpha >= 0x80
-#define STENCIL_PIXELWRITE  2	   // if set, pixel just written (reset after every Flush)
-#define STENCIL_FBA		 4	   // if set, just written pixel's alpha >= 0 (reset after every Flush)
-#define STENCIL_SPECIAL	 8	   // if set, indicates that pixel passed its alpha test (reset after every Flush)
-//#define STENCIL_PBE		   16
-#define STENCIL_CLEAR	   (2|4|8|16)
-
-void Draw(const VB& curvb)
-{
-	glDrawArrays(primtype[curvb.curprim.prim], 0, curvb.nCount);
-}
-
-#define GL_BLEND_RGB(src, dst) { \
-	s_srcrgb = src; \
-	s_dstrgb = dst; \
-	zgsBlendFuncSeparateEXT(s_srcrgb, s_dstrgb, s_srcalpha, s_dstalpha); \
-}
-
-#define GL_BLEND_ALPHA(src, dst) { \
-	s_srcalpha = src; \
-	s_dstalpha = dst; \
-	zgsBlendFuncSeparateEXT(s_srcrgb, s_dstrgb, s_srcalpha, s_dstalpha); \
-}
-
-#define GL_BLEND_ALL(srcrgb, dstrgb, srcalpha, dstalpha) { \
-	s_srcrgb = srcrgb; \
-	s_dstrgb = dstrgb; \
-	s_srcalpha = srcalpha; \
-	s_dstalpha = dstalpha; \
-	zgsBlendFuncSeparateEXT(s_srcrgb, s_dstrgb, s_srcalpha, s_dstalpha); \
-}
-
-#define GL_ZTEST(enable) { \
-	if (enable) glEnable(GL_DEPTH_TEST); \
-	else glDisable(GL_DEPTH_TEST); \
-}
-
-#define GL_ALPHATEST(enable) { \
-	if( enable ) glEnable(GL_ALPHA_TEST); \
-	else glDisable(GL_ALPHA_TEST); \
-}
-
-#define GL_BLENDEQ_RGB(eq) { \
-	s_rgbeq = eq; \
-	zgsBlendEquationSeparateEXT(s_rgbeq, s_alphaeq); \
-}
-
-#define GL_BLENDEQ_ALPHA(eq) { \
-	s_alphaeq = eq; \
-	zgsBlendEquationSeparateEXT(s_rgbeq, s_alphaeq); \
-}
-
-#define COLORMASK_RED	  	1
-#define COLORMASK_GREEN	 	2
-#define COLORMASK_BLUE	  	4
-#define COLORMASK_ALPHA	 	8
-#define GL_COLORMASK(mask) glColorMask(!!((mask)&COLORMASK_RED), !!((mask)&COLORMASK_GREEN), !!((mask)&COLORMASK_BLUE), !!((mask)&COLORMASK_ALPHA))
-
-// ----------------- Types
-//------------------ Dummies
-
-//------------------ variables
-
-extern int g_nDepthBias;
-extern float g_fBlockMult; // used for old cards, that do not support Alpha-32float textures. We store block data in u16 and use it.
-bool g_bUpdateStencil = 1;
-
-extern ZZshProgram g_psprog;							// 2 -- ZZ
+bool g_bSaveTrans = false;
+bool g_bUpdateStencil = true;
+bool s_bWriteDepth = false;
+bool s_bDestAlphaTest = false;
 
 // local alpha blending settings
-static GLenum s_rgbeq, s_alphaeq; // set by zgsBlendEquationSeparateEXT			// ZZ
-
+GLenum s_rgbeq, s_alphaeq; // set by zgsBlendEquationSeparateEXT			// ZZ
 
 static const u32 blendalpha[3] = { GL_SRC_ALPHA, GL_DST_ALPHA, GL_CONSTANT_COLOR_EXT };	// ZZ
 static const u32 blendinvalpha[3] = { GL_ONE_MINUS_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA, GL_ONE_MINUS_CONSTANT_COLOR_EXT }; //ZZ
@@ -142,93 +60,37 @@ static const u32 g_dwZCmp[] = { GL_NEVER, GL_ALWAYS, GL_GEQUAL, GL_GREATER };
 static u32 s_ptexCurSet[2] = {0};
 static u32 s_ptexNextSet[2] = {0};				// ZZ
 
-
-extern vector<u32> s_vecTempTextures;		   // temporary textures, released at the end of every frame
-extern bool s_bTexFlush;
-extern int g_nCurVBOIndex;
-bool s_bWriteDepth = false;
-bool s_bDestAlphaTest = false;
 int s_ClutResolve = 0;						// ZZ
 int g_nDepthUsed = 0; 						// ffx2 pal movies
 int s_nWriteDepthCount = 0;					// ZZ
 int s_nWriteDestAlphaTest = 0;					// ZZ
+int s_nWireframeCount = 0;
 
 ////////////////////
 // State parameters
 static float4 vAlphaBlendColor;	 // used for GPU_COLOR
-
 static bool bNeedBlendFactorInAlpha;	  // set if the output source alpha is different from the real source alpha (only when blend factor > 0x80)
 static u32 s_dwColorWrite = 0xf;			// the color write mask of the current target
 
-typedef union
-{
-	struct
-	{
-		u8 _bNeedAlphaColor;		// set if vAlphaBlendColor needs to be set
-		u8 _b2XAlphaTest;		   // Only valid when bNeedAlphaColor is set. if 1st bit set set, double all alpha testing values
-		// otherwise alpha testing needs to be done separately.
-		u8 _bDestAlphaColor;		// set to 1 if blending with dest color (process only one tri at a time). If 2, dest alpha is always 1.
-		u8 _bAlphaClamping;	 // if first bit is set, do min; if second bit, do max
-	};
-
-	u32 _bAlphaState;
-} g_flag_vars;
-
 g_flag_vars g_vars;
-
-//#define bNeedAlphaColor g_vars._bNeedAlphaColor
-#define b2XAlphaTest g_vars._b2XAlphaTest
-#define bDestAlphaColor g_vars._bDestAlphaColor
-#define bAlphaClamping g_vars._bAlphaClamping
-
-int g_PrevBitwiseTexX = -1, g_PrevBitwiseTexY = -1; // textures stored in SAMP_BITWISEANDX and SAMP_BITWISEANDY		// ZZ
 
 //static alphaInfo s_alphaInfo;												// ZZ
 
-extern u8* g_pbyGSClut;
-extern int ppf;
-
-int s_nWireframeCount = 0;
-
-//------------------ Namespace
+int g_PrevBitwiseTexX = -1, g_PrevBitwiseTexY = -1; // textures stored in SAMP_BITWISEANDX and SAMP_BITWISEANDY		// ZZ
+float fiTexWidth[2], fiTexHeight[2];	// current tex width and height
+Point AA = {0,0}; // if AA.y is set, then AA.x has to be set.
 
 VB vb[2];
-float fiTexWidth[2], fiTexHeight[2];	// current tex width and height
-extern vector<GLuint> g_vboBuffers; // VBOs for all drawing commands
-
-//u8 s_AAx = 0, s_AAy = 0; // if AAy is set, then AAx has to be set
-Point AA = {0,0};
-
 int icurctx = -1;
 
-extern CRangeManager s_RangeMngr; // manages overwritten memory				// zz
-void FlushTransferRanges(const tex0Info* ptex);						//zz
-
-// use to update the state
-void SetTexVariables(int context, FRAGMENTSHADER* pfragment);			// zz
-void SetTexInt(int context, FRAGMENTSHADER* pfragment, int settexint);		// zz
-void SetAlphaVariables(const alphaInfo& ainfo);					// zzz
-//void ResetAlphaVariables();
-
-inline void SetAlphaTestInt(pixTest curtest);
-
-inline void RenderAlphaTest(const VB& curvb, ZZshParameter sOneColor);
-inline void RenderStencil(const VB& curvb, u32 dwUsingSpecialTesting);
-inline void ProcessStencil(const VB& curvb);
-inline void RenderFBA(const VB& curvb, ZZshParameter sOneColor);
-inline void ProcessFBA(const VB& curvb, ZZshParameter sOneColor);			// zz
-
-void SetContextTarget(int context);
-
-void SetWriteDepth();
-bool IsWriteDepth();
-void SetDestAlphaTest();
-
-//------------------ Code
+void Draw(const VB& curvb)
+{
+	glDrawArrays(primtype[curvb.curprim.prim], 0, curvb.nCount);
+}
 
 inline float AlphaReferedValue(int aref)
 {
-	return b2XAlphaTest ? min(1.0f, (float)aref / 127.5f) : (float)aref / 255.0f ;
+	return (b2XAlphaTest) ? min(1.0f, (float)aref / 127.5f) : (float)aref / 255.0f ;
 }
 
 inline void SetAlphaTest(const pixTest& curtest)
@@ -371,7 +233,7 @@ inline void FlushUpdateEffect()
 #endif
 }
 
-// Check, maybe we cold skip flush
+// Check, maybe we could skip flush
 inline bool IsFlushNoNeed(VB& curvb, const pixTest& curtest)
 {
 	if (curvb.nCount == 0 || (curtest.zte && curtest.ztst == 0) || IsBadFrame(curvb))
@@ -819,7 +681,7 @@ inline float4 FlushSetPageOffset(FRAGMENTSHADER* pfragment, int shadertype, CRen
 	return vpageoffset;
 }
 
-//Set texture offsets depends omn shader type.
+//Setting texture offsets depends on shader type.
 inline float4 FlushSetTexOffset(FRAGMENTSHADER* pfragment, int shadertype, VB& curvb, CRenderTarget* ptextarg)
 {
 	SetShaderCaller("FlushSetTexOffset");
@@ -983,7 +845,7 @@ inline void FlushSetTexture(VB& curvb, FRAGMENTSHADER* pfragment, CRenderTarget*
 }
 
 // Reset program and texture variables;
-inline void FlushBindProgramm(FRAGMENTSHADER* pfragment, int context)
+inline void FlushBindProgram(FRAGMENTSHADER* pfragment, int context)
 {
 	vb[context].bTexConstsSync = 0;
 	vb[context].bVarsTexSync = 0;
@@ -1023,7 +885,7 @@ inline FRAGMENTSHADER* FlushRendererStage(VB& curvb, u32& dwFilterOpts, CRenderT
 	// set the shaders
 	SetShaderCaller("FlushRendererStage");
 	ZZshSetVertexShader(pvs[2 * ((curvb.curprim._val >> 1) & 3) + 8 * s_bWriteDepth + context]);
-	FlushBindProgramm(pfragment, context);
+	FlushBindProgram(pfragment, context);
 
 	GL_REPORT_ERRORD();
 	return pfragment;
@@ -1997,7 +1859,7 @@ void SetTexVariables(int context, FRAGMENTSHADER* pfragment)
 		float4 vblack;
 		vblack.x = vblack.y = vblack.z = vblack.w = 10;
 
-		/* tcc -- Tecture Color Component 0=RGB, 1=RGBA + use Alpha from TEXA reg when not in PSM
+		/* tcc -- Texture Color Component 0=RGB, 1=RGBA + use Alpha from TEXA reg when not in PSM
 		 * tfx -- Texture Function (0=modulate, 1=decal, 2=hilight, 3=hilight2)
 		 *
 		 * valpha2 =  0 0 2 1     0 0 2 1
