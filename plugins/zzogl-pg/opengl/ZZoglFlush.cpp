@@ -48,8 +48,10 @@ bool bCanRenderStencil = true;
 // local alpha blending settings
 GLenum s_rgbeq, s_alphaeq; // set by zgsBlendEquationSeparateEXT			// ZZ
 
-static const u32 blendalpha[3] = { GL_SRC_ALPHA, GL_DST_ALPHA, GL_CONSTANT_COLOR_EXT };	// ZZ
-static const u32 blendinvalpha[3] = { GL_ONE_MINUS_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA, GL_ONE_MINUS_CONSTANT_COLOR_EXT }; //ZZ
+// Note: blendalpha[2] & blendinvalpha[2] are never used !!! The index 2 is changed to 0
+// Note: blendalpha[3] & blendinvalpha[3] are special case for dest blending on 24bits. FIXME: I was expected GL_ONE & GL_ZERO !
+static const u32 blendalpha[4] = { GL_SRC_ALPHA, GL_DST_ALPHA, GL_CONSTANT_COLOR_EXT, GL_SRC_ALPHA };	// ZZ
+static const u32 blendinvalpha[4] = { GL_ONE_MINUS_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA, GL_ONE_MINUS_CONSTANT_COLOR_EXT, GL_ONE_MINUS_SRC_ALPHA }; //ZZ
 static const u32 g_dwAlphaCmp[] = { GL_NEVER, GL_ALWAYS, GL_LESS, GL_LEQUAL, GL_EQUAL, GL_GEQUAL, GL_GREATER, GL_NOTEQUAL };    // ZZ
 
 // used for afail case
@@ -74,7 +76,7 @@ static float4 vAlphaBlendColor;	 // used for GPU_COLOR
 static bool bNeedBlendFactorInAlpha;	  // set if the output source alpha is different from the real source alpha (only when blend factor > 0x80)
 static u32 s_dwColorWrite = 0xf;			// the color write mask of the current target
 
-g_flag_vars g_vars;
+// g_flag_vars g_vars;
 
 //static alphaInfo s_alphaInfo;												// ZZ
 
@@ -92,7 +94,8 @@ void Draw(const VB& curvb)
 
 inline float AlphaReferedValue(int aref)
 {
-	return (b2XAlphaTest) ? min(1.0f, (float)aref / 127.5f) : (float)aref / 255.0f ;
+	// return (b2XAlphaTest) ? min(1.0f, (float)aref / 127.5f) : (float)aref / 255.0f ;
+	return min(1.0f, (float)aref / 127.5f);
 }
 
 inline void SetAlphaTest(const pixTest& curtest)
@@ -1027,13 +1030,13 @@ inline void AlphaRenderStencil(VB& curvb, u32 dwUsingSpecialTesting)
 		}
 	}
 
-#ifdef _DEBUG
-	if (bDestAlphaColor == 1)
-	{
-		ZZLog::Debug_Log("Dest alpha blending! Manipulate alpha here.");
-	}
-
-#endif
+// #ifdef _DEBUG
+// 	if (bDestAlphaColor == 1)
+// 	{
+// 		ZZLog::Debug_Log("Dest alpha blending! Manipulate alpha here.");
+// 	}
+// 
+// #endif
 
 	if (bCanRenderStencil && gs.pabe)
 	{
@@ -1257,11 +1260,11 @@ inline void AlphaDestinationTest(VB& curvb, FRAGMENTSHADER* pfragment)
 		}
 	}
 				
-	if (bDestAlphaColor == 1)
-	{
-		// need to reset the dest colors to their original counter parts
-		//ZZLog::Warn_Log("Need to reset dest alpha color");
-	}
+	// if (bDestAlphaColor == 1)
+	// {
+	// 	// need to reset the dest colors to their original counter parts
+	// 	//ZZLog::Warn_Log("Need to reset dest alpha color");
+	// }
 }
 
 inline void AlphaSaveTarget(VB& curvb)
@@ -2129,13 +2132,14 @@ void SetTexVariablesInt(int context, int bilinear, const tex0Info& tex0, bool Ch
 	vb[context].bVarsTexSync = false;
 }
 
+#if 0
 #define SET_ALPHA_COLOR_FACTOR(sign) \
 { \
 	switch(a.c) \
 	{ \
 		case 0: \
 			vAlphaBlendColor.y = (sign) ? 2.0f*255.0f/256.0f : -2.0f*255.0f/256.0f; \
-			s_srcalpha = GL_ONE; \
+            s_srcalpha = GL_ONE; \
 			s_alphaeq = (sign) ? GL_FUNC_ADD : GL_FUNC_REVERSE_SUBTRACT; \
 			break; \
 			\
@@ -2154,7 +2158,7 @@ void SetTexVariablesInt(int context, int bilinear, const tex0Info& tex0, bool Ch
 					/* default: 16bit surface, so returned alpha is ok */ \
 			} \
 		break; \
-		\
+        \
 		case 2: \
 			bNeedBlendFactorInAlpha = true; /* should disable alpha channel writing */ \
 			vAlphaBlendColor.y = 0; \
@@ -2162,7 +2166,7 @@ void SetTexVariablesInt(int context, int bilinear, const tex0Info& tex0, bool Ch
 			usec = 0; /* change so that alpha comes from source*/ \
 		break; \
 	} \
-} \
+}
  
 //if( a.fix <= 0x80 ) { \
 // dwTemp = (a.fix*2)>255?255:(a.fix*2); \
@@ -2185,6 +2189,51 @@ inline void NeedFactor(int w)
 		vAlphaBlendColor.w = (float)w;
 	}
 }
+#endif
+
+template<bool SIGN, bool NEED_FACTOR>
+__forceinline int Set_Alpha_Color_Factor(const alphaInfo& a)
+{
+    int usec;
+    switch(a.c)
+    {
+        case 0:
+            usec = 0;
+            /* Note: there are already default value when sign is 1. So only change them
+             * when sign is 0
+             */
+            if (!SIGN) {
+                vAlphaBlendColor.y =  -2.0f*255.0f/256.0f;
+                s_alphaeq = GL_FUNC_REVERSE_SUBTRACT;
+            }
+            break;
+        case 1:
+            usec = 1;
+            /* if in 24 bit mode, dest alpha should be one */
+            if(PSMT_BITMODE(vb[icurctx].prndr->psm) == 1) {
+                /* dest alpha should be one */
+                usec = 4;
+
+                // need a factor correction
+                if (NEED_FACTOR) {
+                    bNeedBlendFactorInAlpha = (SIGN) ? true : false;
+                    vAlphaBlendColor.y = 0;
+                    vAlphaBlendColor.w = (SIGN) ? 1.0 : -1.0;
+                }
+            }
+            break;
+        case 2:
+            usec = 0; /* change so that alpha comes from source*/
+            bNeedBlendFactorInAlpha = true; /* should disable alpha channel writing */
+            vAlphaBlendColor.y = 0;
+            vAlphaBlendColor.w = (SIGN) ? (float)a.fix * (2.0f/255.0f) : (float)a.fix * (-2.0f/255.0f);
+            break;
+
+        default:
+            assert(0);
+    }
+    return usec;
+}
 
 //static int CheckArray[48][2] = {{0,}};
 
@@ -2194,21 +2243,25 @@ void SetAlphaVariables(const alphaInfo& a)
 	bool alphaenable = true;
 
 	// TODO: negative color when not clamping turns to positive???
-	g_vars._bAlphaState = 0; // set all to zero
+	// g_vars._bAlphaState = 0; // set all to zero
 	bNeedBlendFactorInAlpha = false;
-	b2XAlphaTest = 1;
+	// b2XAlphaTest = 1;
 	//u32 dwTemp = 0xffffffff;
-	bDestAlphaColor = 0;
+	// bDestAlphaColor = 0;
 
 	// default
 	s_srcalpha = GL_ONE;
 	s_dstalpha = GL_ZERO;
 	s_alphaeq = GL_FUNC_ADD;
-	s_rgbeq = 1;
+	s_rgbeq = GL_FUNC_ADD;
 
 //	s_alphaInfo = a;
 	vAlphaBlendColor = float4(1, 2 * 255.0f / 256.0f, 0, 0);
-	u32 usec = a.c;
+	// u32 usec = a.c;
+	u32 usec;
+    const bool POS_A = true;
+    const bool NEG_A = false;
+    const bool NEED_FACTOR = true;
 
 
 	/*
@@ -2238,7 +2291,7 @@ void SetAlphaVariables(const alphaInfo& a)
 	 * 1 102:  0+-a+ 0 | a+ 0+ 0 = a  (R-) a      | 112: 0+ 0+ 0 | a+-a+ 0 =        0      | 122: 0+ 0+ 0 | a+ 0+ 0 = 0      (+)  a
 	 * 2 202:  0+-a+ 0 | 0+ 0+ 0 = a  (R-) 0      | 212: 0+ 0+ 0 | 0+-a+ 0 = 0     (-) a   | 222: 0+ 0+ 0 | 0+ 0+ 0 =         0
 	 *
-	 *  Formulae is: (a-b) * (c /32) + d
+	 *  Formulae is: (a-b) * (c /128) + d
 	 *  		0	1	2
 	 *  a		Cs	Cd	0
 	 *  b		Cs	Cd	0
@@ -2252,23 +2305,26 @@ void SetAlphaVariables(const alphaInfo& a)
 	 */
 	int code = (a.a * 16) + (a.b * 4) + a.d ;
 
-#define one_minus_alpha  (bDestAlphaColor == 2) ? GL_ONE_MINUS_SRC_ALPHA : blendinvalpha[usec]
-#define alpha   	 (bDestAlphaColor == 2) ? GL_SRC_ALPHA : blendalpha[usec]
-#define one 		 (bDestAlphaColor == 2) ? GL_ONE : blendalpha[usec]
-#define	zero 		 (bDestAlphaColor == 2) ? GL_ZERO : blendinvalpha[usec]
+// #define one_minus_alpha  (bDestAlphaColor == 2) ? GL_ONE_MINUS_SRC_ALPHA : blendinvalpha[usec]
+// #define alpha   	 (bDestAlphaColor == 2) ? GL_SRC_ALPHA : blendalpha[usec]
+// #define one 		 (bDestAlphaColor == 2) ? GL_ONE : blendalpha[usec]
+// #define	zero 		 (bDestAlphaColor == 2) ? GL_ZERO : blendinvalpha[usec]
+
+#define one_minus_alpha  blendinvalpha[usec]
+#define alpha   	     blendalpha[usec]
 
 	switch (code)
 	{
 
 		case 0: // 000				// Cs -- nothing changed
-		case 20: // 110 = 16+4=20		// Cs
-		case 40:   // 220 = 32+8=40		// Cs
+        case 20: // 110 = 16+4=20		// Cs
+        case 40:   // 220 = 32+8=40		// Cs
 		{
 			alphaenable = false;
 			break;
 		}
 
-		case 2: //002				// 0  -- should be zero
+        case 2: //002				// 0  -- should be zero
 		case 22: //112				// 0
 		case 42:   //222 = 32+8+2 =42		// 0
 		{
@@ -2290,34 +2346,37 @@ void SetAlphaVariables(const alphaInfo& a)
 
 		case 4:    // 010			 // (Cs-Cd)*A+Cs = Cs * (A + 1) - Cd * A
 		{
-			bAlphaClamping = 3;
-			SET_ALPHA_COLOR_FACTOR(0);	 // a = -A
+			// bAlphaClamping = 3;
+			// SET_ALPHA_COLOR_FACTOR(0);	 // a = -A
+            usec = Set_Alpha_Color_Factor<NEG_A, NEED_FACTOR>(a);
 
 			s_rgbeq = GL_FUNC_ADD;		 // Cs*(1-a)+Cd*a
 			s_srcrgb = one_minus_alpha ;
 			s_dstrgb = alpha;
 
-			NeedFactor(-1);
+			// NeedFactor(-1);
 			break;
 		}
 
 		case 5:   // 011			// (Cs-Cd)*A+Cs = Cs * A + Cd * (1-A)
 		{
-			bAlphaClamping = 3; // all testing
-			SET_ALPHA_COLOR_FACTOR(1);
+			// bAlphaClamping = 3; // all testing
+			// SET_ALPHA_COLOR_FACTOR(1);
+            usec = Set_Alpha_Color_Factor<POS_A, NEED_FACTOR>(a);
 
 			s_rgbeq = GL_FUNC_ADD;
 			s_srcrgb = alpha;
 			s_dstrgb = one_minus_alpha;
 
-			NeedFactor(1);
+			// NeedFactor(1);
 			break;
 		}
 
-		case 6:   //012				// (Cs-Cd)*FIX
+		case 6:   //012				// (Cs-Cd)*A = Cs*A - Cd*A
 		{
-			bAlphaClamping = 3;
-			SET_ALPHA_COLOR_FACTOR(1);
+			// bAlphaClamping = 3;
+			// SET_ALPHA_COLOR_FACTOR(1);
+            usec = Set_Alpha_Color_Factor<POS_A, !NEED_FACTOR>(a);
 
 			s_rgbeq = GL_FUNC_SUBTRACT;
 			s_srcrgb = alpha;
@@ -2328,8 +2387,9 @@ void SetAlphaVariables(const alphaInfo& a)
 
 		case 8:   //020				// Cs*A+Cs = Cs * (1+A)
 		{
-			bAlphaClamping = 2; // max testing
-			SET_ALPHA_COLOR_FACTOR(0);	// Zeyflitz change this! a = -A
+			// bAlphaClamping = 2; // max testing
+			// SET_ALPHA_COLOR_FACTOR(0);	// Zeydlitz change this! a = -A
+            usec = Set_Alpha_Color_Factor<NEG_A, !NEED_FACTOR>(a);
 				
 			s_rgbeq = GL_FUNC_ADD;
 			s_srcrgb = one_minus_alpha;	// Cs*(1-a).
@@ -2341,19 +2401,21 @@ void SetAlphaVariables(const alphaInfo& a)
 
 		case 9:   //021				// Cs*A+Cd
 		{
-			bAlphaClamping = 2; // max testing
-			SET_ALPHA_COLOR_FACTOR(1);
+			// bAlphaClamping = 2; // max testing
+			// SET_ALPHA_COLOR_FACTOR(1);
+            usec = Set_Alpha_Color_Factor<POS_A, !NEED_FACTOR>(a);
 				
 			s_rgbeq = GL_FUNC_ADD;
-			s_srcrgb = alpha;			// ZZ change it to.
+			s_srcrgb = alpha;			// ZZ change it too.
 			s_dstrgb = GL_ONE;
 			break;
 		}
 
 		case 10:   //022			// Cs*A
 		{
-			bAlphaClamping = 2; // max testing
-			SET_ALPHA_COLOR_FACTOR(1);
+			// bAlphaClamping = 2; // max testing
+			// SET_ALPHA_COLOR_FACTOR(1);
+            usec = Set_Alpha_Color_Factor<POS_A, !NEED_FACTOR>(a);
 
 			s_rgbeq = GL_FUNC_ADD;
 			s_srcrgb = alpha;
@@ -2361,36 +2423,39 @@ void SetAlphaVariables(const alphaInfo& a)
 			break;
 		}
 
-		case 16:   //100
+		case 16:   //100            // (Cd-Cs)*A + Cs = Cd*A + Cs*(1-A)
 		{
-			bAlphaClamping = 3;
-			SET_ALPHA_COLOR_FACTOR(1);
+			// bAlphaClamping = 3;
+			// SET_ALPHA_COLOR_FACTOR(1);
+            usec = Set_Alpha_Color_Factor<POS_A, NEED_FACTOR>(a);
 
 			s_rgbeq = GL_FUNC_ADD;
 			s_srcrgb = one_minus_alpha;
 			s_dstrgb = alpha;
 
-			NeedFactor(1);
+			// NeedFactor(1);
 			break;
 		}
 
-		case 17:   //101
+		case 17:   //101            // (Cd-Cs)*A + Cd = Cd*(A+1) - A*Cs
 		{
-			bAlphaClamping = 3; // all testing
-			SET_ALPHA_COLOR_FACTOR(0);
+			// bAlphaClamping = 3; // all testing
+			// SET_ALPHA_COLOR_FACTOR(0);
+            usec = Set_Alpha_Color_Factor<NEG_A, NEED_FACTOR>(a);
 
 			s_rgbeq = GL_FUNC_ADD;
 			s_srcrgb = alpha;
 			s_dstrgb = one_minus_alpha;
 
-			NeedFactor(-1);
+			// NeedFactor(-1);
 			break;
 		}
 
-		case 18:   //102
+		case 18:   //102            // (Cd-Cs)*A = Cd*A - Cs*A
 		{
-			bAlphaClamping = 3;
-			SET_ALPHA_COLOR_FACTOR(1);
+			// bAlphaClamping = 3;
+			// SET_ALPHA_COLOR_FACTOR(1);
+            usec = Set_Alpha_Color_Factor<POS_A, !NEED_FACTOR>(a);
 
 			s_rgbeq = GL_FUNC_REVERSE_SUBTRACT;
 			s_srcrgb = alpha;
@@ -2399,10 +2464,11 @@ void SetAlphaVariables(const alphaInfo& a)
 			break;
 		}
 
-		case 24:   //120 = 16+8
+		case 24:   //120 = 16+8  // Cd*A + Cs
 		{
-			bAlphaClamping = 2; // max testing
-			SET_ALPHA_COLOR_FACTOR(1);
+			// bAlphaClamping = 2; // max testing
+			// SET_ALPHA_COLOR_FACTOR(1);
+            usec = Set_Alpha_Color_Factor<POS_A, !NEED_FACTOR>(a);
 				
 			s_rgbeq = GL_FUNC_ADD;
 			s_srcrgb = GL_ONE;
@@ -2412,8 +2478,9 @@ void SetAlphaVariables(const alphaInfo& a)
 
 		case 25:   //121				// Cd*(1+A)
 		{
-			bAlphaClamping = 2; // max testing
-			SET_ALPHA_COLOR_FACTOR(0);
+			// bAlphaClamping = 2; // max testing
+			// SET_ALPHA_COLOR_FACTOR(0);
+            usec = Set_Alpha_Color_Factor<NEG_A, !NEED_FACTOR>(a);
 
 			s_rgbeq = GL_FUNC_ADD;
 			s_srcrgb = GL_ZERO;
@@ -2423,10 +2490,11 @@ void SetAlphaVariables(const alphaInfo& a)
 			break;
 		}
 
-		case 26:   //122
+		case 26:   //122                // Cd*A
 		{
-			bAlphaClamping = 2;
-			SET_ALPHA_COLOR_FACTOR(1);
+			// bAlphaClamping = 2;
+			// SET_ALPHA_COLOR_FACTOR(1);
+            usec = Set_Alpha_Color_Factor<POS_A, !NEED_FACTOR>(a);
 
 			s_rgbeq = GL_FUNC_ADD;
 			s_srcrgb = GL_ZERO;
@@ -2434,10 +2502,11 @@ void SetAlphaVariables(const alphaInfo& a)
 			break;
 		}
 
-		case 32:  // 200 = 32
+		case 32:  // 200 = 32       // -Cs*A + Cs = Cs*(1-A)
 		{
-			bAlphaClamping = 1; // min testing
-			SET_ALPHA_COLOR_FACTOR(1);
+			// bAlphaClamping = 1; // min testing
+			// SET_ALPHA_COLOR_FACTOR(1);
+            usec = Set_Alpha_Color_Factor<POS_A, !NEED_FACTOR>(a);
 
 			s_rgbeq = GL_FUNC_ADD;
 			s_srcrgb = one_minus_alpha;
@@ -2447,8 +2516,9 @@ void SetAlphaVariables(const alphaInfo& a)
 
 		case 33:  //201					// -Cs*A + Cd
 		{
-			bAlphaClamping = 1; // min testing
-			SET_ALPHA_COLOR_FACTOR(1);
+			// bAlphaClamping = 1; // min testing
+			// SET_ALPHA_COLOR_FACTOR(1);
+            usec = Set_Alpha_Color_Factor<POS_A, !NEED_FACTOR>(a);
 
 			s_rgbeq = GL_FUNC_REVERSE_SUBTRACT;
 			s_srcrgb = alpha;
@@ -2456,10 +2526,10 @@ void SetAlphaVariables(const alphaInfo& a)
 			break;
 		}
 
-		case 34:  //202
-		case 38:  //212
+		case 34:  //202                 // -Cs*A
+		case 38:  //212                 // -Cd*A
 		{
-			bAlphaClamping = 1; // min testing -- negative values
+			// bAlphaClamping = 1; // min testing -- negative values
 
 			s_rgbeq = GL_FUNC_ADD;
 			s_srcrgb = GL_ZERO;
@@ -2467,10 +2537,11 @@ void SetAlphaVariables(const alphaInfo& a)
 			break;
 		}
 
-		case 36:  //210
+		case 36:  //210                 //  -Cd*A + Cs
 		{
-			bAlphaClamping = 1; // min testing
-			SET_ALPHA_COLOR_FACTOR(1);
+			// bAlphaClamping = 1; // min testing
+			// SET_ALPHA_COLOR_FACTOR(1);
+            usec = Set_Alpha_Color_Factor<POS_A, !NEED_FACTOR>(a);
 
 			s_rgbeq = GL_FUNC_SUBTRACT;
 			s_srcrgb = GL_ONE;
@@ -2478,10 +2549,11 @@ void SetAlphaVariables(const alphaInfo& a)
 			break;
 		}
 
-		case 37:  //211
+		case 37:  //211                 // -Cd*A+Cd = Cd * (1-A)
 		{
-			bAlphaClamping = 1; // min testing
-			SET_ALPHA_COLOR_FACTOR(1);
+			// bAlphaClamping = 1; // min testing
+			// SET_ALPHA_COLOR_FACTOR(1);
+            usec = Set_Alpha_Color_Factor<POS_A, !NEED_FACTOR>(a);
 
 			s_rgbeq = GL_FUNC_ADD;
 			s_srcrgb = GL_ZERO;

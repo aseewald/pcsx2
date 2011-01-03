@@ -76,6 +76,7 @@ extern vector<u32> s_vecTempTextures;		   // temporary textures, released at the
 extern vector<GLuint> g_vboBuffers; // VBOs for all drawing commands
 extern CRangeManager s_RangeMngr; // manages overwritten memory				// zz
 
+#if 0
 typedef union
 {
 	struct
@@ -90,13 +91,13 @@ typedef union
 	u32 _bAlphaState;
 } g_flag_vars;
 
-
 extern g_flag_vars g_vars;
+#endif
 
 //#define bNeedAlphaColor g_vars._bNeedAlphaColor
-#define b2XAlphaTest g_vars._b2XAlphaTest
-#define bDestAlphaColor g_vars._bDestAlphaColor
-#define bAlphaClamping g_vars._bAlphaClamping
+//#define b2XAlphaTest g_vars._b2XAlphaTest
+//#define bDestAlphaColor g_vars._bDestAlphaColor
+//#define bAlphaClamping g_vars._bAlphaClamping
 
 void FlushTransferRanges(const tex0Info* ptex);						//zz
 
