@@ -96,7 +96,7 @@ inline void SetTable(int psm) {
 			g_pageTable[psm]   = InitTable( 32,  64, &g_pageTable32Z[0][0]);
 			g_blockTable[psm]  = InitTable(  4,   8, &g_blockTable32Z[0][0]);
 			g_columnTable[psm] = InitTable(  8,   8, &g_columnTable32[0][0]);
-			// Erm...
+			break;
 			
 		case PSMT24Z:
 			g_pageTable[psm]   = g_pageTable[PSMT32Z];
