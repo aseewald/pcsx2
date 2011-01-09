@@ -23,7 +23,6 @@
 #include "GS.h"
 #include "Mem.h"
 
-#define DSTPSM gs.dstbuf.psm
 extern int tempX, tempY;
 extern int pitch, area, fracX;
 extern int nSize;
@@ -39,7 +38,7 @@ static __forceinline const T *TransmitHostLocalY_(_writePixel_0 wp, s32 widthlim
 
 	if ((gs.imageEnd.x - gs.trxpos.dx) % widthlimit)
 	{
-		// ZZLog::GS_Log("Bad Transmission! %d %d, psm: %d", gs.trxpos.dx, gs.imageEnd.x, DSTPSM);
+		// ZZLog::GS_Log("Bad Transmission! %d %d, psm: %d", gs.trxpos.dx, gs.imageEnd.x, gs.dstbuf.psm);
 
 		for (; tempY < endY; ++tempY)
 		{
@@ -98,7 +97,7 @@ static __forceinline const T *TransmitHostLocalY_24(_writePixel_0 wp, s32 widthl
 {
 	if (widthlimit != 8 || ((gs.imageEnd.x - gs.trxpos.dx) % widthlimit))
 	{
-		//ZZLog::GS_Log("Bad Transmission! %d %d, psm: %d", gs.trxpos.dx, gs.imageEnd.x, DSTPSM);
+		//ZZLog::GS_Log("Bad Transmission! %d %d, psm: %d", gs.trxpos.dx, gs.imageEnd.x, gs.dstbuf.psm);
 		for (; tempY < endY; ++tempY)
 		{
 			for (; tempX < gs.imageEnd.x && nSize > 0; tempX += 1, nSize -= 1, buf += 3)

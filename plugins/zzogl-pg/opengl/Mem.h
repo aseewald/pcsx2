@@ -33,8 +33,13 @@ static __forceinline int MOD_POW2(int val, int base) { return ((val)&(base - 1))
 const int BLOCK_TEXWIDTH = 128;
 const int BLOCK_TEXHEIGHT = 512;
 
-#ifdef ZZNORMAL_MEMORY
-extern PCSX2_ALIGNED16(u32 tempblock[64]);
+// PSM is u6 value, so we MUST guarantee, that we don't crush on incorrect psm.
+#define MAX_PSM 64
+#define TABLE_WIDTH 8
+
+#ifndef ZZNORMAL_MEMORY
+#include "ZZoglMem.h"
+#endif
 
 typedef u32(*_getPixelAddress)(int x, int y, u32 bp, u32 bw);
 typedef u32(*_getPixelAddress_0)(int x, int y, u32 bw);
@@ -56,6 +61,7 @@ extern _SwizzleBlock swizzleBlockUnFun[64];
 extern _TransferHostLocal TransferHostLocalFun[64];
 extern _TransferLocalHost TransferLocalHostFun[64];
 
+
 // Both of the following structs should probably be local class variables or in a namespace,
 // but this works for the moment.
 
@@ -69,6 +75,9 @@ struct TransferData
 	u32 transfersize;
 	u32 psm;
 };
+
+#ifdef ZZNORMAL_MEMORY
+extern PCSX2_ALIGNED16(u32 tempblock[64]);
 
 struct TransferFuncts
 {
@@ -502,6 +511,8 @@ static __forceinline u32 readPixel16SZ_0(const void* pmem, int x, int y, u32 bw)
 
 ///////////////
 
+#endif
+
 extern int TransferHostLocal32(const void* pbyMem, u32 nQWordSize);
 extern int TransferHostLocal32Z(const void* pbyMem, u32 nQWordSize);
 extern int TransferHostLocal24(const void* pbyMem, u32 nQWordSize);
@@ -529,6 +540,5 @@ extern void TransferLocalHost32Z(void* pbyMem, u32 nQWordSize);
 extern void TransferLocalHost24Z(void* pbyMem, u32 nQWordSize);
 extern void TransferLocalHost16Z(void* pbyMem, u32 nQWordSize);
 extern void TransferLocalHost16SZ(void* pbyMem, u32 nQWordSize);
-#endif
 
 #endif /* __MEM_H__ */

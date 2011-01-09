@@ -23,16 +23,51 @@
 #include <vector>
 #include "GS.h"
 #include "Util.h"
+#include "Mem.h"
 
 #ifndef ZZNORMAL_MEMORY
-// works only when base is a power of 2
-#define ROUND_UPPOW2(val, base)	(((val)+(base-1))&~(base-1))
-#define ROUND_DOWNPOW2(val, base)	((val)&~(base-1))
-#define MOD_POW2(val, base) ((val)&(base-1))
 
-// d3d texture dims
-#define BLOCK_TEXWIDTH	128
-#define BLOCK_TEXHEIGHT 512
+extern u32 g_blockTable32[4][8];
+extern u32 g_blockTable32Z[4][8];
+extern u32 g_blockTable16[8][4];
+extern u32 g_blockTable16S[8][4];
+
+extern u32 g_blockTable16Z[8][4];
+
+extern u32 g_blockTable16SZ[8][4];
+
+extern u32 g_blockTable8[4][8];
+extern u32 g_blockTable4[8][4];
+
+extern u32 g_columnTable32[8][8];
+extern u32 g_columnTable16[8][16];
+extern u32 g_columnTable8[16][16];
+extern u32 g_columnTable4[16][32];
+
+//--
+
+extern u32 g_pageTable32[32][64];
+extern u32 g_pageTable32Z[32][64];
+extern u32 g_pageTable16[64][64];
+extern u32 g_pageTable16S[64][64];
+extern u32 g_pageTable16Z[64][64];
+extern u32 g_pageTable16SZ[64][64];
+extern u32 g_pageTable8[64][128];
+extern u32 g_pageTable4[128][128];
+
+
+//maximum PSM is 58, so our arrays have 58 + 1 = 59 elements
+
+// This table is used for fast access to memory storage data. 
+extern u32 ZZ_DT[MAX_PSM][TABLE_WIDTH];
+
+
+//maxium PSM is 58, so our arrays have 58 + 1 = 59 elements
+extern u32** g_pageTable[MAX_PSM];
+extern u32** g_blockTable[MAX_PSM];
+extern u32** g_columnTable[MAX_PSM];
+extern u32 g_pageTable2[MAX_PSM][127][127];
+extern u32** g_pageTableNew[MAX_PSM];
 
 // rest not visible externally
 struct BLOCK
@@ -92,6 +127,13 @@ extern u32 g_pageTable16SZ[64][64];
 extern u32 g_pageTable8[64][128];
 extern u32 g_pageTable4[128][128];
 
+
+extern u32** g_pageTable[MAX_PSM];
+extern u32** g_blockTable[MAX_PSM];
+extern u32** g_columnTable[MAX_PSM];
+extern u32 ZZ_DT[MAX_PSM][TABLE_WIDTH];
+extern u32** g_pageTableNew[MAX_PSM];
+
 static __forceinline void MaskedOR(u32* dst, u32 pixel, u32 mask = 0xffffffff) {
 	if (mask == 0xffffffff)
 		*dst = pixel;
@@ -99,7 +141,7 @@ static __forceinline void MaskedOR(u32* dst, u32 pixel, u32 mask = 0xffffffff) {
 		*dst = (*dst & (~mask)) | (pixel & mask);
 }
 
-// This two defines seems like idiotic code, but in reallity it have one, but big impartance -- this code
+// This two defines seems like idiotic code, but in reality it have one, but big importance -- this code
 // made psm variable (and psm2 in second case) -- constant, so optimiser could properly pass proper function
 #define PSM_SWITCHCASE(X) { \
 	switch (psm) { \
@@ -282,45 +324,32 @@ static __forceinline void setPsmtConstantsX(u8& A, u8& B, u8& C, u8& D, u8& E, u
 	} 
 }
 
-// PSM is u6 value, so we MUST guarantee, that we don't crush on incorrect psm.
-#define MAX_PSM 64
-#define TABLE_WIDTH 8
+// This is where the NEW_CODE define used to be.
 
-extern u32** g_pageTable[MAX_PSM];
-extern u32** g_blockTable[MAX_PSM];
-extern u32** g_columnTable[MAX_PSM];
-extern u32 ZZ_DT[MAX_PSM][TABLE_WIDTH];
-extern u32** g_pageTableNew[MAX_PSM];
-
-#define NEWCODE
-//#define OLDCODE
-//#define ZEROFROG_CODE
-
-#ifdef NEWCODE
 // ------------------------------------------ get Address functions ------------------------------------
 // Yes, only 1 function to all cases of life! 
-// Warning! We switch bp and bw for usage of default value, so be warned! I
-// t not C, it's C++, so not it.
+// Warning! We switch bp and bw for usage of default value, so be warned! It's
+// not C, it's C++, so not it.
 template <int psm>
 static __forceinline u32 getPixelAddress(int x, int y, u32 bw, u32 bp = 0) {
 	u32 basepage;
 	u32 word;
 
 	u8 A = 0, B = 0, C = 0, D = 0, E = 0, F = 0;  u32 G = 0; u8 H= 0;
-	setPsmtConstantsX<psm>(A, B, C, D, E, F, G, H) ; 
+	setPsmtConstantsX<psm>(A, B, C, D, E, F, G, H); 
 	basepage = ((y>>A) * (bw>>B)) + (x>>B); 
 	word = ((bp * 64 + basepage * 2048) << C) + g_pageTable[psm][y&D][x&E];				
 
 	return word;	
 }
 
-// It's Zerofrog's funtion. I need to eliminate them all! All access should be 32-bit aligned.
+// It's Zerofrog's function. I need to eliminate them all! All access should be 32-bit aligned.
 static __forceinline u32 getPixelAddress(int psm, int x, int y, u32 bw, u32 bp = 0) {
 	PSM_SWITCHCASE(return getPixelAddress<psmC>(x, y, bw, bp) ;)
 	return 0;
 }
 
-// This is compatibility code, for refenrece,
+// This is compatibility code, for reference,
 #define Def_getPixelAddress(psmT, psmX) \
 	static __forceinline u32 getPixelAddress##psmT(int x, int y, u32 bp, u32 bw) { \
 		return getPixelAddress<psmX>(x, y, bw, bp); } \
@@ -708,7 +737,7 @@ void transferPixelFast(void* dst, void* src, int dx, int dy, int sx, int sy, u32
 
 	u8 A = 0, B = 0, C = 0 , D = 0, E = 0, F = 0; u32 G = 0; u8 H = 0;
 	setPsmtConstantsX<psm> (A, B, C, D, E, F, G, H);
-	assert ( (sx-dx) & E == (sy - dy) & D; (sy - dy) & D == 0; );
+	assert ( ((sx-dx) & E == (sy - dy) & D) && ((sy - dy) & D == 0) );
 
 	Dbasepage = ((dy>>A) * (dbw>>B)) + (dx>>B);
 	Sbasepage = ((sy>>A) * (sbw>>B)) + (sx>>B);
@@ -754,536 +783,6 @@ Def_getReadWrite(24Z, PSMCT24);
 Def_getReadWrite(16Z, PSMCT16); 
 Def_getReadWrite(16SZ, PSMCT16);
 
-#endif // NEWCODE
-
-//---------------------------------------------------------------------------------------------------------------------------------------------
-#ifdef ZEROFROG_CODE
-
-static __forceinline u32 getPixelAddress32(int x, int y, u32 bp, u32 bw) {
-	u32 basepage = ((y>>5) * (bw>>6)) + (x>>6);
-	u32 word = bp * 64 + basepage * 2048 + g_pageTable32[y&31][x&63];
-	//assert (word < 0x100000);
-	//word = min(word, 0xfffff);
-	return word;
-}
-
-static __forceinline u32 getPixelAddress32_0(int x, int y, u32 bw) {
-	u32 basepage = ((y>>5) * (bw>>6)) + (x>>6);
-	u32 word = basepage * 2048 + g_pageTable32[y&31][x&63];
-	//assert (word < 0x100000);
-	//word = min(word, 0xfffff);
-	return word;
-}
-
-#define getPixelAddress24 getPixelAddress32
-#define getPixelAddress24_0 getPixelAddress32_0
-#define getPixelAddress8H getPixelAddress32
-#define getPixelAddress8H_0 getPixelAddress32_0
-#define getPixelAddress4HL getPixelAddress32
-#define getPixelAddress4HL_0 getPixelAddress32_0
-#define getPixelAddress4HH getPixelAddress32
-#define getPixelAddress4HH_0 getPixelAddress32_0
-
-static __forceinline u32 getPixelAddress16(int x, int y, u32 bp, u32 bw) {
-	u32 basepage = ((y>>6) * (bw>>6)) + (x>>6);
-	u32 word = bp * 128 + basepage * 4096 + g_pageTable16[y&63][x&63];
-	//assert (word < 0x200000);
-	//word = min(word, 0x1fffff);
-	return word;
-}
-
-static __forceinline u32 getPixelAddress16_0(int x, int y, u32 bw) {
-	u32 basepage = ((y>>6) * (bw>>6)) + (x>>6);
-	u32 word = basepage * 4096 + g_pageTable16[y&63][x&63];
-	//assert (word < 0x200000);
-	//word = min(word, 0x1fffff);
-	return word;
-}
-
-static __forceinline u32 getPixelAddress16S(int x, int y, u32 bp, u32 bw) {
-	u32 basepage = ((y>>6) * (bw>>6)) + (x>>6);
-	u32 word = bp * 128 + basepage * 4096 + g_pageTable16S[y&63][x&63];
-	//assert (word < 0x200000);
-	//word = min(word, 0x1fffff);
-	return word;
-}
-
-static __forceinline u32 getPixelAddress16S_0(int x, int y, u32 bw) {
-	u32 basepage = ((y>>6) * (bw>>6)) + (x>>6);
-	u32 word = basepage * 4096 + g_pageTable16S[y&63][x&63];
-	//assert (word < 0x200000);
-	//word = min(word, 0x1fffff);
-	return word;
-}
-
-static __forceinline u32 getPixelAddress8(int x, int y, u32 bp, u32 bw) {
-	u32 basepage = ((y>>6) * ((bw+127)>>7)) + (x>>7);
-	u32 word = bp * 256 + basepage * 8192 + g_pageTable8[y&63][x&127];
-	//assert (word < 0x400000);
-	//word = min(word, 0x3fffff);
-	return word;
-}
-
-static __forceinline u32 getPixelAddress8_0(int x, int y, u32 bw) {
-	u32 basepage = ((y>>6) * ((bw+127)>>7)) + (x>>7);
-	u32 word = basepage * 8192 + g_pageTable8[y&63][x&127];
-	//assert (word < 0x400000);
-	//word = min(word, 0x3fffff);
-	return word;
-}
-
-static __forceinline u32 getPixelAddress4(int x, int y, u32 bp, u32 bw) {
-	u32 basepage = ((y>>7) * ((bw+127)>>7)) + (x>>7);
-	u32 word = bp * 512 + basepage * 16384 + g_pageTable4[y&127][x&127];
-	//assert (word < 0x800000);
-	//word = min(word, 0x7fffff);
-	return word;
-}
-
-static __forceinline u32 getPixelAddress4_0(int x, int y, u32 bw) {
-	u32 basepage = ((y>>7) * ((bw+127)>>7)) + (x>>7);
-	u32 word = basepage * 16384 + g_pageTable4[y&127][x&127];
-	//assert (word < 0x800000);
-	//word = min(word, 0x7fffff);
-	return word;
-}
-
-static __forceinline u32 getPixelAddress32Z(int x, int y, u32 bp, u32 bw) {
-	u32 basepage = ((y>>5) * (bw>>6)) + (x>>6);
-	u32 word = bp * 64 + basepage * 2048 + g_pageTable32Z[y&31][x&63];
-	//assert (word < 0x100000);
-	//word = min(word, 0xfffff);
-	return word;
-}
-
-static __forceinline u32 getPixelAddress32Z_0(int x, int y, u32 bw) {
-	u32 basepage = ((y>>5) * (bw>>6)) + (x>>6);
-	u32 word = basepage * 2048 + g_pageTable32Z[y&31][x&63];
-	//assert (word < 0x100000);
-	//word = min(word, 0xfffff);
-	return word;
-}
-
-#define getPixelAddress24Z getPixelAddress32Z
-#define getPixelAddress24Z_0 getPixelAddress32Z_0
-
-static __forceinline u32 getPixelAddress16Z(int x, int y, u32 bp, u32 bw) {
-	u32 basepage = ((y>>6) * (bw>>6)) + (x>>6);
-	u32 word = bp * 128 + basepage * 4096 + g_pageTable16Z[y&63][x&63];
-	//assert (word < 0x200000);
-	//word = min(word, 0x1fffff);
-	return word;
-}
-
-static __forceinline u32 getPixelAddress16Z_0(int x, int y, u32 bw) {
-	u32 basepage = ((y>>6) * (bw>>6)) + (x>>6);
-	u32 word = basepage * 4096 + g_pageTable16Z[y&63][x&63];
-	//assert (word < 0x200000);
-	//word = min(word, 0x1fffff);
-	return word;
-}
-
-static __forceinline u32 getPixelAddress16SZ(int x, int y, u32 bp, u32 bw) {
-	u32 basepage = ((y>>6) * (bw>>6)) + (x>>6);
-	u32 word = bp * 128 + basepage * 4096 + g_pageTable16SZ[y&63][x&63];
-	//assert (word < 0x200000);
-	//word = min(word, 0x1fffff);
-	return word;
-}
-
-static __forceinline u32 getPixelAddress16SZ_0(int x, int y, u32 bw) {
-	u32 basepage = ((y>>6) * (bw>>6)) + (x>>6);
-	u32 word = basepage * 4096 + g_pageTable16SZ[y&63][x&63];
-	//assert (word < 0x200000);
-	//word = min(word, 0x1fffff);
-	return word;
-}
-
-static __forceinline void writePixel32(void* pmem, int x, int y, u32 pixel, u32 bp, u32 bw) {
-	((u32*)pmem)[getPixelAddress32(x, y, bp, bw)] = pixel;
-}
-
-static __forceinline void writePixel24(void* pmem, int x, int y, u32 pixel, u32 bp, u32 bw) {
-	u8 *buf = (u8*)&((u32*)pmem)[getPixelAddress32(x, y, bp, bw)];
-	u8 *pix = (u8*)&pixel;
-	buf[0] = pix[0]; buf[1] = pix[1]; buf[2] = pix[2];
-}
-
-static __forceinline void writePixel16(void* pmem, int x, int y, u32 pixel, u32 bp, u32 bw) {
-	((u16*)pmem)[getPixelAddress16(x, y, bp, bw)] = pixel;
-}
-
-static __forceinline void writePixel16S(void* pmem, int x, int y, u32 pixel, u32 bp, u32 bw) {
-	((u16*)pmem)[getPixelAddress16S(x, y, bp, bw)] = pixel;
-}
-
-static __forceinline void writePixel8(void* pmem, int x, int y, u32 pixel, u32 bp, u32 bw) {
-	((u8*)pmem)[getPixelAddress8(x, y, bp, bw)] = pixel;
-}
-
-static __forceinline void writePixel8H(void* pmem, int x, int y, u32 pixel, u32 bp, u32 bw) {
-	((u8*)pmem)[4*getPixelAddress32(x, y, bp, bw)+3] = pixel;
-}
-
-static __forceinline void writePixel4(void* pmem, int x, int y, u32 pixel, u32 bp, u32 bw) {
-	u32 addr = getPixelAddress4(x, y, bp, bw);
-	u8 pix = ((u8*)pmem)[addr/2];
-	if (addr & 0x1) ((u8*)pmem)[addr/2] = (pix & 0x0f) | (pixel << 4);
-	else ((u8*)pmem)[addr/2] = (pix & 0xf0) | (pixel);
-}
-
-static __forceinline void writePixel4HL(void* pmem, int x, int y, u32 pixel, u32 bp, u32 bw) {
-	u8 *p = (u8*)pmem + 4*getPixelAddress4HL(x, y, bp, bw)+3;
-	*p = (*p & 0xf0) | pixel;
-}
-
-static __forceinline void writePixel4HH(void* pmem, int x, int y, u32 pixel, u32 bp, u32 bw) {
-	u8 *p = (u8*)pmem + 4*getPixelAddress4HH(x, y, bp, bw)+3;
-	*p = (*p & 0x0f) | (pixel<<4);
-}
-
-static __forceinline void writePixel32Z(void* pmem, int x, int y, u32 pixel, u32 bp, u32 bw) {
-	((u32*)pmem)[getPixelAddress32Z(x, y, bp, bw)] = pixel;
-}
-
-static __forceinline void writePixel24Z(void* pmem, int x, int y, u32 pixel, u32 bp, u32 bw) {
-	u8 *buf = (u8*)pmem + 4*getPixelAddress32Z(x, y, bp, bw);
-	u8 *pix = (u8*)&pixel;
-	buf[0] = pix[0]; buf[1] = pix[1]; buf[2] = pix[2];
-}
-
-static __forceinline void writePixel16Z(void* pmem, int x, int y, u32 pixel, u32 bp, u32 bw) {
-	((u16*)pmem)[getPixelAddress16Z(x, y, bp, bw)] = pixel;
-}
-
-static __forceinline void writePixel16SZ(void* pmem, int x, int y, u32 pixel, u32 bp, u32 bw) {
-	((u16*)pmem)[getPixelAddress16SZ(x, y, bp, bw)] = pixel;
-}
-
-
-///////////////
-
-static __forceinline u32  readPixel32(const void* pmem, int x, int y, u32 bp, u32 bw) {
-	return ((const u32*)pmem)[getPixelAddress32(x, y, bp, bw)];
-}
-
-static __forceinline u32  readPixel24(const void* pmem, int x, int y, u32 bp, u32 bw) {
-	return ((const u32*)pmem)[getPixelAddress32(x, y, bp, bw)] & 0xffffff;
-}
-
-static __forceinline u32  readPixel16(const void* pmem, int x, int y, u32 bp, u32 bw) {
-	return ((const u16*)pmem)[getPixelAddress16(x, y, bp, bw)];
-}
-
-static __forceinline u32  readPixel16S(const void* pmem, int x, int y, u32 bp, u32 bw) {
-	return ((const u16*)pmem)[getPixelAddress16S(x, y, bp, bw)];
-}
-
-static __forceinline u32  readPixel8(const void* pmem, int x, int y, u32 bp, u32 bw) {
-	return ((const u8*)pmem)[getPixelAddress8(x, y, bp, bw)];
-}
-
-static __forceinline u32  readPixel8H(const void* pmem, int x, int y, u32 bp, u32 bw) {
-	return ((const u8*)pmem)[4*getPixelAddress32(x, y, bp, bw) + 3];
-}
-
-static __forceinline u32  readPixel4(const void* pmem, int x, int y, u32 bp, u32 bw) {
-	u32 addr = getPixelAddress4(x, y, bp, bw);
-	u8 pix = ((const u8*)pmem)[addr/2];
-	if (addr & 0x1)
-		 return pix >> 4;
-	else return pix & 0xf;
-}
-
-static __forceinline u32  readPixel4HL(const void* pmem, int x, int y, u32 bp, u32 bw) {
-	const u8 *p = (const u8*)pmem+4*getPixelAddress4HL(x, y, bp, bw)+3;
-	return *p & 0x0f;
-}
-
-static __forceinline u32  readPixel4HH(const void* pmem, int x, int y, u32 bp, u32 bw) {
-	const u8 *p = (const u8*)pmem+4*getPixelAddress4HH(x, y, bp, bw) + 3;
-	return *p >> 4;
-}
-
-///////////////
-
-static __forceinline u32  readPixel32Z(const void* pmem, int x, int y, u32 bp, u32 bw) {
-	return ((const u32*)pmem)[getPixelAddress32Z(x, y, bp, bw)];
-}
-
-static __forceinline u32  readPixel24Z(const void* pmem, int x, int y, u32 bp, u32 bw) {
-	return ((const u32*)pmem)[getPixelAddress32Z(x, y, bp, bw)] & 0xffffff;
-}
-
-static __forceinline u32  readPixel16Z(const void* pmem, int x, int y, u32 bp, u32 bw) {
-	return ((const u16*)pmem)[getPixelAddress16Z(x, y, bp, bw)];
-}
-
-static __forceinline u32  readPixel16SZ(const void* pmem, int x, int y, u32 bp, u32 bw) {
-	return ((const u16*)pmem)[getPixelAddress16SZ(x, y, bp, bw)];
-}
-
-///////////////////////////////
-// Functions that take 0 bps //
-///////////////////////////////
-
-static __forceinline void writePixel32_0(void* pmem, int x, int y, u32 pixel, u32 bw) {
-	((u32*)pmem)[getPixelAddress32_0(x, y, bw)] = pixel;
-}
-
-static __forceinline void writePixel24_0(void* pmem, int x, int y, u32 pixel, u32 bw) {
-	u8 *buf = (u8*)&((u32*)pmem)[getPixelAddress32_0(x, y, bw)];
-	u8 *pix = (u8*)&pixel;
-#if defined(_MSC_VER) && defined(__x86_64__)
-	memcpy(buf, pix, 3);
-#else
-	buf[0] = pix[0]; buf[1] = pix[1]; buf[2] = pix[2];
-#endif
-}
-
-static __forceinline void writePixel16_0(void* pmem, int x, int y, u32 pixel, u32 bw) {
-	((u16*)pmem)[getPixelAddress16_0(x, y, bw)] = pixel;
-}
-
-static __forceinline void writePixel16S_0(void* pmem, int x, int y, u32 pixel, u32 bw) {
-	((u16*)pmem)[getPixelAddress16S_0(x, y, bw)] = pixel;
-}
-
-static __forceinline void writePixel8_0(void* pmem, int x, int y, u32 pixel, u32 bw) {
-	((u8*)pmem)[getPixelAddress8_0(x, y, bw)] = pixel;
-}
-
-static __forceinline void writePixel8H_0(void* pmem, int x, int y, u32 pixel, u32 bw) {
-	((u8*)pmem)[4*getPixelAddress32_0(x, y, bw)+3] = pixel;
-}
-
-static __forceinline void writePixel4_0(void* pmem, int x, int y, u32 pixel, u32 bw) {
-	u32 addr = getPixelAddress4_0(x, y, bw);
-	u8 pix = ((u8*)pmem)[addr/2];
-	if (addr & 0x1) ((u8*)pmem)[addr/2] = (pix & 0x0f) | (pixel << 4);
-	else ((u8*)pmem)[addr/2] = (pix & 0xf0) | (pixel);
-}
-
-static __forceinline void writePixel4HL_0(void* pmem, int x, int y, u32 pixel, u32 bw) {
-	u8 *p = (u8*)pmem + 4*getPixelAddress4HL_0(x, y, bw)+3;
-	*p = (*p & 0xf0) | pixel;
-}
-
-static __forceinline void writePixel4HH_0(void* pmem, int x, int y, u32 pixel, u32 bw) {
-	u8 *p = (u8*)pmem + 4*getPixelAddress4HH_0(x, y, bw)+3;
-	*p = (*p & 0x0f) | (pixel<<4);
-}
-
-static __forceinline void writePixel32Z_0(void* pmem, int x, int y, u32 pixel, u32 bw) {
-	((u32*)pmem)[getPixelAddress32Z_0(x, y, bw)] = pixel;
-}
-
-static __forceinline void writePixel24Z_0(void* pmem, int x, int y, u32 pixel, u32 bw) {
-	u8 *buf = (u8*)pmem + 4*getPixelAddress32Z_0(x, y, bw);
-	u8 *pix = (u8*)&pixel;
-#if defined(_MSC_VER) && defined(__x86_64__)
-	memcpy(buf, pix, 3);
-#else
-	buf[0] = pix[0]; buf[1] = pix[1]; buf[2] = pix[2];
-#endif
-}
-
-static __forceinline void writePixel16Z_0(void* pmem, int x, int y, u32 pixel, u32 bw) {
-	((u16*)pmem)[getPixelAddress16Z_0(x, y, bw)] = pixel;
-}
-
-static __forceinline void writePixel16SZ_0(void* pmem, int x, int y, u32 pixel, u32 bw) {
-	((u16*)pmem)[getPixelAddress16SZ_0(x, y, bw)] = pixel;
-}
-
-
-///////////////
-
-static __forceinline u32  readPixel32_0(const void* pmem, int x, int y, u32 bw) {
-	return ((const u32*)pmem)[getPixelAddress32_0(x, y, bw)];
-}
-
-static __forceinline u32  readPixel24_0(const void* pmem, int x, int y, u32 bw) {
-	return ((const u32*)pmem)[getPixelAddress32_0(x, y, bw)] & 0xffffff;
-}
-
-static __forceinline u32  readPixel16_0(const void* pmem, int x, int y, u32 bw) {
-	return ((const u16*)pmem)[getPixelAddress16_0(x, y, bw)];
-}
-
-static __forceinline u32  readPixel16S_0(const void* pmem, int x, int y, u32 bw) {
-	return ((const u16*)pmem)[getPixelAddress16S_0(x, y, bw)];
-}
-
-static __forceinline u32  readPixel8_0(const void* pmem, int x, int y, u32 bw) {
-	return ((const u8*)pmem)[getPixelAddress8_0(x, y, bw)];
-}
-
-static __forceinline u32  readPixel8H_0(const void* pmem, int x, int y, u32 bw) {
-	return ((const u8*)pmem)[4*getPixelAddress32_0(x, y, bw) + 3];
-}
-
-static __forceinline u32  readPixel4_0(const void* pmem, int x, int y, u32 bw) {
-	u32 addr = getPixelAddress4_0(x, y, bw);
-	u8 pix = ((const u8*)pmem)[addr/2];
-	if (addr & 0x1)
-		 return pix >> 4;
-	else return pix & 0xf;
-}
-
-static __forceinline u32  readPixel4HL_0(const void* pmem, int x, int y, u32 bw) {
-	const u8 *p = (const u8*)pmem+4*getPixelAddress4HL_0(x, y, bw)+3;
-	return *p & 0x0f;
-}
-
-static __forceinline u32  readPixel4HH_0(const void* pmem, int x, int y, u32 bw) {
-	const u8 *p = (const u8*)pmem+4*getPixelAddress4HH_0(x, y, bw) + 3;
-	return *p >> 4;
-}
-
-///////////////
-
-static __forceinline u32  readPixel32Z_0(const void* pmem, int x, int y, u32 bw) {
-	return ((const u32*)pmem)[getPixelAddress32Z_0(x, y, bw)];
-}
-
-static __forceinline u32  readPixel24Z_0(const void* pmem, int x, int y, u32 bw) {
-	return ((const u32*)pmem)[getPixelAddress32Z_0(x, y, bw)] & 0xffffff;
-}
-
-static __forceinline u32  readPixel16Z_0(const void* pmem, int x, int y, u32 bw) {
-	return ((const u16*)pmem)[getPixelAddress16Z_0(x, y, bw)];
-}
-
-static __forceinline u32  readPixel16SZ_0(const void* pmem, int x, int y, u32 bw) {
-	return ((const u16*)pmem)[getPixelAddress16SZ_0(x, y, bw)];
-}
-
-static __forceinline u32 getPixelAddress(int psm, int x, int y, u32 bw, u32 bp = 0) {
-	switch (psm) {
-		case PSMCT32: 
-		case PSMCT24:
-		case PSMT8H:  
-		case PSMT4HH:  
-		case PSMT4HL: 
-			return getPixelAddress32(x, y, bp, bw);
-			break; 
-		case PSMT32Z: 
-		case PSMT24Z:
-			return getPixelAddress32Z(x, y, bp, bw);
-			break;  
-		case PSMCT16:   
-			return getPixelAddress16(x, y, bp, bw);
-			break; 
-		case PSMCT16S: 
-       			return getPixelAddress16S(x, y, bp, bw);
-			break; 
-		case PSMT16Z:  
-      			return getPixelAddress16Z(x, y, bp, bw);
-			break; 
-		case PSMT16SZ: 
-       			return getPixelAddress16SZ(x, y, bp, bw);
-			break; 
-		case PSMT8:  
-    			return getPixelAddress8(x, y, bp, bw);
-			break; 
-		case PSMT4:  
-    			return getPixelAddress4(x, y, bp, bw);
-			break; 
-	}
-}
-
-static __forceinline u32  readPixel(int psm, const void* pmem, int x, int y, u32 bw, u32 bp = 0) {
-	switch (psm) {
-		case PSMCT32: 
-			return readPixel32(pmem, x, y, bp, bw);
-			break; 
-		case PSMCT24:
-			return readPixel24(pmem, x, y, bp, bw);
-			break; 
-		case PSMT32Z: 
-			return readPixel32Z(pmem, x, y, bp, bw);
-			break; 
-		case PSMT24Z: 
-			return readPixel24Z(pmem, x, y, bp, bw);
-			break; 
-		case PSMT8H: 
-			return readPixel8H(pmem, x, y, bp, bw);
-			break; 		
-		case PSMT4HH: 
-			return readPixel4HH(pmem, x, y, bp, bw);
-			break; 
-		case PSMT4HL: 
-			return readPixel4HL(pmem, x, y, bp, bw);
-			break; 
-		case PSMCT16:   
-			return readPixel16(pmem, x, y, bp, bw);
-			break; 
-		case PSMCT16S: 
-       			return readPixel16S(pmem, x, y, bp, bw);
-			break; 
-		case PSMT16Z:  
-      			return readPixel16Z(pmem, x, y, bp, bw);
-			break; 
-		case PSMT16SZ: 
-       			return readPixel16SZ(pmem, x, y, bp, bw);
-			break; 
-		case PSMT8:  
-    			return readPixel8(pmem, x, y, bp, bw);
-			break; 
-		case PSMT4:  
-    			return readPixel4(pmem, x, y, bp, bw);
-			break; 
-	}
-}
-
-static __forceinline void writePixel(int psm, void* pmem, int x, int y, int pixel, u32 bw, u32 bp = 0) {
-	switch (psm) {
-		case PSMCT32: 
-			writePixel32(pmem, x, y, pixel, bp, bw);
-			break; 
-		case PSMCT24:
-			writePixel24(pmem, x, y, pixel, bp, bw);
-			break; 
-		case PSMT32Z: 
-			writePixel32Z(pmem, x, y, pixel, bp, bw);
-			break; 
-		case PSMT24Z: 
-			writePixel24Z(pmem, x, y, pixel, bp, bw);
-			break; 
-		case PSMT8H: 
-			writePixel8H(pmem, x, y, pixel, bp, bw);
-			break; 		
-		case PSMT4HH: 
-			writePixel4HH(pmem, x, y, pixel, bp, bw);
-			break; 
-		case PSMT4HL: 
-			writePixel4HL(pmem, x, y, pixel, bp, bw);
-			break; 
-		case PSMCT16:   
-			writePixel16(pmem, x, y, pixel, bp, bw);
-			break; 
-		case PSMCT16S: 
-       			writePixel16S(pmem, x, y, pixel, bp, bw);
-			break; 
-		case PSMT16Z:  
-      			writePixel16Z(pmem, x, y, pixel, bp, bw);
-			break; 
-		case PSMT16SZ: 
-       			writePixel16SZ(pmem, x, y, pixel, bp, bw);
-			break; 
-		case PSMT8:  
-    			writePixel8(pmem, x, y, pixel, bp, bw);
-			break; 
-		case PSMT4:  
-    			writePixel4(pmem, x, y, pixel, bp, bw);
-			break; 
-	}
-}
-
-
-
-#endif // ZEROFROG_CODE
 #endif // Zeydlitz's code
 
 #endif /* __ZZOGL_MEM_H__ */

@@ -573,6 +573,11 @@ bool ZZCreate(int _width, int _height)
 	g_fBlockMult = 1;
 	bool do_not_use_billinear = false;
 
+#ifndef ZZNORMAL_MEMORY
+	FillAlowedPsnTable();
+	FillBlockTables();
+#endif
+
 	vector<char> vBlockData, vBilinearData;
 	BLOCK::FillBlocks(vBlockData, vBilinearData, 1);
 

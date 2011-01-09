@@ -28,6 +28,8 @@
 #include <emmintrin.h>
 #endif
 
+#ifdef ZZNORMAL_MEMORY
+
 BLOCK m_Blocks[0x40]; // do so blocks are indexable
 
 PCSX2_ALIGNED16(u32 tempblock[64]);
@@ -87,7 +89,7 @@ static __forceinline const T* AlignOnBlockBoundry(TransferData data, TransferFun
 		if (((gs.imageEnd.x - gs.trxpos.dx) % data.widthlimit) || ((gs.imageEnd.x - gs.image.x) % data.widthlimit))
 		{
 			/* transmit with a width of 1 */
-			transwidth = (1 + (DSTPSM == PSMT4));
+			transwidth = (1 + (gs.dstbuf.psm == PSMT4));
 		}
 		else
 		{
@@ -119,7 +121,7 @@ static __forceinline const T* TransferAligningToBlocks(TransferData data, Transf
 	/* on top of checking whether pbuf is aligned, make sure that the width is at least aligned to its limits (due to bugs in pcsx2) */
 	bAligned = !((uptr)pbuf & 0xf) && (TransPitch(pitch, data.transfersize) & 0xf) == 0;
 
-	if (bAligned || ((DSTPSM == PSMCT24) || (DSTPSM == PSMT8H) || (DSTPSM == PSMT4HH) || (DSTPSM == PSMT4HL)))
+	if (bAligned || ((gs.dstbuf.psm == PSMCT24) || (gs.dstbuf.psm == PSMT8H) || (gs.dstbuf.psm == PSMT4HH) || (gs.dstbuf.psm == PSMT4HL)))
 		swizzle = (fun.Swizzle);
 	else
 		swizzle = (fun.Swizzle_u);
@@ -382,3 +384,5 @@ void BLOCK::FillBlocks(vector<char>& vBlockData, vector<char>& vBilinearData, in
 	m_Blocks[PSMT4] = b;
 	m_Blocks[PSMT4].SetFun(PSMT4);
 }
+
+#endif
