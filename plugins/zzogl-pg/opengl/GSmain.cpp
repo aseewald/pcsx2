@@ -241,7 +241,7 @@ void CALLBACK GSreset()
 
 	gs.prac = 1;
 	prim = &gs._prim[0];
-	gs.imageTransfer = -1;
+	gs.transferring = false;
 	gs.q = 1;
 }
 
@@ -253,7 +253,7 @@ void CALLBACK GSgifSoftReset(u32 mask)
 	if (mask & 2) memset(&gs.path[1], 0, sizeof(gs.path[1]));
 	if (mask & 4) memset(&gs.path[2], 0, sizeof(gs.path[2]));
 
-	gs.imageTransfer = -1;
+	gs.transferring = false;
 	gs.q = 1;
 }
 

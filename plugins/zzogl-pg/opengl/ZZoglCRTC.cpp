@@ -529,7 +529,7 @@ inline void RenderCheckForTargets(tex0Info& texframe, list<CRenderTarget*>& list
 	int tex_th = (interlace_mode) ? texframe.th * 2 : texframe.th;
 	
 	//ZZLog::WriteLn("Render checking for targets, circuit %d", circuit);
-	GetRectMemAddress(start, end, texframe.psm, 0, 0, texframe.tw, tex_th, texframe.tbp0, texframe.tbw);
+	GetRectMemAddressZero(start, end, texframe.psm, texframe.tw, tex_th, texframe.tbp0, texframe.tbw);
 
 	// We need share list of targets between functions
 	s_RTs.GetTargs(start, end, listTargs);

@@ -192,7 +192,7 @@ bool CRenderTarget::Create(const frameInfo& frame)
 
 	if (fbw > 0 && fbh > 0)
 	{
-		GetRectMemAddress(start, end, psm, 0, 0, fbw, fbh, fbp, fbw);
+		GetRectMemAddressZero(start, end, psm, fbw, fbh, fbp, fbw);
 		psys = _aligned_malloc(Tex_Memory_Size(fbw, fbh), 16);
 
 		GL_REPORT_ERRORD();
@@ -1190,7 +1190,7 @@ void CRenderTargetMngr::DestroyIntersecting(CRenderTarget* prndr)
 	assert(prndr != NULL);
 
 	int start, end;
-	GetRectMemAddress(start, end, prndr->psm, 0, 0, prndr->fbw, prndr->fbh, prndr->fbp, prndr->fbw);
+	GetRectMemAddressZero(start, end, prndr->psm, prndr->fbw, prndr->fbh, prndr->fbp, prndr->fbw);
 
 	for (MAPTARGETS::iterator it = mapTargets.begin(); it != mapTargets.end();)
 	{
@@ -1341,7 +1341,7 @@ CRenderTarget* CRenderTargetMngr::GetTarg(const frameInfo& frame, u32 opts, int 
 			}
 
 			// recalc extents
-			GetRectMemAddress(it->second->start, it->second->end, frame.psm, 0, 0, frame.fbw, it->second->fbh, it->second->fbp, frame.fbw);
+			GetRectMemAddressZero(it->second->start, it->second->end, frame.psm, frame.fbw, it->second->fbh, it->second->fbp, frame.fbw);
 		}
 		else
 		{
@@ -1353,7 +1353,7 @@ CRenderTarget* CRenderTargetMngr::GetTarg(const frameInfo& frame, u32 opts, int 
 				it->second->psm = frame.psm;
 
 				// recalc extents
-				GetRectMemAddress(it->second->start, it->second->end, frame.psm, 0, 0, frame.fbw, it->second->fbh, it->second->fbp, frame.fbw);
+				GetRectMemAddressZero(it->second->start, it->second->end, frame.psm, frame.fbw, it->second->fbh, it->second->fbp, frame.fbw);
 			}
 		}
 
@@ -1418,7 +1418,7 @@ CRenderTarget* CRenderTargetMngr::GetTarg(const frameInfo& frame, u32 opts, int 
 	{
 
 		int start, end;
-		GetRectMemAddress(start, end, frame.psm, 0, 0, frame.fbw, frame.fbh, frame.fbp, frame.fbw);
+		GetRectMemAddressZero(start, end, frame.psm, frame.fbw, frame.fbh, frame.fbp, frame.fbw);
 		CRenderTarget* pbesttarg = NULL;
 
 		if (besttarg == 0)
@@ -1516,7 +1516,7 @@ CRenderTarget* CRenderTargetMngr::GetTarg(const frameInfo& frame, u32 opts, int 
 			ptarg->fbm = frame.fbm;
 			ptarg->fbp = frame.fbp;
 
-			GetRectMemAddress(ptarg->start, ptarg->end, frame.psm, 0, 0, frame.fbw, frame.fbh, frame.fbp, frame.fbw);
+			GetRectMemAddressZero(ptarg->start, ptarg->end, frame.psm, frame.fbw, frame.fbh, frame.fbp, frame.fbw);
 
 			ptarg->status = CRenderTarget::TS_NeedUpdate;
 		}
@@ -1780,7 +1780,7 @@ void CMemoryTargetMngr::GetClutVariables(int& clutsize, const tex0Info& tex0)
 void CMemoryTargetMngr::GetMemAddress(int& start, int& end,  const tex0Info& tex0)
 {
 	int nbStart, nbEnd;
-	GetRectMemAddress(nbStart, nbEnd, tex0.psm, 0, 0, tex0.tw, tex0.th, tex0.tbp0, tex0.tbw);
+	GetRectMemAddressZero(nbStart, nbEnd, tex0.psm, tex0.tw, tex0.th, tex0.tbp0, tex0.tbw);
 	assert(nbStart < nbEnd);
 	nbEnd = min(nbEnd, MEMORY_END);
 
@@ -2557,7 +2557,7 @@ void FlushTransferRange(CRenderTarget* ptarg, int start, int end, int texstart, 
 	{
 		// get start of left-most boundry page
 		int targstart, targend;
-		GetRectMemAddress(targstart, targend, ptarg->psm, 0, 0, ptarg->fbw, ptarg->fbh & ~(m_Blocks[ptarg->psm].height - 1), ptarg->fbp, ptarg->fbw);
+		GetRectMemAddressZero(targstart, targend, ptarg->psm, ptarg->fbw, ptarg->fbh & ~(m_Blocks[ptarg->psm].height - 1), ptarg->fbp, ptarg->fbw);
 
 		if (start >= targend)
 		{
@@ -2614,7 +2614,7 @@ void FlushTransferRanges(const tex0Info* ptex)
 
 	if (ptex != NULL) // If ptex is NULL, texstart & texend will be -1.
 	{
-		GetRectMemAddress(texstart, texend, ptex->psm, 0, 0, ptex->tw, ptex->th, ptex->tbp0, ptex->tbw);
+		GetRectMemAddressZero(texstart, texend, ptex->psm, ptex->tw, ptex->th, ptex->tbp0, ptex->tbw);
 	}
 
 	for (vector<CRangeManager::RANGE>::iterator itrange = s_RangeMngr.ranges.begin(); itrange != s_RangeMngr.ranges.end(); ++itrange)
@@ -3087,7 +3087,7 @@ void _Resolve(const void* psrc, int fbp, int fbw, int fbh, int psm, u32 fbm, boo
 
 	// align the rect to the nearest page
 	// note that fbp is always aligned on page boundaries
-	GetRectMemAddress(start, end, psm, 0, 0, fbw, fbh, fbp, fbw);
+	GetRectMemAddressZero(start, end, psm, fbw, fbh, fbp, fbw);
 
     // Comment this to restore the previous resolve_32 version
 #define OPTI_RESOLVE_32
@@ -3164,7 +3164,7 @@ void _Resolve(const void* psrc, int fbp, int fbw, int fbh, int psm, u32 fbm, boo
 	// align the rect to the nearest page
 	// note that fbp is always aligned on page boundaries
 	int start, end;
-	GetRectMemAddress(start, end, psm, 0, 0, fbw, fbh, fbp, fbw);
+	GetRectMemAddressZero(start, end, psm, fbw, fbh, fbp, fbw);
 
 	int i, j;
 	//short smask1 = gs.smask&1;

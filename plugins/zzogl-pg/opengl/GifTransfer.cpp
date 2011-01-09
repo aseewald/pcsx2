@@ -163,32 +163,36 @@ template<int index> void _GSgifTransfer(const u32 *pMem, u32 size)
 				{
 					int len = min(size, path->nloop);
 					//ZZLog::Error_Log("GIF_FLG_IMAGE(%d)=%d", gs.imageTransfer, len);
-
-					switch (gs.imageTransfer)
+					
+					if (gs.transferring)
 					{
-						case 0:
-							TransferHostLocal(pMem, len * 4);
-							break;
+						switch (gs.imageTransfer)
+						{
+							case XFER_HOST_TO_LOCAL:
+								TransferHostLocal(pMem, len * 4);
+								break;
 
-						case 1:
-							// This can't happen; downloads can not be started or performed as part of
-							// a GIFtag operation.  They're an entirely separate process that can only be
-							// done through the ReverseFIFO transfer (aka ReadFIFO). --air
-							assert(0);
-							//TransferLocalHost(pMem, len);
-							break;
+							case XFER_LOCAL_TO_HOST:
+								// This can't happen; downloads can not be started or performed as part of
+								// a GIFtag operation.  They're an entirely separate process that can only be
+								// done through the ReverseFIFO transfer (aka ReadFIFO). --air
+								assert(0);
+								//TransferLocalHost(pMem, len);
+								break;
 
-						case 2:
-							//TransferLocalLocal();
-							break;
+							case XFER_LOCAL_TO_LOCAL:
+								//TransferLocalLocal();
+								break;
 
-						case 3:
-							//assert(0);
-							break;
+							case XFER_DEACTIVATED:
+								//assert(0);
+								break;
 
-						default:
-							//assert(0);
-							break;
+							default:
+								//assert(0);
+								break;
+						}
+						
 					}
 
 					pMem += len * 4;

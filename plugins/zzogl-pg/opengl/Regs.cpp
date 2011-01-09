@@ -777,53 +777,43 @@ void __gifCall GIFRegHandlerTRXREG(const u32* data)
 {
 	FUNCLOG
 	GIFRegTRXREG* r = (GIFRegTRXREG*)(data);
-	gs.imageWtemp = r->RRW;
-	gs.imageHtemp = r->RRH;
+	gs.imageTemp.w = r->RRW;
+	gs.imageTemp.h = r->RRH;
 }
 
 void __gifCall GIFRegHandlerTRXDIR(const u32* data)
 {
 	FUNCLOG
-	// terminate any previous transfers
-
-	switch (gs.imageTransfer)
-	{
-
-		case 0: // host->loc
-			TerminateHostLocal();
-			break;
-
-		case 1: // loc->host
-			TerminateLocalHost();
-			break;
-	}
 
 	gs.srcbuf = gs.srcbufnew;
-
 	gs.dstbuf = gs.dstbufnew;
+	
+	gs.imageNew.w = gs.imageTemp.w;
+	gs.imageNew.h = gs.imageTemp.h;
+	
 	gs.trxpos = gs.trxposnew;
 	gs.imageTransfer = data[0] & 0x3;
-	gs.imageWnew = gs.imageWtemp;
-	gs.imageHnew = gs.imageHtemp;
+	gs.transferring = true;
 
-	if (gs.imageWnew > 0 && gs.imageHnew > 0)
+	if (gs.imageNew.w > 0 && gs.imageNew.h > 0)
 	{
 		switch (gs.imageTransfer)
 		{
-			case 0: // host->loc
+			case XFER_HOST_TO_LOCAL: // host->loc
 				InitTransferHostLocal();
 				break;
 
-			case 1: // loc->host
+			case XFER_LOCAL_TO_HOST: // loc->host
 				InitTransferLocalHost();
 				break;
 
-			case 2:
+			case XFER_LOCAL_TO_LOCAL:
 				TransferLocalLocal();
 				break;
 
-			case 3:
-				gs.imageTransfer = -1;
+			case XFER_DEACTIVATED:
+				ZZLog::WriteLn("Image Transfer = 3?");
+				gs.transferring = false;
 				break;
 
 			default:
@@ -835,7 +825,7 @@ void __gifCall GIFRegHandlerTRXDIR(const u32* data)
 #if defined(ZEROGS_DEVBUILD)
 		ZZLog::Warn_Log("Dummy transfer.");
 #endif
-		gs.imageTransfer = -1;
+		gs.transferring = false;
 	}
 }
 
@@ -843,7 +833,7 @@ void __gifCall GIFRegHandlerHWREG(const u32* data)
 {
 	FUNCLOG
 
-	if (gs.imageTransfer == 0)
+	if (gs.transferring && gs.imageTransfer == XFER_HOST_TO_LOCAL)
 	{
 		TransferHostLocal(data, 2);
 	}

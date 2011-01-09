@@ -311,7 +311,7 @@ void ExtWrite()
 //  else if (PSMT_ISHALF(texframe.psm)) bpp = 2;
 //
 //  // get the start and end addresses of the buffer
-//  GetRectMemAddress(start, end, texframe.psm, 0, 0, texframe.tw, texframe.th, texframe.tbp0, texframe.tbw);
+//  GetRectMemAddressZero(start, end, texframe.psm, texframe.tw, texframe.th, texframe.tbp0, texframe.tbw);
 }
 
 ////////////

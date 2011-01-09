@@ -497,6 +497,14 @@ typedef struct
 	int fba;
 } fbaInfo;
 
+enum transfer_types
+{
+	XFER_HOST_TO_LOCAL = 0,
+	XFER_LOCAL_TO_HOST = 1,
+	XFER_LOCAL_TO_LOCAL = 2,
+	XFER_DEACTIVATED = 3
+};
+
 typedef struct
 {
 	Vertex gsvertex[4]; // circular buffer that contains the vertex
@@ -531,10 +539,11 @@ typedef struct
 	texaInfo texa;
 	trxposInfo trxpos, trxposnew;
 
-	int imageWtemp, imageHtemp;
-
 	int imageTransfer;
-	int imageWnew, imageHnew, imageX, imageY, imageEndX, imageEndY;
+	bool transferring;
+	
+	Point image, imageEnd;
+	Size imageNew, imageTemp;
 
 	pathInfo path[4];
 	GIFRegDIMX dimx;
