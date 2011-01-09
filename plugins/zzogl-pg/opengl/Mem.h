@@ -22,6 +22,7 @@
 
 #include <assert.h>
 #include <vector>
+#include "GS.h"
 
 // works only when base is a power of 2
 static __forceinline int ROUND_UPPOW2(int val, int base) { return (((val) + (base - 1))&~(base - 1)); }
@@ -32,6 +33,7 @@ static __forceinline int MOD_POW2(int val, int base) { return ((val)&(base - 1))
 const int BLOCK_TEXWIDTH = 128;
 const int BLOCK_TEXHEIGHT = 512;
 
+#ifdef ZZNORMAL_MEMORY
 extern PCSX2_ALIGNED16(u32 tempblock[64]);
 
 typedef u32(*_getPixelAddress)(int x, int y, u32 bp, u32 bw);
@@ -527,5 +529,6 @@ extern void TransferLocalHost32Z(void* pbyMem, u32 nQWordSize);
 extern void TransferLocalHost24Z(void* pbyMem, u32 nQWordSize);
 extern void TransferLocalHost16Z(void* pbyMem, u32 nQWordSize);
 extern void TransferLocalHost16SZ(void* pbyMem, u32 nQWordSize);
+#endif
 
 #endif /* __MEM_H__ */

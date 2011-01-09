@@ -163,6 +163,8 @@
 		<Unit filename="../../ZZoglFlushHack.cpp" />
 		<Unit filename="../../ZZoglFlushHack.h" />
 		<Unit filename="../../ZZoglMath.h" />
+		<Unit filename="../../ZZoglMem.cpp" />
+		<Unit filename="../../ZZoglMem.h" />
 		<Unit filename="../../ZZoglSave.cpp" />
 		<Unit filename="../../ZZoglShaders.cpp" />
 		<Unit filename="../../ZZoglShaders.h" />
