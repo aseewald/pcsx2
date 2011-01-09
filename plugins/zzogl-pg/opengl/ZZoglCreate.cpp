@@ -35,10 +35,6 @@
 #	include "Win32.h"
 #endif
 
-//------------------ Defines
-
-#define VB_NUMBUFFERS			   512
-
 // ----------------- Types
 typedef void (APIENTRYP _PFNSWAPINTERVAL)(int);
 
@@ -49,8 +45,8 @@ extern bool ZZshLoadExtraEffects();
 extern FRAGMENTSHADER* ZZshLoadShadeEffect(int type, int texfilter, int fog, int testaem, int exactcolor, const clampInfo& clamp, int context, bool* pbFailed);
 
 GLuint vboRect = 0;
-vector<GLuint> g_vboBuffers; // VBOs for all drawing commands
-int g_nCurVBOIndex = 0;
+GLuint g_vboBuffers[VB_NUMBUFFERS]; // VBOs for all drawing commands
+u32 g_nCurVBOIndex = 0;
 
 inline bool CreateImportantCheck();
 inline void CreateOtherCheck();
@@ -111,6 +107,7 @@ GLenum g_internalRGBAFloat16Fmt = GL_RGBA_FLOAT16_ATI;
 u32 ptexLogo = 0;
 int nLogoWidth, nLogoHeight;
 u32 s_ptexInterlace = 0;		 // holds interlace fields
+static bool vb_buffer_allocated = false;
 
 //------------------ Global Variables
 int GPU_TEXWIDTH = 512;
@@ -125,7 +122,7 @@ float g_fBlockMult = 1;
 u32 ptexBlocks = 0, ptexConv16to32 = 0;	 // holds information on block tiling
 u32 ptexBilinearBlocks = 0;
 u32 ptexConv32to16 = 0;
-int g_nDepthBias = 0;
+// int g_nDepthBias = 0;
 
 extern void Delete_Avi_Capture();
 extern void ZZDestroy();
@@ -557,14 +554,15 @@ bool ZZCreate(int _width, int _height)
 
 	g_nCurVBOIndex = 0;
 
-	g_vboBuffers.resize(VB_NUMBUFFERS);
-	glGenBuffers((GLsizei)g_vboBuffers.size(), &g_vboBuffers[0]);
-
-	for (int i = 0; i < (int)g_vboBuffers.size(); ++i)
-	{
-		glBindBuffer(GL_ARRAY_BUFFER, g_vboBuffers[i]);
-		glBufferData(GL_ARRAY_BUFFER, 0x100*sizeof(VertexGPU), NULL, GL_STREAM_DRAW);
-	}
+    if (!vb_buffer_allocated) {
+        glGenBuffers((GLsizei)ArraySize(g_vboBuffers), g_vboBuffers);
+        for (int i = 0; i < ArraySize(g_vboBuffers); ++i)
+        {
+            glBindBuffer(GL_ARRAY_BUFFER, g_vboBuffers[i]);
+            glBufferData(GL_ARRAY_BUFFER, 0x100*sizeof(VertexGPU), NULL, GL_STREAM_DRAW);
+        }
+        vb_buffer_allocated = true; // mark the buffer allocated
+    }
 
 	GL_REPORT_ERROR();
 	if (err != GL_NO_ERROR) bSuccess = false;
@@ -743,7 +741,7 @@ bool ZZCreate(int _width, int _height)
 	// This was changed in SetAA - should we be changing it back?
 	glPointSize(1.0f);
 
-	g_nDepthBias = 0;
+	// g_nDepthBias = 0;
 
 	glEnable(GL_POLYGON_OFFSET_FILL);
 	glEnable(GL_POLYGON_OFFSET_LINE);
@@ -785,10 +783,10 @@ void ZZDestroy()
 	vb[0].Destroy();
 	vb[1].Destroy();
 
-	if (g_vboBuffers.size() > 0)
+	if (vb_buffer_allocated)
 	{
-		glDeleteBuffers((GLsizei)g_vboBuffers.size(), &g_vboBuffers[0]);
-		g_vboBuffers.clear();
+		glDeleteBuffers((GLsizei)ArraySize(g_vboBuffers), g_vboBuffers);
+        vb_buffer_allocated = false; // mark the buffer unallocated
 	}
 
 	g_nCurVBOIndex = 0;

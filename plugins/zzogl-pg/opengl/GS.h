@@ -34,6 +34,8 @@ extern float fFPS;
 
 extern int g_LastCRC;
 
+#define VB_NUMBUFFERS			   512 // number of vbo buffer allocated
+
 struct Vector_16F
 {
 	u16 x, y, z, w;

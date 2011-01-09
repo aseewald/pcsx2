@@ -63,9 +63,9 @@ enum ColorMask
 };
 #define GL_COLORMASK(mask) glColorMask(!!((mask)&COLORMASK_RED), !!((mask)&COLORMASK_GREEN), !!((mask)&COLORMASK_BLUE), !!((mask)&COLORMASK_ALPHA))
 
-extern int g_nDepthBias;
+// extern int g_nDepthBias;
 extern float g_fBlockMult; // used for old cards, that do not support Alpha-32float textures. We store block data in u16 and use it.
-extern int g_nCurVBOIndex;
+extern u32 g_nCurVBOIndex;
 extern u8* g_pbyGSClut;
 extern int ppf;
 
@@ -73,7 +73,7 @@ extern bool s_bTexFlush;
 
 extern ZZshProgram g_psprog;							// 2 -- ZZ
 extern vector<u32> s_vecTempTextures;		   // temporary textures, released at the end of every frame
-extern vector<GLuint> g_vboBuffers; // VBOs for all drawing commands
+extern GLuint g_vboBuffers[VB_NUMBUFFERS]; // VBOs for all drawing commands
 extern CRangeManager s_RangeMngr; // manages overwritten memory				// zz
 
 #if 0

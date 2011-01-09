@@ -49,7 +49,7 @@ bool bCanRenderStencil = true;
 GLenum s_rgbeq, s_alphaeq; // set by zgsBlendEquationSeparateEXT			// ZZ
 
 // Note: blendalpha[2] & blendinvalpha[2] are never used !!! The index 2 is changed to 0
-// Note: blendalpha[3] & blendinvalpha[3] are special case for dest blending on 24bits. FIXME: I was expected GL_ONE & GL_ZERO !
+// Note: blendalpha[3] & blendinvalpha[3] are special case for dest blending on 24bits. FIXME: I was expected GL_ONE & GL_ZERO ! -- greg
 static const u32 blendalpha[4] = { GL_SRC_ALPHA, GL_DST_ALPHA, GL_CONSTANT_COLOR_EXT, GL_SRC_ALPHA };	// ZZ
 static const u32 blendinvalpha[4] = { GL_ONE_MINUS_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA, GL_ONE_MINUS_CONSTANT_COLOR_EXT, GL_ONE_MINUS_SRC_ALPHA }; //ZZ
 static const u32 g_dwAlphaCmp[] = { GL_NEVER, GL_ALWAYS, GL_LESS, GL_LEQUAL, GL_EQUAL, GL_GEQUAL, GL_GREATER, GL_NOTEQUAL };    // ZZ
@@ -520,9 +520,13 @@ inline void FlushSetContextTarget(VB& curvb, int context)
 
 inline void FlushSetStream(VB& curvb)
 {
+    // setup current buffer
 	glBindBuffer(GL_ARRAY_BUFFER, g_vboBuffers[g_nCurVBOIndex]);
-	g_nCurVBOIndex = (g_nCurVBOIndex + 1) % g_vboBuffers.size();
 	glBufferData(GL_ARRAY_BUFFER, curvb.nCount * sizeof(VertexGPU), curvb.pBufferData, GL_STREAM_DRAW);
+
+	g_nCurVBOIndex = (g_nCurVBOIndex + 1) % ArraySize(g_vboBuffers);
+
+
 //	void* pdata = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
 //	memcpy_amd(pdata, curvb.pBufferData, curvb.nCount * sizeof(VertexGPU));
 //	glUnmapBuffer(GL_ARRAY_BUFFER);
@@ -922,11 +926,13 @@ inline void AlphaSetDepthTest(VB& curvb, const pixTest curtest, FRAGMENTSHADER* 
 	if (curtest.zte)
 	{
 		if (curtest.ztst > 1) g_nDepthUsed = 2;
+#if 0
 		if ((curtest.ztst == 2) ^(g_nDepthBias != 0))
 		{
 			g_nDepthBias = (curtest.ztst == 2);
 			//SETRS(D3DRS_DEPTHBIAS, g_nDepthBias?FtoDW(0.0003f):FtoDW(0.000015f));
 		}
+#endif
 
 		glDepthFunc(g_dwZCmp[curtest.ztst]);
 	}
@@ -2212,6 +2218,9 @@ __forceinline int Set_Alpha_Color_Factor(const alphaInfo& a)
             /* if in 24 bit mode, dest alpha should be one */
             if(PSMT_BITMODE(vb[icurctx].prndr->psm) == 1) {
                 /* dest alpha should be one */
+                ZZLog::Debug_Log("Alpha on a 24 bits framebuffer, good place to check the value of blend");
+                // FIMXE: the array constains GL_SRC_ALPHA and GL_ONE_MINUS_SRC_ALPHA
+                // It will love a test with GL_ONE and GL_ZERO
                 usec = 4;
 
                 // need a factor correction
