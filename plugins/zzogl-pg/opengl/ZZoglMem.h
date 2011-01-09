@@ -665,8 +665,9 @@ static __forceinline u32 BitmaskinPSM(u32* pmem, u8 x) {
 	 
 		u32 J = ((1 << I) - 1) << k;							// bitmask (of length ) & mask, moved by position k
 
+		// gcc complains repeatedly about this always being false. I'll investigate later.
 		if (z > k)	
-			return ((*(pmem + x/H + y)) & J) << (z - k);				// we use PX data from *mem + ynd properly shift
+			return ((*(pmem + x/H + y)) & J) << (z - k);				// we use PX data from *mem + and properly shift
 		else										// This formula loo little swizzled. 
 			return ((*(pmem + x/H + y)) & J) >> (k - z);
 	}
