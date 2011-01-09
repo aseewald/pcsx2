@@ -19,7 +19,7 @@
 using namespace pxSizerFlags;
 
 Panels::BaseAdvancedCpuOptions::BaseAdvancedCpuOptions( wxWindow* parent )
-	: BaseApplicableConfigPanel( parent )
+	: BaseApplicableConfigPanel_SpecificConfig( parent )
 {
 	wxStaticBoxSizer*	s_round( new wxStaticBoxSizer( wxVERTICAL, this, _("Round Mode") ) );
 	wxStaticBoxSizer*	s_clamp( new wxStaticBoxSizer( wxVERTICAL, this, _("Clamping Mode") ) );
@@ -123,7 +123,7 @@ Panels::AdvancedOptionsVU::AdvancedOptionsVU( wxWindow* parent )
 }
 
 Panels::CpuPanelEE::CpuPanelEE( wxWindow* parent )
-	: BaseApplicableConfigPanel( parent )
+	: BaseApplicableConfigPanel_SpecificConfig( parent )
 {
 	const RadioPanelItem tbl_CpuTypes_EE[] =
 	{
@@ -171,16 +171,16 @@ Panels::CpuPanelEE::CpuPanelEE( wxWindow* parent )
 
 	*this	+= &s_recs							| StdExpand();
 	*this	+= new wxStaticLine( this )			| pxExpand.Border(wxALL, 18);
-	*this	+= new AdvancedOptionsFPU( this )	| StdExpand();
+	*this	+= (m_advancedOptsFpu = new AdvancedOptionsFPU( this ))	| StdExpand();
 
 	*this	+= 12;
-	*this	+= new wxButton( this, wxID_DEFAULT, _("Restore Defaults") ) | StdButton();
+	*this	+= new wxButton( this, wxID_DEFAULT, _("Restore Defaults"))  | StdButton();
 
 	Connect( wxID_DEFAULT, wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler( CpuPanelEE::OnRestoreDefaults ) );
 }
 
 Panels::CpuPanelVU::CpuPanelVU( wxWindow* parent )
-	: BaseApplicableConfigPanel( parent )
+	: BaseApplicableConfigPanel_SpecificConfig( parent )
 {
 	const RadioPanelItem tbl_CpuTypes_VU[] =
 	{
@@ -220,7 +220,7 @@ Panels::CpuPanelVU::CpuPanelVU( wxWindow* parent )
 
 	*this	+= &s_recs							| StdExpand();
 	*this	+= new wxStaticLine( this )			| pxExpand.Border(wxALL, 18);
-	*this	+= new AdvancedOptionsVU( this )	| StdExpand();
+	*this	+= ( m_advancedOptsVu=new AdvancedOptionsVU( this ))	| StdExpand();
 
 	*this	+= 12;
 	*this	+= new wxButton( this, wxID_DEFAULT, _("Restore Defaults") ) | StdButton();
@@ -237,14 +237,28 @@ void Panels::CpuPanelEE::Apply()
 
 void Panels::CpuPanelEE::AppStatusEvent_OnSettingsApplied()
 {
+    ApplyConfigToGui( *g_Conf );
+}
+
+void Panels::CpuPanelEE::ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate ){
 	m_panel_RecEE->Enable( x86caps.hasStreamingSIMD2Extensions );
 
 	// IOP rec should work fine on any CPU. :D
 	//m_panel_RecIOP->Enable( x86caps.hasStreamingSIMD2Extensions );
 
-	const Pcsx2Config::RecompilerOptions& recOps( g_Conf->EmuOptions.Cpu.Recompiler );
+	const Pcsx2Config::RecompilerOptions& recOps( configToApply.EmuOptions.Cpu.Recompiler );
 	m_panel_RecEE->SetSelection( (int)recOps.EnableEE );
 	m_panel_RecIOP->SetSelection( (int)recOps.EnableIOP );
+
+	m_panel_RecEE->Enable(!configToApply.EnablePresets);
+	m_panel_RecIOP->Enable(!configToApply.EnablePresets);
+
+	this->Enable(!configToApply.EnablePresets);
+
+    if( manuallyPropagate )
+    {
+        m_advancedOptsFpu->ApplyConfigToGui( configToApply, true );
+    }
 }
 
 void Panels::CpuPanelEE::OnRestoreDefaults(wxCommandEvent &evt)
@@ -271,6 +285,11 @@ void Panels::CpuPanelVU::Apply()
 
 void Panels::CpuPanelVU::AppStatusEvent_OnSettingsApplied()
 {
+    ApplyConfigToGui( *g_Conf );
+}
+
+void Panels::CpuPanelVU::ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate )
+{
 	m_panel_VU0->Enable( x86caps.hasStreamingSIMD2Extensions );
 	m_panel_VU1->Enable( x86caps.hasStreamingSIMD2Extensions );
 
@@ -280,7 +299,7 @@ void Panels::CpuPanelVU::AppStatusEvent_OnSettingsApplied()
 	m_panel_VU1->EnableItem( 1, x86caps.hasStreamingSIMD2Extensions );
 	m_panel_VU1->EnableItem( 2, x86caps.hasStreamingSIMD2Extensions );
 
-	Pcsx2Config::RecompilerOptions& recOps( g_Conf->EmuOptions.Cpu.Recompiler );
+	Pcsx2Config::RecompilerOptions& recOps( configToApply.EmuOptions.Cpu.Recompiler );
 	if( recOps.UseMicroVU0 )
 		m_panel_VU0->SetSelection( recOps.EnableVU0 ? 1 : 0 );
 	else
@@ -290,7 +309,17 @@ void Panels::CpuPanelVU::AppStatusEvent_OnSettingsApplied()
 		m_panel_VU1->SetSelection( recOps.EnableVU1 ? 1 : 0 );
 	else
 		m_panel_VU1->SetSelection( recOps.EnableVU1 ? 2 : 0 );
+
+	this->Enable(!configToApply.EnablePresets);
+	m_panel_VU0->Enable(!configToApply.EnablePresets);
+	m_panel_VU1->Enable(!configToApply.EnablePresets);
+
+    if ( manuallyPropagate )
+    {
+        m_advancedOptsVu->ApplyConfigToGui( configToApply, true );
+    }
 }
+
 
 void Panels::CpuPanelVU::OnRestoreDefaults(wxCommandEvent &evt)
 {
@@ -329,7 +358,12 @@ void Panels::AdvancedOptionsFPU::Apply()
 
 void Panels::AdvancedOptionsFPU::AppStatusEvent_OnSettingsApplied()
 {
-	const Pcsx2Config::CpuOptions& cpuOps( g_Conf->EmuOptions.Cpu );
+    ApplyConfigToGui( *g_Conf );
+}
+
+void Panels::AdvancedOptionsFPU::ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate )
+{
+	const Pcsx2Config::CpuOptions& cpuOps( configToApply.EmuOptions.Cpu );
 	const Pcsx2Config::RecompilerOptions& recOps( cpuOps.Recompiler );
 
 	m_Option_FTZ->SetValue( cpuOps.sseMXCSR.FlushToZero );
@@ -341,6 +375,8 @@ void Panels::AdvancedOptionsFPU::AppStatusEvent_OnSettingsApplied()
 	else if( recOps.fpuExtraOverflow )	m_ClampModePanel->SetSelection( 2 );
 	else if( recOps.fpuOverflow )		m_ClampModePanel->SetSelection( 1 );
 	else								m_ClampModePanel->SetSelection( 0 );
+
+	this->Enable(!configToApply.EnablePresets);
 }
 
 void Panels::AdvancedOptionsVU::Apply()
@@ -362,7 +398,12 @@ void Panels::AdvancedOptionsVU::Apply()
 
 void Panels::AdvancedOptionsVU::AppStatusEvent_OnSettingsApplied()
 {
-	const Pcsx2Config::CpuOptions& cpuOps( g_Conf->EmuOptions.Cpu );
+    ApplyConfigToGui( *g_Conf );
+}
+
+void Panels::AdvancedOptionsVU::ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate )
+{
+	const Pcsx2Config::CpuOptions& cpuOps( configToApply.EmuOptions.Cpu );
 	const Pcsx2Config::RecompilerOptions& recOps( cpuOps.Recompiler );
 
 	m_Option_FTZ->SetValue( cpuOps.sseVUMXCSR.FlushToZero );
@@ -374,5 +415,6 @@ void Panels::AdvancedOptionsVU::AppStatusEvent_OnSettingsApplied()
 	else if( recOps.vuExtraOverflow )	m_ClampModePanel->SetSelection( 2 );
 	else if( recOps.vuOverflow )		m_ClampModePanel->SetSelection( 1 );
 	else								m_ClampModePanel->SetSelection( 0 );
-}
 
+	this->Enable(!configToApply.EnablePresets);
+}

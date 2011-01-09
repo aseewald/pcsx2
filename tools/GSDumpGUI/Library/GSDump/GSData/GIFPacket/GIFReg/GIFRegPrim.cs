@@ -4,6 +4,7 @@ using System.Text;
 
 namespace GSDumpGUI
 {
+    [Serializable]
     public class GIFRegPRIM : GIFReg
     {
         public GS_PRIM PrimitiveType;
@@ -16,9 +17,9 @@ namespace GSDumpGUI
         public GSCTXT CTXT;
         public GSFIX FIX;
 
-        public GIFRegPRIM(int addr, UInt64 LowData, UInt64 HighData, bool PackedFormat) : base(addr, LowData, HighData, PackedFormat) { }
+        public GIFRegPRIM(byte addr, UInt64 LowData, UInt64 HighData, bool PackedFormat) : base(addr, LowData, HighData, PackedFormat) { }
 
-        static public GIFReg Unpack(GIFTag tag, int addr, UInt64 LowData, UInt64 HighData, bool PackedFormat)
+        static public GIFReg Unpack(GIFTag tag, byte addr, UInt64 LowData, UInt64 HighData, bool PackedFormat)
         {
             GIFRegPRIM pr = new GIFRegPRIM(addr, LowData, HighData, PackedFormat);
             pr.Descriptor = (GIFRegDescriptor)addr;

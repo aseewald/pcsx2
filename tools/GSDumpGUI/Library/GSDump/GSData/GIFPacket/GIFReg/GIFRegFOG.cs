@@ -4,13 +4,14 @@ using System.Text;
 
 namespace GSDumpGUI
 {
+    [Serializable]
     public class GIFRegFOG : GIFReg
     {
         public double F;
 
-        public GIFRegFOG(int addr, UInt64 LowData, UInt64 HighData, bool PackedFormat) : base(addr, LowData, HighData, PackedFormat) { }
+        public GIFRegFOG(byte addr, UInt64 LowData, UInt64 HighData, bool PackedFormat) : base(addr, LowData, HighData, PackedFormat) { }
 
-        static public GIFReg Unpack(GIFTag tag, int addr, UInt64 LowData, UInt64 HighData, bool PackedFormat)
+        static public GIFReg Unpack(GIFTag tag, byte addr, UInt64 LowData, UInt64 HighData, bool PackedFormat)
         {
             GIFRegFOG u = new GIFRegFOG(addr, LowData, HighData, PackedFormat);
             u.Descriptor = (GIFRegDescriptor)addr;
