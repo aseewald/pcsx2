@@ -22,6 +22,8 @@
 #include "targets.h"
 #include "x86.h"
 
+#include "Mem_Swizzle.h"
+
 #ifndef ZZNORMAL_MEMORY
 
 bool allowed_psm[256] = {false, };			// Sometimes we got strange unknown psm
@@ -47,21 +49,25 @@ inline void SetTable(int psm) {
 			g_blockTable[psm]  = InitTable(  4,   8, &g_blockTable32[0][0]);
 			g_columnTable[psm] = InitTable(  8,   8, &g_columnTable32[0][0]);
 			break;
+			
 		case PSMCT24:
 			g_pageTable[psm]   = g_pageTable[PSMCT32];;
 			g_blockTable[psm]  = InitTable(  4,   8, &g_blockTable32[0][0]);
 			g_columnTable[psm] = InitTable(  8,   8, &g_columnTable32[0][0]);
 			break;
+			
 		case PSMCT16:
 			g_pageTable[psm]   = InitTable( 64,  64, &g_pageTable16[0][0]);
 			g_blockTable[psm]  = InitTable(  8,   4, &g_blockTable16[0][0]);
 			g_columnTable[psm] = InitTable(  8,  16, &g_columnTable16[0][0]);
 			break;
+			
 		case PSMCT16S:
 			g_pageTable[psm]   = InitTable( 64,  64, &g_pageTable16S[0][0]);
 			g_blockTable[psm]  = InitTable(  8,   4, &g_blockTable16S[0][0]);
 			g_columnTable[psm] = InitTable(  8,  16, &g_columnTable16[0][0]);
 			break;
+			
 		case PSMT8:
 			g_pageTable[psm]   = InitTable( 64, 128, &g_pageTable8[0][0]);
 			g_blockTable[psm]  = InitTable(  4,   8, &g_blockTable8[0][0]);
@@ -72,31 +78,38 @@ inline void SetTable(int psm) {
 			g_blockTable[psm]  = InitTable(  4,   8, &g_blockTable8[0][0]);
 			g_columnTable[psm] = InitTable( 16,  16, &g_columnTable8[0][0]);
 			break;
+			
 		case PSMT4:
 			g_pageTable[psm]   = InitTable(128, 128, &g_pageTable4[0][0]);
 			g_blockTable[psm]  = InitTable(  8,   4, &g_blockTable4[0][0]);
 			g_columnTable[psm] = InitTable( 16,  32, &g_columnTable4[0][0]);
-			break;			
+			break;	
+					
 		case PSMT4HL:
 		case PSMT4HH:
 			g_pageTable[psm]   = g_pageTable[PSMCT32];
 			g_blockTable[psm]  = InitTable(  8,   4, &g_blockTable4[0][0]);
 			g_columnTable[psm] = InitTable( 16,  32, &g_columnTable4[0][0]);
 			break;
+			
 		case PSMT32Z:
 			g_pageTable[psm]   = InitTable( 32,  64, &g_pageTable32Z[0][0]);
 			g_blockTable[psm]  = InitTable(  4,   8, &g_blockTable32Z[0][0]);
 			g_columnTable[psm] = InitTable(  8,   8, &g_columnTable32[0][0]);
+			// Erm...
+			
 		case PSMT24Z:
-			g_pageTable[psm]   = g_pageTable[PSMT32Z]; ;
+			g_pageTable[psm]   = g_pageTable[PSMT32Z];
 			g_blockTable[psm]  = InitTable(  4,   8, &g_blockTable32Z[0][0]);
 			g_columnTable[psm] = InitTable(  8,   8, &g_columnTable32[0][0]);
 			break;
+			
 		case PSMT16Z:
 			g_pageTable[psm]   = InitTable( 64,  64, &g_pageTable16Z[0][0]);
 			g_blockTable[psm]  = InitTable(  8,   4, &g_blockTable16Z[0][0]);
 			g_columnTable[psm] = InitTable(  8,  16, &g_columnTable16[0][0]);
 			break;
+			
 		case PSMT16SZ:
 			g_pageTable[psm]   = InitTable( 64,  64, &g_pageTable16SZ[0][0]);
 			g_blockTable[psm]  = InitTable(  8,   4, &g_blockTable16SZ[0][0]);
@@ -105,7 +118,7 @@ inline void SetTable(int psm) {
 	}
 }
 
-// Afther this function array's with u32** are memory set and filled. 
+// After this, the function arrays with u32** have memory set and filled. 
 void FillBlockTables() {
 	for (int i = 0; i < MAX_PSM; i++) 
 		SetTable(i);
@@ -124,13 +137,14 @@ void DestroyBlockTables() {
 }
 
 void FillNewPageTable() {
-	u32 address;
-	u32 shift;
 	int k = 0;
 	for (int psm = 0; psm < MAX_PSM; psm ++)
 		if (allowed_psm[psm]) {
 			for (u32 i = 0; i < 127; i++)
 				for(u32 j = 0; j < 127; j++) {
+					u32 address;
+					u32 shift;
+					
 					address = g_pageTable[psm][i & ZZ_DT[psm][3]][j & ZZ_DT[psm][4]];
 					shift = (((address << ZZ_DT[psm][5]) & 0x7 ) << 3)+ ZZ_DT[psm][7]; 				// last part is for 8H, 4HL and 4HH -- they have data from 24 and 28 byte
 					g_pageTable2[k][i][j] = (address >> ZZ_DT[psm][0]) + (shift << 16); 			// now lower 16 byte of page table is 32-bit aligned address, and upper -- 
@@ -141,10 +155,10 @@ void FillNewPageTable() {
 		}
 }
 
-BLOCK m_Blocks[MAX_PSM]; // do so blocks are indexable
+BLOCK m_Blocks[MAX_PSM]; // Do so that blocks are indexable.
 
-// At the begining and the end of each string we should made unaligned writes, with nSize check's. we should be sure, that all
-// this pixels are inside one widthlimit space.
+// At the begining and the end of each string we should made unaligned writes, with nSize checks. We should be sure that all
+// these pixels are inside one widthlimit space.
 template <int psm>
 inline bool DoOneTransmitStep(void* pstart, int& nSize, int endj, const void* pbuf, int& k, int& i, int& j, int widthlimit) {
 	for (; j < endj && nSize > 0; j++, k++, nSize -= 1) { 
@@ -154,17 +168,17 @@ inline bool DoOneTransmitStep(void* pstart, int& nSize, int endj, const void* pb
 	return (nSize == 0);
 }
 
-// FFX have PSMT8 transmit (starting intro -- sword and hairs).
-// Persona 4 texts at start are PSMCT32 (and there is also PSMCT16 transmit somwhere after).
-// Tekken V have PSMCT24 and PSMT4 transfers
+// FFX has PSMT8 transmit (starting intro -- sword and hairs).
+// Persona 4 texts at start are PSMCT32 (and there is also PSMCT16 transmit somwhere after that).
+// Tekken V has PSMCT24 and PSMT4 transfers
 
-// This function transfer "Y" block pixels. I use little another code than Zerofrog. My code ofthenly use widthmult != 1 addition (Zerofrog's code
-// have an stict condition for fast path: width of transferred data should be widthlimit multiplicate and j-EndY also should be multiplicate. But
-// usual data block of 255 pixels become transfered by 1.
-// I should check, maybe Unaligned_Start and Unaligned_End are othenly == 0, that I could try a fastpath -- with this block's off.
+// This function transfers "Y" block pixels. I use little another code than Zerofrog. My code often uses widthmult != 1 addition (Zerofrog's code
+// have an strict condition for fast path: width of transferred data should be widthlimit multiplied by j; EndY also should be multiplied. But
+// the usual data block of 255 pixels becomes transfered by 1.
+// I should check, maybe Unaligned_Start and Unaligned_End often == 0, and I could try a fastpath -- with this block off.
 template <int psm, int widthlimit>
 inline bool TRANSMIT_HOSTLOCAL_Y(u32* pbuf, int& nSize, u8* pstart, int endY, int& i, int& j, int& k) {
-//	if (psm != 19 && psm != 0 && psm != 20 && psm != 1)
+//	if (psm != PSMT8 && psm != 0 && psm != PSMT4 && psm != PSMCT24)
 //		ERROR_LOG("This is usable function TRANSMIT_HOSTLOCAL_Y at ZZoglMem.cpp %d %d %d %d %d\n", psm, widthlimit, i, j, nSize);
 
 	int q = (gs.trxpos.dx - j) % widthlimit; 
@@ -193,7 +207,7 @@ inline bool TRANSMIT_HOSTLOCAL_Y(u32* pbuf, int& nSize, u8* pstart, int endY, in
 // PSMT4 -- Tekken V
 template <int psm, int widthlimit>
 inline void TRANSMIT_HOSTLOCAL_X(u32* pbuf, int& nSize, u8* pstart, int& i, int& j, int& k, int blockheight, int startX, int pitch, int fracX) {
-	if (psm != 19 && psm != 20)
+	if (psm != PSMT8 && psm != PSMT4)
 		ZZLog::Error_Log("This is usable function TRANSMIT_HOSTLOCAL_X at ZZoglMem.cpp %d %d %d %d %d\n", psm, widthlimit, i, j, nSize);
 
 	for(int tempi = 0; tempi < blockheight; ++tempi) { 
@@ -208,91 +222,6 @@ template <int psm>
 inline int TRANSMIT_PITCH(int pitch) {
 	return (PSM_BITS_PER_PIXEL<psm>() * pitch) >> 3;
 }
-
-// special swizzle macros
-#define SwizzleBlock24(dst, src, pitch) { \
-	u8* pnewsrc = src; \
-	u32* pblock = tempblock; \
-	\
-	for(int by = 0; by < 7; ++by, pblock += 8, pnewsrc += pitch-24) { \
-		for(int bx = 0; bx < 8; ++bx, pnewsrc += 3) { \
-			pblock[bx] = *(u32*)pnewsrc; \
-		} \
-	} \
-	for(int bx = 0; bx < 7; ++bx, pnewsrc += 3) { \
-		/* might be 1 byte out of bounds of GS memory */ \
-		pblock[bx] = *(u32*)pnewsrc; \
-	} \
-	/* do 3 bytes for the last copy */ \
-	*((u8*)pblock+28) = pnewsrc[0]; \
-	*((u8*)pblock+29) = pnewsrc[1]; \
-	*((u8*)pblock+30) = pnewsrc[2]; \
-	SwizzleBlock32((u8*)dst, (u8*)tempblock, 32, 0x00ffffff); \
-} \
-
-#define SwizzleBlock24u SwizzleBlock24
-
-#define SwizzleBlock8H(dst, src, pitch) { \
-	u8* pnewsrc = src; \
-	u32* pblock = tempblock; \
-	\
-	for(int by = 0; by < 8; ++by, pblock += 8, pnewsrc += pitch) { \
-		u32 u = *(u32*)pnewsrc; \
-		pblock[0] = u<<24; \
-		pblock[1] = u<<16; \
-		pblock[2] = u<<8; \
-		pblock[3] = u; \
-		u = *(u32*)(pnewsrc+4); \
-		pblock[4] = u<<24; \
-		pblock[5] = u<<16; \
-		pblock[6] = u<<8; \
-		pblock[7] = u; \
-	} \
-	SwizzleBlock32((u8*)dst, (u8*)tempblock, 32, 0xff000000); \
-} \
-
-#define SwizzleBlock8Hu SwizzleBlock8H
-
-#define SwizzleBlock4HH(dst, src, pitch) { \
-	u8* pnewsrc = src; \
-	u32* pblock = tempblock; \
-	\
-	for(int by = 0; by < 8; ++by, pblock += 8, pnewsrc += pitch) { \
-		u32 u = *(u32*)pnewsrc; \
-		pblock[0] = u<<28; \
-		pblock[1] = u<<24; \
-		pblock[2] = u<<20; \
-		pblock[3] = u<<16; \
-		pblock[4] = u<<12; \
-		pblock[5] = u<<8; \
-		pblock[6] = u<<4; \
-		pblock[7] = u; \
-	} \
-	SwizzleBlock32((u8*)dst, (u8*)tempblock, 32, 0xf0000000); \
-} \
-
-#define SwizzleBlock4HHu SwizzleBlock4HH
-
-#define SwizzleBlock4HL(dst, src, pitch) { \
-	ERROR_LOG("A 0x%x 0x%x %d\n", dst, src, pitch); \
-	u8* pnewsrc = src; \
-	u32* pblock = tempblock; \
-	\
-	for(int by = 0; by < 8; ++by, pblock += 8, pnewsrc += pitch) { \
-		u32 u = *(u32*)pnewsrc; \
-		pblock[0] = u<<24; \
-		pblock[1] = u<<20; \
-		pblock[2] = u<<16; \
-		pblock[3] = u<<12; \
-		pblock[4] = u<<8; \
-		pblock[5] = u<<4; \
-		pblock[6] = u; \
-		pblock[7] = u>>4; \
-	} \
-	SwizzleBlock32((u8*)dst, (u8*)tempblock, 32, 0x0f000000); \
-} \
-
-#define SwizzleBlock4HLu SwizzleBlock4HL
 
 // ------------------------
 // |              Y       |
@@ -311,7 +240,6 @@ int TransferHostLocal(const void* pbyMem, u32 nQWordSize)
 	assert( gs.imageTransfer == XFER_HOST_TO_LOCAL );
 	u8* pstart = g_pbyGSMemory + gs.dstbuf.bp*256;
 
-	//const u8* pendbuf = (const u8*)pbyMem + nQWordSize*4;
 	int i = gs.image.y, j = gs.image.x;
 	
 	const u8* pbuf = (const u8*)pbyMem;
@@ -330,7 +258,7 @@ int TransferHostLocal(const void* pbyMem, u32 nQWordSize)
 		int testwidth = (int)nSize - (gs.imageEnd.y - i) * (gs.imageEnd.x - gs.trxpos.dx) + (j - gs.trxpos.dx);
 		if((testwidth <= widthlimit) && (testwidth >= -widthlimit)) {
 			/* don't transfer */
-			/*DEBUG_LOG("bad texture %s: %d %d %d\n", #psm, gs.trxpos.dx, gs.imageEnd.x, nQWordSize);*/
+			/*ZZLog::Debug_Log("bad texture %s: %d %d %d\n", #psm, gs.trxpos.dx, gs.imageEnd.x, nQWordSize);*/
 			gs.transferring = false;
 		}
 		bCanAlign = false;
@@ -345,15 +273,14 @@ int TransferHostLocal(const void* pbyMem, u32 nQWordSize)
 			assert( endY < gs.imageEnd.y); /* part of alignment condition */
 		
 		int limit = widthlimit;
-		if( ((gs.imageEnd.x-gs.trxpos.dx)%widthlimit) || ((gs.imageEnd.x-j)%widthlimit) ) 
+		if (((gs.imageEnd.x-gs.trxpos.dx)%widthlimit) || ((gs.imageEnd.x-j)%widthlimit)) 
 			/* transmit with a width of 1 */
-			limit = 1 + (gs.dstbuf.psm == 0x14);
+			limit = 1 + (gs.dstbuf.psm == PSMT4);
 		/*TRANSMIT_HOSTLOCAL_Y##TransSfx(psm, T, limit, endY)*/
 		int k = 0;
 		if (TRANSMIT_HOSTLOCAL_Y<psmX, widthlimit>((u32*)pbuf, nSize, pstart, endY, i, j, k)) goto End;
 		pbuf += TRANSMIT_PITCH<psmX>(k);
-		if( nSize == 0 || i == gs.imageEnd.y )
-			goto End;
+		if (nSize == 0 || i == gs.imageEnd.y) goto End;
 	}
 
 	assert( MOD_POW2(i, blockheight) == 0 && j == gs.trxpos.dx);
@@ -363,7 +290,7 @@ int TransferHostLocal(const void* pbyMem, u32 nQWordSize)
 	area = pitch*blockheight;
 	fracX = gs.imageEnd.x-alignedX;
 
-	/* on top of checking whether pbuf is alinged, make sure that the width is at least aligned to its limits (due to bugs in pcsx2) */
+	/* on top of checking whether pbuf is aligned, make sure that the width is at least aligned to its limits (due to bugs in pcsx2) */
 	bAligned = !((uptr)pbuf & 0xf) && (TRANSMIT_PITCH<psmX>(pitch)&0xf) == 0;
 	
 	/* transfer aligning to blocks */
