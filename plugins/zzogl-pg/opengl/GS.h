@@ -22,7 +22,7 @@
 
 
 #define USE_OLD_REGS
-#define ZZNORMAL_MEMORY
+//#define ZZNORMAL_MEMORY
 
 #include "Util.h"
 #include "GifTransfer.h"

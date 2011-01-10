@@ -72,6 +72,7 @@ set(zzoglSources
     ZZoglCRTC.cpp
     ZZoglFlush.cpp
     ZZoglFlushHack.cpp
+    ZZoglMem.cpp
     ZZoglSave.cpp
     ZZoglShaders.cpp
     ZZoglShoots.cpp
@@ -106,6 +107,7 @@ set(zzoglHeaders
     ZZLog.h
     ZZoglCRTC.h
     ZZoglMath.h
+    ZZoglMem.h
     ZZoglShaders.h
     ZZoglShoots.h
     ZZoglVB.h

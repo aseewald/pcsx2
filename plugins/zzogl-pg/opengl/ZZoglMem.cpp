@@ -73,6 +73,7 @@ inline void SetTable(int psm) {
 			g_blockTable[psm]  = InitTable(  4,   8, &g_blockTable8[0][0]);
 			g_columnTable[psm] = InitTable( 16,  16, &g_columnTable8[0][0]);
 			break;
+			
 		case PSMT8H:
 			g_pageTable[psm]   = g_pageTable[PSMCT32];
 			g_blockTable[psm]  = InitTable(  4,   8, &g_blockTable8[0][0]);
@@ -129,8 +130,10 @@ void DestroyBlockTables() {
 	for (int i = 0; i < MAX_PSM; i++) {
 		if (g_pageTable[i] != NULL && (i != PSMT8H && i != PSMT4HL && i != PSMT4HH && i != PSMCT24 && i != PSMT24Z))
 			free(g_pageTable[i]);
+			
 		if (g_blockTable[i] != NULL)
 		      	free(g_blockTable[i]);
+		      	
 		if (g_columnTable[i] != NULL)
 			free(g_columnTable[i]);
 	}
@@ -233,6 +236,23 @@ inline int TRANSMIT_PITCH(int pitch) {
 // |              Y       |
 // ------------------------
 
+
+template <int psmX>
+int FinishTransfer(int i, int j, int nSize, int nLeftOver)
+{
+	if( i >= gs.imageEnd.y ) 
+	{
+		assert( gs.transferring == false || i == gs.imageEnd.y );
+		gs.transferring = false;
+	}
+	else {
+		/* update new params */
+		gs.image.y = i;
+		gs.image.x = j;
+	}
+	
+	return (nSize * TRANSMIT_PITCH<psmX>(2) + nLeftOver)/2;
+}
  
 template<int psmX, int widthlimit, int blockbits, int blockwidth, int blockheight>
 int TransferHostLocal(const void* pbyMem, u32 nQWordSize) 
@@ -249,9 +269,13 @@ int TransferHostLocal(const void* pbyMem, u32 nQWordSize)
 
 	int pitch, area, fracX;
 	int endY = ROUND_UPPOW2(i, blockheight);
-	int alignedY = ROUND_DOWNPOW2(gs.imageEnd.y, blockheight);
-	int alignedX = ROUND_DOWNPOW2(gs.imageEnd.x, blockwidth);
-	bool bAligned, bCanAlign = MOD_POW2(gs.trxpos.dx, blockwidth) == 0 && (j == gs.trxpos.dx) && (alignedY > endY) && alignedX > gs.trxpos.dx;
+	Point alignedPt;
+	
+	alignedPt.x = ROUND_DOWNPOW2(gs.imageEnd.x, blockwidth);
+	alignedPt.y = ROUND_DOWNPOW2(gs.imageEnd.y, blockheight);
+	
+	bool bAligned;
+	bool bCanAlign = MOD_POW2(gs.trxpos.dx, blockwidth) == 0 && (j == gs.trxpos.dx) && (alignedPt.y > endY) && alignedPt.x > gs.trxpos.dx;
 
 	if( (gs.imageEnd.x - gs.trxpos.dx) % widthlimit ) {
 		/* hack */
@@ -273,39 +297,43 @@ int TransferHostLocal(const void* pbyMem, u32 nQWordSize)
 			assert( endY < gs.imageEnd.y); /* part of alignment condition */
 		
 		int limit = widthlimit;
-		if (((gs.imageEnd.x-gs.trxpos.dx)%widthlimit) || ((gs.imageEnd.x-j)%widthlimit)) 
+		if (((gs.imageEnd.x - gs.trxpos.dx) % widthlimit) || ((gs.imageEnd.x - j) % widthlimit)) 
 			/* transmit with a width of 1 */
 			limit = 1 + (gs.dstbuf.psm == PSMT4);
 		/*TRANSMIT_HOSTLOCAL_Y##TransSfx(psm, T, limit, endY)*/
 		int k = 0;
-		if (TRANSMIT_HOSTLOCAL_Y<psmX, widthlimit>((u32*)pbuf, nSize, pstart, endY, i, j, k)) goto End;
+		
+		if (TRANSMIT_HOSTLOCAL_Y<psmX, widthlimit>((u32*)pbuf, nSize, pstart, endY, i, j, k)) 
+			return FinishTransfer<psmX>(i, j, nSize, nLeftOver);
+		
 		pbuf += TRANSMIT_PITCH<psmX>(k);
-		if (nSize == 0 || i == gs.imageEnd.y) goto End;
+		
+		if (nSize == 0 || i == gs.imageEnd.y) return FinishTransfer<psmX>(i, j, nSize, nLeftOver);
 	}
 
 	assert( MOD_POW2(i, blockheight) == 0 && j == gs.trxpos.dx);
 
 	/* can align! */
-	pitch = gs.imageEnd.x-gs.trxpos.dx;
-	area = pitch*blockheight;
-	fracX = gs.imageEnd.x-alignedX;
+	pitch = gs.imageEnd.x - gs.trxpos.dx;
+	area = pitch * blockheight;
+	fracX = gs.imageEnd.x - alignedPt.x;
 
 	/* on top of checking whether pbuf is aligned, make sure that the width is at least aligned to its limits (due to bugs in pcsx2) */
-	bAligned = !((uptr)pbuf & 0xf) && (TRANSMIT_PITCH<psmX>(pitch)&0xf) == 0;
+	bAligned = !((uptr)pbuf & 0xf) && ((TRANSMIT_PITCH<psmX>(pitch)&0xf) == 0);
 	
 	/* transfer aligning to blocks */
-	for(; i < alignedY && nSize >= area; i += blockheight, nSize -= area) {
+	for(; i < alignedPt.y && nSize >= area; i += blockheight, nSize -= area) {
 	
-		for(int tempj = gs.trxpos.dx; tempj < alignedX; tempj += blockwidth, pbuf += TRANSMIT_PITCH<psmX>(blockwidth)) {
+		for(int tempj = gs.trxpos.dx; tempj < alignedPt.x; tempj += blockwidth, pbuf += TRANSMIT_PITCH<psmX>(blockwidth)) {
 			SwizzleBlock<psmX>((u32*)(pstart + getPixelAddress<psmX>(tempj, i, gs.dstbuf.bw)*blockbits/8),
 				(u32*)pbuf, TRANSMIT_PITCH<psmX>(pitch));
 		}
 	
 		/* transfer the rest */
-		if( alignedX < gs.imageEnd.x ) {
+		if( alignedPt.x < gs.imageEnd.x ) {
 			int k = 0;
-			TRANSMIT_HOSTLOCAL_X<psmX, widthlimit>((u32*)pbuf, nSize, pstart, i, j, k, blockheight, alignedX, pitch, fracX);
-			pbuf += TRANSMIT_PITCH<psmX>(k - alignedX + gs.trxpos.dx);
+			TRANSMIT_HOSTLOCAL_X<psmX, widthlimit>((u32*)pbuf, nSize, pstart, i, j, k, blockheight, alignedPt.x, pitch, fracX);
+			pbuf += TRANSMIT_PITCH<psmX>(k - alignedPt.x + gs.trxpos.dx);
 		}
 		else pbuf += (blockheight-1)*TRANSMIT_PITCH<psmX>(pitch);
 		j = gs.trxpos.dx;
@@ -319,21 +347,7 @@ int TransferHostLocal(const void* pbyMem, u32 nQWordSize)
 		assert( gs.transferring == false || TRANSMIT_PITCH<psmX>(nSize)/4 <= 2 );
 	}
 	
-End:
-	if( i >= gs.imageEnd.y ) {
-		assert( gs.transferring == false || i == gs.imageEnd.y );
-		gs.transferring = false;
-		/*int start, end;
-		ZeroGS::GetRectMemAddress(start, end, gs.dstbuf.psm, gs.trxpos.dx, gs.trxpos.dy, gs.imageWnew, gs.imageHnew, gs.dstbuf.bp, gs.dstbuf.bw);
-		ZeroGS::g_MemTargs.ClearRange(start, end);*/
-	}
-	else {
-		/* update new params */
-		gs.image.y = i;
-		gs.image.x = j;
-	}
-	
-	return (nSize * TRANSMIT_PITCH<psmX>(2) + nLeftOver)/2;
+	return FinishTransfer<psmX>(i, j, nSize, nLeftOver);
 }
 
 inline int TransferHostLocal32(const void* pbyMem, u32 nQWordSize) 
