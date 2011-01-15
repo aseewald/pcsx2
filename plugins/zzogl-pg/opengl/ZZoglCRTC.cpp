@@ -201,7 +201,7 @@ extern bool s_bWriteDepth;
 // Something should be done before Renderering the picture.
 inline void RenderStartHelper()
 {
-	if (conf.mrtdepth && pvs[8] == NULL)
+	if (conf.mrtdepth && ZZshExistProgram(pvs[8]))
 	{
 		conf.mrtdepth = 0;
 		s_bWriteDepth = false;
@@ -728,7 +728,7 @@ void ZZReset()
 	s_nLastResolveReset = 0;
 
 	icurctx = -1;
-	g_vsprog = g_psprog = 0;
+	g_vsprog = g_psprog = sZero;
 
 	ZZGSStateReset();
 	ZZDestroy();

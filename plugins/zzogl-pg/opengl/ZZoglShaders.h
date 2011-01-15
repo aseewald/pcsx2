@@ -33,8 +33,10 @@
 #include "ZZoglMath.h"
 #include "GS.h"
 
-// For output
+// By default enable nvidia cg api
+#if !defined(GLSL_API) && !defined(NVIDIA_CG_API)
 #define NVIDIA_CG_API
+#endif
 // --------------------------- API abstraction level --------------------------------
 
 #ifdef NVIDIA_CG_API				// Code for NVIDIA cg-toolkit API
@@ -56,9 +58,60 @@ inline bool ZZshActiveParameter(ZZshParameter param) {return (param !=NULL); }
 
 #endif					// end NVIDIA cg-toolkit API
 
+#ifdef GLSL_API
+
+enum ZZshPARAMTYPE {
+	ZZ_UNDEFINED,
+	ZZ_TEXTURE_2D,
+	ZZ_TEXTURE_RECT,
+	ZZ_TEXTURE_3D,
+	ZZ_FLOAT4,
+};
+
+typedef struct {
+	const char* 	ShName;		// Name of uniform
+	ZZshPARAMTYPE	type;		// Choose between parameter type
+
+	float 		fvalue[4];
+	GLuint		sampler;	// Number of texture unit in array 
+	GLint		texid;		// Number of texture - texid. 
+
+	bool		Constant;	// Uniform could be constants, does not change at program flow
+	bool 		Settled;	// Check if Uniform value was set.
+} ZZshParamInfo;
+
+typedef struct {
+	void*	 	link;
+	bool		isFragment;
+} ZZshShaderLink; 
+
+#define ZZshProgram 		GLuint
+#define ZZshShader 		GLuint
+#define ZZshParameter 		GLint
+#define ZZshContext		int
+#define ZZshProfile		int
+#define ZZshError		int
+#define ZZshIndex		GLuint
+
+const ZZshParamInfo  qZero = {ShName:"", type:ZZ_UNDEFINED, fvalue:{0}, sampler: -1, texid: 0, Constant: false, Settled: false};
+
+#define pZero			0
+
+const ZZshShaderLink sZero = {link: NULL, isFragment: false};
+
+inline bool ZZshActiveParameter(ZZshParameter param) {return (param > -1); }
+#define SAFE_RELEASE_PROG(x) 	{ /*don't know what to do*/ }
+
+// ---------------------------
+
+#endif
+
+
+
+
 //const static char* g_pPsTexWrap[] = { "-DREPEAT", "-DCLAMP", "-DREGION_REPEAT", NULL };
 
-enum ZZshShaderType {ZZ_SH_ZERO, ZZ_SH_REGULAR, ZZ_SH_REGULAR_FOG, ZZ_SH_TEXTURE, ZZ_SH_TEXTURE_FOG, ZZ_SH_CRTC};
+enum ZZshShaderType {ZZ_SH_ZERO, ZZ_SH_REGULAR, ZZ_SH_REGULAR_FOG, ZZ_SH_TEXTURE, ZZ_SH_TEXTURE_FOG, ZZ_SH_CRTC, ZZ_SH_NONE};
 // We have "compatible" shaders, as RegularFogVS and RegularFogPS. if don't need to wory about incompatible shaders
 // It used only in GLSL mode. 
 
@@ -92,6 +145,7 @@ struct FRAGMENTSHADER
 	string filename;
 #endif
 
+#ifdef NVIDIA_CG_API
 	void set_uniform_param(ZZshParameter &var, const char *name)
 	{
 		ZZshParameter p;
@@ -161,6 +215,7 @@ struct FRAGMENTSHADER
 
 		return false;
 	}
+#endif
 };
 
 struct VERTEXSHADER
@@ -216,6 +271,11 @@ inline bool ZZshExistProgram(FRAGMENTSHADER* pf) {return (pf->prog != NULL); };	
 inline bool ZZshExistProgram(VERTEXSHADER* pf) {return (pf->prog != NULL); };
 inline bool ZZshExistProgram(ZZshShaderLink prog) {return (prog != NULL); };
 #endif
+#ifdef GLSL_API
+inline bool ZZshExistProgram(FRAGMENTSHADER* pf) {return (pf->Shader != 0); };
+inline bool ZZshExistProgram(VERTEXSHADER* pf) {return (pf->Shader != 0); };
+inline bool ZZshExistProgram(ZZshShaderLink prog) {return (prog.link != NULL); }		// This is used for pvs mainly. No NULL means that we do LOAD_VS
+#endif
 
 extern const char* ShaderCallerName;
 extern const char* ShaderHandleName;
@@ -246,10 +306,17 @@ extern void ZZshDefaultOneColor( FRAGMENTSHADER ptr );
 extern void ZZshSetVertexShader(ZZshShaderLink prog);
 extern void ZZshSetPixelShader(ZZshShaderLink prog);
 extern bool ZZshLoadExtraEffects();
+extern void ZZshExitCleaning();
 
 extern FRAGMENTSHADER* ZZshLoadShadeEffect(int type, int texfilter, int fog, int testaem, int exactcolor, const clampInfo& clamp, int context, bool* pbFailed);
 
-	// only sets a limited amount of state (for Update)
-	void SetTexVariablesInt(int context, int bilinear, const tex0Info& tex0, bool CheckVB, FRAGMENTSHADER* pfragment, int force);
+// only sets a limited amount of state (for Update)
+void SetTexVariablesInt(int context, int bilinear, const tex0Info& tex0, bool CheckVB, FRAGMENTSHADER* pfragment, int force);
+
+extern u32 ptexBlocks;		// holds information on block tiling. It's texture number in OpenGL -- if 0 than such texture
+extern u32 ptexConv16to32;	// does not exists. This textures should be created on start and released on finish.
+extern u32 ptexBilinearBlocks;
+extern u32 ptexConv32to16;
+
 
 #endif

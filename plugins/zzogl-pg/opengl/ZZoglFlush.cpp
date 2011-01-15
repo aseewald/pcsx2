@@ -2045,10 +2045,7 @@ void SetTexVariablesInt(int context, int bilinear, const tex0Info& tex0, bool Ch
 		v.z = 1.0f / (float)fw;
 		v.w = 1.0f / (float)fh;
 
-		if (pfragment->fRealTexDims)
-			ZZshSetParameter4fv(pfragment->fRealTexDims, v, "g_fRealTexDims");
-		else
-			ZZshSetParameter4fv(cgGetNamedParameter(pfragment->prog,"g_fRealTexDims"),v, "g_fRealTexDims");	
+		ZZshSetParameter4fvWithRetry(&pfragment->fRealTexDims, pfragment->prog, v, "g_fRealTexDims");
 	}
 
 	if (m_Blocks[tex0.psm].bpp == 0)

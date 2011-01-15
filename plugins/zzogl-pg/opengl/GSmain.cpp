@@ -22,6 +22,7 @@
 #include "Profile.h"
 #include "GLWin.h"
 #include "ZZoglFlushHack.h"
+#include "ZZoglShaders.h"
 
 
 using namespace std;
@@ -351,6 +352,8 @@ void CALLBACK GSclose()
 	ZZDestroy();
 	GLWin.CloseWindow();
 
+	// Free alocated memory. We could close plugin without closing pcsx2, so we SHOULD free all allocated resources
+	ZZshExitCleaning();
 	SaveStateFile = NULL;
 	SaveStateExists = true; // default value
     g_LastCRC = 0;

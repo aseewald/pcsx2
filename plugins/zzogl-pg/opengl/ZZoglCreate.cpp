@@ -264,8 +264,14 @@ __forceinline bool LoadShadersFromDat()
 
 		if (fres == NULL)
 		{
-			ZZLog::Error_Log("Cannot find ps2hw.dat in working directory. Exiting.");
-			return false;
+			// try an absolute location for linux distribution (ease package)
+#ifdef __LINUX__
+			fres = fopen("/usr/share/games/pcsx2/shaders/ps2hw.dat", "rb");
+#endif
+			if (fres == NULL) {
+				ZZLog::Error_Log("Cannot find ps2hw.dat in working directory. Exiting.");
+				return false;
+			}
 		}
 	}
 
@@ -459,7 +465,12 @@ bool ZZCreate(int _width, int _height)
 	GPU_TEXWIDTH = min (g_MaxTexWidth/8, 1024);
 	g_fiGPU_TEXWIDTH = 1.0f / GPU_TEXWIDTH;
 
+	// FIXME: not clean maybe re integrate the function in shader files --greg
+#ifndef GLSL_API
 	if (!CreateOpenShadersFile()) return false;
+#else
+	if (!ZZshCreateOpenShadersFile()) return false;
+#endif
 
 	GL_REPORT_ERROR();
 
@@ -751,7 +762,7 @@ bool ZZCreate(int _width, int _height)
 	vb[0].Init(VB_BUFFERSIZE);
 	vb[1].Init(VB_BUFFERSIZE);
 
-	g_vsprog = g_psprog = 0;
+	g_vsprog = g_psprog = sZero;
 
 	if (glGetError() == GL_NO_ERROR)
 	{

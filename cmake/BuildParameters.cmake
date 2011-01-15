@@ -5,6 +5,7 @@
 # Use all         internal lib: -DFORCE_INTERNAL_ALL=TRUE
 # Use soundtouch  internal lib: -DFORCE_INTERNAL_SOUNDTOUCH=TRUE
 # Use zlib        internal lib: -DFORCE_INTERNAL_ZLIB=TRUE
+# Use GLSL API(else NVIDIA_CG): -DGLSL_API=TRUE
 ### Add some flags to the build process
 # control C flags             : -DUSER_CMAKE_C_FLAGS="cflags"
 # control C++ flags           : -DUSER_CMAKE_CXX_FLAGS="cxxflags"
@@ -131,3 +132,11 @@ endif(NOT DEFINED FORCE_INTERNAL_SOUNDTOUCH)
 if(NOT DEFINED FORCE_INTERNAL_ZLIB)
     set(FORCE_INTERNAL_ZLIB FALSE)
 endif(NOT DEFINED FORCE_INTERNAL_ZLIB)
+
+#-------------------------------------------------------------------------------
+# Select nvidia cg shader api by default
+#-------------------------------------------------------------------------------
+if(NOT DEFINED FORCE_INTERNAL_SOUNDTOUCH)
+	set(GLSL_API FALSE)
+endif(NOT DEFINED FORCE_INTERNAL_SOUNDTOUCH)
+

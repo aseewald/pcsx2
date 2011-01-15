@@ -44,6 +44,14 @@ if(CMAKE_BUILD_TYPE STREQUAL Release)
     add_definitions(${CommonFlags} ${OptimizationFlags} -W)
 endif(CMAKE_BUILD_TYPE STREQUAL Release)
 
+# Select the shader API 
+if(GLSP_API)
+	add_definitions(-DGLSL_API)
+else(GLSP_API)
+	add_definitions(-DNVIDIA_CG_API)
+endif(GLSP_API)
+
+
 # zzogl sources
 set(zzoglSources
     GifTransfer.cpp
@@ -75,6 +83,7 @@ set(zzoglSources
     ZZoglMem.cpp
     ZZoglSave.cpp
     ZZoglShaders.cpp
+    ZZoglShadersGLSL.cpp
     ZZoglShoots.cpp
     ZZoglVB.cpp
     )
@@ -155,12 +164,17 @@ set_target_properties(${Output} PROPERTIES
 # copy ps2hw.dat to plugins folder
 add_custom_command(TARGET ${Output} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/plugins/zzogl-pg/opengl/ps2hw.dat ${PROJECT_SOURCE_DIR}/bin/plugins)
+# copy ps2glsl.fx to plugins folder
+add_custom_command(TARGET ${Output} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/plugins/zzogl-pg/opengl/ps2glsl.fx ${PROJECT_SOURCE_DIR}/bin/plugins)
 
 # link target with project internal libraries
 target_link_libraries(${Output} Utilities)
 
 # link target with Cg
-target_link_libraries(${Output} ${CG_LIBRARIES})
+if(NOT GLSP_API)
+	target_link_libraries(${Output} ${CG_LIBRARIES})
+endif(NOT GLSP_API)
 
 # link target with glew
 target_link_libraries(${Output} ${GLEW_LIBRARY})

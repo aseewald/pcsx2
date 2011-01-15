@@ -71,7 +71,6 @@ extern int ppf;
 
 extern bool s_bTexFlush;
 
-extern ZZshProgram g_psprog;							// 2 -- ZZ
 extern vector<u32> s_vecTempTextures;		   // temporary textures, released at the end of every frame
 extern GLuint g_vboBuffers[VB_NUMBUFFERS]; // VBOs for all drawing commands
 extern CRangeManager s_RangeMngr; // manages overwritten memory				// zz
