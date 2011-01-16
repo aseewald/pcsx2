@@ -487,6 +487,48 @@ void SetupVertexProgramParameters(ZZshProgram prog, int context)
 }
 
 #ifndef DEVBUILD
+#if 0
+static __forceinline void LOAD_VS(int Index, ZZshProgram prog)
+{
+	assert(mapShaderResources.find(Index) != mapShaderResources.end());
+	header = mapShaderResources[Index];
+	assert((header) != NULL && (header)->index == (Index));
+	prog = cgCreateProgram(g_cgcontext, CG_OBJECT, (char*)(s_lpShaderResources + (header)->offset), cgvProf, NULL, NULL);
+	if (!cgIsProgram(prog)) 
+	{
+		ZZLog::Error_Log("Failed to load vs %d: \n%s", Index, cgGetLastListing(g_cgcontext));
+		return false;
+	}
+	cgGLLoadProgram(prog);
+	
+	if (cgGetError() != CG_NO_ERROR) ZZLog::Error_Log("Failed to load program %d.", Index);
+	SetupVertexProgramParameters(prog, !!(Index&SH_CONTEXT1));	
+}
+
+
+static __forceinline void LOAD_VS(int Index, FRAGMENTSHADER fragment)
+{
+	bLoadSuccess = true;
+	assert(mapShaderResources.find(Index) != mapShaderResources.end());
+	header = mapShaderResources[Index];
+	fragment.prog = cgCreateProgram(g_cgcontext, CG_OBJECT, (char*)(s_lpShaderResources + (header)->offset), cgfProf, NULL, NULL);
+	if (!cgIsProgram(fragment.prog)) 
+	{
+		ZZLog::Error_Log("Failed to load ps %d: \n%s", Index, cgGetLastListing(g_cgcontext));
+		return false;
+	}
+	
+	cgGLLoadProgram(fragment.prog);
+	
+	if (cgGetError() != CG_NO_ERROR) 
+	{
+		ZZLog::Error_Log("failed to load program %d.", Index);
+		bLoadSuccess = false;
+	}
+	
+	SetupFragmentProgramParameters(&fragment, !!(Index&SH_CONTEXT1), 0);
+}
+#endif
 
 #define LOAD_VS(Index, prog) {						  \
 	assert( mapShaderResources.find(Index) != mapShaderResources.end() ); \

@@ -79,7 +79,6 @@ const float g_filog32 = 0.999f / (32.0f * logf(2.0f));
 
 const static char* g_pTexTypes[] = { "32", "tex32", "clut32", "tex32to16", "tex16to8h" };
 const static char* g_pShaders[4] = { "full", "reduced", "accurate", "accurate-reduced" };
-const int GLSL_VERSION = 130;  			// Sampler2DRect appear in 1.3
 
 // ----------------- Global Variables 
 
@@ -655,7 +654,6 @@ char* AddContextToName(const char* name, int context) {
 
 void SetupFragmentProgramParameters(FRAGMENTSHADER* pf, int context, int type)
 {
-
 	// uniform parameters
 	GLint p;
 	pf->prog.link = (void*)pf;			// Setting autolink
@@ -708,7 +706,7 @@ void SetupFragmentProgramParameters(FRAGMENTSHADER* pf, int context, int type)
 	INIT_UNIFORMPARAM(float4(1/1024.0f, 0.2f/1024.0f, 1/128.0f, 1/512.0f), "g_fMult");
 	pf->ParametersFinish = NumActiveUniforms;
 	if (NumActiveUniforms > MAX_ACTIVE_UNIFORMS)
-		ZZLog::Error_Log("To many shader variables. You shell increase limit in source %d\n", NumActiveUniforms);
+		ZZLog::Error_Log("Too many shader variables. You may increase the limit in source %d\n", NumActiveUniforms);
 		
 	glUseProgram(0);
 	GL_REPORT_ERRORD();
@@ -756,24 +754,39 @@ void SetupVertexProgramParameters(VERTEXSHADER* pf, int context)
 	SET_UNIFORMPARAM(fBitBltTrans, "g_fBitBltTrans");
 	pf->ParametersFinish = NumActiveUniforms;
 	if (NumActiveUniforms > MAX_ACTIVE_UNIFORMS)
-		ZZLog::Error_Log("To many shader variables. You shell increase limit in source\n");
+		ZZLog::Error_Log("Too many shader variables. You may increase the limit in the source.\n");
 
 	glUseProgram(0);
 	GL_REPORT_ERRORD();
 }
 
-// We use strictly compilation from source for GSLS
+const int GLSL_VERSION = 130;  			// Sampler2DRect appear in 1.3
 
-#define LOAD_VS(name, vertex, shaderver, context, depth) { \
-	sprintf(DefineString, "#version %d\n#define %s main\n%s#define VERTEX_SHADER 1\n#define CTX %d\n", GLSL_VERSION, name, depth, context * NOCONTEXT); \
-	bLoadSuccess = LoadShaderFromFile(vertex.Shader, DefineString, name, GL_VERTEX_SHADER); \
-	SetupVertexProgramParameters(&vertex, context); \
+// We use strictly compilation from source for GSLS
+static __forceinline char* GlslHeaderString(const char* name, const char* depth)
+{
+	// The '#extension ARB_texture_rectangle: enable' is because of nvidia weirdness.
+	char vers[200];
+	sprintf(vers, "#version %d\n#extension ARB_texture_rectangle: enable\n#define %s main\n%s", GLSL_VERSION, name, depth);
+	return vers;
 }
 
-#define LOAD_PS(name, fragment, shaderver, context, depth) { \
-	sprintf(DefineString, "#version %d\n#define %s main\n%s#define FRAGMENT_SHADER 1\n#define CTX %d\n", GLSL_VERSION, name, depth, context * NOCONTEXT); \
-	bLoadSuccess = LoadShaderFromFile(fragment.Shader, DefineString, name, GL_FRAGMENT_SHADER); \
-	SetupFragmentProgramParameters(&fragment, context, 0);  \
+static __forceinline bool LOAD_VS(char* DefineString, const char* name, VERTEXSHADER vertex, int shaderver, ZZshProfile context, const char* depth)
+{
+	bool flag;
+	sprintf(DefineString, "%s#define VERTEX_SHADER 1\n#define CTX %d\n", GlslHeaderString(name, depth), context * NOCONTEXT);
+	flag = LoadShaderFromFile(vertex.Shader, DefineString, name, GL_VERTEX_SHADER);
+	SetupVertexProgramParameters(&vertex, context);
+	return flag;
+}
+
+static __forceinline bool LOAD_PS(char* DefineString, const char* name, FRAGMENTSHADER fragment, int shaderver, ZZshProfile context, const char* depth)
+{
+	bool flag;
+	sprintf(DefineString, "%s#define FRAGMENT_SHADER 1\n#define CTX %d\n", GlslHeaderString(name, depth), context * NOCONTEXT);
+	flag = LoadShaderFromFile(fragment.Shader, DefineString, name, GL_FRAGMENT_SHADER);
+	SetupFragmentProgramParameters(&fragment, context, 0); 
+	return flag;
 }
 
 inline bool LoadEffects()
@@ -799,62 +812,61 @@ bool ZZshLoadExtraEffects() {
 	const char* pvsshaders[4] = { "RegularVS", "TextureVS", "RegularFogVS", "TextureFogVS" };
 
 	for (int i = 0; i < 4; ++i) {
-		LOAD_VS(pvsshaders[i], pvsStore[2 * i], cgvProf, 0, "");
-		LOAD_VS(pvsshaders[i], pvsStore[2 *i + 1 ], cgvProf, 1, "");
-		LOAD_VS(pvsshaders[i], pvsStore[2 *i + 8 ], cgvProf, 0, writedepth);
-		LOAD_VS(pvsshaders[i], pvsStore[2 *i + 8 + 1], cgvProf, 1, writedepth);
+		if (!LOAD_VS(DefineString, pvsshaders[i], pvsStore[2 * i], cgvProf, 0, "")) bLoadSuccess = false;
+		if (!LOAD_VS(DefineString, pvsshaders[i], pvsStore[2 *i + 1 ], cgvProf, 1, "")) bLoadSuccess = false;
+		if (!LOAD_VS(DefineString, pvsshaders[i], pvsStore[2 *i + 8 ], cgvProf, 0, writedepth)) bLoadSuccess = false;
+		if (!LOAD_VS(DefineString, pvsshaders[i], pvsStore[2 *i + 8 + 1], cgvProf, 1, writedepth)) bLoadSuccess = false;
 	}
 	for (int i = 0; i < 16; ++i) 
 		pvs[i] = pvsStore[i].prog;	
 
-	LOAD_VS("BitBltVS", pvsBitBlt, cgvProf, 0, "");
+	if (!LOAD_VS(DefineString, "BitBltVS", pvsBitBlt, cgvProf, 0, "")) bLoadSuccess = false;
 	GLint p;
 	GL_REPORT_ERRORD();
 
-	LOAD_PS("RegularPS", ppsRegular[0], cgfProf, 0, "");
-	LOAD_PS("RegularFogPS", ppsRegular[1], cgfProf, 0, "");
+	if (!LOAD_PS(DefineString, "RegularPS", ppsRegular[0], cgfProf, 0, "")) bLoadSuccess = false;
+	if (!LOAD_PS(DefineString, "RegularFogPS", ppsRegular[1], cgfProf, 0, "")) bLoadSuccess = false;
 
 	if( conf.mrtdepth ) {
-		LOAD_PS("RegularPS", ppsRegular[2], cgfProf, 0, writedepth);
-		if( !bLoadSuccess )
-			conf.mrtdepth = 0;
-		LOAD_PS("RegularFogPS", ppsRegular[3], cgfProf, 0, writedepth);
-		if( !bLoadSuccess )
-			conf.mrtdepth = 0;
+		if (!LOAD_PS(DefineString, "RegularPS", ppsRegular[2], cgfProf, 0, writedepth)) bLoadSuccess = false;
+		if (!bLoadSuccess) conf.mrtdepth = 0;
+		
+		if (!LOAD_PS(DefineString, "RegularFogPS", ppsRegular[3], cgfProf, 0, writedepth)) bLoadSuccess = false;
+		if (!bLoadSuccess) conf.mrtdepth = 0;
 	}
 
-	LOAD_PS("BitBltPS", ppsBitBlt[0], cgfProf, 0, "");
-	LOAD_PS("BitBltAAPS", ppsBitBlt[1], cgfProf, 0, "");
+	if (!LOAD_PS(DefineString, "BitBltPS", ppsBitBlt[0], cgfProf, 0, "")) bLoadSuccess = false;
+	if (!LOAD_PS(DefineString, "BitBltAAPS", ppsBitBlt[1], cgfProf, 0, "")) bLoadSuccess = false;
 	if (!bLoadSuccess) {
 		ZZLog::Error_Log("Failed to load BitBltAAPS, using BitBltPS\n");
-		LOAD_PS("BitBltPS", ppsBitBlt[1], cgfProf, 0, "");
+		if (!LOAD_PS(DefineString, "BitBltPS", ppsBitBlt[1], cgfProf, 0, "")) bLoadSuccess = false;
 	}
 
-	LOAD_PS("BitBltDepthPS", ppsBitBltDepth, cgfProf, 0, "");
-	LOAD_PS("CRTCTargPS", ppsCRTCTarg[0], cgfProf, 0, ""); 
-	LOAD_PS("CRTCTargInterPS", ppsCRTCTarg[1], cgfProf, 0, "");
+	if (!LOAD_PS(DefineString, "BitBltDepthPS", ppsBitBltDepth, cgfProf, 0, "")) bLoadSuccess = false;
+	if (!LOAD_PS(DefineString, "CRTCTargPS", ppsCRTCTarg[0], cgfProf, 0, "")) bLoadSuccess = false;
+	if (!LOAD_PS(DefineString, "CRTCTargInterPS", ppsCRTCTarg[1], cgfProf, 0, "")) bLoadSuccess = false;
 	
 	g_bCRTCBilinear = true;
-	LOAD_PS("CRTCPS", ppsCRTC[0], cgfProf, 0, "");
+	if (!LOAD_PS(DefineString, "CRTCPS", ppsCRTC[0], cgfProf, 0, "")) bLoadSuccess = false;
 	if( !bLoadSuccess ) {
 		// switch to simpler
 		g_bCRTCBilinear = false;
-		LOAD_PS("CRTCPS_Nearest", ppsCRTC[0], cgfProf, 0, "");
-		LOAD_PS("CRTCInterPS_Nearest", ppsCRTC[0], cgfProf, 0, "");
+		if (!LOAD_PS(DefineString, "CRTCPS_Nearest", ppsCRTC[0], cgfProf, 0, "")) bLoadSuccess = false;
+		if (!LOAD_PS(DefineString, "CRTCInterPS_Nearest", ppsCRTC[0], cgfProf, 0, "")) bLoadSuccess = false;
 	}
 	else {
-		LOAD_PS("CRTCInterPS", ppsCRTC[1], cgfProf, 0, "");
+		if (!LOAD_PS(DefineString, "CRTCInterPS", ppsCRTC[1], cgfProf, 0, "")) bLoadSuccess = false;
 	}
 
 	if( !bLoadSuccess )
 		ZZLog::Error_Log("Failed to create CRTC shaders\n");
 	
-	// LOAD_PS("CRTC24PS", ppsCRTC24[0], cgfProf, 0, ""); 
-	// LOAD_PS("CRTC24InterPS", ppsCRTC24[1], cgfProf, 0, "");
-	LOAD_PS("ZeroPS", ppsOne, cgfProf, 0, "");
-	LOAD_PS("BaseTexturePS", ppsBaseTexture, cgfProf, 0, "");
-	LOAD_PS("Convert16to32PS", ppsConvert16to32, cgfProf, 0, "");
-	LOAD_PS("Convert32to16PS", ppsConvert32to16, cgfProf, 0, "");
+	// if (!LOAD_PS(DefineString, "CRTC24PS", ppsCRTC24[0], cgfProf, 0, "")) bLoadSuccess = false;
+	// if (!LOAD_PS(DefineString, "CRTC24InterPS", ppsCRTC24[1], cgfProf, 0, "")) bLoadSuccess = false;
+	if (!LOAD_PS(DefineString, "ZeroPS", ppsOne, cgfProf, 0, "")) bLoadSuccess = false;
+	if (!LOAD_PS(DefineString, "BaseTexturePS", ppsBaseTexture, cgfProf, 0, "")) bLoadSuccess = false;
+	if (!LOAD_PS(DefineString, "Convert16to32PS", ppsConvert16to32, cgfProf, 0, "")) bLoadSuccess = false;
+	if (!LOAD_PS(DefineString, "Convert32to16PS", ppsConvert32to16, cgfProf, 0, "")) bLoadSuccess = false;
 
 	GL_REPORT_ERRORD();
 	return true;
@@ -866,7 +878,7 @@ static ZZshShader LoadShaderFromType(const char* srcdir, const char* srcfile, in
 
 	assert( texwrap < NUM_TEXWRAPS);
 	assert( type < NUM_TYPES );
-	ZZLog::Error_Log("\n");
+	//ZZLog::Error_Log("\n");
 
 	ZZshProgram prog;
 
@@ -881,7 +893,7 @@ static ZZshShader LoadShaderFromType(const char* srcdir, const char* srcfile, in
 	const char* AddExcolor	= exactcolor?"#define EXACT_COLOR 1\n":"";
 	const char* AddAcurate  = (ps & SHADER_ACCURATE)?"#define ACCURATE_DECOMPRESSION 1\n":"";
 	char DefineString[DEFINE_STRING_SIZE] = "";
-	sprintf(DefineString, "#version %d\n#define FRAGMENT_SHADER 1\n#define %s main\n%s%s%s%s%s\n#define CTX %d\n", GLSL_VERSION, name, AddWrap, AddDepth, AddAEM, AddExcolor, AddAcurate, context * NOCONTEXT);
+	sprintf(DefineString, "%s#define FRAGMENT_SHADER 1\n%s%s%s%s%s\n#define CTX %d\n", GlslHeaderString(name, AddWrap), AddWrap, AddDepth, AddAEM, AddExcolor, AddAcurate, context * NOCONTEXT);
 
 	ZZshShader shader;
 	if (!CompileShader(shader, DefineString, name, GL_FRAGMENT_SHADER)) 
@@ -920,10 +932,11 @@ FRAGMENTSHADER* ZZshLoadShadeEffect(int type, int texfilter, int fog, int testae
 	FRAGMENTSHADER* pf = ppsTexture+index;
 
 	if (ZZshExistProgram(pf)) 
+	{
 		return pf;
-	
+	}
 	pf->Shader = LoadShaderFromType(EFFECT_DIR, EFFECT_NAME, type, texfilter, texwrap, fog, s_bWriteDepth, testaem, exactcolor, g_nPixelShaderVer, context);
-
+	
 	if (ZZshExistProgram(pf)) {
 		SetupFragmentProgramParameters(pf, context, type);
 		GL_REPORT_ERRORD();
@@ -933,6 +946,7 @@ FRAGMENTSHADER* ZZshLoadShadeEffect(int type, int texfilter, int fog, int testae
 				if (pbFailed != NULL ) *pbFailed = true;
 				return pf;
 		}
+		
 		return pf;
 	}
 
