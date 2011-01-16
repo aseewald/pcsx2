@@ -94,8 +94,8 @@ ZZshProgram	ZZshMainProgram;
 char*		ZZshSource;			// Shader's source data.	
 off_t		ZZshSourceSize;
 
-char* EFFECT_NAME;				// All this variables used for testing and set manually
-char* EFFECT_DIR;
+extern char* EFFECT_NAME;				// All this variables used for testing and set manually
+extern char* EFFECT_DIR;
 
 bool g_bCRTCBilinear = true;
 
@@ -227,15 +227,15 @@ bool ZZshStartUsingShaders() {
 
 // open shader file according to build target 
 bool ZZshCreateOpenShadersFile() {
-	char ShaderFileName[30] = "plugins/ps2glsl.fx";
+	const char ShaderFileName[30] = "plugins/ps2glsl.fx";
 	int ShaderFD = open(ShaderFileName, O_RDONLY);
 	struct stat sb;
 	if ((ShaderFD == -1) || (fstat(ShaderFD, &sb) == -1)) {	
 		// Try an absolute location for linux distribution (ease package)
-		ShaderFileName[200] = "/usr/share/games/pcsx2/shaders/ps2glsl.fx";
-		ShaderFD = open(ShaderFileName, O_RDONLY);
+		const char NewShaderFileName[200] = "/usr/share/games/pcsx2/shaders/ps2glsl.fx";
+		ShaderFD = open(NewShaderFileName, O_RDONLY);
 		if ((ShaderFD == -1) || (fstat(ShaderFD, &sb) == -1)) {	
-			ZZLog::Error_Log("No source for %s: \n", ShaderFileName); 
+			ZZLog::Error_Log("No source for %s: \n", NewShaderFileName); 
 			return false;
 		}
 	}

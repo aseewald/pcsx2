@@ -89,10 +89,10 @@ void (APIENTRY *zgsBlendFuncSeparateEXT)(GLenum, GLenum, GLenum, GLenum) = NULL;
 extern u8* s_lpShaderResources;
 
 // String's for shader file in developer mode
-#ifdef ZEROGS_DEVBUILD
+//#ifdef ZEROGS_DEVBUILD
 char* EFFECT_NAME = "";
 char* EFFECT_DIR = "";
-#endif
+//#endif
 
 /////////////////////
 // graphics resources
