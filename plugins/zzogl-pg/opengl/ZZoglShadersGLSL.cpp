@@ -767,7 +767,7 @@ static __forceinline char* GlslHeaderString(const char* name, const char* depth)
 {
 	// The '#extension ARB_texture_rectangle: enable' is because of nvidia weirdness.
 	char vers[200];
-	sprintf(vers, "#version %d\n#extension ARB_texture_rectangle: enable\n#define %s main\n%s", GLSL_VERSION, name, depth);
+	sprintf(vers, "#version %d\n#extension ARB_texture_rectangle: enable\n#define %s main\n%s\n", GLSL_VERSION, name, depth);
 	return vers;
 }
 
@@ -893,7 +893,7 @@ static ZZshShader LoadShaderFromType(const char* srcdir, const char* srcfile, in
 	const char* AddExcolor	= exactcolor?"#define EXACT_COLOR 1\n":"";
 	const char* AddAcurate  = (ps & SHADER_ACCURATE)?"#define ACCURATE_DECOMPRESSION 1\n":"";
 	char DefineString[DEFINE_STRING_SIZE] = "";
-	sprintf(DefineString, "%s#define FRAGMENT_SHADER 1\n%s%s%s%s%s\n#define CTX %d\n", GlslHeaderString(name, AddWrap), AddWrap, AddDepth, AddAEM, AddExcolor, AddAcurate, context * NOCONTEXT);
+	sprintf(DefineString, "%s#define FRAGMENT_SHADER 1\n%s%s%s%s\n#define CTX %d\n", GlslHeaderString(name, AddWrap), AddDepth, AddAEM, AddExcolor, AddAcurate, context * NOCONTEXT);
 
 	ZZshShader shader;
 	if (!CompileShader(shader, DefineString, name, GL_FRAGMENT_SHADER)) 
