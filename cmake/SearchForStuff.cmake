@@ -42,9 +42,9 @@ if(NOT FORCE_INTERNAL_ZLIB)
 endif(NOT FORCE_INTERNAL_ZLIB)
 
 ## Use pcsx2 package to find module
-if(NOT GLSP_API)
+if(NOT GLSL_API)
 	include(FindCg)
-endif(NOT GLSP_API)
+endif(NOT GLSL_API)
 include(FindGlew)
 include(FindPortAudio)
 if(NOT FORCE_INTERNAL_SOUNDTOUCH)
