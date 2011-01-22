@@ -139,7 +139,7 @@ protected:
 	// be called after a failed Apply (canceled due to error).
 	virtual void AppStatusEvent_OnSettingsApplied() {}
 
-	virtual void AppStatusEvent_OnSettingsLoadSave( const AppSettingsEventInfo& ) {}
+	virtual void AppStatusEvent_OnUiSettingsLoadSave( const AppSettingsEventInfo& ) {}
 	virtual void AppStatusEvent_OnExit() {}
 };
 
@@ -187,15 +187,18 @@ public:
 	void Init();
 
 	// Mandatory override: As a rule for proper interface design, all deriving classes need
-	// to implement this function.  There's no implementation of an options/settings panel
-	// that does not heed the changes of application status/settings changes. ;)
+	// to implement this OnSettingsApplied function.  There's no implementation of an options/
+	// settings panel that does not heed the changes of application status/settings changes. ;)
 	//
 	// Note: This method *will* be called automatically after a successful Apply, but will not
 	// be called after a failed Apply (canceled due to error).
 	virtual void AppStatusEvent_OnSettingsApplied()=0;
 
-	virtual void AppStatusEvent_OnSettingsLoadSave( const AppSettingsEventInfo& ) {}
+	virtual void AppStatusEvent_OnUiSettingsLoadSave( const AppSettingsEventInfo& ) {}
+	virtual void AppStatusEvent_OnVmSettingsLoadSave( const AppSettingsEventInfo& ) {}
 	virtual void AppStatusEvent_OnExit() {}
+
+	virtual bool IsSpecificConfig(){return false;} //lame RTTI
 
 protected:
 	virtual void OnSettingsApplied( wxCommandEvent& evt );
@@ -211,6 +214,7 @@ class BaseApplicableConfigPanel_SpecificConfig : public BaseApplicableConfigPane
     //but multiple inheritance sucks. So, subclass.
     //NOTE: because ApplyConfigToGui is called manually and not via an event, it must consider manuallyPropagate and call sub panels.
 public:
+	virtual bool IsSpecificConfig(){return true;};
 	BaseApplicableConfigPanel_SpecificConfig( wxWindow* parent, wxOrientation orient=wxVERTICAL );
 	BaseApplicableConfigPanel_SpecificConfig( wxWindow* parent, wxOrientation orient, const wxString& staticLabel );
 

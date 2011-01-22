@@ -369,9 +369,10 @@ __forceinline void TimeUpdate(u32 cClocks)
 		lClocks = cClocks - dClocks;
 	}
 
-	// Uncomment for a visual debug display showing all core's activity!
-	// Also need to uncomment a few lines in SPU2open
-	//UpdateDebugDialog();
+	// Visual debug display showing all core's activity! Disabled via #define on release builds.
+#ifdef __WIN32__
+	UpdateDebugDialog();
+#endif
 
 	if( SynchMode == 1 ) // AsyncMix on
 		SndBuffer::UpdateTempoChangeAsyncMixing();
@@ -382,7 +383,7 @@ __forceinline void TimeUpdate(u32 cClocks)
 	{
 		if(has_to_call_irq)
 		{
-			ConLog("* SPU2-X: Irq Called (%04x) at cycle %d.\n", Spdif.Info, Cycles);
+			//ConLog("* SPU2-X: Irq Called (%04x) at cycle %d.\n", Spdif.Info, Cycles);
 			has_to_call_irq=false;
 			if(_irqcallback) _irqcallback();
 		}
@@ -977,8 +978,8 @@ static void __fastcall RegWrite_Core( u16 value )
 			}
 			if(thiscore.IRQEnable!=irqe)
 			{
-				ConLog("* SPU2-X: IRQ %s at cycle %d. Current IRQA = %x\n",
-					((thiscore.IRQEnable==0)?"disabled":"enabled"), Cycles, thiscore.IRQA);
+				//ConLog("* SPU2-X: IRQ %s at cycle %d. Current IRQA = %x\n",
+				//	((thiscore.IRQEnable==0)?"disabled":"enabled"), Cycles, thiscore.IRQA);
 				
 				if(!thiscore.IRQEnable)
 					Spdif.Info &= ~(4 << thiscore.Index);

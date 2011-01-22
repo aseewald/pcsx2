@@ -111,8 +111,8 @@ class MainEmuFrame : public wxFrame,
 protected:
 	bool			m_RestartEmuOnDelete;
 
-    wxStatusBar&	m_statusbar;
-    wxStaticBitmap	m_background;
+	wxStatusBar&	m_statusbar;
+	wxStaticBitmap	m_background;
 
 	wxMenuBar&		m_menubar;
 
@@ -132,12 +132,11 @@ protected:
 
 	virtual void DispatchEvent( const PluginEventType& plugin_evt );
 	virtual void DispatchEvent( const CoreThreadStatus& status );
-	virtual void AppStatusEvent_OnSettingsLoadSave();
 	virtual void AppStatusEvent_OnSettingsApplied();
 
 public:
-    MainEmuFrame(wxWindow* parent, const wxString& title);
-    virtual ~MainEmuFrame() throw();
+	MainEmuFrame(wxWindow* parent, const wxString& title);
+	virtual ~MainEmuFrame() throw();
 
 	void OnLogBoxHidden();
 
@@ -153,7 +152,6 @@ protected:
 
 	void ApplySettings();
 	void ApplyCoreStatus();
-	void SaveEmuOptions();
 
 	void InitLogBoxPosition( AppConfig::ConsoleLogOptions& conf );
 

@@ -42,13 +42,6 @@ DEFINE_EVENT_TYPE( pxEvt_LogicalVsync );
 
 DEFINE_EVENT_TYPE( pxEvt_ThreadTaskTimeout_SysExec );
 
-DocsModeType			DocsFolderMode = DocsFolder_User;
-wxDirName				SettingsFolder;
-wxDirName				CustomDocumentsFolder;
-bool					UseDefaultSettingsFolder = true;
-wxDirName               Logs;
-bool					UseDefaultLogs = true;
-
 ScopedPtr<AppConfig>	g_Conf;
 
 template<typename DialogType>
@@ -446,7 +439,7 @@ void Pcsx2App::LogicalVsync()
 	// Only call PADupdate here if we're using GSopen2.  Legacy GSopen plugins have the
 	// GS window belonging to the MTGS thread.
 	if( (PADupdate != NULL) && (GSopen2 != NULL) && (wxGetApp().GetGsFramePtr() != NULL) )
- 		PADupdate(0);
+		PADupdate(0);
 
 	while( const keyEvent* ev = PADkeyEvent() )
 	{

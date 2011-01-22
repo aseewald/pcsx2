@@ -85,13 +85,13 @@ static void __forceinline XA_decode_block(s16* buffer, const s16* block, s32& pr
 	for(; blockbytes<=blockend; ++blockbytes)
 	{
 		s32 data	= ((*blockbytes)<<28) & 0xF0000000;
-		s32 pcm		= (data >> shift) + (((pred1*prev1)+(pred2*prev2)) >> 6);
+		s32 pcm		= (data >> shift) + (((pred1*prev1)+(pred2*prev2)+32) >> 6);
 
 		Clampify( pcm, -0x8000, 0x7fff );
 		*(buffer++) = pcm;
 
 		data		= ((*blockbytes)<<24) & 0xF0000000;
-		s32 pcm2	= (data >> shift) + (((pred1*pcm)+(pred2*prev1)) >> 6);
+		s32 pcm2	= (data >> shift) + (((pred1*pcm)+(pred2*prev1)+32) >> 6);
 
 		Clampify( pcm2, -0x8000, 0x7fff );
 		*(buffer++) = pcm2;
@@ -112,8 +112,8 @@ static void __forceinline IncrementNextA(V_Core& thiscore, uint voiceidx)
 	{
 		if( Cores[i].IRQEnable && (vc.NextA==Cores[i].IRQA ) )
 		{
-			if( IsDevBuild )
-				ConLog(" * SPU2 Core %d: IRQ Called (IRQA (%05X) passed; voice %d).\n", i, Cores[i].IRQA, thiscore.Index * 24 + voiceidx);
+			//if( IsDevBuild )
+			//	ConLog(" * SPU2 Core %d: IRQ Called (IRQA (%05X) passed; voice %d).\n", i, Cores[i].IRQA, thiscore.Index * 24 + voiceidx);
 
 			SetIrqCall(i);
 		}
@@ -859,7 +859,8 @@ __forceinline void Mix()
 		#endif
 		{
 			Out = Apply_Dealias_Filter ( Out );
-			Out = Apply_Frequency_Response_Filter ( Out );
+			// Frequency response filter needs to be tuned. Currently emphasizes the highs too much.
+			//Out = Apply_Frequency_Response_Filter ( Out );
 		}
 
 		// Final Clamp!

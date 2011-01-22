@@ -124,7 +124,7 @@ static __fi void mfifo_VIF1chain()
 	if (vif1ch.madr >= dmacRegs.rbor.ADDR &&
 	        vif1ch.madr <= (dmacRegs.rbor.ADDR + dmacRegs.rbsr.RMSK + 16))
 	{		
-		if(vif1ch.madr == (dmacRegs.rbor.ADDR + dmacRegs.rbsr.RMSK + 16)) DevCon.Warning("Edge VIF1");
+		//if(vif1ch.madr == (dmacRegs.rbor.ADDR + dmacRegs.rbsr.RMSK + 16)) DevCon.Warning("Edge VIF1");
 		
 		vif1ch.madr = qwctag(vif1ch.madr);
 		mfifoVIF1rbTransfer();
@@ -169,7 +169,8 @@ void mfifoVIF1transfer(int qwc)
 				CPU_INT(DMAC_MFIFO_VIF, 4);
 			}
 
-			vif1Regs.stat.FQC = 0x10; // FQC=16
+			//Apparently this is bad, i guess so, the data is going to memory rather than the FIFO
+			//vif1Regs.stat.FQC = 0x10; // FQC=16
 		}
 		vif1.inprogress &= ~0x10;
 
@@ -281,16 +282,6 @@ void vifMFIFOInterrupt()
 
 	//Simulated GS transfer time done, clear the flags
 	
-	if (vif1.cmd) 
-	{
-		if(vif1.done == true && vif1ch.qwc == 0)	vif1Regs.stat.VPS = VPS_WAITING;
-	}
-	else		 
-	{
-		vif1Regs.stat.VPS = VPS_IDLE;
-	}
-
-	
 	if (vif1.irq && vif1.tag.size == 0)
 	{
 		SPR_LOG("VIF MFIFO Code Interrupt detected");
@@ -302,8 +293,23 @@ void vifMFIFOInterrupt()
 		{
 			/*vif1Regs.stat.FQC = 0; // FQC=0
 			vif1ch.chcr.STR = false;*/
-			if((vif1ch.qwc > 0 || !vif1.done) && !(vif1.inprogress & 0x10)) return;
+			vif1Regs.stat.FQC = min((u16)0x10, vif1ch.qwc);
+			if((vif1ch.qwc > 0 || !vif1.done) && !(vif1.inprogress & 0x10))
+			{
+				VIF_LOG("VIF1 MFIFO Stalled");
+				return;
+			}
 		}
+	}
+
+	//Mirroring change to VIF0
+	if (vif1.cmd) 
+	{
+		if(vif1.done == true && vif1ch.qwc == 0)	vif1Regs.stat.VPS = VPS_WAITING;
+	}
+	else		 
+	{
+		vif1Regs.stat.VPS = VPS_IDLE;
 	}
 
 	if(vif1.inprogress & 0x10)
@@ -326,11 +332,13 @@ void vifMFIFOInterrupt()
 				}
 				
                 mfifoVIF1transfer(0);
+				vif1Regs.stat.FQC = min((u16)0x10, vif1ch.qwc);
 				
 			case 1: //Transfer data
 				mfifo_VIF1chain();
 				//Sanity check! making sure we always have non-zero values
 				CPU_INT(DMAC_MFIFO_VIF, (g_vifCycles == 0 ? 4 : g_vifCycles) );	
+				vif1Regs.stat.FQC = min((u16)0x10, vif1ch.qwc);
 				return;
 		}
 		return;
@@ -339,6 +347,7 @@ void vifMFIFOInterrupt()
 	vif1.vifstalled = false;
 	vif1.done = 1;
 	g_vifCycles = 0;
+	vif1Regs.stat.FQC = min((u16)0x10, vif1ch.qwc);
 	vif1ch.chcr.STR = false;
 	hwDmacIrq(DMAC_VIF1);
 	VIF_LOG("vif mfifo dma end");

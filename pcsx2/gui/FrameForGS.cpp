@@ -42,7 +42,7 @@ void GSPanel::InitDefaultAccelerators()
 	m_Accels->Map( AAC( WXK_F4 ),				"Framelimiter_MasterToggle");
 	m_Accels->Map( AAC( WXK_F4 ).Shift(),		"Frameskip_Toggle");
 	m_Accels->Map( AAC( WXK_TAB ),				"Framelimiter_TurboToggle" );
-	m_Accels->Map( AAC( WXK_TAB ).Shift(),		"Framelimiter_MasterToggle" );
+	m_Accels->Map( AAC( WXK_TAB ).Shift(),		"Framelimiter_SlomoToggle" );
 
 	m_Accels->Map( AAC( WXK_ESCAPE ),			"Sys_Suspend" );
 	m_Accels->Map( AAC( WXK_F8 ),				"Sys_TakeSnapshot" );
@@ -243,9 +243,11 @@ void GSPanel::AppStatusEvent_OnSettingsApplied()
 
 void GSPanel::OnLeftDclick(wxMouseEvent& evt)
 {
-	//need to add a config option for users which use mouse input. Till then, this feature is disabled.
-	//Console.WriteLn("GSPanel::OnDoubleClick: Invoking Fullscreen-Toggle accelerator.");
-	//DirectKeyCommand(FULLSCREEN_TOGGLE_ACCELERATOR_GSPANEL);
+	if( !g_Conf->GSWindow.IsToggleFullscreenOnDoubleClick )
+		return;
+
+	Console.WriteLn("GSPanel::OnDoubleClick: Invoking Fullscreen-Toggle accelerator.");
+	DirectKeyCommand(FULLSCREEN_TOGGLE_ACCELERATOR_GSPANEL);
 }
 
 

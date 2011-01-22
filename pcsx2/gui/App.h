@@ -272,6 +272,7 @@ class StartupOptions
 public:
 	bool			ForceWizard;
 	bool			ForceConsole;
+	bool			PortableMode;
 
 	// Disables the fast boot option when auto-running games.  This option only applies
 	// if SysAutoRun is also true.
@@ -290,8 +291,9 @@ public:
 	StartupOptions()
 	{
 		ForceWizard				= false;
-		NoFastBoot				= false;
 		ForceConsole			= false;
+		PortableMode			= false;
+		NoFastBoot				= false;
 		SysAutoRun				= false;
 		CdvdSource				= CDVDsrc_NoDisc;
 	}
@@ -309,7 +311,7 @@ class CommandlineOverrides
 public:
 	AppConfig::FilenameOptions	Filenames;
 	wxDirName		SettingsFolder;
-	wxFileName		SettingsFile;
+	wxFileName		VmSettingsFile;
 
 	bool			DisableSpeedhacks;
 
@@ -342,7 +344,7 @@ public:
 
 	bool HasSettingsOverride() const
 	{
-		return SettingsFolder.IsOk() || SettingsFile.IsOk();
+		return SettingsFolder.IsOk() || VmSettingsFile.IsOk();
 	}
 
 	bool HasPluginsOverride() const
@@ -456,7 +458,8 @@ public:
 	void DispatchEvent( PluginEventType evt );
 	void DispatchEvent( AppEventType evt );
 	void DispatchEvent( CoreThreadStatus evt );
-	void DispatchEvent( IniInterface& ini );
+	void DispatchUiSettingsEvent( IniInterface& ini );
+	void DispatchVmSettingsEvent( IniInterface& ini );
 
 	// ----------------------------------------------------------------------------
 protected:
@@ -538,7 +541,11 @@ public:
 	void CleanupRestartable();
 	void CleanupResources();
 	void WipeUserModeSettings();
-	void ReadUserModeSettings();
+	bool TestUserPermissionsRights( const wxDirName& testFolder, wxString& createFailedStr, wxString& accessFailedStr );
+	void EstablishAppUserMode();
+
+	wxConfigBase* OpenInstallSettingsFile();
+	wxConfigBase* TestForPortableInstall();
 
 	bool HasPendingSaves() const;
 	void StartPendingSave();
