@@ -146,10 +146,10 @@ bool ZZshCheckProfilesSupport() {
 // Error handler. Setup in ZZogl_Create once.
 void HandleCgError(ZZshContext ctx, ZZshError err, void* appdata)
 {/*
-	ZZLog::Error_Log("%s->%s: %s\n", ShaderCallerName, ShaderHandleName, cgGetErrorString(err));
+	ZZLog::Error_Log("%s->%s: %s", ShaderCallerName, ShaderHandleName, cgGetErrorString(err));
 	const char* listing = cgGetLastListing(g_cgcontext);
 	if (listing != NULL) 
-		DEBUG_LOG("	last listing: %s\n", listing);
+		ZZLog::Debug_Log("	last listing: %s", listing);
 */
 }
 
@@ -183,8 +183,13 @@ inline void SetGlobalUniform(ZZshParameter* param, const char* name) {
 
 bool ZZshStartUsingShaders() {
 	
-	ZZLog::Error_Log("Creating effects\n");
+	ZZLog::Error_Log("Creating effects.");
 	B_G(LoadEffects(), return false);
+	if (!glCreateShader) 
+	{
+		ZZLog::Error_Log("GLSL shaders is not supported, stop.");
+		return false;
+	}
 
 	// create a sample shader
 	clampInfo temp;
@@ -203,7 +208,7 @@ bool ZZshStartUsingShaders() {
 			glLinkProgram(pfrag->Shader);
 		if( bFailed || pfrag == NULL || glGetError() != GL_NO_ERROR) {
 			g_nPixelShaderVer = SHADER_REDUCED;
-			ZZLog::Error_Log("Basic shader test failed\n");
+			ZZLog::Error_Log("Basic shader test failed.");
 		}
 	}
 	ZZshMainProgram = glCreateProgram();
@@ -216,10 +221,10 @@ bool ZZshStartUsingShaders() {
 	if (g_nPixelShaderVer & SHADER_REDUCED)
 		conf.bilinear = 0;
 
-	ZZLog::Error_Log("Creating extra effects\n");
+	ZZLog::Error_Log("Creating extra effects.");
 	B_G(ZZshLoadExtraEffects(), return false);
 
-	ZZLog::Error_Log("using %s shaders\n", g_pShaders[g_nPixelShaderVer]);	
+	ZZLog::Error_Log("Using %s shaders.", g_pShaders[g_nPixelShaderVer]);	
 
 	return true;
 }
@@ -263,6 +268,7 @@ void ZZshGLEnableProfile() {
 // The same function for texture, also to cgGLEnable
 void ZZshGLSetTextureParameter(ZZshParameter param, GLuint texobj, const char* name) {
 	if (param > -1) {
+//		ZZLog::Error_Log("Set texture parameter %s %d... Ok", name, texobj);
 		UniformsIndex[param].texid = texobj;
 		UniformsIndex[param].Settled = true;
 	}
@@ -270,6 +276,7 @@ void ZZshGLSetTextureParameter(ZZshParameter param, GLuint texobj, const char* n
 
 void ZZshGLSetTextureParameter(ZZshShaderLink prog, ZZshParameter param, GLuint texobj, const char* name) {
 	if (param > -1) {
+//		ZZLog::Error_Log("Set texture parameter %s %d... Ok", name, texobj);
 		UniformsIndex[param].texid = texobj;
 		UniformsIndex[param].Settled = true;
 	}
@@ -280,6 +287,7 @@ void ZZshGLSetTextureParameter(ZZshShaderLink prog, ZZshParameter param, GLuint 
 // return name
 void ZZshSetParameter4fv(ZZshShaderLink prog, ZZshParameter param, const float* v, const char* name) {	
 	if (param > -1) {
+//		ZZLog::Error_Log("Set float parameter %s %f, %f, %f, %f... Ok", name, v[0], v[1], v[2], v[3]);
 		SettleFloat(UniformsIndex[param].fvalue, v);
 		UniformsIndex[param].Settled = true;
 	}
@@ -287,6 +295,7 @@ void ZZshSetParameter4fv(ZZshShaderLink prog, ZZshParameter param, const float* 
  
 void ZZshSetParameter4fv(ZZshParameter param, const float* v, const char* name) {	
 	if (param > -1) {
+//		ZZLog::Error_Log("Set float parameter %s %f, %f, %f, %f... Ok", name, v[0], v[1], v[2], v[3]);
 		SettleFloat(UniformsIndex[param].fvalue, v);	
 		UniformsIndex[param].Settled = true;
 	}
@@ -294,13 +303,13 @@ void ZZshSetParameter4fv(ZZshParameter param, const float* v, const char* name) 
 
 // The same stuff, but also with retry of param, name should be USED name of param for prog.
 void ZZshSetParameter4fvWithRetry(ZZshParameter* param, ZZshShaderLink prog, const float* v, const char* name) {
-/*	if (param == -1)
-		param->location = glGetUniformLocation(prog, name);*/
-	ZZshSetParameter4fv(prog, *param, v, name);
+	if (param != NULL)
+		ZZshSetParameter4fv(prog, *param, v, name);
 }
 
 // Used sometimes for color 1.
-void ZZshDefaultOneColor( FRAGMENTSHADER ptr ) {	
+void ZZshDefaultOneColor( FRAGMENTSHADER ptr ) {
+//	return;	
 	ShaderHandleName = "Set Default One colot";
 	float4 v = float4 ( 1, 1, 1, 1 );
 	ZZshSetParameter4fv(ptr.prog, ptr.sOneColor, v, "DegaultOne");
@@ -325,7 +334,7 @@ inline ZZshProgram UseEmptyProgram(const char* name, GLenum shaderType) {
 		ZZLog::Error_Log("Failed to load empty shader for %s:", name); 
 		return -1; 
 	} 
-	ZZLog::Error_Log("Used Empty program for %s... Ok\n",name);
+	ZZLog::Error_Log("Used Empty program for %s... Ok.",name);
 	return prog;
 }
 
@@ -350,7 +359,7 @@ inline ZZshShader UseEmptyShader(const char* name, GLenum shaderType) {
 	ShaderNames[shader] = name;
 	ShaderTypes[shader] = ZZshGetShaderType(name);
 
-	ZZLog::Error_Log("Used Empty shader for %s... Ok\n",name);
+	ZZLog::Error_Log("Used Empty shader for %s... Ok.",name);
 	return shader;
 }
 
@@ -393,11 +402,11 @@ inline bool CompileShader(ZZshProgram& shader, const char* DefineString, const c
 
 inline bool LoadShaderFromFile(ZZshShader& shader, const char* DefineString, const char* name, GLenum ShaderType) {			// Linux specific, as I presume
 	if (!CompileShader(shader, DefineString, name, ShaderType)) {
-		ZZLog::Error_Log("Failed to compile shader for %s: \n", name); 
+		ZZLog::Error_Log("Failed to compile shader for %s: ", name); 
 	       	return false; 
 	}
 
-	ZZLog::Error_Log("Used shader for %s... Ok\n",name);
+	ZZLog::Error_Log("Used shader for %s... Ok",name);
 	return true;
 }
 
@@ -408,7 +417,7 @@ inline bool GetLinkLog(ZZshProgram prog) {
 	int unif, atrib;
 	glGetProgramiv(prog, GL_ACTIVE_UNIFORMS, &unif);
 	glGetProgramiv(prog, GL_ACTIVE_ATTRIBUTES, &atrib);
-	UNIFORM_ERROR_LOG("Uniforms %d, attributes %d\n", unif, atrib);
+	UNIFORM_ERROR_LOG("Uniforms %d, attributes %d", unif, atrib);
 
 	if (LinkStatus == GL_TRUE && glIsProgram(prog)) return true;
 
@@ -418,7 +427,7 @@ inline bool GetLinkLog(ZZshProgram prog) {
 	char* InfoLog = new char[infologlength];
 	glGetProgramInfoLog(prog, infologlength, lenght, InfoLog);
 	if (!infologlength == 0)
-		ZZLog::Error_Log("Linking %d... %d:\t %s\n", prog, infologlength, InfoLog);
+		ZZLog::Error_Log("Linking %d... %d:\t %s", prog, infologlength, InfoLog);
 #endif
 
 	return false;	
@@ -433,12 +442,12 @@ inline ZZshProgram madeProgram(ZZshShader shader, ZZshShader shader2, char* name
 		glAttachShader(prog, shader2); 
 	glLinkProgram(prog);
 	if (!GetLinkLog(prog)) { 
-		ZZLog::Error_Log("Failed to link shader for %s: \n", name); 
+		ZZLog::Error_Log("Failed to link shader for %s: ", name); 
 		prog = UseEmptyProgram(name, GL_FRAGMENT_SHADER);
 	}
 	glDetachShader(prog, shader); 
 
-	ZZLog::Error_Log("Made shader program for %s... Ok\n",name);
+	ZZLog::Error_Log("Made shader program for %s... Ok",name);
 	return prog;
 }
 
@@ -451,12 +460,12 @@ void PutParametersInProgam(int start, int finish) {
 			UNIFORM_ERROR_LOG("\tTry uniform %d %d %d %s...\t\t", i, location, param.type, param.ShName);
 
 			if (!param.Settled && !param.Constant) {
-				UNIFORM_ERROR_LOG("\tUnsettled, non-constant uniform, could be bug: %d %s\n", param.type, param.ShName);
+				UNIFORM_ERROR_LOG("\tUnsettled, non-constant uniform, could be bug: %d %s", param.type, param.ShName);
 				continue;
 			}
 
 			if (param.type == ZZ_FLOAT4) {
-				glUniform4fv(location, 4, param.fvalue);
+				glUniform4fv(location, 1, param.fvalue);
 			}
 			else
 			{
@@ -471,15 +480,15 @@ void PutParametersInProgam(int start, int finish) {
 			}
 
 			if (glGetError() == GL_NO_ERROR)
-				UNIFORM_ERROR_LOG("Ok.\n");
+				UNIFORM_ERROR_LOG("Ok. Param name %s, location %d, type %d", param.ShName, location, param.type);
 			else
-				ZZLog::Error_Log("error in PutParametersInProgam param name %s, location %d, typr %d\n", param.ShName, location, param.type);
+				ZZLog::Error_Log("error in PutParametersInProgam param name %s, location %d, type %d", param.ShName, location, param.type);
 
 			if (!param.Constant)								// Unset used parameters 
 				UniformsIndex[i].Settled == false;
 		}
 		else if (start != 0 && location == -1 && param.Settled)					// No global variable
-			ZZLog::Error_Log("Warning! Unused, but set uniform %d, %s\n", location, param.ShName);
+			ZZLog::Error_Log("Warning! Unused, but set uniform %d, %s", location, param.ShName);
 	}
 	GL_REPORT_ERRORD();
 }
@@ -493,9 +502,9 @@ void PutSInProgam(int start, int finish) {
 			if (param.type != ZZ_FLOAT4) {
 				UNIFORM_ERROR_LOG("\tTry sampler %d %d %d %s %d...\t\t", i, location, param.type, param.ShName, param.sampler);
 				if (glGetError() == GL_NO_ERROR)
-					UNIFORM_ERROR_LOG("Ok\n");
+					UNIFORM_ERROR_LOG("Ok");
 				else
-					UNIFORM_ERROR_LOG("error!\n");
+					UNIFORM_ERROR_LOG("error!");
 				glUniform1i(location, param.sampler);
 			}
 		}
@@ -513,17 +522,17 @@ bool ValidateProgram(ZZshProgram Prog) {
 		glGetProgramiv(Prog, GL_INFO_LOG_LENGTH, &infologlength);
 		char* InfoLog = new char[infologlength];
 		glGetProgramInfoLog(Prog, infologlength, lenght, InfoLog);
-		ZZLog::Error_Log("Validation %d... %d:\t %s\n", Prog, infologlength, InfoLog);
+		ZZLog::Error_Log("Validation %d... %d:\t %s", Prog, infologlength, InfoLog);
 	}
 	return (isValid != 0); 
 }
 
 void PutParametersAndRun(VERTEXSHADER* vs, FRAGMENTSHADER* ps) {
-	UNIFORM_ERROR_LOG("Run program %s(%d) \t+\t%s(%d)\n", ShaderNames[vs->Shader], vs->Shader, ShaderNames[ps->Shader], ps->Shader);
+	UNIFORM_ERROR_LOG("Run program %s(%d) \t+\t%s(%d)", ShaderNames[vs->Shader], vs->Shader, ShaderNames[ps->Shader], ps->Shader);
 
 	glUseProgram(ZZshMainProgram);	
 	if (glGetError() != GL_NO_ERROR) {
-		ZZLog::Error_Log("Something weird happened on Linking stage\n");
+		ZZLog::Error_Log("Something weird happened on Linking stage.");
 
 		glUseProgram(0);
 		return;
@@ -541,7 +550,7 @@ void PutParametersAndRun(VERTEXSHADER* vs, FRAGMENTSHADER* ps) {
 }
 
 void CreateAndRunMain(VERTEXSHADER* vs, FRAGMENTSHADER* ps) {
-	ZZLog::Error_Log("\n--->  New shader program %d, %s(%d) \t+\t%s(%d)\n", ZZshMainProgram, ShaderNames[vs->Shader], vs->Shader, ShaderNames[ps->Shader], ps->Shader);
+	ZZLog::Error_Log("\n--->  New shader program %d, %s(%d) \t+\t%s(%d).", ZZshMainProgram, ShaderNames[vs->Shader], vs->Shader, ShaderNames[ps->Shader], ps->Shader);
 
 	if (vs->Shader != 0)
 		glAttachShader(ZZshMainProgram, vs->Shader);
@@ -550,7 +559,7 @@ void CreateAndRunMain(VERTEXSHADER* vs, FRAGMENTSHADER* ps) {
 
 	glLinkProgram(ZZshMainProgram);
 	if (!GetLinkLog(ZZshMainProgram)) {
-		ZZLog::Error_Log("Main program linkage error, don't use any shader for this stage.\n");
+		ZZLog::Error_Log("Main program linkage error, don't use any shader for this stage.");
 		return;
 	}
 
@@ -619,7 +628,7 @@ inline int SetUniformParam(ZZshProgram prog, ZZshParameter* param, const char* n
 		UniformsIndex[NumActiveUniforms] = ParamInfo(name, ZZ_FLOAT4, ZeroFloat4, -1, 0, false, false);		// By define Uniform is FLOAT4
 
 		SettleTextureUnit(&(UniformsIndex[NumActiveUniforms]), name);
-		UNIFORM_ERROR_LOG("uniform %s \t\t%d %d\n", name, p, UniformsIndex[NumActiveUniforms].type); 
+		UNIFORM_ERROR_LOG("uniform %s \t\t%d %d", name, p, UniformsIndex[NumActiveUniforms].type); 
 
 		NumActiveUniforms++;  		
 	}
@@ -706,7 +715,7 @@ void SetupFragmentProgramParameters(FRAGMENTSHADER* pf, int context, int type)
 	INIT_UNIFORMPARAM(float4(1/1024.0f, 0.2f/1024.0f, 1/128.0f, 1/512.0f), "g_fMult");
 	pf->ParametersFinish = NumActiveUniforms;
 	if (NumActiveUniforms > MAX_ACTIVE_UNIFORMS)
-		ZZLog::Error_Log("Too many shader variables. You may increase the limit in source %d\n", NumActiveUniforms);
+		ZZLog::Error_Log("Too many shader variables. You may increase the limit in source %d.", NumActiveUniforms);
 		
 	glUseProgram(0);
 	GL_REPORT_ERRORD();
@@ -739,7 +748,7 @@ void SetupVertexProgramParameters(VERTEXSHADER* pf, int context)
 	INIT_UNIFORMPARAM(g_vdepth, "g_fZ");
 	if (p > -1) {
 		INIT_UNIFORMPARAM(vlogz, "g_fZMin");
-		if (p == -1)  ZZLog::Error_Log ("Shader file version is outdated! Only is log-Z possible\n");
+		if (p == -1)  ZZLog::Error_Log ("Shader file version is outdated! Only log-Z is possible.");
 	}
 	GL_REPORT_ERRORD();
 
@@ -754,7 +763,7 @@ void SetupVertexProgramParameters(VERTEXSHADER* pf, int context)
 	SET_UNIFORMPARAM(fBitBltTrans, "g_fBitBltTrans");
 	pf->ParametersFinish = NumActiveUniforms;
 	if (NumActiveUniforms > MAX_ACTIVE_UNIFORMS)
-		ZZLog::Error_Log("Too many shader variables. You may increase the limit in the source.\n");
+		ZZLog::Error_Log("Too many shader variables. You may increase the limit in the source.");
 
 	glUseProgram(0);
 	GL_REPORT_ERRORD();
@@ -838,7 +847,7 @@ bool ZZshLoadExtraEffects() {
 	if (!LOAD_PS(DefineString, "BitBltPS", ppsBitBlt[0], cgfProf, 0, "")) bLoadSuccess = false;
 	if (!LOAD_PS(DefineString, "BitBltAAPS", ppsBitBlt[1], cgfProf, 0, "")) bLoadSuccess = false;
 	if (!bLoadSuccess) {
-		ZZLog::Error_Log("Failed to load BitBltAAPS, using BitBltPS\n");
+		ZZLog::Error_Log("Failed to load BitBltAAPS, using BitBltPS.");
 		if (!LOAD_PS(DefineString, "BitBltPS", ppsBitBlt[1], cgfProf, 0, "")) bLoadSuccess = false;
 	}
 
@@ -859,7 +868,7 @@ bool ZZshLoadExtraEffects() {
 	}
 
 	if( !bLoadSuccess )
-		ZZLog::Error_Log("Failed to create CRTC shaders\n");
+		ZZLog::Error_Log("Failed to create CRTC shaders.");
 	
 	// if (!LOAD_PS(DefineString, "CRTC24PS", ppsCRTC24[0], cgfProf, 0, "")) bLoadSuccess = false;
 	// if (!LOAD_PS(DefineString, "CRTC24InterPS", ppsCRTC24[1], cgfProf, 0, "")) bLoadSuccess = false;
@@ -942,7 +951,7 @@ FRAGMENTSHADER* ZZshLoadShadeEffect(int type, int texfilter, int fog, int testae
 		GL_REPORT_ERRORD();
 
 		if( glGetError() != GL_NO_ERROR ) {
-				ZZLog::Error_Log("Failed to load shader %d,%d,%d,%d\n", type, fog, texfilter, 4*clamp.wms+clamp.wmt);
+				ZZLog::Error_Log("Failed to load shader %d,%d,%d,%d.", type, fog, texfilter, 4*clamp.wms+clamp.wmt);
 				if (pbFailed != NULL ) *pbFailed = true;
 				return pf;
 		}
@@ -950,7 +959,7 @@ FRAGMENTSHADER* ZZshLoadShadeEffect(int type, int texfilter, int fog, int testae
 		return pf;
 	}
 
-	ZZLog::Error_Log("Failed to create shader %d,%d,%d,%d\n", type, fog, texfilter, 4*clamp.wms+clamp.wmt);
+	ZZLog::Error_Log("Failed to create shader %d,%d,%d,%d.", type, fog, texfilter, 4*clamp.wms+clamp.wmt);
 	if( pbFailed != NULL ) *pbFailed = true;
 	
 	GL_REPORT_ERRORD();

@@ -18,8 +18,6 @@
  */
 
 #include "GS.h"
-//#include <Cg/cg.h>
-//#include <Cg/cgGL.h>
 
 #include <stdlib.h>
 #include "Mem.h"

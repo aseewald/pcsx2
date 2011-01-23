@@ -823,7 +823,7 @@ void __gifCall GIFRegHandlerTRXDIR(const u32* data)
 	else
 	{
 #if defined(ZEROGS_DEVBUILD)
-		ZZLog::Warn_Log("Dummy transfer.");
+		//ZZLog::Warn_Log("Dummy transfer.");
 #endif
 		gs.transferring = false;
 	}
