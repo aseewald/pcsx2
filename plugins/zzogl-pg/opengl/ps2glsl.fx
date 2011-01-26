@@ -3,6 +3,7 @@
 // divides by z for every pixel, instead of in vertex shader
 // fixes kh textures
 
+#extension ARB_texture_rectangle: enable
 #define GL_compatibility_profile 1
 #define PERSPECTIVE_CORRECT_TEX
 

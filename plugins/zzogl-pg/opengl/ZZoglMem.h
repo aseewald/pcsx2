@@ -435,6 +435,7 @@ static __forceinline u32* getPixelBaseAddress_A32(const void* pmem, int x, int y
 // Wrapper for cases, where psm is not constant, should be avoided inside cycles
 static __forceinline u32* getPixelAddress_A32(u32& mask, u32& shift, int psm, const void* pmem, int x, int y, u32 bw, u32 bp = 0) {
 	PSM_SWITCHCASE( return getPixelAddress_A32<psmC>(mask, shift, pmem, x, y, bw, bp) );
+	return 0;
 }
 
 static __forceinline u32* getClutAddress(u8* pmem, const tex0Info& tex0) {

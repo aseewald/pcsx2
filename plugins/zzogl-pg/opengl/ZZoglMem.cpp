@@ -188,10 +188,9 @@ inline bool TRANSMIT_HOSTLOCAL_Y(u32* pbuf, int& nSize, u8* pstart, int endY, in
 	if (DoOneTransmitStep<psm>(pstart, nSize, q, pbuf, k, i, j, widthlimit)) return true;						// After this j and dx are compatible by modyle of widthlimit
 	
 	int Unaligned_Start = (gs.trxpos.dx % widthlimit == 0) ? 0 : widthlimit - gs.trxpos.dx % widthlimit;					// gs.trpos.dx + Unaligned_Start is multiple of widthlimit
-
 	for (; i < endY; ++i) {
 		if (DoOneTransmitStep<psm>(pstart, nSize, j + Unaligned_Start, pbuf, k, i, j, widthlimit)) return true;			// This operation made j % widthlimit == 0.
-		assert (j % widthlimit != 0);													 
+		//assert (j % widthlimit != 0);												 
 
 		for (; j < gs.imageEnd.x - widthlimit + 1 && nSize >= widthlimit; j += widthlimit, nSize -= widthlimit) { 			
 			writePixelsFromMemory<psm, true, widthlimit>(pstart, pbuf, k, j % 2048, i % 2048,  gs.dstbuf.bw);
@@ -445,7 +444,9 @@ inline void FILL_BLOCK(BLOCK& b, int floatfmt, vector<char>& vBlockData, vector<
 	b.pageTable = g_pageTable[psmX]; 
 	b.blockTable = g_blockTable[psmX]; 
 	b.columnTable = g_columnTable[psmX]; 
-	assert( sizeof(g_pageTable[psmX]) == bw*bh*sizeof(g_pageTable[psmX][0][0]) ); 
+	
+	// This is never true.
+	//assert( sizeof(g_pageTable[psmX]) == bw*bh*sizeof(g_pageTable[psmX][0][0]) ); 
 	float* psrcf = (float*)&vBlockData[0] + ox + oy * BLOCK_TEXWIDTH; 
 	u16* psrcw = (u16*)&vBlockData[0] + ox + oy * BLOCK_TEXWIDTH; 
 	for(int i = 0; i < bh; ++i) { 

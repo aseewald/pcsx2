@@ -179,7 +179,7 @@ template <int psm>
 inline void __fastcall SwizzleBlock(u32* dst, u32* src, int pitch, u32 WriteMask = 0xffffffff) {
 	u8 B = (PSM_PIXELS_PER_WORD<psm>() > 2)? 4 : 2;
 
-	assert ((pitch & 3) != 0 );
+	assert ((pitch & 3) == 0 );
 
 	u32* src1 = src;
 	u32* src2 = src + pitch / 4;

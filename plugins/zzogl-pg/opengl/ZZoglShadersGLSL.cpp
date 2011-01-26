@@ -772,18 +772,18 @@ void SetupVertexProgramParameters(VERTEXSHADER* pf, int context)
 const int GLSL_VERSION = 130;  			// Sampler2DRect appear in 1.3
 
 // We use strictly compilation from source for GSLS
-static __forceinline char* GlslHeaderString(const char* name, const char* depth)
+static __forceinline void GlslHeaderString(char* header_string, const char* name, const char* depth)
 {
-	// The '#extension ARB_texture_rectangle: enable' is because of nvidia weirdness.
-	char vers[200];
-	sprintf(vers, "#version %d\n#extension ARB_texture_rectangle: enable\n#define %s main\n%s\n", GLSL_VERSION, name, depth);
-	return vers;
+	sprintf(header_string, "#version %d\n#define %s main\n%s\n", GLSL_VERSION, name, depth);
 }
 
 static __forceinline bool LOAD_VS(char* DefineString, const char* name, VERTEXSHADER vertex, int shaderver, ZZshProfile context, const char* depth)
 {
 	bool flag;
-	sprintf(DefineString, "%s#define VERTEX_SHADER 1\n#define CTX %d\n", GlslHeaderString(name, depth), context * NOCONTEXT);
+	char temp[200];
+	GlslHeaderString(temp, name, depth);
+	sprintf(DefineString, "%s#define VERTEX_SHADER 1\n#define CTX %d\n", temp, context * NOCONTEXT);
+	//ZZLog::WriteLn("Define for VS == '%s'", DefineString);
 	flag = LoadShaderFromFile(vertex.Shader, DefineString, name, GL_VERTEX_SHADER);
 	SetupVertexProgramParameters(&vertex, context);
 	return flag;
@@ -792,7 +792,10 @@ static __forceinline bool LOAD_VS(char* DefineString, const char* name, VERTEXSH
 static __forceinline bool LOAD_PS(char* DefineString, const char* name, FRAGMENTSHADER fragment, int shaderver, ZZshProfile context, const char* depth)
 {
 	bool flag;
-	sprintf(DefineString, "%s#define FRAGMENT_SHADER 1\n#define CTX %d\n", GlslHeaderString(name, depth), context * NOCONTEXT);
+	char temp[200];
+	GlslHeaderString(temp, name, depth);
+	sprintf(DefineString, "%s#define FRAGMENT_SHADER 1\n#define CTX %d\n", temp, context * NOCONTEXT);
+	//ZZLog::WriteLn("Define for PS == '%s'", DefineString);
 	flag = LoadShaderFromFile(fragment.Shader, DefineString, name, GL_FRAGMENT_SHADER);
 	SetupFragmentProgramParameters(&fragment, context, 0); 
 	return flag;
@@ -900,9 +903,11 @@ static ZZshShader LoadShaderFromType(const char* srcdir, const char* srcfile, in
 	const char* AddDepth 	= writedepth?"#define WRITE_DEPTH 1\n":"";
 	const char* AddAEM	= testaem?"#define TEST_AEM 1\n":"";
 	const char* AddExcolor	= exactcolor?"#define EXACT_COLOR 1\n":"";
-	const char* AddAcurate  = (ps & SHADER_ACCURATE)?"#define ACCURATE_DECOMPRESSION 1\n":"";
+	const char* AddAccurate  = (ps & SHADER_ACCURATE)?"#define ACCURATE_DECOMPRESSION 1\n":"";
 	char DefineString[DEFINE_STRING_SIZE] = "";
-	sprintf(DefineString, "%s#define FRAGMENT_SHADER 1\n%s%s%s%s\n#define CTX %d\n", GlslHeaderString(name, AddWrap), AddDepth, AddAEM, AddExcolor, AddAcurate, context * NOCONTEXT);
+	char temp[200];
+	GlslHeaderString(temp, name, AddWrap);
+	sprintf(DefineString, "%s#define FRAGMENT_SHADER 1\n%s%s%s%s\n#define CTX %d\n", temp, AddDepth, AddAEM, AddExcolor, AddAccurate, context * NOCONTEXT);
 
 	ZZshShader shader;
 	if (!CompileShader(shader, DefineString, name, GL_FRAGMENT_SHADER)) 
