@@ -442,11 +442,9 @@ MainEmuFrame::MainEmuFrame(wxWindow* parent, const wxString& title)
 	m_menuConfig.Append(MenuId_Config_SysSettings,	_("Emulation &Settings") );
 	m_menuConfig.Append(MenuId_Config_McdSettings,	_("&Memory cards") );
 	m_menuConfig.Append(MenuId_Config_BIOS,			_("&Plugin/BIOS Selector") );
-	if (IsDebugBuild)
-	{
-		m_menuConfig.Append(MenuId_Config_GameDatabase,	_("Game Database Editor") );
-		m_menuConfig.Append(MenuId_Config_Language,		_("Appearance...") );
-	}
+	if (IsDebugBuild) m_menuConfig.Append(MenuId_Config_GameDatabase,	_("Game Database Editor") );
+	// Empty menu
+	// m_menuConfig.Append(MenuId_Config_Language,		_("Appearance...") );
 
 	m_menuConfig.AppendSeparator();
 
@@ -634,23 +632,45 @@ void MainEmuFrame::ApplyCoreStatus()
 	menubar.Enable( MenuId_Sys_Shutdown, SysHasValidState() || CorePlugins.AreAnyInitialized() );
 }
 
+//Apply a config to the menu such that the menu reflects it properly
 void MainEmuFrame::ApplySettings()
+{
+	ApplyConfigToGui(*g_Conf);
+}
+
+//MainEmuFrame needs to be aware which items are affected by presets if AppConfig::APPLY_FLAG_FROM_PRESET is on.
+//currently only EnablePatches is affected when the settings come from a preset.
+void MainEmuFrame::ApplyConfigToGui(AppConfig& configToApply, int flags)
 {
 	wxMenuBar& menubar( *GetMenuBar() );
 
-	menubar.Check( MenuId_EnablePatches, g_Conf->EmuOptions.EnablePatches );
-	menubar.Check( MenuId_EnableCheats,  g_Conf->EmuOptions.EnableCheats );
-	menubar.Check( MenuId_EnableHostFs,  g_Conf->EmuOptions.HostFs );
-	menubar.Check( MenuId_CDVD_Info,	 g_Conf->EmuOptions.CdvdVerboseReads );
+	menubar.Check(	MenuId_EnablePatches, configToApply.EmuOptions.EnablePatches );
+	menubar.Enable(	MenuId_EnablePatches, !configToApply.EnablePresets );
+
+	if ( !(flags & AppConfig::APPLY_FLAG_FROM_PRESET) )
+	{//these should not be affected by presets
+		menubar.Check( MenuId_EnableCheats,  configToApply.EmuOptions.EnableCheats );
+		menubar.Check( MenuId_EnableHostFs,  configToApply.EmuOptions.HostFs );
+		menubar.Check( MenuId_CDVD_Info,	 configToApply.EmuOptions.CdvdVerboseReads );
 #ifdef __LINUX__
-	menubar.Check( MenuId_Console_Stdio, g_Conf->EmuOptions.ConsoleToStdio );
+		menubar.Check( MenuId_Console_Stdio, configToApply.EmuOptions.ConsoleToStdio );
 #endif
 
-	menubar.Check( MenuId_Config_Multitap0Toggle, g_Conf->EmuOptions.MultitapPort0_Enabled );
-	menubar.Check( MenuId_Config_Multitap1Toggle, g_Conf->EmuOptions.MultitapPort1_Enabled );
+		menubar.Check( MenuId_Config_Multitap0Toggle, configToApply.EmuOptions.MultitapPort0_Enabled );
+		menubar.Check( MenuId_Config_Multitap1Toggle, configToApply.EmuOptions.MultitapPort1_Enabled );
+	}
 
-	UpdateIsoSrcSelection();
+	UpdateIsoSrcSelection();	//shouldn't be affected by presets but updates from g_Conf anyway and not from configToApply, so no problem here.
 }
+
+//write pending preset settings from the gui to g_Conf,
+//	without triggering an overall "settingsApplied" event.
+void MainEmuFrame::CommitPreset_noTrigger()
+{
+	wxMenuBar& menubar( *GetMenuBar() );
+	g_Conf->EmuOptions.EnablePatches = menubar.IsChecked( MenuId_EnablePatches );
+}
+
 
 // ------------------------------------------------------------------------
 //   "Extensible" Plugin Menus

@@ -128,9 +128,6 @@ namespace Panels
 		pxRadioPanel*	m_RoundModePanel;
 		pxRadioPanel*	m_ClampModePanel;
 
-		pxCheckBox*		m_Option_FTZ;
-		pxCheckBox*		m_Option_DAZ;
-
 	public:
 		BaseAdvancedCpuOptions( wxWindow* parent );
 		virtual ~BaseAdvancedCpuOptions() throw() { }
@@ -152,7 +149,7 @@ namespace Panels
 		virtual ~AdvancedOptionsFPU() throw() { }
 		void Apply();
 		void AppStatusEvent_OnSettingsApplied();
-		void ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate=false );
+		void ApplyConfigToGui( AppConfig& configToApply, int flags=0 );
 	};
 
 	class AdvancedOptionsVU : public BaseAdvancedCpuOptions
@@ -162,7 +159,7 @@ namespace Panels
 		virtual ~AdvancedOptionsVU() throw() { }
 		void Apply();
 		void AppStatusEvent_OnSettingsApplied();
-		void ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate=false );
+		void ApplyConfigToGui( AppConfig& configToApply, int flags=0 );
 
 	};
 
@@ -182,7 +179,7 @@ namespace Panels
 
 		void Apply();
 		void AppStatusEvent_OnSettingsApplied();
-		void ApplyConfigToGui(AppConfig& configToApply, bool manuallyPropagate=false);
+		void ApplyConfigToGui(AppConfig& configToApply, int flags=0);
 
 	protected:
 		void OnRestoreDefaults( wxCommandEvent& evt );
@@ -201,7 +198,7 @@ namespace Panels
 
 		void Apply();
 		void AppStatusEvent_OnSettingsApplied();
-		void ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate=false );
+		void ApplyConfigToGui( AppConfig& configToApply, int flags=0 );
 
 	protected:
 		void OnRestoreDefaults( wxCommandEvent& evt );
@@ -215,8 +212,6 @@ namespace Panels
 	protected:
 		wxSpinCtrl*		m_spin_FramesToSkip;
 		wxSpinCtrl*		m_spin_FramesToDraw;
-		//pxCheckBox*		m_check_EnableSkip;
-		//pxCheckBox*		m_check_EnableSkipOnTurbo;
 
 		pxRadioPanel*	m_radio_SkipMode;
 
@@ -226,7 +221,7 @@ namespace Panels
 
 		void Apply();
 		void AppStatusEvent_OnSettingsApplied();
-		void ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate=false );
+		void ApplyConfigToGui( AppConfig& configToApply, int flags=0 );
 	};
 
 	// --------------------------------------------------------------------------------------
@@ -253,7 +248,7 @@ namespace Panels
 
 		void Apply();
 		void AppStatusEvent_OnSettingsApplied();
-		void ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate=false );
+		void ApplyConfigToGui( AppConfig& configToApply, int flags=0 );
 	};
 
 	// --------------------------------------------------------------------------------------
@@ -280,7 +275,7 @@ namespace Panels
 		virtual ~GSWindowSettingsPanel() throw() {}
 		void Apply();
 		void AppStatusEvent_OnSettingsApplied();
-		void ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate=false );
+		void ApplyConfigToGui( AppConfig& configToApply, int flags=0 );
 	};
 
 	class VideoPanel : public BaseApplicableConfigPanel_SpecificConfig
@@ -296,7 +291,7 @@ namespace Panels
 		virtual ~VideoPanel() throw() {}
 		void Apply();
 		void AppStatusEvent_OnSettingsApplied();
-		void ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate=false );
+		void ApplyConfigToGui( AppConfig& configToApply, int flags=0 );
 
 	protected:
 		void OnOpenWindowSettings( wxCommandEvent& evt );
@@ -331,7 +326,7 @@ namespace Panels
 		void Apply();
 		void EnableStuff( AppConfig* configToUse=NULL );
 		void AppStatusEvent_OnSettingsApplied();
-		void ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate=false );
+		void ApplyConfigToGui( AppConfig& configToApply, int flags=0 );
 
 	protected:
 		const wxChar* GetEEcycleSliderMsg( int val );
@@ -362,7 +357,7 @@ namespace Panels
 		void OnEnable_Toggled( wxCommandEvent& evt );
 		void Apply();
 		void AppStatusEvent_OnSettingsApplied();
-		void ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate=false );
+		void ApplyConfigToGui( AppConfig& configToApply, int flags=0 );
 	};
 
 	// --------------------------------------------------------------------------------------

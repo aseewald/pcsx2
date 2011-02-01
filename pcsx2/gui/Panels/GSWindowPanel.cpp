@@ -116,11 +116,11 @@ void Panels::GSWindowSettingsPanel::AppStatusEvent_OnSettingsApplied()
 	ApplyConfigToGui( *g_Conf );
 }
 
-void Panels::GSWindowSettingsPanel::ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate )
+void Panels::GSWindowSettingsPanel::ApplyConfigToGui( AppConfig& configToApply, int flags )
 {
 	const AppConfig::GSWindowOptions& conf( configToApply.GSWindow );
 
-	if( !manuallyPropagate )	//Presets don't control these: only change if config doesn't come from preset.
+	if( !(flags & AppConfig::APPLY_FLAG_FROM_PRESET) )	//Presets don't control these: only change if config doesn't come from preset.
 	{
 		m_check_CloseGS		->SetValue( conf.CloseOnEsc );
 		m_check_Fullscreen	->SetValue( conf.DefaultToFullscreen );
@@ -133,8 +133,8 @@ void Panels::GSWindowSettingsPanel::ApplyConfigToGui( AppConfig& configToApply, 
 
 		m_check_DclickFullscreen ->SetValue ( conf.IsToggleFullscreenOnDoubleClick );
 
-		m_text_WindowWidth	->SetValue( wxsFormat( L"%d", conf.WindowSize.GetWidth() ) );
-		m_text_WindowHeight	->SetValue( wxsFormat( L"%d", conf.WindowSize.GetHeight() ) );
+		m_text_WindowWidth	->ChangeValue( wxsFormat( L"%d", conf.WindowSize.GetWidth() ) );
+		m_text_WindowHeight	->ChangeValue( wxsFormat( L"%d", conf.WindowSize.GetHeight() ) );
 	}
 
 	m_check_VsyncEnable->Enable(!configToApply.EnablePresets);

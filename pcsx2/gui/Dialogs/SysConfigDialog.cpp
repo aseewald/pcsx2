@@ -21,6 +21,7 @@
 #include "BaseConfigurationDialog.inl"
 #include "ModalPopups.h"
 #include "Panels/ConfigurationPanels.h"
+#include "MainFrame.h"
 
 using namespace Panels;
 using namespace pxSizerFlags;
@@ -83,6 +84,7 @@ void Dialogs::SysConfigDialog::UpdateGuiForPreset ( int presetIndex, bool preset
 	preset.IsOkApplyPreset( presetIndex );	//apply a preset to a copy of g_Conf.
 	preset.EnablePresets = presetsEnabled;	//override IsOkApplyPreset (which always applies/enabled) to actual required state
 	
+	//update the config panels of SysConfigDialog to reflect the preset.
 	size_t pages = m_labels.GetCount();
 	for( size_t i=0; i<pages; ++i )
 	{
@@ -94,9 +96,32 @@ void Dialogs::SysConfigDialog::UpdateGuiForPreset ( int presetIndex, bool preset
 		if ( ((BaseApplicableConfigPanel*)(m_listbook->GetPage(i)))->IsSpecificConfig() )
 		{
 			((BaseApplicableConfigPanel_SpecificConfig*)(m_listbook->GetPage(i)))
-				->ApplyConfigToGui( preset, true );
+				->ApplyConfigToGui( preset, AppConfig::APPLY_FLAG_FROM_PRESET | AppConfig::APPLY_FLAG_MANUALLY_PROPAGATE );
 		}
 	}
+
+	//Main menus behavior regarding presets and changes/cancel/apply from SysConfigDialog:
+	//1. As long as preset-related values were not changed at SysConfigDialog, menus behave normally.
+	//2. After the first preset-related change at SysConfigDialog (this function) and before Apply/Ok/Cancel:
+	//	- The menus reflect the temporary pending values, but these preset-controlled items are grayed out even if temporarily presets is unchecked.
+	//3. When clicking Ok/Apply/Cancel at SysConfigDialog, the menus are re-alligned with g_Conf (including gray out or not as needed).
+	//NOTE: Enabling the presets and disabling them wihout clicking Apply leaves the pending menu config at last preset values
+	//		(consistent with SysConfigDialog behavior). But unlike SysConfigDialog, the menu items stay grayed out.
+	//		Clicking cancel will revert all pending changes, but clicking apply will commit them, and this includes the menus.
+	//		E.g.:
+	//			1. Patches (menu) is disabled and presets (SysConfigDialog) is disabled.
+	//			2. Opening config and checking presets without apply --> patches are visually enabled and grayed out (not yet applied to g_Conf)
+	//			3. Unchecking presets, still without clicking apply  --> patches are visually still enabled (last preset values) and grayed out.
+	//			4. Clicking Apply (presets still unchecked) --> patches will be enabled and not grayed out, presets are disabled.
+	//			--> If clicking Cancel instead of Apply at 4., will revert everything to the state of 1 (preset disabled, patches disabled and not grayed out).
+	
+	bool origEnable=preset.EnablePresets;
+	preset.EnablePresets=true;	// will cause preset-related items to be grayed out at the menus regardless of their value.
+	if ( GetMainFramePtr() )
+		GetMainFramePtr()->ApplyConfigToGui( preset, AppConfig::APPLY_FLAG_FROM_PRESET | AppConfig::APPLY_FLAG_MANUALLY_PROPAGATE );
+	
+	// Not really needed as 'preset' is local and dumped anyway. For the sake of future modifications of more GUI elements.
+	preset.EnablePresets=origEnable;	
 	
 }
 
@@ -182,13 +207,27 @@ void Dialogs::SysConfigDialog::Preset_Scroll(wxScrollEvent &event)
 	event.Skip();
 }
 
+//Write the values SysConfigDialog holds (preset index and enabled) to g_Conf.
+//Make the main menu system write the presets values it holds to g_Conf (preset may have affected the gui without changing g_Conf)
+//The panels will write themselves to g_Conf on apply (AFTER this function) and will also trigger a global OnSettingsApplied.
 void Dialogs::SysConfigDialog::Apply()
 {
 	//Console.WriteLn("Applying preset to to g_Conf: Preset index: %d, EnablePresets: %s", (int)m_slider_presets->GetValue(), m_check_presets->IsChecked()?"true":"false");
 	g_Conf->EnablePresets	= m_check_presets->IsChecked();
 	g_Conf->PresetIndex		= m_slider_presets->GetValue();
+	
+	if (GetMainFramePtr())
+		GetMainFramePtr()->CommitPreset_noTrigger();
 }
 
+//Update the main menu system to reflect the original configuration on cancel.
+//The config panels don't need this because they just reload themselves with g_Conf when re-opened next time.
+//But the menu system has a mostly persistent state that reflects g_Conf (except for when presets are used).
+void Dialogs::SysConfigDialog::Cancel()
+{
+	if (GetMainFramePtr())
+		GetMainFramePtr()->ApplyConfigToGui( *g_Conf, AppConfig::APPLY_FLAG_FROM_PRESET | AppConfig::APPLY_FLAG_MANUALLY_PROPAGATE );
+}
 
 Dialogs::SysConfigDialog::SysConfigDialog(wxWindow* parent)
 	: BaseConfigurationDialog( parent, AddAppName(_("Emulation Settings - %s")), 580 )
@@ -225,6 +264,7 @@ Dialogs::ComponentsConfigDialog::ComponentsConfigDialog(wxWindow* parent)
 
 	AddPage<PluginSelectorPanel>	( pxL("Plugins"),		cfgid.Plugins );
 	AddPage<BiosSelectorPanel>		( pxL("BIOS"),			cfgid.Cpu );
+	AddPage<StandardPathsPanel>		( pxL("Folders"),		cfgid.Paths );
 
 	AddListbook();
 	AddOkCancel();
@@ -243,7 +283,6 @@ Dialogs::InterfaceConfigDialog::InterfaceConfigDialog(wxWindow *parent)
 	const AppImageIds::ConfigIds& cfgid( wxGetApp().GetImgId().Config );
 
 	AddPage<AppearanceThemesPanel>	( pxL("Appearance"),	cfgid.Appearance );
-	AddPage<StandardPathsPanel>		( pxL("Folders"),		cfgid.Paths );
 
 	AddListbook();
 	AddOkCancel();

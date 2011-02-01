@@ -100,14 +100,6 @@ Panels::FramelimiterPanel::FramelimiterPanel( wxWindow* parent )
 	*this	+= s_spins	| pxExpand;
 	*this	+= s_fps	| pxExpand;
 
-	*this	+= 5;
-
-	//*this	+= Heading( pxE( "!Panel:Framelimiter:Heading",
-	*this	+= new pxStaticText( this, pxE( "!Panel:Framelimiter:Heading",
-		L"The internal framelimiter regulates the speed of the virtual machine. Adjustment values below are in "
-		L"percentages of the default region-based framerate, which can also be configured below." )
-	);
-
 	AppStatusEvent_OnSettingsApplied();
 }
 
@@ -116,27 +108,33 @@ void Panels::FramelimiterPanel::AppStatusEvent_OnSettingsApplied()
 	ApplyConfigToGui( *g_Conf );
 }
 
-void Panels::FramelimiterPanel::ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate )
+void Panels::FramelimiterPanel::ApplyConfigToGui( AppConfig& configToApply, int flags )
 {
 	const AppConfig::GSWindowOptions& appwin( configToApply.GSWindow );
 	const AppConfig::FramerateOptions& appfps( configToApply.Framerate );
 	const Pcsx2Config::GSOptions& gsconf( configToApply.EmuOptions.GS );
 
-	if( !manuallyPropagate )	//Presets don't control this: only change if config doesn't come from preset.
+	if( ! (flags & AppConfig::APPLY_FLAG_FROM_PRESET) )	//Presets don't control this: only change if config doesn't come from preset.
 		m_check_LimiterDisable->SetValue( !gsconf.FrameLimitEnable );
 
 	m_spin_NominalPct	->SetValue( appfps.NominalScalar.Raw );
 	m_spin_TurboPct		->SetValue( appfps.TurboScalar.Raw );
 	m_spin_SlomoPct		->SetValue( appfps.SlomoScalar.Raw );
 
-	m_text_BaseNtsc		->SetValue( gsconf.FramerateNTSC.ToString() );
-	m_text_BasePal		->SetValue( gsconf.FrameratePAL.ToString() );
+	m_text_BaseNtsc		->ChangeValue( gsconf.FramerateNTSC.ToString() );
+	m_text_BasePal		->ChangeValue( gsconf.FrameratePAL.ToString() );
 
 	m_spin_NominalPct	->Enable(!configToApply.EnablePresets);
 	m_spin_TurboPct		->Enable(!configToApply.EnablePresets);
 	m_spin_SlomoPct		->Enable(!configToApply.EnablePresets);
+	// Vsync timing controls only on devel builds / via manual ini editing
+#ifdef PCSX2_DEVBUILD
 	m_text_BaseNtsc		->Enable(!configToApply.EnablePresets);
 	m_text_BasePal		->Enable(!configToApply.EnablePresets);
+#else
+	m_text_BaseNtsc		->Enable( 0 );
+	m_text_BasePal		->Enable( 0 );
+#endif
 }
 
 void Panels::FramelimiterPanel::Apply()
@@ -175,20 +173,6 @@ Panels::FrameSkipPanel::FrameSkipPanel( wxWindow* parent )
 	: BaseApplicableConfigPanel_SpecificConfig( parent )
 {
 	SetMinWidth( 280 );
-	/*m_check_EnableSkipOnTurbo = new pxCheckBox( this, _("Use Frameskip for Turbo") );
-
-	m_check_EnableSkip = new pxCheckBox( this, _("Use Frameskip"),
-		_(".") );
-
-	m_check_EnableSkip->SetToolTip( pxEt( "!ContextTip:Frameskip:Disable",
-		L""
-		L""
-	) );
-
-	m_check_EnableSkipOnTurbo->SetToolTip( pxEt( "!ContextTip:Frameskip:UseForTurbo",
-		L"Recommended option! Since frameskipping glitches typically aren't as annoying when you're "
-		L" just trying to speed through stuff."
-	) );*/
 
 	const RadioPanelItem FrameskipOptions[] =
 	{
@@ -197,7 +181,7 @@ Panels::FrameSkipPanel::FrameSkipPanel( wxWindow* parent )
 		),
 
 		RadioPanelItem(
-			_("Skip when on Turbo only")
+			_("Skip when on Turbo only (TAB to enable)")
 		),
 
 		RadioPanelItem(
@@ -218,9 +202,6 @@ Panels::FrameSkipPanel::FrameSkipPanel( wxWindow* parent )
 
 	// ------------------------------------------------------------
 	// Sizers and Layouts
-
-	//*this += m_check_EnableSkipOnTurbo;
-	//*this += m_check_EnableSkip;
 
 	*this += m_radio_SkipMode;
 
@@ -244,6 +225,8 @@ Panels::FrameSkipPanel::FrameSkipPanel( wxWindow* parent )
 		L"Enabling it will cause severe graphical errors in some games." )
 	) | StdExpand();
 
+	*this += 24; // Extends the right box to match the left one. Only works with (Windows) 100% dpi.
+
 	AppStatusEvent_OnSettingsApplied();
 }
 
@@ -252,13 +235,10 @@ void Panels::FrameSkipPanel::AppStatusEvent_OnSettingsApplied()
 	ApplyConfigToGui( *g_Conf );
 }
 
-void Panels::FrameSkipPanel::ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate )
+void Panels::FrameSkipPanel::ApplyConfigToGui( AppConfig& configToApply, int flags )
 {
 	const AppConfig::FramerateOptions& appfps( configToApply.Framerate );
 	const Pcsx2Config::GSOptions& gsconf( configToApply.EmuOptions.GS );
-
-	//m_check_EnableSkip		->SetValue( !appfps.SkipOnLimit );
-	//m_check_EnableSkipOnTurbo	->SetValue( !appfps.SkipOnTurbo );
 
 	m_radio_SkipMode	->SetSelection( appfps.SkipOnLimit ? 2 : (appfps.SkipOnTurbo ? 1 : 0) );
 
@@ -282,16 +262,19 @@ void Panels::FrameSkipPanel::Apply()
 		case 0:
 			appfps.SkipOnLimit = false;
 			appfps.SkipOnTurbo = false;
+			gsconf.FrameSkipEnable = false;
 		break;
 
 		case 1:
 			appfps.SkipOnLimit = false;
 			appfps.SkipOnTurbo = true;
+			//gsconf.FrameSkipEnable = true;
 		break;
 
 		case 2:
 			appfps.SkipOnLimit = true;
 			appfps.SkipOnTurbo = true;
+			gsconf.FrameSkipEnable = true;
 		break;
 	}
 
@@ -308,11 +291,11 @@ Panels::VideoPanel::VideoPanel( wxWindow* parent ) :
 	wxPanelWithHelpers* left	= new wxPanelWithHelpers( this, wxVERTICAL );
 	wxPanelWithHelpers* right	= new wxPanelWithHelpers( this, wxVERTICAL );
 
-	m_check_SynchronousGS = new pxCheckBox( right, _("Use Synchronized MTGS"),
+	m_check_SynchronousGS = new pxCheckBox( left, _("Use Synchronized MTGS"),
 		_t("For troubleshooting potential bugs in the MTGS only, as it is potentially very slow.")
 	);
 
-	m_check_DisableOutput = new pxCheckBox( right, _("Disable all GS output"),
+	m_check_DisableOutput = new pxCheckBox( left, _("Disable all GS output"),
 		_t("Completely disables all GS plugin activity; ideal for benchmarking EEcore components.")
 	);
 
@@ -341,11 +324,11 @@ Panels::VideoPanel::VideoPanel( wxWindow* parent ) :
 
 	*right		+= m_span		| pxExpand;
 	*right		+= 5;
-	*right		+= m_check_SynchronousGS;
-	*right		+= m_check_DisableOutput;
 
 	*left		+= m_fpan		| pxExpand;
 	*left		+= 5;
+	*left		+= m_check_SynchronousGS;
+	*left		+= m_check_DisableOutput;
 
 	*s_table	+= left		| StdExpand();
 	*s_table	+= right	| StdExpand();
@@ -373,7 +356,7 @@ void Panels::VideoPanel::AppStatusEvent_OnSettingsApplied()
 	ApplyConfigToGui(*g_Conf);
 }
 
-void Panels::VideoPanel::ApplyConfigToGui( AppConfig& configToApply, bool manuallyPropagate ){
+void Panels::VideoPanel::ApplyConfigToGui( AppConfig& configToApply, int flags ){
 	
 	m_check_SynchronousGS->SetValue( configToApply.EmuOptions.GS.SynchronousMTGS );
 	m_check_DisableOutput->SetValue( configToApply.EmuOptions.GS.DisableOutput );
@@ -381,7 +364,7 @@ void Panels::VideoPanel::ApplyConfigToGui( AppConfig& configToApply, bool manual
 	m_check_SynchronousGS->Enable(!configToApply.EnablePresets);
 	m_check_DisableOutput->Enable(!configToApply.EnablePresets);
 
-	if( manuallyPropagate )
+	if( flags & AppConfig::APPLY_FLAG_MANUALLY_PROPAGATE )
 	{
 		m_span->ApplyConfigToGui( configToApply, true );
 		m_fpan->ApplyConfigToGui( configToApply, true );

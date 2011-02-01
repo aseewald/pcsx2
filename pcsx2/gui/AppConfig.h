@@ -76,7 +76,7 @@ enum UserLocalDataType
 
 	// Uses the directory containing PCSX2.exe, or the current working directory (if the PCSX2
 	// directory could not be determined).  This is considered 'portable' mode, and is typically
-	// detected by PCSX2 on application startup, by looking for a pcsx2_portable.ini file in
+	// detected by PCSX2 on application startup, by looking for a pcsx2_portable.ini file in 
 	// said locations.
 	UserLocalFolder_Portable,
 };
@@ -127,7 +127,8 @@ public:
 				UseDefaultSnapshots:1,
 				UseDefaultSavestates:1,
 				UseDefaultMemoryCards:1,
-				UseDefaultLogs:1;
+				UseDefaultLogs:1,
+				UseDefaultLangs:1;
 		BITFIELD_END
 
 		wxDirName
@@ -135,6 +136,7 @@ public:
 			Snapshots,
 			Savestates,
 			MemoryCards,
+			Langs,
 			Logs;
 
 		wxDirName RunIso;		// last used location for Iso loading.
@@ -305,7 +307,18 @@ public:
 
 	static int  GetMaxPresetIndex();
     static bool isOkGetPresetTextAndColor(int n, wxString& label, wxColor& c);
+	
 	bool        IsOkApplyPreset(int n);
+
+
+	//The next 2 flags are used with ApplyConfigToGui which the presets system use:
+	
+	//Indicates that the scope is only for preset-related items.
+	static const int APPLY_FLAG_FROM_PRESET			= 0x01;
+
+	//Indicates that the change should manually propagate to sub items because it's called directly and not as an event.
+	//Currently used by some panels which contain sub-panels which are affected by presets.
+	static const int APPLY_FLAG_MANUALLY_PROPAGATE	= 0x02;
 
 };
 

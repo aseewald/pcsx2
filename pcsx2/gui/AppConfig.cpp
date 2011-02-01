@@ -72,6 +72,12 @@ namespace PathDefs
 			return retval;
 		}
 
+		const wxDirName& Langs()
+		{
+			static const wxDirName retval( L"Langs" );
+			return retval;
+		}
+
 		const wxDirName& Dumps()
 		{
 			static const wxDirName retval( L"dumps" );
@@ -176,6 +182,11 @@ namespace PathDefs
 		return GetDocuments() + Base::Logs();
 	}
 
+	wxDirName GetLangs()
+	{
+		return AppRoot() + Base::Langs();
+	}
+
 	wxDirName Get( FoldersEnum_t folderidx )
 	{
 		switch( folderidx )
@@ -188,6 +199,7 @@ namespace PathDefs
 			case FolderId_Savestates:	return GetSavestates();
 			case FolderId_MemoryCards:	return GetMemoryCards();
 			case FolderId_Logs:			return GetLogs();
+			case FolderId_Langs:		return GetLangs();
 
 			case FolderId_Documents:	return CustomDocumentsFolder;
 
@@ -209,6 +221,7 @@ wxDirName& AppConfig::FolderOptions::operator[]( FoldersEnum_t folderidx )
 		case FolderId_Savestates:	return Savestates;
 		case FolderId_MemoryCards:	return MemoryCards;
 		case FolderId_Logs:			return Logs;
+		case FolderId_Langs:		return Langs;
 
 		case FolderId_Documents:	return CustomDocumentsFolder;
 
@@ -234,6 +247,7 @@ bool AppConfig::FolderOptions::IsDefault( FoldersEnum_t folderidx ) const
 		case FolderId_Savestates:	return UseDefaultSavestates;
 		case FolderId_MemoryCards:	return UseDefaultMemoryCards;
 		case FolderId_Logs:			return UseDefaultLogs;
+		case FolderId_Langs:		return UseDefaultLangs;
 
 		case FolderId_Documents:	return false;
 
@@ -284,6 +298,11 @@ void AppConfig::FolderOptions::Set( FoldersEnum_t folderidx, const wxString& src
 		case FolderId_Logs:
 			Logs = src;
 			UseDefaultLogs = useDefault;
+		break;
+
+		case FolderId_Langs:
+			Langs = src;
+			UseDefaultLangs = useDefault;
 		break;
 
 		case FolderId_Documents:
@@ -564,6 +583,7 @@ void AppConfig::FolderOptions::ApplyDefaults()
 	if( UseDefaultSavestates )	Savestates	= PathDefs::GetSavestates();
 	if( UseDefaultMemoryCards )	MemoryCards	= PathDefs::GetMemoryCards();
 	if( UseDefaultLogs )		Logs		= PathDefs::GetLogs();
+	if( UseDefaultLangs )		Langs		= PathDefs::GetLangs();
 }
 
 // ------------------------------------------------------------------------
@@ -572,6 +592,7 @@ AppConfig::FolderOptions::FolderOptions()
 	, Snapshots		( PathDefs::GetSnapshots() )
 	, Savestates	( PathDefs::GetSavestates() )
 	, MemoryCards	( PathDefs::GetMemoryCards() )
+	, Langs			( PathDefs::GetLangs() )
 	, Logs			( PathDefs::GetLogs() )
 
 	, RunIso( PathDefs::GetDocuments() )			// raw default is always the Documents folder.
@@ -594,12 +615,14 @@ void AppConfig::FolderOptions::LoadSave( IniInterface& ini )
 	IniBitBool( UseDefaultSavestates );
 	IniBitBool( UseDefaultMemoryCards );
 	IniBitBool( UseDefaultLogs );
+	IniBitBool( UseDefaultLangs );
 
 	IniEntry( Bios );
 	IniEntry( Snapshots );
 	IniEntry( Savestates );
 	IniEntry( MemoryCards );
 	IniEntry( Logs );
+	IniEntry( Langs );
 
 	IniEntry( RunIso );
 	IniEntry( RunELF );
@@ -767,7 +790,7 @@ bool AppConfig::IsOkApplyPreset(int n)
 		return false;
 	}
 
-	Console.WriteLn("Applying Preset %d ...", n);
+	//Console.WriteLn("Applying Preset %d ...", n);
 
 	//Have some original and default values at hand to be used later.
 	Pcsx2Config::GSOptions  original_GS = EmuOptions.GS;
@@ -775,10 +798,10 @@ bool AppConfig::IsOkApplyPreset(int n)
 	Pcsx2Config				default_Pcsx2Config;
 
 
-	//  NOTE:	Because the system currently only supports passing of an entire AppConfig to the GUI panels to apply,
-	//			the GUI panels should be aware of the settings which the presets control, such that when presets are used:
-	//			1. The panels should prevent manual modifications (by graying out) of settings which the presets control.
-	//			2. The panels should not apply values which the presets don't control.
+	//  NOTE:	Because the system currently only supports passing of an entire AppConfig to the GUI panels/menus to apply/reflect,
+	//			the GUI entities should be aware of the settings which the presets control, such that when presets are used:
+	//			1. The panels/entities should prevent manual modifications (by graying out) of settings which the presets control.
+	//			2. The panels should not apply values which the presets don't control if the value is initiated by a preset.
 	//			Currently controlled by the presets:
 	//			- AppConfig:	Framerate, EnableSpeedHacks, EnableGameFixes.
 	//			- EmuOptions:	Cpu, Gamefixes, SpeedHacks, EnablePatches, GS (except FrameLimitEnable).
@@ -786,6 +809,9 @@ bool AppConfig::IsOkApplyPreset(int n)
 	//			This essentially currently covers all the options on all the panels except for framelimiter which isn't
 	//			controlled by the presets, and almost the entire GSWindow panel which also isn't controlled by presets
 	//			(however, vsync IS controlled by the presets).
+	//
+	//			So, if changing the scope of the presets (making them affect more or less values), the relevant GUI entities
+	//			should me modified to support it.
 
 
 	//Force some settings as a (current) base for all presets.
@@ -915,6 +941,7 @@ void AppConfig_OnChangedSettingsFolder( bool overwrite )
 		AppLoadSettings();
 
 	AppApplySettings();
+	AppSaveSettings();//Make sure both ini files are created if needed.
 }
 
 // --------------------------------------------------------------------------------------
@@ -1071,6 +1098,8 @@ void AppSaveSettings()
 
 		return;
 	}
+
+	Console.WriteLn("Saving ini files...");
 
 	SaveUiSettings();
 	SaveVmSettings();
