@@ -20,9 +20,6 @@
 #ifndef __GSREGS_H__
 #define __GSREGS_H__
 
-
-#ifdef USE_OLD_REGS
-
 enum GIF_REG
 {
 	GIF_REG_PRIM	= 0x00,
@@ -1030,7 +1027,4 @@ void FlushBoth();
 // called on a primitive switch
 void Prim();
 
-#else
-#include "NewRegs.h"
-#endif
 #endif

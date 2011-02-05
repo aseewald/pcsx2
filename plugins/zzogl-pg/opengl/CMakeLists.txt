@@ -65,7 +65,6 @@ set(zzoglSources
     Mem_Tables.cpp
     Profile.cpp
     rasterfont.cpp
-    NewRegs.cpp
     Regs.cpp
     targets.cpp
     x86.cpp
@@ -101,7 +100,6 @@ set(zzoglHeaders
     Mem_Transmit.h
     Profile.h
     rasterfont.h
-    NewRegs.h
     Regs.h
     targets.h
     Util.h

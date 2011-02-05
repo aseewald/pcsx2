@@ -21,7 +21,6 @@
 #define __GS_H__
 
 
-#define USE_OLD_REGS
 #define ZZNORMAL_MEMORY
 
 #include "Util.h"
