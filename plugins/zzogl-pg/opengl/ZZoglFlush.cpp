@@ -1765,23 +1765,23 @@ void SetTexClamping(int context, FRAGMENTSHADER* pfragment)
 
 	switch (pclamp->wms)
 	{
-		case 0:
+		case CLAMP_REPEAT:
 			v2.x = -1e10;
 			v2.z = 1e10;
 			break;
 
-		case 1: // pclamp
+		case CLAMP_CLAMP: // pclamp
 			// suikoden5 movie text
 			v2.x = 0;
 			v2.z = 1 - 0.5f / fw;
 			break;
 
-		case 2: // reg pclamp
+		case CLAMP_REGION_CLAMP: // reg pclamp
 			v2.x = (pclamp->minu + 0.5f) / fw;
 			v2.z = (pclamp->maxu - 0.5f) / fw;
 			break;
 
-		case 3: // region rep x
+		case CLAMP_REGION_REPEAT: // region rep x
 			v.x = 0.9999f;
 			v.z = (float)fw;
 			v2.x = (float)GPU_TEXMASKWIDTH / fw;
@@ -1800,23 +1800,23 @@ void SetTexClamping(int context, FRAGMENTSHADER* pfragment)
 	switch (pclamp->wmt)
 	{
 
-		case 0:
+		case CLAMP_REPEAT:
 			v2.y = -1e10;
 			v2.w = 1e10;
 			break;
 
-		case 1: // pclamp
+		case CLAMP_CLAMP: // pclamp
 			// suikoden5 movie text
 			v2.y = 0;
 			v2.w = 1 - 0.5f / fh;
 			break;
 
-		case 2: // reg pclamp
+		case CLAMP_REGION_CLAMP: // reg pclamp
 			v2.y = (pclamp->minv + 0.5f) / fh;
 			v2.w = (pclamp->maxv - 0.5f) / fh;
 			break;
 
-		case 3: // region rep y
+		case CLAMP_REGION_REPEAT: // region rep y
 			v.y = 0.9999f;
 			v.w = (float)fh;
 			v2.y = (float)GPU_TEXMASKWIDTH / fh;
@@ -1861,15 +1861,12 @@ void SetTexVariables(int context, FRAGMENTSHADER* pfragment)
 		SetShaderCaller("SetTexVariables");
 
 		// alpha and texture highlighting
-		float4 valpha, valpha2 ;
+		float4 valpha, valpha2;
 
 		// if clut, use the frame format
 		int psm = PIXEL_STORAGE_FORMAT(tex0);
 
 //		ZZLog::Error_Log( "A %d psm, is-clut %d. cpsm %d | %d %d", psm,  PSMT_ISCLUT(psm), tex0.cpsm,  tex0.tfx, tex0.tcc );
-
-		float4 vblack;
-		vblack.x = vblack.y = vblack.z = vblack.w = 10;
 
 		/* tcc -- Texture Color Component 0=RGB, 1=RGBA + use Alpha from TEXA reg when not in PSM
 		 * tfx -- Texture Function (0=modulate, 1=decal, 2=hilight, 3=hilight2)
@@ -1886,124 +1883,42 @@ void SetTexVariables(int context, FRAGMENTSHADER* pfragment)
 		 *	      0 0 1 1     0 1 1 0                        1 0           ta0 0 1 0
 		*/
 
-		valpha2.x = (tex0.tfx == 1) ;
-		valpha2.y = (tex0.tcc == 1) && (tex0.tfx != 0) ;
-		valpha2.z = (tex0.tfx != 1) * 2 ;
-		valpha2.w = (tex0.tfx == 0) ;
+		valpha2.x = (tex0.tfx == TFX_DECAL);
+		valpha2.y = (tex0.tcc == 1) && (tex0.tfx != TFX_MODULATE);
+		valpha2.z = (tex0.tfx != TFX_DECAL) * 2;
+		valpha2.w = (tex0.tfx == TFX_MODULATE);
 
-		if (tex0.tcc == 0 || !PSMT_ALPHAEXP(psm))
+		if (tex0.tcc && PSMT_ALPHAEXP(psm))
 		{
-			valpha.x = 0 ;
-			valpha.y = (!!tex0.tcc) * (1 + (tex0.tfx == 0)) ;
+			valpha.x = (gs.texa.ta[0] / 255.0f)  * (1 + (tex0.tfx == TFX_MODULATE));
+			if (psm == PSMCT24)
+			{
+				valpha.y = 0;
+			}
+			else
+			{
+				valpha.y = ((gs.texa.ta[1] - gs.texa.ta[0]) / 255.0f) * (1 + (tex0.tfx == TFX_MODULATE));
+			}
 		}
 		else
 		{
-			valpha.x = (gs.texa.fta[0])  * (1 + (tex0.tfx == 0)) ;
-			valpha.y = (gs.texa.fta[psm != PSMCT24] - gs.texa.fta[0]) * (1 + (tex0.tfx == 0)) ;
-
+			valpha.x = 0;
+			valpha.y = (!!tex0.tcc) * (1 + (tex0.tfx == TFX_MODULATE));
 		}
 
-		valpha.z = (tex0.tfx >= 3) ;
-
-		valpha.w = (tex0.tcc == 0) || (tex0.tcc == 1 && tex0.tfx == 2) ;
-
-		if (tex0.tcc && gs.texa.aem && psm == PSMCT24)
-			vblack.w = 0;
-
-		/*
-		// Test, old code.
-				float4 valpha3, valpha4;
-		 		switch(tex0.tfx) {
-					case 0:
-						valpha3.z = 0; valpha3.w = 0;
-						valpha4.x = 0; valpha4.y = 0;
-						valpha4.z = 2; valpha4.w = 1;
-
-						break;
-					case 1:
-						valpha3.z = 0; valpha3.w = 1;
-						valpha4.x = 1; valpha4.y = 0;
-						valpha4.z = 0; valpha4.w = 0;
-
-						break;
-					case 2:
-						valpha3.z = 1; valpha3.w = 1.0f;
-						valpha4.x = 0; valpha4.y = tex0.tcc ? 1.0f : 0.0f;
-						valpha4.z = 2; valpha4.w = 0;
-
-						break;
-
-					case 3:
-						valpha3.z = 1; valpha3.w = tex0.tcc ? 0.0f : 1.0f;
-						valpha4.x = 0; valpha4.y = tex0.tcc ? 1.0f : 0.0f;
-						valpha4.z = 2; valpha4.w = 0;
-
-						break;
-				}
-				if( tex0.tcc ) {
-
-					if( tex0.tfx == 1 ) {
-						//mode.x = 10;
-						valpha3.z = 0; valpha3.w = 0;
-						valpha4.x = 1; valpha4.y = 1;
-						valpha4.z = 0; valpha4.w = 0;
-					}
-
-					if( PSMT_ALPHAEXP(psm) ) {
-
-						if( tex0.tfx == 0 ) {
-							// make sure alpha is mult by two when the output is Cv = Ct*Cf
-							valpha3.x = 2*gs.texa.fta[0];
-							// if 24bit, always choose ta[0]
-							valpha3.y = 2*gs.texa.fta[psm != 1];
-							valpha3.y -= valpha.x;
-						}
-						else {
-							valpha3.x = gs.texa.fta[0];
-							// if 24bit, always choose ta[0]
-							valpha3.y = gs.texa.fta[psm != 1];
-							valpha3.y -= valpha.x;
-						}
-					}
-					else {
-						if( tex0.tfx == 0 ) {
-							valpha3.x = 0;
-							valpha3.y = 2;
-						}
-						else {
-							valpha3.x = 0;
-							valpha3.y = 1;
-						}
-					}
-				}
-				else {
-
-					// reset alpha to color
-					valpha3.x = valpha3.y = 0;
-					valpha3.w = 1;
-				}
-
-				if ( equal_vectors(valpha, valpha3) && equal_vectors(valpha2, valpha4) ) {
-					if (CheckTexArray[tex0.tfx][tex0.tcc][psm!=1][PSMT_ALPHAEXP(psm)] == 0) {
-						ZZLog::Debug_Log ( "Good issue %d %d %d %d", tex0.tfx,  tex0.tcc, psm, PSMT_ALPHAEXP(psm) );
-						CheckTexArray[tex0.tfx][tex0.tcc][psm!=1][PSMT_ALPHAEXP(psm) ] = 1;
-					}
-				}
-				else if (CheckTexArray[tex0.tfx][tex0.tcc][psm!=1][PSMT_ALPHAEXP(psm)] == -1) {
-					ZZLog::Debug_Log ("Bad array, %d %d %d %d\n\tolf valpha %f, %f, %f, %f : valpha2 %f %f %f %f\n\tnew valpha %f, %f, %f, %f : valpha2 %f %f %f %f",
-						 tex0.tfx,  tex0.tcc, psm, PSMT_ALPHAEXP(psm),
-					 	valpha3.x, valpha3.y, valpha3.z, valpha3.w, valpha4.x, valpha4.y, valpha4.z, valpha4.w,
-					 	valpha.x, valpha.y, valpha.z, valpha.w,  valpha2.x, valpha2.y, valpha2.z, valpha2.w);
-					CheckTexArray[tex0.tfx][tex0.tcc][psm!=1][PSMT_ALPHAEXP(psm)] = -1 ;
-				}
-
-		// Test;*/
+		valpha.z = (tex0.tfx == TFX_HIGHLIGHT2);
+		valpha.w = (tex0.tcc == 0) || (tex0.tcc == 1 && tex0.tfx == TFX_HIGHLIGHT);
 
 		ZZshSetParameter4fv(pfragment->fTexAlpha, valpha, "g_fTexAlpha");
 		ZZshSetParameter4fv(pfragment->fTexAlpha2, valpha2, "g_fTexAlpha2");
 
 		if (IsAlphaTestExpansion(tex0))
+		{
+			float4 vblack;
+			vblack.x = vblack.y = vblack.z = vblack.w = 10;
+			if (tex0.tcc && gs.texa.aem && psm == PSMCT24) vblack.w = 0;
 			ZZshSetParameter4fv(pfragment->fTestBlack, vblack, "g_fTestBlack");
+		}
 
 		SetTexClamping(context, pfragment);
 

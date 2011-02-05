@@ -556,7 +556,6 @@ typedef struct
 {
 	u16 aem;
 	u8 ta[2];
-	float fta[2];
 } texaInfo;
 
 typedef struct

@@ -557,8 +557,6 @@ void __gifCall GIFRegHandlerTEXA(const u32* data)
 	gs.texa.aem = r->AEM;
 	gs.texa.ta[0] = r->TA0;
 	gs.texa.ta[1] = r->TA1;
-	gs.texa.fta[0] = r->TA0 / 255.0f;
-	gs.texa.fta[1] = r->TA1 / 255.0f;
 }
 
 void __gifCall GIFRegHandlerFOGCOL(const u32* data)
