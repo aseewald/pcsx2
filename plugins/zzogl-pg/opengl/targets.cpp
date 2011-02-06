@@ -1021,7 +1021,7 @@ void CDepthTarget::Update(int context, CRenderTarget* prndr)
 	//GLint w1 = 0;
 	//GLint h1 = 0;
 
-	FB::Attach2D(0);
+	FB::Attach2D(0, ptex);
 	//glGetRenderbufferParameterivEXT(GL_RENDERBUFFER_EXT, GL_RENDERBUFFER_WIDTH_EXT, &w1);
 	//glGetRenderbufferParameterivEXT(GL_RENDERBUFFER_EXT, GL_RENDERBUFFER_HEIGHT_EXT, &h1);
 	SetDepthStencilSurface();
