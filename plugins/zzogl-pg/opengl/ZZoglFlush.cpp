@@ -1293,7 +1293,7 @@ inline void AlphaSaveTarget(VB& curvb)
 //		Needs a # after frame to work properly.
 //		sprintf(str, "frames/frame.tga");
 
-//		//glBindFramebufferEXT( GL_FRAMEBUFFER_EXT, 0 ); // switch to the backbuffer
+//		//FB::Unbind(); // switch to the backbuffer
 //		//glFlush();
 //		//SaveTexture("tex.jpg", GL_TEXTURE_RECTANGLE_NV, curvb.prndr->ptex, RW(curvb.prndr->fbw), RH(curvb.prndr->fbh));
 //		SaveRenderTarget(str, RW(curvb.prndr->fbw), RH(curvb.prndr->fbh), 0);

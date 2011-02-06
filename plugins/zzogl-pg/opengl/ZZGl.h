@@ -145,45 +145,76 @@ static __forceinline void DrawBuffers(GLenum *buffer)
 	GL_REPORT_ERRORD();
 }
 
-static __forceinline void FBTexture(int attach, int id = 0)
-{
-	glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT + attach, GL_TEXTURE_RECTANGLE_NV, id, 0);
-	GL_REPORT_ERRORD();
-}
+
+namespace FB
+{	
+	extern u32 buf;
+
+	static __forceinline void Create()
+	{
+		glGenFramebuffersEXT(1, &buf);
+	}
+	
+	static __forceinline void Bind()
+	{
+		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, buf);
+	}
+	
+	static __forceinline void Unbind()
+	{
+		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+	}
+		
+	static __forceinline GLenum State()
+	{
+		return glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT);
+	}
+
+	static __forceinline void Attach2D(int attach, int id = 0)
+	{
+		glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT + attach, GL_TEXTURE_RECTANGLE_NV, id, 0);
+		GL_REPORT_ERRORD();
+	}
+
+	static __forceinline void Attach(GLenum rend, GLuint id = 0)
+	{
+		glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, rend, GL_RENDERBUFFER_EXT, id);
+	}	
+};
 
 static __forceinline void ResetRenderTarget(int index)
 {
-	FBTexture(index);
+	FB::Attach2D(index);
+}
+
+static __forceinline void TextureImage(GLenum tex_type, GLint iFormat, GLint width, GLint height, GLenum format, GLenum type, const GLvoid* pixels)
+{
+	glTexImage2D(tex_type, 0, iFormat, width, height, 0, format, type, pixels);
 }
 
 static __forceinline void Texture2D(GLint iFormat, GLint width, GLint height, GLenum format, GLenum type, const GLvoid* pixels)
 {
-	glTexImage2D(GL_TEXTURE_2D, 0, iFormat, width, height, 0, format, type, pixels);
+	TextureImage(GL_TEXTURE_2D, iFormat, width, height, format, type, pixels);
 }
 
 static __forceinline void Texture2D(GLint iFormat, GLenum format, GLenum type, const GLvoid* pixels)
 {
-	glTexImage2D(GL_TEXTURE_2D, 0, iFormat, BLOCK_TEXWIDTH, BLOCK_TEXHEIGHT, 0, format, type, pixels);
+	TextureImage(GL_TEXTURE_2D, iFormat, BLOCK_TEXWIDTH, BLOCK_TEXHEIGHT, format, type, pixels);
+}
+	
+static __forceinline void TextureRect(GLint iFormat, GLint width, GLint height, GLenum format, GLenum type, const GLvoid* pixels)
+{
+	TextureImage(GL_TEXTURE_RECTANGLE_NV, iFormat, width, height, format, type, pixels);
+}
+
+static __forceinline void TextureRect2(GLint iFormat, GLint width, GLint height, GLenum format, GLenum type, const GLvoid* pixels)
+{
+	TextureImage(GL_TEXTURE_RECTANGLE, iFormat, width, height, format, type, pixels);
 }
 
 static __forceinline void Texture3D(GLint iFormat, GLint width, GLint height, GLint depth, GLenum format, GLenum type, const GLvoid* pixels)
 {
 	glTexImage3D(GL_TEXTURE_3D, 0, iFormat, width, height, depth, 0, format, type, pixels);
-}
-	
-static __forceinline void TextureRect(GLint iFormat, GLint width, GLint height, GLenum format, GLenum type, const GLvoid* pixels)
-{
-	glTexImage2D(GL_TEXTURE_RECTANGLE_NV, 0, iFormat, width, height, 0, format, type, pixels);
-}
-
-static __forceinline void TextureRect2(GLint iFormat, GLint width, GLint height, GLenum format, GLenum type, const GLvoid* pixels)
-{
-	glTexImage2D(GL_TEXTURE_RECTANGLE, 0, iFormat, width, height, 0, format, type, pixels);
-}
-
-static __forceinline void TextureRect(GLenum attach, GLuint id = 0)
-{
-	glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, attach, GL_RENDERBUFFER_EXT, id);
 }
 
 static __forceinline void setTex2DFilters(GLint type)

@@ -575,7 +575,7 @@ void CRenderTarget::ConvertTo32()
 	SET_STREAM();
 
 	// assume depth already set !?
-	FBTexture(0, ptexConv);
+	FB::Attach2D(0, ptexConv);
 	ResetRenderTarget(1);
 
 	BindToSample(&ptex);
@@ -676,7 +676,7 @@ void CRenderTarget::ConvertTo16()
 	SET_STREAM();
 
 	// assume depth already set !?
-	FBTexture(0, ptexConv);
+	FB::Attach2D(0, ptexConv);
 	ResetRenderTarget(1);
 	GL_REPORT_ERRORD();
 
@@ -780,7 +780,7 @@ void CRenderTarget::_CreateFeedback()
 	glBindBuffer(GL_ARRAY_BUFFER, vboRect);
 	SET_STREAM();
 
-	FBTexture(0, ptexFeedback);
+	FB::Attach2D(0, ptexFeedback);
 	glBindTexture(GL_TEXTURE_RECTANGLE_NV, ptex);
 	GL_REPORT_ERRORD();
 
@@ -818,7 +818,7 @@ void CRenderTarget::SetRenderTarget(int targ)
 {
 	FUNCLOG
 
-	FBTexture(targ, ptex);
+	FB::Attach2D(targ, ptex);
 
 	//GL_REPORT_ERRORD();
 	//if (glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT) != GL_FRAMEBUFFER_COMPLETE_EXT)
@@ -886,8 +886,8 @@ void CDepthTarget::Destroy()
 	if (status)     // In this case Framebuffer extension is off-use and lead to segfault
 	{
 		ResetRenderTarget(1);
-		TextureRect(GL_DEPTH_ATTACHMENT_EXT);
-		TextureRect(GL_STENCIL_ATTACHMENT_EXT);
+		FB::Attach(GL_DEPTH_ATTACHMENT_EXT);
+		FB::Attach(GL_STENCIL_ATTACHMENT_EXT);
 		GL_REPORT_ERRORD();
 
 		if (pstencil != 0)
@@ -1021,12 +1021,12 @@ void CDepthTarget::Update(int context, CRenderTarget* prndr)
 	//GLint w1 = 0;
 	//GLint h1 = 0;
 
-	glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_RECTANGLE_NV, ptex, 0);
+	FB::Attach2D(0);
 	//glGetRenderbufferParameterivEXT(GL_RENDERBUFFER_EXT, GL_RENDERBUFFER_WIDTH_EXT, &w1);
 	//glGetRenderbufferParameterivEXT(GL_RENDERBUFFER_EXT, GL_RENDERBUFFER_HEIGHT_EXT, &h1);
 	SetDepthStencilSurface();
 
-	FBTexture(1);
+	FB::Attach2D(1);
 
 	GLenum buffer = GL_COLOR_ATTACHMENT0_EXT;
 
@@ -1068,20 +1068,20 @@ void CDepthTarget::Update(int context, CRenderTarget* prndr)
 void CDepthTarget::SetDepthStencilSurface()
 {
 	FUNCLOG
-	TextureRect(GL_DEPTH_ATTACHMENT_EXT, pdepth);
+	FB::Attach(GL_DEPTH_ATTACHMENT_EXT, pdepth);
 
 	if (pstencil)
 	{
 		// there's a bug with attaching stencil and depth buffers
-		TextureRect(GL_STENCIL_ATTACHMENT_EXT, pstencil);
+		FB::Attach(GL_STENCIL_ATTACHMENT_EXT, pstencil);
 
 		if (icount++ < 8)    // not going to fail if succeeded 4 times
 		{
 			GL_REPORT_ERRORD();
 
-			if (glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT) != GL_FRAMEBUFFER_COMPLETE_EXT)
+			if (FB::State() != GL_FRAMEBUFFER_COMPLETE_EXT)
 			{
-				TextureRect(GL_STENCIL_ATTACHMENT_EXT);
+				FB::Attach(GL_STENCIL_ATTACHMENT_EXT);
 
 				if (pstencil != pdepth) glDeleteRenderbuffersEXT(1, &pstencil);
 
@@ -1092,7 +1092,7 @@ void CDepthTarget::SetDepthStencilSurface()
 	}
 	else
 	{
-		TextureRect(GL_STENCIL_ATTACHMENT_EXT);
+		FB::Attach(GL_STENCIL_ATTACHMENT_EXT);
 	}
 }
 

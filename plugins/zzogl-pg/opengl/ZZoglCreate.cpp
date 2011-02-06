@@ -113,7 +113,11 @@ static bool vb_buffer_allocated = false;
 int GPU_TEXWIDTH = 512;
 float g_fiGPU_TEXWIDTH = 1/512.0f;
 int g_MaxTexWidth = 4096, g_MaxTexHeight = 4096;
-u32 s_uFramebuffer = 0;
+
+namespace FB
+{
+	u32 buf = 0;
+};
 
 RasterFont* font_p = NULL;
 float g_fBlockMult = 1;
@@ -485,16 +489,16 @@ bool ZZCreate(int _width, int _height)
 
 	if (err != GL_NO_ERROR) bSuccess = false;
 
-	glGenFramebuffersEXT(1, &s_uFramebuffer);
+	FB::Create();
 
-	if (s_uFramebuffer == 0)
+	if (FB::buf == 0)
 	{
 		ZZLog::Error_Log("Failed to create the renderbuffer.");
 	}
 
 	GL_REPORT_ERRORD();
 
-	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, s_uFramebuffer);
+	FB::Bind();
 
 	DrawBuffers(s_drawbuffers);
 		

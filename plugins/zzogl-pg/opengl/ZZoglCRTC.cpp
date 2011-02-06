@@ -221,7 +221,7 @@ inline void RenderStartHelper()
 	vb[0].fba.fba = 0;
 	vb[1].fba.fba = 0;
 
-	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);   // switch to the backbuffer
+	FB::Unbind();   // switch to the backbuffer
 
 	glViewport(0, 0, GLWin.backbuffer.w, GLWin.backbuffer.h);
 
@@ -792,12 +792,10 @@ inline void AfterRendererUnimportantJob()
 	maxmin = 608;
 }
 
-extern u32 s_uFramebuffer;
-
 // Swich Framebuffers
 inline void AfterRendererSwitchBackToTextures()
 {
-	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, s_uFramebuffer);
+	FB::Bind();
 
 	g_MemTargs.DestroyCleared();
 
