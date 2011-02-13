@@ -70,6 +70,9 @@ set(zzoglSources
     x86.cpp
     zerogs.cpp
     zpipe.cpp
+    ZZDepthTargets.cpp
+    ZZMemoryTargets.cpp
+    ZZRenderTargets.cpp
     ZZClut.cpp
     ZZHacks.cpp
     ZZKeyboard.cpp

@@ -34,6 +34,8 @@
 
 #define VB_BUFFERSIZE			   0x4000
 
+extern void FlushIfNecesary(void* ptr);
+
 // all textures have this width
 extern int GPU_TEXWIDTH;
 extern float g_fiGPU_TEXWIDTH;
@@ -103,8 +105,8 @@ class CRenderTarget
 			TS_NeedConvert32 = 16,
 			TS_NeedConvert16 = 32
 		};
-		inline float4 DefaultBitBltPos();
-		inline float4 DefaultBitBltTex();
+		float4 DefaultBitBltPos();
+		float4 DefaultBitBltTex();
 
 	private:
 		void _CreateFeedback();
@@ -310,9 +312,12 @@ class CRenderTargetMngr
 			return ptarg;
 		}
 
-		static void DestroyTarg(CRenderTarget* ptarg);
+		void DestroyTarg(CRenderTarget* ptarg);
 		void PrintTargets();
 		MAPTARGETS mapTargets, mapDummyTargs;
+	private:
+		
+		void DestroyAllTargetsHelper(void* ptr);
 };
 
 class CMemoryTargetMngr
@@ -501,5 +506,13 @@ inline int get_maxheight(int fbp, int fbw, int psm)
 
 	return ret;
 }
+
+// memory size for one row of texture. It depends on width of texture and number of bytes
+// per pixel
+inline u32 Pitch(int fbw) { return (RW(fbw) * 4) ; }
+
+// memory size of whole texture. It is number of rows multiplied by memory size of row
+inline u32 Tex_Memory_Size(int fbw, int fbh) { return (RH(fbh) * Pitch(fbw)); }
+
 
 #endif

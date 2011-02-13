@@ -208,12 +208,15 @@
 		</Unit>
 		<Unit filename="../../ZZClut.cpp" />
 		<Unit filename="../../ZZClut.h" />
+		<Unit filename="../../ZZDepthTargets.cpp" />
 		<Unit filename="../../ZZGl.h" />
 		<Unit filename="../../ZZHacks.cpp" />
 		<Unit filename="../../ZZHacks.h" />
 		<Unit filename="../../ZZKeyboard.cpp" />
 		<Unit filename="../../ZZLog.cpp" />
 		<Unit filename="../../ZZLog.h" />
+		<Unit filename="../../ZZMemoryTargets.cpp" />
+		<Unit filename="../../ZZRenderTargets.cpp" />
 		<Unit filename="../../ZZoglCRTC.cpp" />
 		<Unit filename="../../ZZoglCRTC.h" />
 		<Unit filename="../../ZZoglCreate.cpp" />

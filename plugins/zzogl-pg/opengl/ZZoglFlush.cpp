@@ -1375,6 +1375,14 @@ void FlushBoth()
 	Flush(1);
 }
 
+// Often called for several reasons
+// Call flush if renderer or depth target is equal to ptr
+void FlushIfNecesary(void* ptr)
+{
+	if (vb[0].prndr == ptr || vb[0].pdepth == ptr) Flush(0);
+	if (vb[1].prndr == ptr || vb[1].pdepth == ptr) Flush(1);
+}
+
 inline void RenderFBA(const VB& curvb, ZZshParameter sOneColor)
 {
 	// add fba to all pixels
