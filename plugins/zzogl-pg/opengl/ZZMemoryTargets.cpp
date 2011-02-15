@@ -422,12 +422,6 @@ CMemoryTarget* CMemoryTargetMngr::GetMemoryTarget(const tex0Info& tex0, int forc
 
 #ifdef ZEROGS_SSE2
         assert(((u32)(uptr)dst) % 16 == 0);
-        // FIXME Uncomment to test intrinsic versions (instead of asm)
-        // perf improvement vs asm:
-        // 1/ gcc updates both pointer with 1 addition
-        // 2/ Bypass the cache for the store
-#define NEW_INTRINSIC_VERSION
-#ifdef NEW_INTRINSIC_VERSION
 
         __m128i zero_128 = _mm_setzero_si128();
         // NOTE: future performance improvement
@@ -472,9 +466,6 @@ CMemoryTarget* CMemoryTargetMngr::GetMemoryTarget(const tex0Info& tex0, int forc
         // It is advise to use a fence instruction after non temporal move (mm_stream) instruction...
         // store fence insures that previous store are finish before execute new one.
         _mm_sfence();
-#else
-        SSE2_UnswizzleZ16Target(dst, src, targ->height * GPU_TEXWIDTH / 16);
-#endif
 #else // ZEROGS_SSE2
 
         for (int i = 0; i < targ->height; ++i)

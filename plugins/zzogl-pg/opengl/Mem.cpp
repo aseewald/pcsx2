@@ -25,7 +25,7 @@
 #include "Mem_Transmit.h"
 #include "Mem_Swizzle.h"
 #ifdef ZEROGS_SSE2
-#include <emmintrin.h>
+#include <immintrin.h>
 #endif
 
 #ifdef ZZNORMAL_MEMORY

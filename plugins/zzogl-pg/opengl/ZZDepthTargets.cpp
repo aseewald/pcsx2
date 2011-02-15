@@ -29,7 +29,7 @@
 #include "ZZoglVB.h"
 
 #ifdef ZEROGS_SSE2
-#include <emmintrin.h>
+#include <immintrin.h>
 #endif
 
 extern bool g_bUpdateStencil;

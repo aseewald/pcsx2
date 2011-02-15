@@ -60,14 +60,12 @@ set(zzoglSources
     GSmain.cpp
     HostMemory.cpp
     Mem.cpp
-    # memcpy_amd.cpp
     Mem_Swizzle.cpp
     Mem_Tables.cpp
     Profile.cpp
     rasterfont.cpp
     Regs.cpp
     targets.cpp
-    x86.cpp
     zerogs.cpp
     zpipe.cpp
     ZZDepthTargets.cpp
@@ -123,10 +121,6 @@ set(zzoglHeaders
     ZZoglVB.h
     )
 
-# zzogl S sources
-set(zzoglSSources
-    x86-32.S)
-
 # zzogl shader sources
 set(zzoglShaderSources
     ctx0/ps2hw_ctx.fx
@@ -141,9 +135,6 @@ set(zzoglLinuxSources
 set(zzoglLinuxHeaders
     Linux/Linux.h)
 
-# change language of .S-files to c++
-set_source_files_properties(${zzoglSSources} PROPERTIES LANGUAGE CXX)
-
 # add additional include directories
 include_directories(.
     Linux)
@@ -152,7 +143,6 @@ include_directories(.
 add_library(${Output} SHARED
     ${zzoglSources}
     ${zzoglHeaders}
-    ${zzoglSSources}
     ${zzoglShaderSources}
     ${zzoglLinuxSources}
     ${zzoglLinuxHeaders})
