@@ -27,7 +27,7 @@ static int path1_count = 0;
 
 static int nPath3Hack = 0;
 
-void CALLBACK GSgetLastTag(u64* ptag)
+EXPORT_C_(void) GSgetLastTag(u64* ptag)
 {
 	FUNCLOG
 
@@ -238,7 +238,7 @@ template<int index> void _GSgifTransfer(const u32 *pMem, u32 size)
 	}
 }
 
-void CALLBACK GSgifTransfer1(u32 *pMem, u32 addr)
+EXPORT_C_(void) GSgifTransfer1(u32 *pMem, u32 addr)
 {
 	FUNCLOG
 
@@ -252,7 +252,7 @@ void CALLBACK GSgifTransfer1(u32 *pMem, u32 addr)
 	_GSgifTransfer<0>((u32*)((u8*)pMem + addr), (0x4000 - addr) / 16);
 }
 
-void CALLBACK GSgifTransfer2(u32 *pMem, u32 size)
+EXPORT_C_(void) GSgifTransfer2(u32 *pMem, u32 size)
 {
 	FUNCLOG
 
@@ -261,7 +261,7 @@ void CALLBACK GSgifTransfer2(u32 *pMem, u32 size)
 	_GSgifTransfer<1>(const_cast<u32*>(pMem), size);
 }
 
-void CALLBACK GSgifTransfer3(u32 *pMem, u32 size)
+EXPORT_C_(void) GSgifTransfer3(u32 *pMem, u32 size)
 {
 	FUNCLOG
 
@@ -270,7 +270,7 @@ void CALLBACK GSgifTransfer3(u32 *pMem, u32 size)
 	_GSgifTransfer<2>(const_cast<u32*>(pMem), size);
 }
 
-void CALLBACK GSgifTransfer(const u32 *pMem, u32 size)
+EXPORT_C_(void) GSgifTransfer(const u32 *pMem, u32 size)
 {
 	FUNCLOG
 

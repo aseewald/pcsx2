@@ -35,6 +35,7 @@
 #define VB_BUFFERSIZE			   0x4000
 
 extern void FlushIfNecesary(void* ptr);
+extern bool g_bSaveZUpdate;
 
 // all textures have this width
 extern int GPU_TEXWIDTH;

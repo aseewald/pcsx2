@@ -34,7 +34,7 @@ extern bool THR_bShift;
 static map<string, confOptsStruct> mapConfOpts;
 static gameHacks tempHacks;
 
-void CALLBACK GSkeyEvent(keyEvent *ev)
+EXPORT_C_(void) GSkeyEvent(keyEvent *ev)
 {
 	//static bool bShift = false;
 	static bool bAlt = false;
@@ -442,7 +442,7 @@ void DisplayDialog()
 	gtk_widget_destroy(dialog);
 }
 
-void CALLBACK GSconfigure()
+EXPORT_C_(void) GSconfigure()
 {
 	char strcurdir[256];
 	getcwd(strcurdir, 256);
@@ -476,12 +476,12 @@ void SysMessage(const char *fmt, ...)
 	gtk_widget_destroy(dialog);
 }
 
-void CALLBACK GSabout()
+EXPORT_C_(void) GSabout()
 {
 	SysMessage("ZZOgl PG: by Zeydlitz (PG version worked on by arcum42, gregory, and the pcsx2 development team). Based off of ZeroGS, by zerofrog.");
 }
 
-s32 CALLBACK GStest()
+EXPORT_C_(s32) GStest()
 {
 	return 0;
 }
