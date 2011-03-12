@@ -154,7 +154,7 @@ __aligned(struct, 16) GSVertexSW
 	}
 };
 
-__forceinline GSVertexSW operator + (const GSVertexSW& v1, const GSVertexSW& v2)
+__need_forceinline GSVertexSW operator + (const GSVertexSW& v1, const GSVertexSW& v2)
 {
 	GSVertexSW v0;
 	v0.c = v1.c + v2.c;
@@ -163,7 +163,7 @@ __forceinline GSVertexSW operator + (const GSVertexSW& v1, const GSVertexSW& v2)
 	return v0;
 }
 
-__forceinline GSVertexSW operator - (const GSVertexSW& v1, const GSVertexSW& v2)
+__need_forceinline GSVertexSW operator - (const GSVertexSW& v1, const GSVertexSW& v2)
 {
 	GSVertexSW v0;
 	v0.c = v1.c - v2.c;
@@ -172,7 +172,7 @@ __forceinline GSVertexSW operator - (const GSVertexSW& v1, const GSVertexSW& v2)
 	return v0;
 }
 
-__forceinline GSVertexSW operator * (const GSVertexSW& v, const GSVector4& vv)
+__need_forceinline GSVertexSW operator * (const GSVertexSW& v, const GSVector4& vv)
 {
 	GSVertexSW v0;
 	v0.c = v.c * vv;
@@ -181,7 +181,7 @@ __forceinline GSVertexSW operator * (const GSVertexSW& v, const GSVector4& vv)
 	return v0;
 }
 
-__forceinline GSVertexSW operator / (const GSVertexSW& v, const GSVector4& vv)
+__need_forceinline GSVertexSW operator / (const GSVertexSW& v, const GSVector4& vv)
 {
 	GSVertexSW v0;
 	v0.c = v.c / vv;

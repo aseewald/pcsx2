@@ -98,6 +98,7 @@ using namespace stdext;
 #ifdef _MSC_VER
 
     #define __aligned(t, n) __declspec(align(n)) t
+    #define __need_forceinline __forceinline
 
     #define EXPORT_C_(type) extern "C" __declspec(dllexport) type __stdcall
     #define EXPORT_C EXPORT_C_(void)
@@ -113,8 +114,10 @@ using namespace stdext;
     #ifdef __GNUC__
 
         #include "assert.h"
-        #define __forceinline __inline__ __attribute__((always_inline,unused))
+        // #define __forceinline __inline__ __attribute__((always_inline,unused))
         // #define __forceinline __inline__ __attribute__((__always_inline__,__gnu_inline__))
+        #define __forceinline
+		#define __need_forceinline __inline__ __attribute__((always_inline,unused))
         #define __assume(c) ((void)0)
 
     #endif
@@ -264,20 +267,20 @@ extern void _aligned_free(void* p);
 // http://svn.reactos.org/svn/reactos/trunk/reactos/include/crt/mingw32/intrin_x86.h?view=markup
 // - the other intrin_x86.h of pcsx2 is not up to date, its _interlockedbittestandreset simply does not work.
 
-__forceinline unsigned char _BitScanForward(unsigned long* const Index, const unsigned long Mask)
+__need_forceinline unsigned char _BitScanForward(unsigned long* const Index, const unsigned long Mask)
 {
     __asm__("bsfl %[Mask], %[Index]" : [Index] "=r" (*Index) : [Mask] "mr" (Mask));
     return Mask ? 1 : 0;
 }
 
-__forceinline unsigned char _interlockedbittestandreset(volatile long* a, const long b)
+__need_forceinline unsigned char _interlockedbittestandreset(volatile long* a, const long b)
 {
     unsigned char retval;
     __asm__("lock; btrl %[b], %[a]; setb %b[retval]" : [retval] "=q" (retval), [a] "+m" (*a) : [b] "Ir" (b) : "memory");
     return retval;
 }
 
-__forceinline unsigned char _interlockedbittestandset(volatile long* a, const long b)
+__need_forceinline unsigned char _interlockedbittestandset(volatile long* a, const long b)
 {
 	unsigned char retval;
 	__asm__("lock; btsl %[b], %[a]; setc %b[retval]" : [retval] "=q" (retval), [a] "+m" (*a) : [b] "Ir" (b) : "memory");
@@ -286,7 +289,7 @@ __forceinline unsigned char _interlockedbittestandset(volatile long* a, const lo
 
 #ifdef __GNUC__
 
-__forceinline unsigned long long __rdtsc()
+__need_forceinline unsigned long long __rdtsc()
 {
     #if defined(__amd64__) || defined(__x86_64__)
     unsigned long long low, high;

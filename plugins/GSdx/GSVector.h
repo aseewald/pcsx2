@@ -2874,22 +2874,22 @@ public:
 	VECTOR4_SHUFFLE_1(w, 3)
 };
 
-__forceinline GSVector4i::GSVector4i(const GSVector4& v)
+__need_forceinline GSVector4i::GSVector4i(const GSVector4& v)
 {
 	m = _mm_cvttps_epi32(v);
 }
 
-__forceinline GSVector4::GSVector4(const GSVector4i& v)
+__need_forceinline GSVector4::GSVector4(const GSVector4i& v)
 {
 	m = _mm_cvtepi32_ps(v);
 }
 
-__forceinline GSVector4i GSVector4i::cast(const GSVector4& v)
+__need_forceinline GSVector4i GSVector4i::cast(const GSVector4& v)
 {
 	return GSVector4i(_mm_castps_si128(v.m));
 }
 
-__forceinline GSVector4 GSVector4::cast(const GSVector4i& v)
+__need_forceinline GSVector4 GSVector4::cast(const GSVector4i& v)
 {
 	return GSVector4(_mm_castsi128_ps(v.m));
 }
