@@ -33,11 +33,6 @@
 extern void SetDeviceSize(int nNewWidth, int nNewHeight);
 extern void OnFKey(int key, int shift);
 
-struct opengl_win_context {
-	GLXContext context;
-	Window glWindow;
-};
-
 class GLWindow
 {
 	private:

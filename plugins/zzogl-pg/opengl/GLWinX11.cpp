@@ -24,18 +24,15 @@
 
 #include <X11/Xlib.h>
 #include <stdlib.h>
-//#include <gdk/gdkx.h>
-//#include <gdk/gdk.h>
-//#include <gtk/gtk.h>
+// #include <gdk/gdkx.h>
+// #include <gdk/gdk.h>
+// #include <gtk/gtk.h>
 
 #ifdef USE_GSOPEN2
 bool GLWindow::CreateWindow(void *pDisplay)
 {
-	opengl_win_context display_config = *(opengl_win_context*)*(uptr*)pDisplay;
-
+	glWindow = *(Window*)*(uptr*)pDisplay;
 	glDisplay = XOpenDisplay(NULL);
-	context   = display_config.context;
-	glWindow  = display_config.glWindow;
 
 	return true;
 }
@@ -289,6 +286,16 @@ bool GLWindow::DisplayWindow(int _width, int _height)
 	// backbuffer.w = _width;
 	// backbuffer.h = _height;
 	GetWindowSize();
+
+	int attrListDbl[] = { GLX_RGBA, GLX_DOUBLEBUFFER,
+						  GLX_RED_SIZE, 8,
+						  GLX_GREEN_SIZE, 8,
+						  GLX_BLUE_SIZE, 8,
+						  GLX_DEPTH_SIZE, 24,
+						  None
+						};
+	XVisualInfo *vi = glXChooseVisual(glDisplay, DefaultScreen(glDisplay), attrListDbl);
+	context =  glXCreateContext(glDisplay, vi, NULL, GL_TRUE);
 
 	XLockDisplay(glDisplay);
 	glXMakeCurrent(glDisplay, glWindow, context);

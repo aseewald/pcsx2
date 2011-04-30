@@ -815,22 +815,9 @@ SysMainMemory& Pcsx2App::GetVmReserve()
 }
 
 #ifdef __WXGTK__
-#include <wx/gtk/win_gtk.h>
-#include <GL/gl.h>
-#include <GL/glext.h>
-#include <GL/glx.h>
-
+#include <wx/gtk/win_gtk.h> // GTK_PIZZA interface
 #include <gdk/gdkx.h>
-
-#include <X11/Xlib.h>
-#include <stdlib.h>
 #endif
-
-struct _opengl_win_context {
-	GLXContext context;
-	Window glWindow;
-};
-typedef struct _opengl_win_context opengl_win_context;
 
 void Pcsx2App::OpenGsPanel()
 {
@@ -881,34 +868,16 @@ void Pcsx2App::OpenGsPanel()
 	
 	pxAssertDev( !GetCorePlugins().IsOpen( PluginId_GS ), "GS Plugin must be closed prior to opening a new Gs Panel!" );
 #ifdef __WXGTK__
-	int attrListDbl[] = { GLX_RGBA, GLX_DOUBLEBUFFER,
-						  GLX_RED_SIZE, 8,
-						  GLX_GREEN_SIZE, 8,
-						  GLX_BLUE_SIZE, 8,
-						  GLX_DEPTH_SIZE, 24,
-						  None
-						};
-	// FIXME memory leak...
-	opengl_win_context* linux_display = (opengl_win_context*)malloc(sizeof(opengl_win_context));
-    XInitThreads();
+	Window* glWindow = (Window*)malloc(sizeof(Window));
 
 	GtkWidget* wx_win = gsFrame->GetViewport()->m_wxwindow;
 	gtk_widget_realize(wx_win);
 	gtk_widget_set_double_buffered(wx_win, false);
 
 	GdkWindow* Win = GTK_PIZZA(wx_win)->bin_window;
-	Display *glDisplay = GDK_WINDOW_XDISPLAY(Win);
-	linux_display->glWindow = GDK_WINDOW_XWINDOW(Win);
+	*glWindow = GDK_WINDOW_XWINDOW(Win);
 
-	XLockDisplay(glDisplay);
-	XFlush(GDK_WINDOW_XDISPLAY(Win));
-	XUnlockDisplay(glDisplay);
-
-
-	XVisualInfo *vi = glXChooseVisual(glDisplay, DefaultScreen(glDisplay), attrListDbl);
-	linux_display->context = glXCreateContext(glDisplay, vi, NULL, GL_TRUE);
-
-	pDsp_gtk = (uptr)linux_display;
+	pDsp_gtk = (uptr)glWindow;
 
 #endif
 	pDsp = (uptr)gsFrame->GetViewport()->GetHandle();
