@@ -187,8 +187,13 @@ void SysMtgsThread::OpenPlugin()
 
 	int result;
 
-	if( GSopen2 != NULL )
+	if( GSopen2 != NULL ) {
+#ifdef __WXGTK__
+		result = GSopen2( (void*)&pDsp_gtk, 1 | (renderswitch ? 4 : 0) );
+#else
 		result = GSopen2( (void*)&pDsp, 1 | (renderswitch ? 4 : 0) );
+#endif
+	}
 	else
 		result = GSopen( (void*)&pDsp, "PCSX2", renderswitch ? 2 : 1 );
 

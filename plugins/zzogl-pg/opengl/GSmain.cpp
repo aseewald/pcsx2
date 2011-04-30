@@ -307,8 +307,8 @@ s32 CALLBACK GSopen(void *pDsp, char *Title, int multithread)
 	return 0;
 }
 
-#ifdef USE_GOPEN2
-s32 CALLBACK GSopen2( void* pDsp, INT32 flags )
+#ifdef USE_GSOPEN2
+EXPORT_C_(s32) GSopen2( void* pDsp, int flags )
 {
 	FUNCLOG
 
@@ -327,7 +327,8 @@ s32 CALLBACK GSopen2( void* pDsp, INT32 flags )
 	ZZLog::GS_Log("Using %s:%d.%d.%d.", libraryName, zgsrevision, zgsbuild, zgsminor);
 
 	ZZLog::WriteLn("Capturing ZZOgl window.");
-	if ((!GLWin.GetWindow(pDsp)) || (!ZZCreate2(conf.width, conf.height))) return -1;// Needs to be added.
+	// if ((!GLWin.GetWindow(pDsp)) || (!ZZCreate2(conf.width, conf.height))) return -1;// Needs to be added.
+	if ((!GLWin.CreateWindow(pDsp)) || (!ZZCreate(conf.width, conf.height))) return -1;
 
 	ZZLog::WriteLn("Initialization successful.");
 

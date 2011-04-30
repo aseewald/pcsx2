@@ -20,6 +20,7 @@
 #ifndef GLWIN_H_INCLUDED
 #define GLWIN_H_INCLUDED
 
+#define USE_GSOPEN2
 
 #ifdef _WIN32
 #define GL_WIN32_WINDOW
@@ -31,6 +32,11 @@
 
 extern void SetDeviceSize(int nNewWidth, int nNewHeight);
 extern void OnFKey(int key, int shift);
+
+struct opengl_win_context {
+	GLXContext context;
+	Window glWindow;
+};
 
 class GLWindow
 {

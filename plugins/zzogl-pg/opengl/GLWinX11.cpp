@@ -24,7 +24,22 @@
 
 #include <X11/Xlib.h>
 #include <stdlib.h>
+//#include <gdk/gdkx.h>
+//#include <gdk/gdk.h>
+//#include <gtk/gtk.h>
 
+#ifdef USE_GSOPEN2
+bool GLWindow::CreateWindow(void *pDisplay)
+{
+	opengl_win_context display_config = *(opengl_win_context*)*(uptr*)pDisplay;
+
+	glDisplay = XOpenDisplay(NULL);
+	context   = display_config.context;
+	glWindow  = display_config.glWindow;
+
+	return true;
+}
+#else
 bool GLWindow::CreateWindow(void *pDisplay)
 {
     // init support of multi thread
@@ -44,9 +59,11 @@ bool GLWindow::CreateWindow(void *pDisplay)
 
 	return true;
 }
+#endif
 
 bool GLWindow::ReleaseContext()
 {
+#ifndef USE_GSOPEN2
     bool status = true;
     if (!glDisplay) return status;
 
@@ -69,15 +86,20 @@ bool GLWindow::ReleaseContext()
     }
 
 	return status;
+#else
+	return true;
+#endif
 }
 
 void GLWindow::CloseWindow()
 {
+#ifndef USE_GSOPEN2
 	SaveConfig();
 	if (!glDisplay) return;
 
     XCloseDisplay(glDisplay);
     glDisplay = NULL;
+#endif
 }
 
 bool GLWindow::CreateVisual()
@@ -145,15 +167,18 @@ void GLWindow::GetWindowSize()
 
 void GLWindow::GetGLXVersion()
 {
+#ifndef USE_GSOPEN2
 	int glxMajorVersion, glxMinorVersion;
 	
 	glXQueryVersion(glDisplay, &glxMajorVersion, &glxMinorVersion);
 
 	ZZLog::Error_Log("glX-Version %d.%d", glxMajorVersion, glxMinorVersion);
+#endif
 }
 
 void GLWindow::UpdateGrabKey()
 {
+#ifndef USE_GSOPEN2
     // Do not stole the key in debug mode. It is not breakpoint friendly...
 #ifndef _DEBUG
     XLockDisplay(glDisplay);
@@ -166,10 +191,12 @@ void GLWindow::UpdateGrabKey()
     }
     XUnlockDisplay(glDisplay);
 #endif
+#endif
 }
 
 void GLWindow::Force43Ratio()
 {
+#ifndef USE_GSOPEN2
     // avoid black border in fullscreen
     if (fullScreen && conf.isWideScreen) {
         conf.width = width;
@@ -191,6 +218,7 @@ void GLWindow::Force43Ratio()
             XUnlockDisplay(glDisplay);
         }
     }
+#endif
 }
 
 #define _NET_WM_STATE_REMOVE 0
@@ -199,6 +227,7 @@ void GLWindow::Force43Ratio()
 
 void GLWindow::ToggleFullscreen()
 {
+#ifndef USE_GSOPEN2
     if (!glDisplay or !glWindow) return;
 
     Force43Ratio();
@@ -251,13 +280,28 @@ void GLWindow::ToggleFullscreen()
     if(fullScreen)
         XWarpPointer(glDisplay, None, glWindow, 0, 0, 0, 0, 2*width, 2*height);
 
+#endif
 }
 
+#ifdef USE_GSOPEN2
+bool GLWindow::DisplayWindow(int _width, int _height)
+{
+	// backbuffer.w = _width;
+	// backbuffer.h = _height;
+	GetWindowSize();
+
+	XLockDisplay(glDisplay);
+	glXMakeCurrent(glDisplay, glWindow, context);
+	XUnlockDisplay(glDisplay);
+
+	return true;
+}
+#else
 bool GLWindow::DisplayWindow(int _width, int _height)
 {
 	backbuffer.w = _width;
 	backbuffer.h = _height;
-	
+
 	if (!CreateVisual()) return false;
 	
 	/* create a GLX context */
@@ -304,15 +348,19 @@ bool GLWindow::DisplayWindow(int _width, int _height)
 
 	return true;
 }
+#endif
 
 void GLWindow::SwapGLBuffers()
 {
 	if (glGetError() != GL_NO_ERROR) ZZLog::Debug_Log("glError before swap!");
+	// FIXME I think we need to flush when there is only 1 visual buffer
 	glXSwapBuffers(glDisplay, glWindow);
+	// glClear(GL_COLOR_BUFFER_BIT);
 }
 
 void GLWindow::SetTitle(char *strtitle)
 {
+#ifndef USE_GSOPEN2
     if (!glDisplay or !glWindow) return;
 	if (fullScreen) return;
 
@@ -327,6 +375,7 @@ void GLWindow::SetTitle(char *strtitle)
     }
 
     XFree(prop.value);
+#endif
 }
 
 void GLWindow::ResizeCheck()
@@ -366,7 +415,9 @@ void GLWindow::ProcessEvents()
 	FUNCLOG
 
 	// check resizing
+#ifndef USE_GSOPEN2
 	ResizeCheck();
+#endif
 
 	if (THR_KeyEvent)     // This value was passed from GSKeyEvents which could be in another thread
 	{

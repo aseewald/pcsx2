@@ -663,6 +663,8 @@ target_link_libraries(${Output} ${wxWidgets_LIBRARIES})
 if(Linux)
 	# link target with gtk2
 	target_link_libraries(${Output} ${GTK2_LIBRARIES})
+target_link_libraries(${Output} ${X11_LIBRARIES})
+target_link_libraries(${Output} ${OPENGL_LIBRARIES})
 endif(Linux)
 
 # link target with zlib
