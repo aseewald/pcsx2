@@ -493,7 +493,10 @@ void CALLBACK GSvsync(int interlace)
 		fFPS = UPDATE_FRAMES * 1000.0f / (float)max(d - dwTime, (u32)1);
 		dwTime = d;
 		g_nFrame += UPDATE_FRAMES;
+#ifndef USE_GSOPEN2
+		// let PCSX2 manage the title
 		SetGSTitle();
+#endif
 
 //		if( g_nFrame > 100 && fFPS > 60.0f ) {
 //			ZZLog::Debug_Log("Set profile.");

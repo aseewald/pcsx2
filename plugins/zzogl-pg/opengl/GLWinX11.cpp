@@ -53,7 +53,6 @@ bool GLWindow::CreateWindow(void *pDisplay)
         ZZLog::Error_Log("Failed to init the xlib concurent threads");
 
 	glDisplay = XOpenDisplay(0);
-	glScreen = DefaultScreen(glDisplay);
 
 	if (pDisplay == NULL) 
 	{
@@ -124,11 +123,11 @@ bool GLWindow::CreateVisual()
 						};
 
 	/* get an appropriate visual */
-	vi = glXChooseVisual(glDisplay, glScreen, attrListDbl);
+	vi = glXChooseVisual(glDisplay, DefaultScreen(glDisplay), attrListDbl);
 
 	if (vi == NULL)
 	{
-		vi = glXChooseVisual(glDisplay, glScreen, attrListSgl);
+		vi = glXChooseVisual(glDisplay, DefaultScreen(glDisplay), attrListSgl);
 		doubleBuffered = false;
 		ZZLog::Error_Log("Only Singlebuffered Visual!");
 	}
@@ -179,7 +178,6 @@ void GLWindow::GetGLXVersion()
 
 void GLWindow::UpdateGrabKey()
 {
-#ifndef USE_GSOPEN2
     // Do not stole the key in debug mode. It is not breakpoint friendly...
 #ifndef _DEBUG
     XLockDisplay(glDisplay);
@@ -191,7 +189,6 @@ void GLWindow::UpdateGrabKey()
         XUngrabKeyboard(glDisplay, CurrentTime);
     }
     XUnlockDisplay(glDisplay);
-#endif
 #endif
 }
 
