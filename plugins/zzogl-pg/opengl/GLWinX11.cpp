@@ -24,14 +24,23 @@
 
 #include <X11/Xlib.h>
 #include <stdlib.h>
-// #include <gdk/gdkx.h>
-// #include <gdk/gdk.h>
-// #include <gtk/gtk.h>
+
+#include <wx/gtk/win_gtk.h> // GTK_PIZZA interface
+#include <gdk/gdkx.h>
+#include <gtk/gtk.h>
 
 #ifdef USE_GSOPEN2
 bool GLWindow::CreateWindow(void *pDisplay)
 {
-	glWindow = *(Window*)*(uptr*)pDisplay;
+	GtkScrolledWindow* top_window = *(GtkScrolledWindow**)pDisplay;
+	GtkWidget *child_window = gtk_bin_get_child(GTK_BIN(top_window));
+
+	gtk_widget_realize(child_window);
+	gtk_widget_set_double_buffered(child_window, false);
+
+	GdkWindow* draw_window = GTK_PIZZA(child_window)->bin_window;
+	glWindow = GDK_WINDOW_XWINDOW(draw_window);
+
 	glDisplay = XOpenDisplay(NULL);
 
 	return true;
@@ -60,7 +69,6 @@ bool GLWindow::CreateWindow(void *pDisplay)
 
 bool GLWindow::ReleaseContext()
 {
-#ifndef USE_GSOPEN2
     bool status = true;
     if (!glDisplay) return status;
 
@@ -83,20 +91,15 @@ bool GLWindow::ReleaseContext()
     }
 
 	return status;
-#else
-	return true;
-#endif
 }
 
 void GLWindow::CloseWindow()
 {
-#ifndef USE_GSOPEN2
 	SaveConfig();
 	if (!glDisplay) return;
 
     XCloseDisplay(glDisplay);
     glDisplay = NULL;
-#endif
 }
 
 bool GLWindow::CreateVisual()
@@ -159,18 +162,19 @@ void GLWindow::GetWindowSize()
     // update the gl buffer size
     UpdateWindowSize(width, height);
 
+#ifndef USE_GSOPEN2
+	// too verbose!
     ZZLog::Dev_Log("Resolution %dx%d. Depth %d bpp. Position (%d,%d)", width, height, depth, conf.x, conf.y);
+#endif
 }
 
 void GLWindow::GetGLXVersion()
 {
-#ifndef USE_GSOPEN2
 	int glxMajorVersion, glxMinorVersion;
 	
 	glXQueryVersion(glDisplay, &glxMajorVersion, &glxMinorVersion);
 
 	ZZLog::Error_Log("glX-Version %d.%d", glxMajorVersion, glxMinorVersion);
-#endif
 }
 
 void GLWindow::UpdateGrabKey()
@@ -283,23 +287,19 @@ void GLWindow::ToggleFullscreen()
 #ifdef USE_GSOPEN2
 bool GLWindow::DisplayWindow(int _width, int _height)
 {
-	// backbuffer.w = _width;
-	// backbuffer.h = _height;
 	GetWindowSize();
 
-	int attrListDbl[] = { GLX_RGBA, GLX_DOUBLEBUFFER,
-						  GLX_RED_SIZE, 8,
-						  GLX_GREEN_SIZE, 8,
-						  GLX_BLUE_SIZE, 8,
-						  GLX_DEPTH_SIZE, 24,
-						  None
-						};
-	XVisualInfo *vi = glXChooseVisual(glDisplay, DefaultScreen(glDisplay), attrListDbl);
+	if (!CreateVisual()) return false;
 	context =  glXCreateContext(glDisplay, vi, NULL, GL_TRUE);
 
-	XLockDisplay(glDisplay);
+	GetGLXVersion();
+
 	glXMakeCurrent(glDisplay, glWindow, context);
-	XUnlockDisplay(glDisplay);
+
+	if (glXIsDirect(glDisplay, context))
+		ZZLog::Error_Log("You have Direct Rendering!");
+	else
+		ZZLog::Error_Log("No Direct Rendering possible!");
 
 	return true;
 }
@@ -421,8 +421,9 @@ void GLWindow::ProcessEvents()
 {
 	FUNCLOG
 
-	// check resizing
-#ifndef USE_GSOPEN2
+#ifdef USE_GSOPEN2
+	GetWindowSize();
+#else
 	ResizeCheck();
 #endif
 

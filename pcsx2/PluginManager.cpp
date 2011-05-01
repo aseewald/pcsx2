@@ -324,7 +324,6 @@ _FWirqCallback     FWirqCallback;
 DEV9handler dev9Handler;
 USBhandler usbHandler;
 uptr pDsp;
-uptr pDsp_gtk;
 
 static s32 CALLBACK _hack_PADinit()
 {

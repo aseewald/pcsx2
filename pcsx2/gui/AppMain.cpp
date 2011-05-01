@@ -814,11 +814,6 @@ SysMainMemory& Pcsx2App::GetVmReserve()
 	return *m_VmReserve;
 }
 
-#ifdef __WXGTK__
-#include <wx/gtk/win_gtk.h> // GTK_PIZZA interface
-#include <gdk/gdkx.h>
-#endif
-
 void Pcsx2App::OpenGsPanel()
 {
 	if( AppRpc_TryInvoke( &Pcsx2App::OpenGsPanel ) ) return;
@@ -867,19 +862,6 @@ void Pcsx2App::OpenGsPanel()
 	}
 	
 	pxAssertDev( !GetCorePlugins().IsOpen( PluginId_GS ), "GS Plugin must be closed prior to opening a new Gs Panel!" );
-#ifdef __WXGTK__
-	Window* glWindow = (Window*)malloc(sizeof(Window));
-
-	GtkWidget* wx_win = gsFrame->GetViewport()->m_wxwindow;
-	gtk_widget_realize(wx_win);
-	gtk_widget_set_double_buffered(wx_win, false);
-
-	GdkWindow* Win = GTK_PIZZA(wx_win)->bin_window;
-	*glWindow = GDK_WINDOW_XWINDOW(Win);
-
-	pDsp_gtk = (uptr)glWindow;
-
-#endif
 	pDsp = (uptr)gsFrame->GetViewport()->GetHandle();
 
 	gsFrame->ShowFullScreen( g_Conf->GSWindow.IsFullscreen );
