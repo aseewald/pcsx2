@@ -325,6 +325,27 @@ GSWnd::~GSWnd()
 	}
 }
 
+#include <wx/gtk/win_gtk.h> // GTK_PIZZA interface
+#include <gdk/gdkx.h>
+#include <gtk/gtk.h>
+
+bool GSWnd::Attach(void* handle, bool managed)
+{
+	GtkScrolledWindow* top_window = (GtkScrolledWindow*)handle;
+	GtkWidget *child_window = gtk_bin_get_child(GTK_BIN(top_window));
+
+	gtk_widget_realize(child_window);
+	gtk_widget_set_double_buffered(child_window, false);
+
+	GdkWindow* draw_window = GTK_PIZZA(child_window)->bin_window;
+	Window glWindow = GDK_WINDOW_XWINDOW(draw_window);
+
+
+	m_window = SDL_CreateWindowFrom((void*)&glWindow);
+
+	return true;
+}
+
 // Actually the destructor is not called when there is a GSclose or GSshutdown
 // The window still need to be closed
 void GSWnd::Detach()

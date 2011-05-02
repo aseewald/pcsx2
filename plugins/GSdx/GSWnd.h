@@ -100,7 +100,7 @@ public:
 	virtual ~GSWnd();
 
 	bool Create(const string& title, int w, int h);
-	bool Attach(void* handle, bool managed = true) {return false;}
+	bool Attach(void* handle, bool managed = true);
 	void Detach();
 	bool IsManaged() const {return true;}
 
