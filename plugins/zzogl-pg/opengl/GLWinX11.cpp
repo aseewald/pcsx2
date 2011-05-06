@@ -32,6 +32,11 @@
 #ifdef USE_GSOPEN2
 bool GLWindow::CreateWindow(void *pDisplay)
 {
+#if 1
+	// Display* pcsx2_disp = *(Display**)pDisplay;
+	// glWindow = XDefaultRootWindow(pcsx2_disp);
+	glWindow = (Window)*((u32*)(pDisplay)+1);
+#else
 	GtkScrolledWindow* top_window = *(GtkScrolledWindow**)pDisplay;
 	GtkWidget *child_window = gtk_bin_get_child(GTK_BIN(top_window));
 
@@ -40,6 +45,7 @@ bool GLWindow::CreateWindow(void *pDisplay)
 
 	GdkWindow* draw_window = GTK_PIZZA(child_window)->bin_window;
 	glWindow = GDK_WINDOW_XWINDOW(draw_window);
+#endif
 
 	glDisplay = XOpenDisplay(NULL);
 

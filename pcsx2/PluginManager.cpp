@@ -323,7 +323,7 @@ _FWirqCallback     FWirqCallback;
 
 DEV9handler dev9Handler;
 USBhandler usbHandler;
-uptr pDsp;
+uptr pDsp[2];
 
 static s32 CALLBACK _hack_PADinit()
 {
@@ -1058,12 +1058,12 @@ bool SysCorePlugins::OpenPlugin_GS()
 
 bool SysCorePlugins::OpenPlugin_PAD()
 {
-	return !PADopen( (void*)&pDsp );
+	return !PADopen( (void*)pDsp );
 }
 
 bool SysCorePlugins::OpenPlugin_SPU2()
 {
-	if( SPU2open((void*)&pDsp) ) return false;
+	if( SPU2open((void*)pDsp) ) return false;
 
 #ifdef ENABLE_NEW_IOPDMA_SPU2
 	SPU2irqCallback( spu2Irq );
@@ -1079,7 +1079,7 @@ bool SysCorePlugins::OpenPlugin_DEV9()
 {
 	dev9Handler = NULL;
 
-	if( DEV9open( (void*)&pDsp ) ) return false;
+	if( DEV9open( (void*)pDsp ) ) return false;
 	DEV9irqCallback( dev9Irq );
 	dev9Handler = DEV9irqHandler();
 	return true;
@@ -1089,7 +1089,7 @@ bool SysCorePlugins::OpenPlugin_USB()
 {
 	usbHandler = NULL;
 
-	if( USBopen((void*)&pDsp) ) return false;
+	if( USBopen((void*)pDsp) ) return false;
 	USBirqCallback( usbIrq );
 	usbHandler = USBirqHandler();
 	if( USBsetRAM != NULL )
@@ -1099,7 +1099,7 @@ bool SysCorePlugins::OpenPlugin_USB()
 
 bool SysCorePlugins::OpenPlugin_FW()
 {
-	if( FWopen((void*)&pDsp) ) return false;
+	if( FWopen((void*)pDsp) ) return false;
 	FWirqCallback( fwIrq );
 	return true;
 }

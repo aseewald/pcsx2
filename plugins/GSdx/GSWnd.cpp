@@ -331,6 +331,7 @@ GSWnd::~GSWnd()
 
 bool GSWnd::Attach(void* handle, bool managed)
 {
+#if 0
 	GtkScrolledWindow* top_window = (GtkScrolledWindow*)handle;
 	GtkWidget *child_window = gtk_bin_get_child(GTK_BIN(top_window));
 
@@ -338,10 +339,13 @@ bool GSWnd::Attach(void* handle, bool managed)
 	gtk_widget_set_double_buffered(child_window, false);
 
 	GdkWindow* draw_window = GTK_PIZZA(child_window)->bin_window;
-	Window glWindow = GDK_WINDOW_XWINDOW(draw_window);
 
+	m_Xwindow = GDK_WINDOW_XWINDOW(draw_window);
+#else
+	m_Xwindow = *(Window*)handle;
+#endif
 
-	m_window = SDL_CreateWindowFrom((void*)&glWindow);
+	m_managed = managed;
 
 	return true;
 }
@@ -380,7 +384,18 @@ bool GSWnd::Create(const string& title, int w, int h)
     if (SDL_GetNumVideoDisplays() <= 0) return false;
 #endif
 
+	m_managed = true;
 	m_window = SDL_CreateWindow(title.c_str(), 100, 100, w, h, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+
+	// Get the X window from the newly created window
+	SDL_SysWMinfo wminfo;
+	memset(&wminfo, 0, sizeof(wminfo));
+
+	wminfo.version.major = SDL_MAJOR_VERSION;
+	wminfo.version.minor = SDL_MINOR_VERSION;
+
+	SDL_GetWindowWMInfo(m_window, &wminfo);
+	m_Xwindow = wminfo.info.x11.window;
 
 	return (m_window != NULL);
 }

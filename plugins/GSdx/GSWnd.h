@@ -94,6 +94,8 @@ public:
 class GSWnd
 {
 	SDL_Window* m_window;
+	Window      m_Xwindow;
+	bool m_managed;
 
 public:
 	GSWnd();
@@ -102,10 +104,10 @@ public:
 	bool Create(const string& title, int w, int h);
 	bool Attach(void* handle, bool managed = true);
 	void Detach();
-	bool IsManaged() const {return true;}
+	bool IsManaged() const {return m_managed;}
 
 	Display* GetDisplay();
-	void* GetHandle() {return m_window;}
+	void* GetHandle() {return (void*)&m_Xwindow;}
 	GSVector4i GetClientRect();
 	bool SetWindowText(const char* title);
 

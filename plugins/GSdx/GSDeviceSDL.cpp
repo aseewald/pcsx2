@@ -52,17 +52,21 @@ bool GSDeviceSDL::Create(GSWnd* wnd)
 {
 	void* handle = wnd->GetHandle();
 
-	if(handle == wnd->GetDisplay())
-	{
-		// HACK: no SDL window
+	// if(handle == wnd->GetDisplay())
+	// {
+	// 	// HACK: no SDL window
 
+	// 	m_window = SDL_CreateWindowFrom(handle);
+
+	// 	m_free_window = true;
+	// }
+	// else
+	// {
+	// 	m_window = (SDL_Window*)handle;
+	// }
+	if (m_window == NULL) {
 		m_window = SDL_CreateWindowFrom(handle);
-
-		m_free_window = true;
-	}
-	else
-	{
-		m_window = (SDL_Window*)handle;
+	 	m_free_window = true;
 	}
 
 	return GSDeviceSW::Create(wnd);
