@@ -286,6 +286,7 @@ static int _GSopen(void** dsp, char* title, int renderer, int threads = -1)
 		s_gs->m_wnd.Attach((void*)((uint32*)(dsp)+1), false);
 #else
 		s_gs->m_wnd.Attach(*dsp, false);
+#endif
 	}
 
 	if(!s_gs->CreateDevice(dev))
