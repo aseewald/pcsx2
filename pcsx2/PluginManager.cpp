@@ -1159,7 +1159,15 @@ void SysCorePlugins::Open()
 		// If GS doesn't support GSopen2, need to wait until call to GSopen
 		// returns to populate pDsp.  If it does, can initialize other plugins
 		// at same time as GS, as long as GSopen2 does not subclass its window.
+#ifdef __LINUX__
+		// On linux, application have also a channel (named display) to communicate with the
+		// Xserver. The safe rule is 1 thread, 1 channel. In our case we use the display in
+		// several places. Save yourself of multithread headache. Wait few seconds the end of 
+		// gsopen -- Gregory
+		if (pi->id == PluginId_GS) GetMTGS().WaitForOpen();
+#else
 		if (pi->id == PluginId_GS && !GSopen2) GetMTGS().WaitForOpen();
+#endif
 	} while( ++pi, pi->shortname != NULL );
 
 	if (GSopen2) GetMTGS().WaitForOpen();

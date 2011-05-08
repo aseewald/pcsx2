@@ -303,8 +303,6 @@ static int _GSopen(void** dsp, char* title, int renderer, int threads = -1)
 	return 0;
 }
 
-#ifdef _WINDOWS
-
 EXPORT_C_(int) GSopen2(void** dsp, uint32 flags)
 {
 	int renderer = theApp.GetConfig("renderer", 0);
@@ -324,8 +322,6 @@ EXPORT_C_(int) GSopen2(void** dsp, uint32 flags)
 
 	return retval;
 }
-
-#endif
 
 EXPORT_C_(int) GSopen(void** dsp, char* title, int mt)
 {
