@@ -69,27 +69,32 @@ void SetAutoRepeat(bool autorep)
 }
 
 #ifdef __LINUX__
-void PollForX11KeyboardInput(int pad)
+static bool s_grab_input = false;
+void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 {
-	XEvent E;
-	KeySym key;
-	int keyPress = 0, keyRelease = 0;
 	int i;
+	KeySym key = (KeySym)evt.key;
 
-	// keyboard input
-	while (XPending(GSdsp) > 0)
+	switch (evt.evt)
 	{
-		XNextEvent(GSdsp, &E);
-		switch (E.type)
-		{
-			case KeyPress:
-				key = XLookupKeysym((XKeyEvent *) & E, 0);
+		case KeyPress:
+			if (key == XK_F10) {
+				if(!s_grab_input) {
+					s_grab_input = true;
+					XGrabPointer(GSdsp, GSwin, True, ButtonPressMask, GrabModeAsync, GrabModeAsync, GSwin, None, CurrentTime);
+					XGrabKeyboard(GSdsp, GSwin, True, GrabModeAsync, GrabModeAsync, CurrentTime);
+				} else {
+					s_grab_input = false;
+					XUngrabPointer(GSdsp, CurrentTime);
+					XUngrabKeyboard(GSdsp, CurrentTime);
+				}
+			}
 
-				i = FindKey(key, pad);
+			i = FindKey(key, pad);
 
-				// Analog controls.
-				if ((i > PAD_RY) && (i <= PAD_R_LEFT))
-				{
+			// Analog controls.
+			if ((i > PAD_RY) && (i <= PAD_R_LEFT))
+			{
 				switch (i)
 				{
 					case PAD_R_LEFT:
@@ -106,49 +111,71 @@ void PollForX11KeyboardInput(int pad)
 						break;
 				}
 				i += 0xff00;
-				}
+			}
 
-				if (i != -1)
-				{
-					clear_bit(keyRelease, i);
-					set_bit(keyPress, i);
-				}
-				//PAD_LOG("Key pressed:%d\n", i);
+			if (i != -1)
+			{
+				clear_bit(keyRelease, i);
+				set_bit(keyPress, i);
+			}
+			//PAD_LOG("Key pressed:%d\n", i);
 
-				event.evt = KEYPRESS;
-				event.key = key;
-				break;
+			event.evt = KEYPRESS;
+			event.key = key;
+			break;
 
-			case KeyRelease:
-				key = XLookupKeysym((XKeyEvent *) & E, 0);
+		case KeyRelease:
+			i = FindKey(key, pad);
 
-				i = FindKey(key, pad);
+			// Analog Controls.
+			if ((i > PAD_RY) && (i <= PAD_R_LEFT))
+			{
+				Analog::ResetPad(pad, Analog::AnalogToPad(i));
+				i += 0xff00;
+			}
 
-				// Analog Controls.
-				if ((i > PAD_RY) && (i <= PAD_R_LEFT))
-				{
-					Analog::ResetPad(pad, Analog::AnalogToPad(i));
-					i += 0xff00;
-				}
+			if (i != -1)
+			{
+				clear_bit(keyPress, i);
+				set_bit(keyRelease, i);
+			}
 
-				if (i != -1)
-				{
-					clear_bit(keyPress, i);
-					set_bit(keyRelease, i);
-				}
+			event.evt = KEYRELEASE;
+			event.key = key;
+			break;
 
-				event.evt = KEYRELEASE;
-				event.key = key;
-				break;
+		case FocusIn:
+			XAutoRepeatOff(GSdsp);
+			break;
 
-			case FocusIn:
-				XAutoRepeatOff(GSdsp);
-				break;
+		case FocusOut:
+			XAutoRepeatOn(GSdsp);
+			break;
+	}
+}
+void PollForX11KeyboardInput(int pad)
+{
+	keyEvent evt;
+	XEvent E;
+	int keyPress = 0, keyRelease = 0;
 
-			case FocusOut:
-				XAutoRepeatOn(GSdsp);
-				break;
-		}
+	// Keyboard input send by PCSX2
+	pthread_mutex_lock(&mutex_KeyEvent);
+	vector<keyEvent>::iterator it = ev_fifo.begin();
+	while ( it != ev_fifo.end() ) {
+		AnalyzeKeyEvent(pad, *it, keyPress, keyRelease);
+		it++;
+	}
+	ev_fifo.clear();
+	pthread_mutex_unlock(&mutex_KeyEvent);
+
+	// keyboard input
+	while (XPending(GSdsp) > 0)
+	{
+		XNextEvent(GSdsp, &E);
+		evt.evt = E.type;
+		evt.key = (int)XLookupKeysym((XKeyEvent *) & E, 0);
+		AnalyzeKeyEvent(pad, evt, keyPress, keyRelease);
 	}
 
 	UpdateKeys(pad, keyPress, keyRelease);

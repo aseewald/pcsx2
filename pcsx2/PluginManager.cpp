@@ -252,6 +252,7 @@ _PADupdate         PADupdate;
 _PADkeyEvent       PADkeyEvent;
 _PADsetSlot        PADsetSlot;
 _PADqueryMtap      PADqueryMtap;
+_PADWriteEvent	   PADWriteEvent;
 
 static void PAD_update( u32 padslot ) { }
 
@@ -417,6 +418,7 @@ static const LegacyApi_ReqMethod s_MethMessReq_PAD[] =
 static const LegacyApi_OptMethod s_MethMessOpt_PAD[] =
 {
 	{	"PADupdate",		(vMeth**)&PADupdate },
+	{   "PADWriteEvent",	(vMeth**)&PADWriteEvent },
 	{ NULL },
 };
 

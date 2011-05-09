@@ -31,6 +31,7 @@
 extern Display *GSdsp;
 extern void PollForX11KeyboardInput(int pad);
 extern bool PollX11Keyboard(char* &temp, u32 &pkey);
+extern Window GSwin;
 
 #else
 

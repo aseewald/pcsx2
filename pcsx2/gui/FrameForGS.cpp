@@ -96,6 +96,7 @@ GSPanel::GSPanel( wxWindow* parent )
 
 	Connect(wxEVT_CLOSE_WINDOW,		wxCloseEventHandler	(GSPanel::OnCloseWindow));
 	Connect(wxEVT_SIZE,				wxSizeEventHandler	(GSPanel::OnResize));
+	Connect(wxEVT_KEY_UP,			wxKeyEventHandler	(GSPanel::OnKeyDown));
 	Connect(wxEVT_KEY_DOWN,			wxKeyEventHandler	(GSPanel::OnKeyDown));
 
 	Connect(wxEVT_SET_FOCUS,		wxFocusEventHandler	(GSPanel::OnFocus));
@@ -205,10 +206,28 @@ void GSPanel::OnHideMouseTimeout( wxTimerEvent& evt )
 
 void GSPanel::OnKeyDown( wxKeyEvent& evt )
 {
+
 	// HACK: Legacy PAD plugins expect PCSX2 to ignore keyboard messages on the GS Window while
 	// the PAD plugin is open, so ignore here (PCSX2 will direct messages routed from PAD directly
 	// to the APP level message handler, which in turn routes them right back here -- yes it's
 	// silly, but oh well).
+
+#ifdef __LINUX__
+	// HACK2: In gsopen2 there is one event buffer read by both wx/gui and pad plugin. Wx deletes
+	// the event before the pad see it. So you send key event directly to the pad.
+	if( (PADWriteEvent != NULL) && (GSopen2 != NULL) ) {
+		keyEvent event;
+		event.key = evt.GetRawKeyCode();
+		if (evt.GetEventType() == wxEVT_KEY_UP)
+			event.evt = 3; // X equivalent of KEYRELEASE;
+		else if (evt.GetEventType() == wxEVT_KEY_DOWN)
+			event.evt = 2; // X equivalent of KEYPRESS;
+		else
+			event.evt = 0;
+
+		PADWriteEvent(event);
+	}
+#endif
 
 	if( (PADopen != NULL) && CoreThread.IsOpen() ) return;
 	DirectKeyCommand( evt );
@@ -242,6 +261,16 @@ void GSPanel::OnFocus( wxFocusEvent& evt )
 	else
 		DoShowMouse();
 
+#ifdef __LINUX__
+	// HACK2: In gsopen2 there is one event buffer read by both wx/gui and pad plugin. Wx deletes
+	// the event before the pad see it. So you send key event directly to the pad.
+	if( (PADWriteEvent != NULL) && (GSopen2 != NULL) ) {
+		keyEvent event;
+		event.key = 0;
+		event.evt = 9; // X equivalent of FocusIn;
+		PADWriteEvent(event);
+	}
+#endif
 	//Console.Warning("GS frame > focus set");
 }
 
@@ -250,6 +279,16 @@ void GSPanel::OnFocusLost( wxFocusEvent& evt )
 	evt.Skip();
 	m_HasFocus = false;
 	DoShowMouse();
+#ifdef __LINUX__
+	// HACK2: In gsopen2 there is one event buffer read by both wx/gui and pad plugin. Wx deletes
+	// the event before the pad see it. So you send key event directly to the pad.
+	if( (PADWriteEvent != NULL) && (GSopen2 != NULL) ) {
+		keyEvent event;
+		event.key = 0;
+		event.evt = 10; // X equivalent of FocusOut;
+		PADWriteEvent(event);
+	}
+#endif
 	//Console.Warning("GS frame > focus lost");
 }
 

@@ -134,6 +134,9 @@ enum gamePadValues
 
 extern keyEvent event;
 
+extern vector<keyEvent> ev_fifo;
+extern pthread_mutex_t	mutex_KeyEvent;
+
 extern u16 status[2];
 extern u32 pads;
 

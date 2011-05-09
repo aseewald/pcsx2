@@ -125,7 +125,10 @@ int ds2mode = 0; // DS Mode at start
 FILE *padLog = NULL;
 
 pthread_spinlock_t s_mutexStatus;
+pthread_mutex_t	   mutex_KeyEvent;
 u32 s_keyPress[2], s_keyRelease[2];
+
+vector<keyEvent> ev_fifo;
 
 static void InitLibraryName()
 {
@@ -278,7 +281,9 @@ EXPORT_C_(s32) PADopen(void *pDsp)
 {
 	memset(&event, 0, sizeof(event));
 
+	ev_fifo.clear();
 	pthread_spin_init(&s_mutexStatus, PTHREAD_PROCESS_PRIVATE);
+	pthread_mutex_init(&mutex_KeyEvent, NULL);
 	s_keyPress[0] = s_keyPress[1] = 0;
 	s_keyRelease[0] = s_keyRelease[1] = 0;
 
@@ -306,7 +311,9 @@ EXPORT_C_(void) PADsetLogDir(const char* dir)
 
 EXPORT_C_(void) PADclose()
 {
+	ev_fifo.clear();
 	pthread_spin_destroy(&s_mutexStatus);
+	pthread_mutex_destroy(&mutex_KeyEvent);
 	_PADclose();
 }
 
@@ -627,3 +634,12 @@ EXPORT_C_(keyEvent*) PADkeyEvent()
 	event.key = 0;
 	return &s_event;
 }
+
+#ifdef __LINUX__
+EXPORT_C_(void) PADWriteEvent(keyEvent &evt) // FIXME interface
+{
+	pthread_mutex_lock(&mutex_KeyEvent);
+	ev_fifo.push_back(evt);
+	pthread_mutex_unlock(&mutex_KeyEvent);
+}
+#endif

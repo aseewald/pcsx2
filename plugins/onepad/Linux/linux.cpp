@@ -30,6 +30,7 @@
 extern void PollForKeyboardInput(int pad);
 extern void SetAutoRepeat(bool autorep);
 Display *GSdsp;
+Window	GSwin;
 
 extern string KeyName(int pad, int key);
 
@@ -82,6 +83,7 @@ s32  _PADopen(void *pDsp)
 	{
         GSdsp = *(Display**)pDsp;
 	}
+	GSwin = (Window)*(((u32*)pDsp)+1);
 
     SetAutoRepeat(false);
 	return 0;
