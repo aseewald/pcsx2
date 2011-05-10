@@ -68,6 +68,10 @@ bool GSDeviceSDL::Create(GSWnd* wnd)
 		m_window = SDL_CreateWindowFrom(handle);
 	 	m_free_window = true;
 	}
+	// FIXME do a stub on window 
+#ifdef __LINUX__
+	wnd->SetWindow(m_window);
+#endif
 
 	return GSDeviceSW::Create(wnd);
 }

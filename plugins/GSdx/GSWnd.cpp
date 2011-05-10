@@ -312,7 +312,7 @@ void GSWnd::HideFrame()
 */
 
 GSWnd::GSWnd()
-	: m_window(NULL)
+	: m_window(NULL), m_Xwindow(0), m_XDisplay(NULL)
 {
 }
 
@@ -322,6 +322,10 @@ GSWnd::~GSWnd()
 	{
 		SDL_DestroyWindow(m_window);
 		m_window = NULL;
+	}
+	if (m_XDisplay) {
+		XCloseDisplay(m_XDisplay);
+		m_XDisplay = NULL;
 	}
 }
 
@@ -358,6 +362,10 @@ void GSWnd::Detach()
 	{
 		SDL_DestroyWindow(m_window);
 		m_window = NULL;
+	}
+	if (m_XDisplay) {
+		XCloseDisplay(m_XDisplay);
+		m_XDisplay = NULL;
 	}
 }
 
@@ -416,16 +424,25 @@ Display* GSWnd::GetDisplay()
 
 GSVector4i GSWnd::GetClientRect()
 {
-	// Get all SDL events. It refreshes the window parameter do not ask why.
-	// Anyway it allow to properly resize the window surface
-	// FIXME: it does not feel a good solution -- Gregory
-	SDL_PumpEvents();
+	unsigned int h = 480;
+	unsigned int w = 640;
 
-	int h = 480;
-	int w = 640;
-	if (m_window) SDL_GetWindowSize(m_window, &w, &h);
+	unsigned int borderDummy;
+	unsigned int depthDummy;
+	Window winDummy;
+    int xDummy;
+    int yDummy;
 
-	return GSVector4i(0, 0, w, h);
+	// In gsopen2, pcsx2 stoles all event (including resize event). SDL is not able to update its structure
+	// so you must do it yourself
+	// In perfect world:
+	// if (m_window) SDL_GetWindowSize(m_window, &w, &h);
+	// In real world...:
+	if (!m_XDisplay) m_XDisplay = XOpenDisplay(NULL);
+	XGetGeometry(m_XDisplay, m_Xwindow, &winDummy, &xDummy, &yDummy, &w, &h, &borderDummy, &depthDummy);
+	SDL_SetWindowSize(m_window, w, h);
+
+	return GSVector4i(0, 0, (int)w, (int)h);
 }
 
 // Returns FALSE if the window has no title, or if th window title is under the strict
@@ -437,7 +454,8 @@ bool GSWnd::SetWindowText(const char* title)
 	// Better than nothing heuristic, check the window position. Fullscreen = (0,0)
 	// if(!(m_window->flags & SDL_WINDOW_FULLSCREEN) ) // Do not compile
 	//
-	// Same as GetClientRect. We call SDL_PumpEvents to refresh x and y value
+	// We call SDL_PumpEvents to refresh x and y value. Note SDL_PumpEvents will not work on gsopen2
+	// but we not use this function anyway.
 	// FIXME: it does not feel a good solution -- Gregory
 	SDL_PumpEvents();
 	int x,y = 0;

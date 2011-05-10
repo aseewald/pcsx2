@@ -95,6 +95,7 @@ class GSWnd
 {
 	SDL_Window* m_window;
 	Window      m_Xwindow;
+	Display*    m_XDisplay;
 	bool m_managed;
 
 public:
@@ -110,6 +111,7 @@ public:
 	void* GetHandle() {return (void*)&m_Xwindow;}
 	GSVector4i GetClientRect();
 	bool SetWindowText(const char* title);
+	void SetWindow(SDL_Window* current_window) { if (current_window) m_window = current_window; }
 
 	void Show();
 	void Hide();
