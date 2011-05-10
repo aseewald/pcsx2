@@ -70,6 +70,7 @@ void SetAutoRepeat(bool autorep)
 
 #ifdef __LINUX__
 static bool s_grab_input = false;
+static bool s_Shift = false;
 void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 {
 	int i;
@@ -78,7 +79,13 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 	switch (evt.evt)
 	{
 		case KeyPress:
-			if (key == XK_F10) {
+			// Shift F12 is not yet use by pcsx2. So keep it to grab/ungrab input
+			// I found it very handy vs the automatic fullscreen detection
+			// 1/ Does not need to detect full-screen
+			// 2/ Can use a debugger in full-screen
+			// 3/ Can grab input in window without the need of a pixelated full-screen
+			if (key == XK_Shift_R || key == XK_Shift_L) s_Shift = true;
+			if (key == XK_F12 && s_Shift) {
 				if(!s_grab_input) {
 					s_grab_input = true;
 					XGrabPointer(GSdsp, GSwin, True, ButtonPressMask, GrabModeAsync, GrabModeAsync, GSwin, None, CurrentTime);
@@ -125,6 +132,8 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 			break;
 
 		case KeyRelease:
+			if (key == XK_Shift_R || key == XK_Shift_L) s_Shift = false;
+
 			i = FindKey(key, pad);
 
 			// Analog Controls.
