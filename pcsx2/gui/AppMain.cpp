@@ -36,6 +36,14 @@
 #	include <wx/msw/wrapwin.h>		// needed to implement the app!
 #endif
 
+#ifdef __WXGTK__
+// Need to tranform the GSPanel to a X11 window/display for the GS plugins
+#include <wx/gtk/win_gtk.h> // GTK_PIZZA interface
+#include <gdk/gdkx.h>
+#include <gtk/gtk.h>
+#endif
+
+
 IMPLEMENT_APP(Pcsx2App)
 
 DEFINE_EVENT_TYPE( pxEvt_LoadPluginsComplete );
@@ -813,13 +821,6 @@ SysMainMemory& Pcsx2App::GetVmReserve()
 	if (!m_VmReserve) m_VmReserve = new SysMainMemory();
 	return *m_VmReserve;
 }
-
-// FIXME move at top if include really needed
-#ifdef __WXGTK__
-#include <wx/gtk/win_gtk.h> // GTK_PIZZA interface
-#include <gdk/gdkx.h>
-#include <gtk/gtk.h>
-#endif
 
 void Pcsx2App::OpenGsPanel()
 {

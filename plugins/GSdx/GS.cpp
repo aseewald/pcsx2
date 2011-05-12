@@ -282,7 +282,7 @@ static int _GSopen(void** dsp, char* title, int renderer, int threads = -1)
 		s_gs->SetMultithreaded(true);
 
 #ifdef __LINUX__
-		// Get the Xwindow from dsp
+		// Get the Xwindow from dsp.
 		s_gs->m_wnd.Attach((void*)((uint32*)(dsp)+1), false);
 #else
 		s_gs->m_wnd.Attach(*dsp, false);

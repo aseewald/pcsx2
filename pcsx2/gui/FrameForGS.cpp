@@ -47,11 +47,11 @@ void GSPanel::InitDefaultAccelerators()
 
 	m_Accels->Map( AAC( WXK_F6 ),				"GSwindow_CycleAspectRatio" );
 
-	m_Accels->Map( AAC( WXK_NUMPAD_ADD ).Cmd(),			"GSwindow_ZoomIn" );	//CTRL on Windows (probably linux too), CMD on OSX
+	m_Accels->Map( AAC( WXK_NUMPAD_ADD ).Cmd(),			"GSwindow_ZoomIn" );	//CTRL on Windows/linux, CMD on OSX
 	m_Accels->Map( AAC( WXK_NUMPAD_SUBTRACT ).Cmd(),	"GSwindow_ZoomOut" );
 	m_Accels->Map( AAC( WXK_NUMPAD_MULTIPLY ).Cmd(),	"GSwindow_ZoomToggle" );
 
-	m_Accels->Map( AAC( WXK_NUMPAD_ADD ).Cmd().Alt(),			"GSwindow_ZoomInY" );	//CTRL on Windows (probably linux too), CMD on OSX
+	m_Accels->Map( AAC( WXK_NUMPAD_ADD ).Cmd().Alt(),			"GSwindow_ZoomInY" );	//CTRL on Windows/linux, CMD on OSX
 	m_Accels->Map( AAC( WXK_NUMPAD_SUBTRACT ).Cmd().Alt(),	"GSwindow_ZoomOutY" );
 	m_Accels->Map( AAC( WXK_NUMPAD_MULTIPLY ).Cmd().Alt(),	"GSwindow_ZoomResetY" );
 
@@ -265,9 +265,7 @@ void GSPanel::OnFocus( wxFocusEvent& evt )
 	// HACK2: In gsopen2 there is one event buffer read by both wx/gui and pad plugin. Wx deletes
 	// the event before the pad see it. So you send key event directly to the pad.
 	if( (PADWriteEvent != NULL) && (GSopen2 != NULL) ) {
-		keyEvent event;
-		event.key = 0;
-		event.evt = 9; // X equivalent of FocusIn;
+		keyEvent event = {0, 9}; // X equivalent of FocusIn;
 		PADWriteEvent(event);
 	}
 #endif
@@ -283,9 +281,7 @@ void GSPanel::OnFocusLost( wxFocusEvent& evt )
 	// HACK2: In gsopen2 there is one event buffer read by both wx/gui and pad plugin. Wx deletes
 	// the event before the pad see it. So you send key event directly to the pad.
 	if( (PADWriteEvent != NULL) && (GSopen2 != NULL) ) {
-		keyEvent event;
-		event.key = 0;
-		event.evt = 10; // X equivalent of FocusOut;
+		keyEvent event = {0, 10}; // X equivalent of FocusOut
 		PADWriteEvent(event);
 	}
 #endif

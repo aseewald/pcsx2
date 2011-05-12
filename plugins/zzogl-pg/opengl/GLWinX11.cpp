@@ -25,28 +25,12 @@
 #include <X11/Xlib.h>
 #include <stdlib.h>
 
-#include <wx/gtk/win_gtk.h> // GTK_PIZZA interface
-#include <gdk/gdkx.h>
-#include <gtk/gtk.h>
-
 #ifdef USE_GSOPEN2
 bool GLWindow::CreateWindow(void *pDisplay)
 {
-#if 1
-	// Display* pcsx2_disp = *(Display**)pDisplay;
-	// glWindow = XDefaultRootWindow(pcsx2_disp);
 	glWindow = (Window)*((u32*)(pDisplay)+1);
-#else
-	GtkScrolledWindow* top_window = *(GtkScrolledWindow**)pDisplay;
-	GtkWidget *child_window = gtk_bin_get_child(GTK_BIN(top_window));
-
-	gtk_widget_realize(child_window);
-	gtk_widget_set_double_buffered(child_window, false);
-
-	GdkWindow* draw_window = GTK_PIZZA(child_window)->bin_window;
-	glWindow = GDK_WINDOW_XWINDOW(draw_window);
-#endif
-
+	// Do not take the display which come from pcsx2 neither change it.
+	// You need a new one to do the operation in the GS thread
 	glDisplay = XOpenDisplay(NULL);
 
 	return true;
@@ -58,7 +42,7 @@ bool GLWindow::CreateWindow(void *pDisplay)
     if (!XInitThreads())
         ZZLog::Error_Log("Failed to init the xlib concurent threads");
 
-	glDisplay = XOpenDisplay(0);
+	glDisplay = XOpenDisplay(NULL);
 
 	if (pDisplay == NULL) 
 	{
@@ -66,7 +50,11 @@ bool GLWindow::CreateWindow(void *pDisplay)
 		return false;
 	}
 
+	// Allow pad to use the display
 	*(Display**)pDisplay = glDisplay;
+	// Pad can use the window to grab the input. For the moment just set to 0 to avoid
+	// to grab an unknow window... Anyway GSopen1 might be dropped in the future
+	*((u32*)(pDisplay)+1) = 0;
 
 	return true;
 }
@@ -182,111 +170,6 @@ void GLWindow::GetGLXVersion()
 	ZZLog::Error_Log("glX-Version %d.%d", glxMajorVersion, glxMinorVersion);
 }
 
-void GLWindow::UpdateGrabKey()
-{
-    // Do not stole the key in debug mode. It is not breakpoint friendly...
-#ifndef _DEBUG
-    XLockDisplay(glDisplay);
-    if (fullScreen) {
-        XGrabPointer(glDisplay, glWindow, True, ButtonPressMask, GrabModeAsync, GrabModeAsync, glWindow, None, CurrentTime);
-        XGrabKeyboard(glDisplay, glWindow, True, GrabModeAsync, GrabModeAsync, CurrentTime);
-    } else {
-        XUngrabPointer(glDisplay, CurrentTime);
-        XUngrabKeyboard(glDisplay, CurrentTime);
-    }
-    XUnlockDisplay(glDisplay);
-#endif
-}
-
-void GLWindow::Force43Ratio()
-{
-#ifndef USE_GSOPEN2
-    // avoid black border in fullscreen
-    if (fullScreen && conf.isWideScreen) {
-        conf.width = width;
-        conf.height = height;
-    }
-
-    if(!fullScreen && !conf.isWideScreen) {
-        // Compute the width based on height
-        s32 new_width = (4*height)/3;
-        // do not bother to resize for 5 pixels. Avoid a loop 
-        // due to round value
-        if ( abs(new_width - width) > 5) {
-            width = new_width;
-            conf.width = new_width;
-            // resize the window
-            XLockDisplay(glDisplay);
-            XResizeWindow(glDisplay, glWindow, new_width, height);
-            XSync(glDisplay, False);
-            XUnlockDisplay(glDisplay);
-        }
-    }
-#endif
-}
-
-#define _NET_WM_STATE_REMOVE 0
-#define _NET_WM_STATE_ADD 1
-#define _NET_WM_STATE_TOGGLE 2
-
-void GLWindow::ToggleFullscreen()
-{
-#ifndef USE_GSOPEN2
-    if (!glDisplay or !glWindow) return;
-
-    Force43Ratio();
-
-    u32 mask = SubstructureRedirectMask | SubstructureNotifyMask;
-    // Setup a new event structure
-    XClientMessageEvent cme;
-    cme.type = ClientMessage;
-    cme.send_event = True;
-    cme.display = glDisplay;
-    cme.window  = glWindow;
-    cme.message_type = XInternAtom(glDisplay, "_NET_WM_STATE", False);
-    cme.format = 32;
-    // Note: can not use _NET_WM_STATE_TOGGLE because the WM can change the fullscreen state
-    // and screw up the fullscreen variable... The test on fulscreen restore a sane configuration
-    cme.data.l[0] = fullScreen  ? _NET_WM_STATE_REMOVE : _NET_WM_STATE_ADD;
-    cme.data.l[1] = (u32)XInternAtom(glDisplay, "_NET_WM_STATE_FULLSCREEN", False);
-    cme.data.l[2] = 0;
-    cme.data.l[3] = 0;
-
-    // send the event
-    XLockDisplay(glDisplay);
-    if (!XSendEvent(glDisplay, RootWindow(glDisplay, vi->screen), False, mask, (XEvent*)(&cme)))
-        ZZLog::Error_Log("Failed to send event: toggle fullscreen");
-    else {
-        fullScreen = (!fullScreen);
-        conf.setFullscreen(fullScreen);
-    }
-    XUnlockDisplay(glDisplay);
-
-    // Apply the change
-    XSync(glDisplay, false);
-
-    // Wait a little that the VM does his joes. Actually the best is to check some WM event
-    // but it not sure it will appear so a time out is necessary.
-    usleep(100*1000); // 100 us should be far enough for old computer and unnoticeable for users
-
-    // update info structure
-    GetWindowSize();
-
-    UpdateGrabKey();
-
-    // avoid black border in widescreen fullscreen
-    if (fullScreen && conf.isWideScreen) {
-        conf.width = width;
-        conf.height = height;
-    }
-
-    // Hide the cursor in the right bottom corner
-    if(fullScreen)
-        XWarpPointer(glDisplay, None, glWindow, 0, 0, 0, 0, 2*width, 2*height);
-
-#endif
-}
-
 #ifdef USE_GSOPEN2
 bool GLWindow::DisplayWindow(int _width, int _height)
 {
@@ -368,23 +251,146 @@ void GLWindow::SwapGLBuffers()
 	// glClear(GL_COLOR_BUFFER_BIT);
 }
 
-void GLWindow::SetTitle(char *strtitle)
+u32 THR_KeyEvent = 0; // Value for key event processing between threads
+bool THR_bShift = false;
+bool THR_bCtrl = false;
+
+void GLWindow::ProcessEvents()
+{
+	FUNCLOG
+
+#ifdef USE_GSOPEN2
+	GetWindowSize();
+#else
+	ResizeCheck();
+#endif
+
+	if (THR_KeyEvent)     // This value was passed from GSKeyEvents which could be in another thread
+	{
+		int my_KeyEvent = THR_KeyEvent;
+		bool my_bShift = THR_bShift;
+		bool my_bCtrl = THR_bCtrl;
+		THR_KeyEvent = 0;
+
+		switch (my_KeyEvent)
+		{
+			case XK_F5:
+			case XK_F6:
+			case XK_F7:
+			case XK_F9:
+				// Note: to avoid some clash with PCSX2 shortcut in GSOpen2.
+				// GS shortcut will only be activated when ctrl is press
+				if (my_bCtrl)
+					OnFKey(my_KeyEvent - XK_F1 + 1, my_bShift);
+				break;
+		}
+	}
+}
+
+
+// ************************** Function that are either stub or useless in GSOPEN2
+#define _NET_WM_STATE_REMOVE 0
+#define _NET_WM_STATE_ADD 1
+#define _NET_WM_STATE_TOGGLE 2
+
+void GLWindow::Force43Ratio()
+{
+#ifndef USE_GSOPEN2
+    // avoid black border in fullscreen
+    if (fullScreen && conf.isWideScreen) {
+        conf.width = width;
+        conf.height = height;
+    }
+
+    if(!fullScreen && !conf.isWideScreen) {
+        // Compute the width based on height
+        s32 new_width = (4*height)/3;
+        // do not bother to resize for 5 pixels. Avoid a loop
+        // due to round value
+        if ( abs(new_width - width) > 5) {
+            width = new_width;
+            conf.width = new_width;
+            // resize the window
+            XLockDisplay(glDisplay);
+            XResizeWindow(glDisplay, glWindow, new_width, height);
+            XSync(glDisplay, False);
+            XUnlockDisplay(glDisplay);
+        }
+    }
+#endif
+}
+
+void GLWindow::UpdateGrabKey()
+{
+    // Do not stole the key in debug mode. It is not breakpoint friendly...
+#ifndef _DEBUG
+    XLockDisplay(glDisplay);
+    if (fullScreen) {
+        XGrabPointer(glDisplay, glWindow, True, ButtonPressMask, GrabModeAsync, GrabModeAsync, glWindow, None, CurrentTime);
+        XGrabKeyboard(glDisplay, glWindow, True, GrabModeAsync, GrabModeAsync, CurrentTime);
+    } else {
+        XUngrabPointer(glDisplay, CurrentTime);
+        XUngrabKeyboard(glDisplay, CurrentTime);
+    }
+    XUnlockDisplay(glDisplay);
+#endif
+}
+
+void GLWindow::ToggleFullscreen()
 {
 #ifndef USE_GSOPEN2
     if (!glDisplay or !glWindow) return;
-	if (fullScreen) return;
 
-    XTextProperty prop;
-    memset(&prop, 0, sizeof(prop));
+    Force43Ratio();
 
-    char* ptitle = strtitle;
-    if (XStringListToTextProperty(&ptitle, 1, &prop)) {
-        XLockDisplay(glDisplay);
-        XSetWMName(glDisplay, glWindow, &prop);
-        XUnlockDisplay(glDisplay);
+    u32 mask = SubstructureRedirectMask | SubstructureNotifyMask;
+    // Setup a new event structure
+    XClientMessageEvent cme;
+    cme.type = ClientMessage;
+    cme.send_event = True;
+    cme.display = glDisplay;
+    cme.window  = glWindow;
+    cme.message_type = XInternAtom(glDisplay, "_NET_WM_STATE", False);
+    cme.format = 32;
+    // Note: can not use _NET_WM_STATE_TOGGLE because the WM can change the fullscreen state
+    // and screw up the fullscreen variable... The test on fulscreen restore a sane configuration
+    cme.data.l[0] = fullScreen  ? _NET_WM_STATE_REMOVE : _NET_WM_STATE_ADD;
+    cme.data.l[1] = (u32)XInternAtom(glDisplay, "_NET_WM_STATE_FULLSCREEN", False);
+    cme.data.l[2] = 0;
+    cme.data.l[3] = 0;
+
+    // send the event
+    XLockDisplay(glDisplay);
+    if (!XSendEvent(glDisplay, RootWindow(glDisplay, vi->screen), False, mask, (XEvent*)(&cme)))
+        ZZLog::Error_Log("Failed to send event: toggle fullscreen");
+    else {
+        fullScreen = (!fullScreen);
+        conf.setFullscreen(fullScreen);
+    }
+    XUnlockDisplay(glDisplay);
+
+    // Apply the change
+    XSync(glDisplay, false);
+
+    // Wait a little that the VM does his joes. Actually the best is to check some WM event
+    // but it not sure it will appear so a time out is necessary.
+    usleep(100*1000); // 100 us should be far enough for old computer and unnoticeable for users
+
+    // update info structure
+    GetWindowSize();
+
+	UpdateGrabKey();
+
+    // avoid black border in widescreen fullscreen
+    if (fullScreen && conf.isWideScreen) {
+        conf.width = width;
+        conf.height = height;
     }
 
-    XFree(prop.value);
+    // Hide the cursor in the right bottom corner
+    if(fullScreen)
+        XWarpPointer(glDisplay, None, glWindow, 0, 0, 0, 0, 2*width, 2*height);
+
 #endif
 }
 
@@ -417,35 +423,24 @@ void GLWindow::ResizeCheck()
     XUnlockDisplay(glDisplay);
 }
 
-u32 THR_KeyEvent = 0; // Value for key event processing between threads
-bool THR_bShift = false;
-
-void GLWindow::ProcessEvents()
+void GLWindow::SetTitle(char *strtitle)
 {
-	FUNCLOG
+#ifndef USE_GSOPEN2
+    if (!glDisplay or !glWindow) return;
+	if (fullScreen) return;
 
-#ifdef USE_GSOPEN2
-	GetWindowSize();
-#else
-	ResizeCheck();
+    XTextProperty prop;
+    memset(&prop, 0, sizeof(prop));
+
+    char* ptitle = strtitle;
+    if (XStringListToTextProperty(&ptitle, 1, &prop)) {
+        XLockDisplay(glDisplay);
+        XSetWMName(glDisplay, glWindow, &prop);
+        XUnlockDisplay(glDisplay);
+    }
+
+    XFree(prop.value);
 #endif
-
-	if (THR_KeyEvent)     // This value was passed from GSKeyEvents which could be in another thread
-	{
-		int my_KeyEvent = THR_KeyEvent;
-		bool my_bShift = THR_bShift;
-		THR_KeyEvent = 0;
-
-		switch (my_KeyEvent)
-		{
-			case XK_F5:
-			case XK_F6:
-			case XK_F7:
-			case XK_F9:
-				OnFKey(my_KeyEvent - XK_F1 + 1, my_bShift);
-				break;
-		}
-	}
 }
 
 #endif

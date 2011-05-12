@@ -318,7 +318,7 @@ GSWnd::GSWnd()
 
 GSWnd::~GSWnd()
 {
-	if(m_window != NULL)
+	if(m_window != NULL && m_managed)
 	{
 		SDL_DestroyWindow(m_window);
 		m_window = NULL;
@@ -329,36 +329,19 @@ GSWnd::~GSWnd()
 	}
 }
 
-#include <wx/gtk/win_gtk.h> // GTK_PIZZA interface
-#include <gdk/gdkx.h>
-#include <gtk/gtk.h>
-
 bool GSWnd::Attach(void* handle, bool managed)
 {
-#if 0
-	GtkScrolledWindow* top_window = (GtkScrolledWindow*)handle;
-	GtkWidget *child_window = gtk_bin_get_child(GTK_BIN(top_window));
-
-	gtk_widget_realize(child_window);
-	gtk_widget_set_double_buffered(child_window, false);
-
-	GdkWindow* draw_window = GTK_PIZZA(child_window)->bin_window;
-
-	m_Xwindow = GDK_WINDOW_XWINDOW(draw_window);
-#else
 	m_Xwindow = *(Window*)handle;
-#endif
-
 	m_managed = managed;
 
 	return true;
 }
 
-// Actually the destructor is not called when there is a GSclose or GSshutdown
-// The window still need to be closed
 void GSWnd::Detach()
 {
-	if(m_window != NULL)
+	// Actually the destructor is not called when there is only a GSclose/GSshutdown
+	// The window still need to be closed
+	if(m_window != NULL && m_managed)
 	{
 		SDL_DestroyWindow(m_window);
 		m_window = NULL;
@@ -396,6 +379,7 @@ bool GSWnd::Create(const string& title, int w, int h)
 	m_window = SDL_CreateWindow(title.c_str(), 100, 100, w, h, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
 
 	// Get the X window from the newly created window
+	// It would be needed to get the current size
 	SDL_SysWMinfo wminfo;
 	memset(&wminfo, 0, sizeof(wminfo));
 
@@ -404,6 +388,7 @@ bool GSWnd::Create(const string& title, int w, int h)
 
 	SDL_GetWindowWMInfo(m_window, &wminfo);
 	m_Xwindow = wminfo.info.x11.window;
+
 
 	return (m_window != NULL);
 }
@@ -450,18 +435,21 @@ GSVector4i GSWnd::GetClientRect()
 
 bool GSWnd::SetWindowText(const char* title)
 {
+	if (!m_managed) return true;
+
 	// Do not find anyway to check the current fullscreen status
 	// Better than nothing heuristic, check the window position. Fullscreen = (0,0)
 	// if(!(m_window->flags & SDL_WINDOW_FULLSCREEN) ) // Do not compile
 	//
-	// We call SDL_PumpEvents to refresh x and y value. Note SDL_PumpEvents will not work on gsopen2
+	// We call SDL_PumpEvents to refresh x and y value.
 	// but we not use this function anyway.
 	// FIXME: it does not feel a good solution -- Gregory
+	// NOte: it might be more thread safe to use a call to XGetGeometry
 	SDL_PumpEvents();
 	int x,y = 0;
 	SDL_GetWindowPosition(m_window, &x, &y);
 	if ( x && y )
-	SDL_SetWindowTitle(m_window, title);
+		SDL_SetWindowTitle(m_window, title);
 
 	return true;
 }

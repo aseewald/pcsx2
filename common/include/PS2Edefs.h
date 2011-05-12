@@ -322,6 +322,9 @@ u32  CALLBACK PADquery();
 // have to be added to maintain data integrity.
 void CALLBACK PADupdate(int pad);
 
+// Send a key event from wx-gui to pad
+// Note: On linux GSOpen2, wx-gui and pad share the same event buffer. Wx-gui reads and deletes event
+// before the pad saw them. So the gui needs to send them back to the pad.
 void CALLBACK PADWriteEvent(keyEvent &evt);
 
 // extended funcs
