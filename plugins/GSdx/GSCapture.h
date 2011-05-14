@@ -21,15 +21,26 @@
 
 #pragma once
 
-#include "GSCaptureDlg.h"
 #include "GSVector.h"
+#include "GSThread.h"
 
-class GSCapture : protected CCritSec
+#ifdef _WINDOWS
+#include "GSCaptureDlg.h"
+#endif
+
+class GSCapture : protected GSCritSec
 {
 	bool m_capturing;
 	GSVector2i m_size;
+
+	int m_colorspace;
+
+	#ifdef _WINDOWS
+
 	CComPtr<IGraphBuilder> m_graph;
 	CComPtr<IBaseFilter> m_src;
+
+	#endif
 
 public:
 	GSCapture();

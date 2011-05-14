@@ -109,6 +109,22 @@ set(GSnull TRUE)
 #---------------------------------------
 
 #---------------------------------------
+#			GSdx
+#---------------------------------------
+# requires: -OpenGL
+#			-X11
+#           -PCSX2 SDL
+#---------------------------------------
+if(OPENGL_FOUND AND X11_FOUND AND projectSDL)
+    set(GSdx TRUE)
+else(OPENGL_FOUND AND X11_FOUND AND projectSDL)
+	set(GSdx FALSE)
+    message(STATUS "Skip build of GSdx: miss some dependencies")
+    message(STATUS "${msg_dep_gsdx}")
+endif(OPENGL_FOUND AND X11_FOUND AND projectSDL)
+#---------------------------------------
+
+#---------------------------------------
 #			zerogs
 #---------------------------------------
 # requires:	-GLEW
@@ -229,7 +245,6 @@ set(cdvdGigaherz FALSE)
 set(CDVDisoEFP FALSE)
 set(CDVDolio FALSE)
 set(CDVDpeops FALSE)
-set(GSdx FALSE)
 set(LilyPad FALSE)
 set(PeopsSPU2 FALSE)
 set(SSSPSXPAD FALSE)

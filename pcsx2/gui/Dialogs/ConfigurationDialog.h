@@ -20,6 +20,7 @@
 
 #include "AppCommon.h"
 #include "ApplyState.h"
+#include "App.h"
 
 namespace Panels
 {
@@ -30,6 +31,7 @@ namespace Panels
 
 BEGIN_DECLARE_EVENT_TYPES()
 	DECLARE_EVENT_TYPE( pxEvt_SetSettingsPage, -1 )
+	DECLARE_EVENT_TYPE( pxEvt_SomethingChanged, -1 );
 END_DECLARE_EVENT_TYPES()
 
 namespace Dialogs
@@ -61,6 +63,11 @@ namespace Dialogs
 		void AddPage( const wxChar* label, int iconid );
 
 		void AllowApplyActivation( bool allow=true );
+		virtual bool SomethingChanged_StateModified_IsChanged(){ //returns the state of the apply button.
+			if( wxWindow* apply = FindWindow( wxID_APPLY ) )
+				return apply->IsEnabled();
+			return false;
+		}
 
 	protected:
 		void OnSettingsApplied( wxCommandEvent& evt );
@@ -92,6 +99,12 @@ namespace Dialogs
 		wxString GetDialogName() const { return GetNameStatic(); }
    		void Apply();
 		void Cancel();
+
+		//Stores the state of the apply button in a global var.
+		//This var will be used by KB shortcuts commands to decide if the gui should be modified (only when no intermediate changes)
+		virtual bool SomethingChanged_StateModified_IsChanged(){
+			return g_ConfigPanelChanged = BaseConfigurationDialog::SomethingChanged_StateModified_IsChanged();
+		}
 
 	protected:
 		virtual wxString& GetConfSettingsTabName() const { return g_Conf->SysSettingsTabName; }
@@ -129,6 +142,7 @@ namespace Dialogs
 
 	protected:
 		Panels::BaseMcdListPanel*	m_panel_mcdlist;
+		bool m_needs_suspending;
 
 	public:
 		virtual ~McdConfigDialog() throw() {}
@@ -141,7 +155,7 @@ namespace Dialogs
 
 	protected:
 		virtual wxString& GetConfSettingsTabName() const { return g_Conf->McdSettingsTabName; }
-		void OnMultitapClicked( wxCommandEvent& evt );
+		//void OnMultitapClicked( wxCommandEvent& evt );
 	};
 
 	// --------------------------------------------------------------------------------------
@@ -207,11 +221,11 @@ namespace Dialogs
 	class CreateMemoryCardDialog : public wxDialogWithHelpers
 	{
 	protected:
-		uint		m_slot;
 		wxDirName	m_mcdpath;
 		wxString	m_mcdfile;
+		wxTextCtrl*	m_text_filenameInput;
 
-		wxFilePickerCtrl*	m_filepicker;
+		//wxFilePickerCtrl*	m_filepicker;
 		pxRadioPanel*		m_radio_CardSize;
 
 	#ifdef __WXMSW__
@@ -220,10 +234,13 @@ namespace Dialogs
 
 	public:
 		virtual ~CreateMemoryCardDialog()  throw() {}
-		//CreateMemoryCardDialog( wxWindow* parent, uint port, uint slot, const wxString& filepath=wxEmptyString );
-		CreateMemoryCardDialog( wxWindow* parent, uint slot, const wxDirName& mcdpath, const wxString& mcdfile=wxEmptyString );
+		CreateMemoryCardDialog( wxWindow* parent, const wxDirName& mcdpath, const wxString& suggested_mcdfileName);
+	
+		//duplicate of MemoryCardFile::Create. Don't know why the existing method isn't used. - avih
+		static bool CreateIt( const wxString& mcdFile, uint sizeInMB );
+		wxString result_createdMcdFilename;
+		//wxDirName GetPathToMcds() const;
 
-		wxDirName GetPathToMcds() const;
 
 	protected:
 		void CreateControls();

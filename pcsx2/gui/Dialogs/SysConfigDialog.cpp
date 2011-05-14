@@ -129,11 +129,12 @@ void Dialogs::SysConfigDialog::AddPresetsControl()
 {
 	m_slider_presets = new wxSlider( this, wxID_ANY, g_Conf->PresetIndex, 0, AppConfig::GetMaxPresetIndex(),
 		wxDefaultPosition, wxDefaultSize, wxHORIZONTAL /*| wxSL_AUTOTICKS | wxSL_LABELS */);
+	m_slider_presets->SetMinSize(wxSize(100,25));
 
 	m_slider_presets->SetToolTip(
 		pxEt( "!Notice:Tooltip:Presets:Slider",
 				L"The Presets apply speed hacks, some recompiler options and some game fixes known to boost speed.\n"
-				L"Known important game fixes ('Patches') will be applied automatically.\n\n"
+				L"Known important game fixes will be applied automatically.\n\n"
 				L"Presets info:\n"
 				L"1 -     The most accurate emulation but also the slowest.\n"
 				L"3 --> Tries to balance speed with compatibility.\n"
@@ -147,14 +148,8 @@ void Dialogs::SysConfigDialog::AddPresetsControl()
 	m_check_presets->SetToolTip(
 		pxEt( "!Notice:Tooltip:Presets:Checkbox",
 				L"The Presets apply speed hacks, some recompiler options and some game fixes known to boost speed.\n"
-				L"Known important game fixes ('Patches') will be applied automatically.\n\n"
-//This creates nested macros = not working. Un/comment manually if needed.
-//#ifdef PRESETS_USE_APPLIED_CONFIG_ON_UNCHECK
-//				L"--> Uncheck to modify settings manually."
-//              L"If you want to manually modify with a preset as a base, apply this preset, then uncheck."
-//#else
+				L"Known important game fixes will be applied automatically.\n\n"
 				L"--> Uncheck to modify settings manually (with current preset as base)"
-//#endif
 			)
 	);
 	m_check_presets->SetValue(!!g_Conf->EnablePresets);
@@ -312,3 +307,5 @@ void AppearanceThemesPanel::AppStatusEvent_OnSettingsApplied()
 {
 
 }
+
+bool g_ConfigPanelChanged = false;

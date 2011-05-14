@@ -144,6 +144,7 @@ public:
 	void UpdateIsoSrcSelection();
 	void RemoveCdvdMenu();
 	void EnableMenuItem( int id, bool enable );
+	void EnableCdvdPluginSubmenu(bool isEnable = true);
 	
 	bool Destroy();
 
@@ -174,6 +175,7 @@ protected:
 	void Menu_ResetAllSettings_Click(wxCommandEvent &event);
 
 	void Menu_IsoBrowse_Click(wxCommandEvent &event);
+	void Menu_EnableBackupStates_Click(wxCommandEvent &event);
 	void Menu_EnablePatches_Click(wxCommandEvent &event);
 	void Menu_EnableCheats_Click(wxCommandEvent &event);
 	void Menu_EnableHostFs_Click(wxCommandEvent &event);
@@ -202,7 +204,6 @@ protected:
 
 	void Menu_ShowConsole(wxCommandEvent &event);
 	void Menu_ShowConsole_Stdio(wxCommandEvent &event);
-	void Menu_PrintCDVD_Info(wxCommandEvent &event);
 	void Menu_ShowAboutBox(wxCommandEvent &event);
 
 	void _DoBootCdvd();
@@ -213,7 +214,7 @@ protected:
 //     MainEmuFram Internal API for Populating Main Menu Contents
 // ------------------------------------------------------------------------
 
-	wxMenu* MakeStatesSubMenu( int baseid ) const;
+	wxMenu* MakeStatesSubMenu( int baseid, int loadBackupId=-1 ) const;
 	wxMenu* MakeStatesMenu();
 	wxMenu* MakeLanguagesMenu() const;
 
@@ -222,3 +223,4 @@ protected:
 	friend class Pcsx2App;
 };
 
+extern int GetPluginMenuId_Settings( PluginsEnum_t pid );

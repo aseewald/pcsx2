@@ -113,7 +113,7 @@ static void __forceinline IncrementNextA(V_Core& thiscore, uint voiceidx)
 		if( Cores[i].IRQEnable && (vc.NextA==Cores[i].IRQA ) )
 		{
 			//if( IsDevBuild )
-			//	ConLog(" * SPU2 Core %d: IRQ Called (IRQA (%05X) passed; voice %d).\n", i, Cores[i].IRQA, thiscore.Index * 24 + voiceidx);
+			//	ConLog(" * SPU2 Core %d: IRQ Requested (IRQA (%05X) passed; voice %d).\n", i, Cores[i].IRQA, thiscore.Index * 24 + voiceidx);
 
 			SetIrqCall(i);
 		}
@@ -353,7 +353,6 @@ static __forceinline void CalculateADSR( V_Core& thiscore, uint voiceidx )
 			if(MsgVoiceOff()) ConLog("* SPU2-X: Voice Off by ADSR: %d \n", voiceidx);
 		}
 		vc.Stop();
-		thiscore.Regs.ENDX |= (1 << voiceidx);
 	}
 
 	jASSUME( vc.ADSR.Value >= 0 );	// ADSR should never be negative...
@@ -800,7 +799,12 @@ StereoOut32 Apply_Dealias_Filter(StereoOut32 &SoundStream)
 // used to throttle the output rate of cache stat reports
 static int p_cachestat_counter=0;
 
-__forceinline void Mix()
+// Gcc does not want to inline it when lto is enabled because some functions growth too much.
+// The function is big enought to see any speed impact. -- Gregory
+#ifndef __LINUX__
+__forceinline
+#endif
+void Mix()
 {
 	// Note: Playmode 4 is SPDIF, which overrides other inputs.
 	StereoOut32 InputData[2] =
@@ -858,18 +862,26 @@ __forceinline void Mix()
 		if(postprocess_filter_enabled)
 		#endif
 		{
-			Out = Apply_Dealias_Filter ( Out );
-			// Frequency response filter needs to be tuned. Currently emphasizes the highs too much.
-			//Out = Apply_Frequency_Response_Filter ( Out );
+			// Dealias filter emphasizes the highs too much.
+			//Out = Apply_Dealias_Filter ( Out );
+			Out = Apply_Frequency_Response_Filter ( Out );
 		}
 
 		// Final Clamp!
 		// Like any good audio system, the PS2 pumps the volume and incurs some distortion in its
 		// output, giving us a nice thumpy sound at times.  So we add 1 above (2x volume pump) and
 		// then clamp it all here.
+		
+		// Edit: I'm sorry Jake, but I know of no good audio system that arbitrary distorts and clips
+		// output by design.
+		// Good thing though that this code gets the volume exactly right, as per tests :)
 		Out = clamp_mix( Out, SndOutVolumeShift );
 	}
-
+	
+	// Configurable output volume
+	Out.Left *= FinalVolume;
+	Out.Right *= FinalVolume;
+	
 	SndBuffer::Write( Out );
 
 	// Update AutoDMA output positioning

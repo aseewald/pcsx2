@@ -107,7 +107,8 @@ Panels::BiosSelectorPanel::BiosSelectorPanel( wxWindow* parent )
 	m_ComboBox->SetFont( wxFont( m_ComboBox->GetFont().GetPointSize()+1, wxFONTFAMILY_MODERN, wxNORMAL, wxNORMAL, false, L"Lucida Console" ) );
 	m_ComboBox->SetMinSize( wxSize( wxDefaultCoord, std::max( m_ComboBox->GetMinSize().GetHeight(), 96 ) ) );
 	
-	m_FolderPicker->SetStaticDesc( _("Click the Browse button to select a different folder where PCSX2 will look for PS2 BIOS roms.") );
+	//if (InstallationMode != InstallMode_Portable)
+		m_FolderPicker->SetStaticDesc( _("Click the Browse button to select a different folder where PCSX2 will look for PS2 BIOS roms.") );
 
 	wxButton* refreshButton = new wxButton( this, wxID_ANY, _("Refresh list") );
 
@@ -136,7 +137,7 @@ void Panels::BiosSelectorPanel::Apply()
 			.SetDiagMsg(L"User did not specify a valid BIOS selection.")
 			.SetUserMsg( pxE( "!Notice:BIOS:InvalidSelection",
 				L"Please select a valid BIOS.  If you are unable to make a valid selection "
-				L"then press cancel to close the Configuration panel."
+				L"then press Cancel to close the Configuration panel."
 			) );
 	}
 

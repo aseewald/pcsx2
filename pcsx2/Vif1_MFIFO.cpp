@@ -37,7 +37,7 @@ static u16 QWCinVIFMFIFO(u32 DrainADDR)
 	u32 ret;
 	
 
-	SPR_LOG("VIF MFIFO Requesting %x QWC from the MFIFO Base %x, SPR MADR %x Drain %x", vif1ch.qwc, dmacRegs.rbor.ADDR, spr0ch.madr, DrainADDR);
+	SPR_LOG("VIF MFIFO Requesting %x QWC from the MFIFO Base %x MFIFO Top %x, SPR MADR %x Drain %x", vif1ch.qwc, dmacRegs.rbor.ADDR, dmacRegs.rbor.ADDR + dmacRegs.rbsr.RMSK + 16, spr0ch.madr, DrainADDR);
 	//Calculate what we have in the fifo.
 	if(DrainADDR <= spr0ch.madr)
 	{
@@ -166,7 +166,7 @@ void mfifoVIF1transfer(int qwc)
 			if(vif1ch.chcr.STR == true && !(cpuRegs.interrupt & (1<<DMAC_MFIFO_VIF)))
 			{
 				SPR_LOG("Data Added, Resuming");
-				CPU_INT(DMAC_MFIFO_VIF, 4);
+				CPU_INT(DMAC_MFIFO_VIF, 16);
 			}
 
 			//Apparently this is bad, i guess so, the data is going to memory rather than the FIFO
@@ -261,17 +261,23 @@ void vifMFIFOInterrupt()
 		return;
 	}
 
-	if(GSTransferStatus.PTH2 == STOPPED_MODE && gifRegs.stat.APATH == GIF_APATH2)
+	if(GSTransferStatus.PTH2 == PENDINGSTOP_MODE)
 	{
 		GSTransferStatus.PTH2 = STOPPED_MODE;
-		if(gifRegs.stat.DIR == 0)gifRegs.stat.OPH = false;
-		gifRegs.stat.APATH = GIF_APATH_IDLE;
-		if(gifRegs.stat.P1Q) gsPath1Interrupt();
-		/*gifRegs.stat.APATH = GIF_APATH_IDLE;
-		if(gifRegs.stat.DIR == 0)gifRegs.stat.OPH = false;*/
+
+		if(gifRegs.stat.APATH == GIF_APATH2)
+		{
+			if(gifRegs.stat.DIR == 0)gifRegs.stat.OPH = false;
+			gifRegs.stat.APATH = GIF_APATH_IDLE;
+			if(gifRegs.stat.P1Q) gsPath1Interrupt();
+		}
 	}
 
-	if (schedulepath3msk & 0x10) Vif1MskPath3();
+	if (schedulepath3msk & 0x10) 
+	{
+		MSKPATH3_LOG("Scheduled Path3 Mask Firing on MFIFO VIF");
+		Vif1MskPath3();
+	}
 
 	if(vif1ch.chcr.DIR && CheckPath2GIF(DMAC_MFIFO_VIF) == false) 
 	{
@@ -350,7 +356,7 @@ void vifMFIFOInterrupt()
 	vif1Regs.stat.FQC = min((u16)0x10, vif1ch.qwc);
 	vif1ch.chcr.STR = false;
 	hwDmacIrq(DMAC_VIF1);
-	VIF_LOG("vif mfifo dma end");
+	DMA_LOG("VIF1 MFIFO DMA End");
 
 	vif1Regs.stat.FQC = 0;
 }

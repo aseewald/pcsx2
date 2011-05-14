@@ -99,7 +99,7 @@ void Pcsx2App::OpenProgramLog()
 {
 	if( AppRpc_TryInvokeAsync( &Pcsx2App::OpenProgramLog ) ) return;
 
-	if( ConsoleLogFrame* frame = GetProgramLog() )
+	if( /*ConsoleLogFrame* frame =*/ GetProgramLog() )
 	{
 		//pxAssume( );
 		return;
@@ -668,6 +668,8 @@ protected:
 Pcsx2App::Pcsx2App() 
 	: SysExecutorThread( new SysEvtHandler() )
 {
+	// Warning: Do not delete this comment block! Gettext will parse it to allow
+	// the translation of some wxWidget internal strings. -- greg
 	#if 0
 	{
 		// Some common labels provided by wxWidgets.  wxWidgets translation files are chucked full
@@ -679,14 +681,18 @@ Pcsx2App::Pcsx2App()
 		_("&Cancel");
 		_("&Apply");
 		_("&Next >");
-		_("&Back >");
+		_("< &Back");
 		_("&Back");
 		_("&Finish");
-
+		_("&Yes");
+		_("&No");
+		_("Browse");
 		_("&Save");
 		_("Save &As...");
 		_("&Help");
 		_("&Home");
+
+		_("Show about dialog")
 	}
 	#endif
 

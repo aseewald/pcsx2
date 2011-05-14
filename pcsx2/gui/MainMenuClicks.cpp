@@ -153,6 +153,7 @@ wxWindowID SwapOrReset_Iso( wxWindow* owner, IScopedCoreThread& core_control, co
 		}
 	}
 
+	g_Conf->CdvdSource = CDVDsrc_Iso;
 	SysUpdateIsoSrcFile( isoFilename );
 	if( result == wxID_RESET )
 	{
@@ -162,10 +163,12 @@ wxWindowID SwapOrReset_Iso( wxWindow* owner, IScopedCoreThread& core_control, co
 	else
 	{
 		Console.Indent().WriteLn( "HotSwapping to new ISO src image!" );
-		g_Conf->CdvdSource = CDVDsrc_Iso;
+		//g_Conf->CdvdSource = CDVDsrc_Iso;
 		//CoreThread.ChangeCdvdSource();
 		core_control.AllowResume();
 	}
+
+	GetMainFrame().EnableCdvdPluginSubmenu( g_Conf->CdvdSource == CDVDsrc_Plugin );
 
 	return result;
 }
@@ -213,6 +216,8 @@ wxWindowID SwapOrReset_CdvdSrc( wxWindow* owner, CDVD_SourceType newsrc )
 		core.DisallowResume();
 		sApp.SysExecute( g_Conf->CdvdSource );
 	}
+
+	GetMainFrame().EnableCdvdPluginSubmenu( g_Conf->CdvdSource == CDVDsrc_Plugin );
 
 	return result;
 }
@@ -348,6 +353,11 @@ void MainEmuFrame::_DoBootCdvd()
 	sApp.SysExecute( g_Conf->CdvdSource );
 }
 
+void MainEmuFrame::EnableCdvdPluginSubmenu(bool isEnable)
+{
+	EnableMenuItem( GetPluginMenuId_Settings(PluginId_CDVD), isEnable );
+}
+
 void MainEmuFrame::Menu_CdvdSource_Click( wxCommandEvent &event )
 {
 	CDVD_SourceType newsrc = CDVDsrc_NoDisc;
@@ -395,6 +405,7 @@ void MainEmuFrame::Menu_IsoBrowse_Click( wxCommandEvent &event )
 	AppSaveSettings();		// save the new iso selection; update menus!
 }
 
+
 void MainEmuFrame::Menu_MultitapToggle_Click( wxCommandEvent& )
 {
 	g_Conf->EmuOptions.MultitapPort0_Enabled = GetMenuBar()->IsChecked( MenuId_Config_Multitap0Toggle );
@@ -403,6 +414,18 @@ void MainEmuFrame::Menu_MultitapToggle_Click( wxCommandEvent& )
 	AppSaveSettings();
 
 	//evt.Skip();
+}
+
+void MainEmuFrame::Menu_EnableBackupStates_Click( wxCommandEvent& )
+{
+	g_Conf->EmuOptions.BackupSavestate = GetMenuBar()->IsChecked( MenuId_EnableBackupStates );
+	
+	//without the next line, after toggling this menu-checkbox, the change only applies from the 2nd save and onwards
+	//  (1st save after the toggle keeps the old pre-toggle value)..
+	//  wonder what that means for all the other menu checkboxes which only use AppSaveSettings... (avih)
+	AppApplySettings();
+    
+	AppSaveSettings();
 }
 
 void MainEmuFrame::Menu_EnablePatches_Click( wxCommandEvent& )
@@ -437,6 +460,12 @@ void MainEmuFrame::Menu_OpenELF_Click(wxCommandEvent&)
 
 void MainEmuFrame::Menu_LoadStates_Click(wxCommandEvent &event)
 {
+	if( event.GetId() == MenuId_State_LoadBackup )
+	{
+		States_DefrostCurrentSlotBackup();
+		return;
+	}
+
 	States_SetCurrentSlot( event.GetId() - MenuId_State_Load01 - 1 );
 	States_DefrostCurrentSlot();
 }
@@ -546,13 +575,6 @@ void MainEmuFrame::Menu_ShowConsole(wxCommandEvent &event)
 void MainEmuFrame::Menu_ShowConsole_Stdio(wxCommandEvent &event)
 {
 	g_Conf->EmuOptions.ConsoleToStdio = GetMenuBar()->IsChecked( MenuId_Console_Stdio );
-	AppSaveSettings();
-}
-
-void MainEmuFrame::Menu_PrintCDVD_Info(wxCommandEvent &event)
-{
-	g_Conf->EmuOptions.CdvdVerboseReads = GetMenuBar()->IsChecked( MenuId_CDVD_Info );
-	const_cast<Pcsx2Config&>(EmuConfig).CdvdVerboseReads = g_Conf->EmuOptions.CdvdVerboseReads;		// read-only in core thread, so it's safe to modify.
 	AppSaveSettings();
 }
 

@@ -44,6 +44,8 @@ namespace Panels
 		FoldersEnum_t		m_FolderId;
 		wxDirPickerCtrl*	m_pickerCtrl;
 		pxCheckBox*			m_checkCtrl;
+		wxTextCtrl*			m_textCtrl;
+		wxButton*			b_explore;
 
 	public:
 		DirPickerPanel( wxWindow* parent, FoldersEnum_t folderid, const wxString& label, const wxString& dialogLabel );
@@ -68,6 +70,8 @@ namespace Panels
 
 	protected:
 		void Init( FoldersEnum_t folderid, const wxString& dialogLabel, bool isCompact );
+		void InitForPortableMode( const wxString& normalized );
+		void InitForRegisteredMode( const wxString& normalized, const wxString& dialogLabel, bool isCompact );
 
 		void UseDefaultPath_Click( wxCommandEvent &event );
 		void Explore_Click( wxCommandEvent &event );
@@ -171,6 +175,7 @@ namespace Panels
 	protected:
 		pxRadioPanel*		m_panel_RecEE;
 		pxRadioPanel*		m_panel_RecIOP;
+		pxCheckBox*			m_check_EECacheEnable;
 		AdvancedOptionsFPU*	m_advancedOptsFpu;
 
 	public:
@@ -259,11 +264,23 @@ namespace Panels
 	protected:
 		wxComboBox*		m_combo_AspectRatio;
 
+		wxTextCtrl*		m_text_Zoom;
+
 		pxCheckBox*		m_check_CloseGS;
 		pxCheckBox*		m_check_SizeLock;
 		pxCheckBox*		m_check_VsyncEnable;
+		pxCheckBox*		m_check_ManagedVsync;
 		pxCheckBox*		m_check_Fullscreen;
-		pxCheckBox*		m_check_ExclusiveFS;
+
+		//Exclusive mode is currently not used (true for svn r4399).
+		//PCSX2 has partial infrastructure for it:
+		//  - The plugin APIs have GSsetExclusive.
+		//  - GSdx seem to support it (it supports the API and has implementation), but I don't know if it ever got called.
+		//  - BUT, the configuration (AppConfig, and specifically GSWindowOptions) do NOT seem to have a place to store this value,
+		//         and PCSX2's code doesn't seem to use this API anywhere. So, no exclusive mode for now.
+		//           - avih
+		//pxCheckBox*		m_check_ExclusiveFS;
+
 		pxCheckBox*		m_check_HideMouse;
 		pxCheckBox*		m_check_DclickFullscreen;
 
@@ -318,7 +335,6 @@ namespace Panels
 		pxCheckBox*		m_check_fastCDVD;
 		pxCheckBox*		m_check_vuFlagHack;
 		pxCheckBox*		m_check_vuBlockHack;
-		pxCheckBox*		m_check_vuMinMax;
 
 	public:
 		virtual ~SpeedHacksPanel() throw() {}

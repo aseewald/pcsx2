@@ -27,7 +27,7 @@ static const int LATENCY_MAX = 750;
 static const int LATENCY_MIN = 50;
 
 // MIXING
-int Interpolation = 1;
+int Interpolation = 4;
 /* values:
 		0: no interpolation (use nearest)
 		1. linear interpolation
@@ -37,6 +37,7 @@ int Interpolation = 1;
 */
 int ReverbBoost = 0;
 bool EffectsDisabled = false;
+float FinalVolume;
 bool postprocess_filter_enabled = 1;
 
 // OUTPUT
@@ -59,12 +60,13 @@ int numSpeakers = 0;
 
 void ReadSettings()
 {
-	Interpolation = CfgReadInt( L"MIXING",L"Interpolation", 1 );
+	Interpolation = CfgReadInt( L"MIXING",L"Interpolation", 4 );
 	ReverbBoost = CfgReadInt( L"MIXING",L"Reverb_Boost", 0 );
 
 	SynchMode = CfgReadInt( L"OUTPUT", L"Synch_Mode", 0);
 	EffectsDisabled = CfgReadBool( L"MIXING", L"Disable_Effects", false );
-
+	FinalVolume = ((float)CfgReadInt( L"MIXING", L"FinalVolume", 100 )) / 100;
+		if ( FinalVolume > 1.0f) FinalVolume = 1.0f;
 	numSpeakers = CfgReadInt( L"OUTPUT", L"XAudio2_SpeakerConfiguration", 0);
 	SndOutLatencyMS = CfgReadInt(L"OUTPUT",L"Latency", 150);
 
@@ -109,6 +111,7 @@ void WriteSettings()
 	CfgWriteInt(L"MIXING",L"Reverb_Boost",ReverbBoost);
 
 	CfgWriteBool(L"MIXING",L"Disable_Effects",EffectsDisabled);
+	CfgWriteInt(L"MIXING",L"FinalVolume",(int)(FinalVolume*100));
 
 	CfgWriteStr(L"OUTPUT",L"Output_Module", mods[OutputModule]->GetIdent() );
 	CfgWriteInt(L"OUTPUT",L"Latency", SndOutLatencyMS);
@@ -143,10 +146,10 @@ BOOL CALLBACK ConfigProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 		{
 			SendDialogMsg( hWnd, IDC_INTERPOLATE, CB_RESETCONTENT,0,0 );
 			SendDialogMsg( hWnd, IDC_INTERPOLATE, CB_ADDSTRING,0,(LPARAM) L"0 - Nearest (fastest/bad quality)" );
-			SendDialogMsg( hWnd, IDC_INTERPOLATE, CB_ADDSTRING,0,(LPARAM) L"1 - Linear (simple/nice)" );
-			SendDialogMsg( hWnd, IDC_INTERPOLATE, CB_ADDSTRING,0,(LPARAM) L"2 - Cubic (slower/good highs)" );
-			SendDialogMsg( hWnd, IDC_INTERPOLATE, CB_ADDSTRING,0,(LPARAM) L"3 - Hermite (slower/better highs)" );
-			SendDialogMsg( hWnd, IDC_INTERPOLATE, CB_ADDSTRING,0,(LPARAM) L"4 - Catmull-Rom (slow/hq)" );
+			SendDialogMsg( hWnd, IDC_INTERPOLATE, CB_ADDSTRING,0,(LPARAM) L"1 - Linear (simple/okay sound)" );
+			SendDialogMsg( hWnd, IDC_INTERPOLATE, CB_ADDSTRING,0,(LPARAM) L"2 - Cubic (artificial highs)" );
+			SendDialogMsg( hWnd, IDC_INTERPOLATE, CB_ADDSTRING,0,(LPARAM) L"3 - Hermite (better highs)" );
+			SendDialogMsg( hWnd, IDC_INTERPOLATE, CB_ADDSTRING,0,(LPARAM) L"4 - Catmull-Rom (PS2-like/slow)" );
 			SendDialogMsg( hWnd, IDC_INTERPOLATE, CB_SETCURSEL,Interpolation,0 );
 
 			SendDialogMsg( hWnd, IDC_REVERB_BOOST, CB_RESETCONTENT,0,0 );
@@ -192,6 +195,7 @@ BOOL CALLBACK ConfigProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 			EnableWindow( GetDlgItem( hWnd, IDC_OPEN_CONFIG_DEBUG ), DebugEnabled );
 
 			SET_CHECK(IDC_EFFECTS_DISABLE,	EffectsDisabled);
+			//FinalVolume;
 			SET_CHECK(IDC_DEBUG_ENABLE,		DebugEnabled);
 			SET_CHECK(IDC_DSP_ENABLE,		dspPluginEnabled);
 		}
@@ -248,6 +252,7 @@ BOOL CALLBACK ConfigProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 				break;
 
 				HANDLE_CHECK(IDC_EFFECTS_DISABLE,EffectsDisabled);
+				//FinalVolume;
 				HANDLE_CHECK(IDC_DSP_ENABLE,dspPluginEnabled);
 				
 				// Fixme : Eh, how to update this based on drop list selections? :p

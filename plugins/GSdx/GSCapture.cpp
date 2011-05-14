@@ -19,9 +19,10 @@
  *
  */
 
-#include "StdAfx.h"
+#include "stdafx.h"
 #include "GSCapture.h"
-#include "GSVector.h"
+
+#ifdef _WINDOWS
 
 //
 // GSSource
@@ -63,7 +64,7 @@ GSSource : public CBaseFilter, private CCritSec, public IGSSource
 		vector<CMediaType> m_mts;
 
 	public:
-		GSSourceOutputPin(const GSVector2i& size, REFERENCE_TIME atpf, CBaseFilter* pFilter, CCritSec* pLock, HRESULT& hr)
+		GSSourceOutputPin(const GSVector2i& size, REFERENCE_TIME atpf, CBaseFilter* pFilter, CCritSec* pLock, HRESULT& hr, int m_colorspace)
 			: CBaseOutputPin("GSSourceOutputPin", pFilter, pLock, &hr, L"Output")
 			, m_size(size)
 		{
@@ -78,8 +79,24 @@ GSSource : public CBaseFilter, private CCritSec, public IGSSource
 			vih.bmiHeader.biWidth = m_size.x;
 			vih.bmiHeader.biHeight = m_size.y;
 
-			// YUY2
+			// RGB32 (priority)
+			if ( m_colorspace == 1 )
+			{
+			mt.subtype = MEDIASUBTYPE_RGB32;
+			mt.lSampleSize = m_size.x * m_size.y * 4;
 
+			vih.bmiHeader.biCompression = BI_RGB;
+			vih.bmiHeader.biPlanes = 1;
+			vih.bmiHeader.biBitCount = 32;
+			vih.bmiHeader.biSizeImage = m_size.x * m_size.y * 4;
+			mt.SetFormat((uint8*)&vih, sizeof(vih));
+
+			m_mts.push_back(mt);
+			}
+
+			// YUY2
+			else
+			{
 			mt.subtype = MEDIASUBTYPE_YUY2;
 			mt.lSampleSize = m_size.x * m_size.y * 2;
 
@@ -90,6 +107,7 @@ GSSource : public CBaseFilter, private CCritSec, public IGSSource
 			mt.SetFormat((uint8*)&vih, sizeof(vih));
 
 			m_mts.push_back(mt);
+			}
 
 			// RGB32
 
@@ -171,14 +189,14 @@ GSSource : public CBaseFilter, private CCritSec, public IGSSource
 
 public:
 
-	GSSource(int w, int h, int fps, IUnknown* pUnk, HRESULT& hr)
+	GSSource(int w, int h, int fps, IUnknown* pUnk, HRESULT& hr, int m_colorspace)
 		: CBaseFilter(NAME("GSSource"), pUnk, this, __uuidof(this), &hr)
 		, m_output(NULL)
 		, m_size(w, h)
 		, m_atpf(10000000i64 / fps)
 		, m_now(0)
 	{
-		m_output = new GSSourceOutputPin(m_size, m_atpf, this, this, hr);
+		m_output = new GSSourceOutputPin(m_size, m_atpf, this, this, hr, m_colorspace);
 
 		// FIXME
 		if(fps == 60) m_atpf = 166834; // = 10000000i64 / 59.94
@@ -248,10 +266,15 @@ public:
 			GSVector4 ys(0.257f, 0.504f, 0.098f, 0.0f);
 			GSVector4 us(-0.148f / 2, -0.291f / 2, 0.439f / 2, 0.0f);
 			GSVector4 vs(0.439f / 2, -0.368f / 2, -0.071f / 2, 0.0f);
-			const GSVector4 offset(16, 128, 16, 128);
 
-			if (!rgba)
-				ys = ys.zyxw(), us = us.zyxw(), vs = vs.zyxw();
+			if(!rgba)
+			{
+				ys = ys.zyxw();
+				us = us.zyxw();
+				vs = vs.zyxw();
+			}
+
+			const GSVector4 offset(16, 128, 16, 128);
 
 			for(int j = 0; j < h; j++, dst += dstpitch, src += srcpitch)
 			{
@@ -260,8 +283,8 @@ public:
 
 				for(int i = 0; i < w; i += 2)
 				{
-					GSVector4 c0 = GSVector4(s[i + 0]);
-					GSVector4 c1 = GSVector4(s[i + 1]);
+					GSVector4 c0 = GSVector4::rgba32(s[i + 0]);
+					GSVector4 c1 = GSVector4::rgba32(s[i + 1]);
 					GSVector4 c2 = c0 + c1;
 
 					GSVector4 lo = (c0 * ys).hadd(c2 * us);
@@ -335,20 +358,6 @@ public:
 	}
 };
 
-//
-// GSCapture
-//
-
-GSCapture::GSCapture()
-	: m_capturing(false)
-{
-}
-
-GSCapture::~GSCapture()
-{
-	EndCapture();
-}
-
 #define BeginEnumPins(pBaseFilter, pEnumPins, pPin) \
 	{CComPtr<IEnumPins> pEnumPins; \
 	if(pBaseFilter && SUCCEEDED(pBaseFilter->EnumPins(&pEnumPins))) \
@@ -378,13 +387,31 @@ static IPin* GetFirstPin(IBaseFilter* pBF, PIN_DIRECTION dir)
 	return(NULL);
 }
 
+#endif
+
+//
+// GSCapture
+//
+
+GSCapture::GSCapture()
+	: m_capturing(false)
+{
+}
+
+GSCapture::~GSCapture()
+{
+	EndCapture();
+}
+
 bool GSCapture::BeginCapture(int fps)
 {
-	CAutoLock cAutoLock(this);
+	GSAutoLock lock(this);
 
 	ASSERT(fps != 0);
 
 	EndCapture();
+
+#ifdef _WINDOWS
 
 	GSCaptureDlg dlg;
 
@@ -392,6 +419,8 @@ bool GSCapture::BeginCapture(int fps)
 
 	m_size.x = (dlg.m_width + 7) & ~7;
 	m_size.y = (dlg.m_height + 7) & ~7;
+
+	m_colorspace = dlg.m_colorspace;
 
 	wstring fn(dlg.m_filename.begin(), dlg.m_filename.end());
 
@@ -410,7 +439,7 @@ bool GSCapture::BeginCapture(int fps)
 		return false;
 	}
 
-	m_src = new GSSource(m_size.x, m_size.y, fps, NULL, hr);
+	m_src = new GSSource(m_size.x, m_size.y, fps, NULL, hr, m_colorspace);
 
 	if (dlg.m_enc==0)
 	{
@@ -464,6 +493,8 @@ bool GSCapture::BeginCapture(int fps)
 
 	CComQIPtr<IGSSource>(m_src)->DeliverNewSegment();
 
+#endif
+
 	m_capturing = true;
 
 	return true;
@@ -471,7 +502,7 @@ bool GSCapture::BeginCapture(int fps)
 
 bool GSCapture::DeliverFrame(const void* bits, int pitch, bool rgba)
 {
-	CAutoLock cAutoLock(this);
+	GSAutoLock lock(this);
 
 	if(bits == NULL || pitch == 0)
 	{
@@ -480,6 +511,8 @@ bool GSCapture::DeliverFrame(const void* bits, int pitch, bool rgba)
 		return false;
 	}
 
+#ifdef _WINDOWS
+
 	if(m_src)
 	{
 		CComQIPtr<IGSSource>(m_src)->DeliverFrame(bits, pitch, rgba);
@@ -487,12 +520,16 @@ bool GSCapture::DeliverFrame(const void* bits, int pitch, bool rgba)
 		return true;
 	}
 
+#endif
+
 	return false;
 }
 
 bool GSCapture::EndCapture()
 {
-	CAutoLock cAutoLock(this);
+	GSAutoLock lock(this);
+
+#ifdef _WINDOWS
 
 	if(m_src)
 	{
@@ -507,6 +544,8 @@ bool GSCapture::EndCapture()
 
 		m_graph = NULL;
 	}
+
+#endif
 
 	m_capturing = false;
 

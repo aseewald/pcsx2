@@ -32,6 +32,8 @@ Panels::GSWindowSettingsPanel::GSWindowSettingsPanel( wxWindow* parent )
 		_("Widescreen (16:9)")
 	};
 
+	m_text_Zoom = CreateNumericalTextCtrl( this, 5 );
+
 	m_combo_AspectRatio	= new wxComboBox( this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize,
 		ArraySize(aspect_ratio_labels), aspect_ratio_labels, wxCB_READONLY );
 
@@ -43,15 +45,32 @@ Panels::GSWindowSettingsPanel::GSWindowSettingsPanel( wxWindow* parent )
 
 	m_check_SizeLock	= new pxCheckBox( this, _("Disable window resize border") );
 	m_check_HideMouse	= new pxCheckBox( this, _("Always hide mouse cursor") );
-	m_check_CloseGS		= new pxCheckBox( this, _("Hide window on suspend") );
+	m_check_CloseGS		= new pxCheckBox( this, _("Hide window when paused") );
 	m_check_Fullscreen	= new pxCheckBox( this, _("Default to fullscreen mode on open") );
-	m_check_VsyncEnable	= new pxCheckBox( this, _("Wait for vsync on refresh") );
-	m_check_DclickFullscreen = new pxCheckBox( this, _("Double-click Toggles Full-Screen mode") );
-	m_check_ExclusiveFS = new pxCheckBox( this, _("Use exclusive fullscreen mode (if available)") );
+	m_check_VsyncEnable	= new pxCheckBox( this, _("Wait for Vsync on refresh") );
+	m_check_ManagedVsync = new pxCheckBox( this, _("Dynamically toggle Vsync depending on frame rate (read tooltip!)") );
+	m_check_DclickFullscreen = new pxCheckBox( this, _("Double-click toggles fullscreen mode") );
+	//m_check_ExclusiveFS = new pxCheckBox( this, _("Use exclusive fullscreen mode (if available)") );
+
+	m_text_Zoom->SetToolTip( pxEt( "!ContextTip:Window:Zoom",
+		L"Zoom = 100: Fit the entire image to the window without any cropping.\n"
+		L"Above/Below 100: Zoom In/Out\n"
+		L"0: Automatic-Zoom-In untill the black-bars are gone (Aspect ratio is kept, some of the image goes out of screen).\n"
+		L"  NOTE: Some games draw their own black-bars, which will not be removed with '0'.\n\n"
+		L"Keyboard: CTRL + NUMPAD-PLUS: Zoom-In, CTRL + NUMPAD-MINUS: Zoom-Out, CTRL + NUMPAD-*: Toggle 100/0"
+	) );
 
 	m_check_VsyncEnable->SetToolTip( pxEt( "!ContextTip:Window:Vsync",
 		L"Vsync eliminates screen tearing but typically has a big performance hit. "
 		L"It usually only applies to fullscreen mode, and may not work with all GS plugins."
+	) );
+	
+	m_check_ManagedVsync->SetToolTip( pxEt( "!ContextTip:Window:ManagedVsync",
+		L"Enables Vsync when the framerate is exactly at full speed. "
+		L"Should it fall below that, Vsync gets disabled to avoid further performance penalties. "
+		L"Note: This currently only works well with GSdx as GS plugin and with it configured to use DX10/11 hardware rendering. "
+		L"Any other plugin or rendering mode will either ignore it or produce a black frame that blinks whenever the mode switches. "
+		L"It also requires Vsync to be enabled."
 	) );
 
 	m_check_HideMouse->SetToolTip( pxEt( "!ContextTip:Window:HideMouse",
@@ -65,14 +84,15 @@ Panels::GSWindowSettingsPanel::GSWindowSettingsPanel( wxWindow* parent )
 		L"You can still toggle fullscreen display at any time using alt-enter."
 	) );
 
+/*
 	m_check_ExclusiveFS->SetToolTip( pxEt( "!ContextTip:Window:FullscreenExclusive",
 		L"Fullscreen Exclusive Mode may look better on older CRTs and might be a little faster on older video cards, "
 		L"but typically can lead to memory leaks or random crashes when entering/leaving fullscreen mode."
 	) );
-
+*/
 	m_check_CloseGS->SetToolTip( pxEt( "!ContextTip:Window:HideGS",
 		L"Completely closes the often large and bulky GS window when pressing "
-		L"ESC or suspending the emulator."
+		L"ESC or pausing the emulator."
 	) );
 
 	// ----------------------------------------------------------------------------
@@ -92,6 +112,10 @@ Panels::GSWindowSettingsPanel::GSWindowSettingsPanel( wxWindow* parent )
 	s_AspectRatio += Label(_("Custom Window Size:"))| pxMiddle;
 	s_AspectRatio += s_customsize					| pxAlignRight;
 
+	s_AspectRatio	+= Label(_("Zoom:"))			| StdExpand();
+	s_AspectRatio	+= m_text_Zoom;
+
+
 	*this += s_AspectRatio				| StdExpand();
 	*this += m_check_SizeLock;
 	*this += m_check_HideMouse;
@@ -99,10 +123,13 @@ Panels::GSWindowSettingsPanel::GSWindowSettingsPanel( wxWindow* parent )
 	*this += new wxStaticLine( this )	| StdExpand();
 
 	*this += m_check_Fullscreen;
-	*this += m_check_DclickFullscreen;;
+	*this += m_check_DclickFullscreen;
 
-	*this += m_check_ExclusiveFS;
+	//*this += m_check_ExclusiveFS;
+	*this += new wxStaticLine( this )	| StdExpand();
+
 	*this += m_check_VsyncEnable;
+	*this += m_check_ManagedVsync;
 
 	wxBoxSizer* centerSizer = new wxBoxSizer( wxVERTICAL );
 	*centerSizer += GetSizer()	| pxCenter;
@@ -120,16 +147,15 @@ void Panels::GSWindowSettingsPanel::ApplyConfigToGui( AppConfig& configToApply, 
 {
 	const AppConfig::GSWindowOptions& conf( configToApply.GSWindow );
 
-	if( !(flags & AppConfig::APPLY_FLAG_FROM_PRESET) )	//Presets don't control these: only change if config doesn't come from preset.
-	{
+	if( !(flags & AppConfig::APPLY_FLAG_FROM_PRESET) )	
+	{//Presets don't control these values
 		m_check_CloseGS		->SetValue( conf.CloseOnEsc );
 		m_check_Fullscreen	->SetValue( conf.DefaultToFullscreen );
 		m_check_HideMouse	->SetValue( conf.AlwaysHideMouse );
 		m_check_SizeLock	->SetValue( conf.DisableResizeBorders );
 
 		m_combo_AspectRatio	->SetSelection( (int)conf.AspectRatio );
-
-		m_check_VsyncEnable	->SetValue( configToApply.EmuOptions.GS.VsyncEnable );
+		m_text_Zoom			->ChangeValue( conf.Zoom.ToString() );
 
 		m_check_DclickFullscreen ->SetValue ( conf.IsToggleFullscreenOnDoubleClick );
 
@@ -137,7 +163,11 @@ void Panels::GSWindowSettingsPanel::ApplyConfigToGui( AppConfig& configToApply, 
 		m_text_WindowHeight	->ChangeValue( wxsFormat( L"%d", conf.WindowSize.GetHeight() ) );
 	}
 
-	m_check_VsyncEnable->Enable(!configToApply.EnablePresets);
+	m_check_VsyncEnable->SetValue( configToApply.EmuOptions.GS.VsyncEnable );
+	m_check_VsyncEnable->Enable  ( !configToApply.EnablePresets );//grayed-out when presets are enabled
+
+	m_check_ManagedVsync->SetValue( configToApply.EmuOptions.GS.ManagedVsync );
+	m_check_ManagedVsync->Enable  ( !configToApply.EnablePresets );//grayed-out when presets are enabled
 }
 
 void Panels::GSWindowSettingsPanel::Apply()
@@ -151,12 +181,14 @@ void Panels::GSWindowSettingsPanel::Apply()
 	appconf.DisableResizeBorders	= m_check_SizeLock	->GetValue();
 
 	appconf.AspectRatio		= (AspectRatioType)m_combo_AspectRatio->GetSelection();
+	appconf.Zoom			= Fixed100::FromString( m_text_Zoom->GetValue() );
 
 	gsconf.VsyncEnable		= m_check_VsyncEnable->GetValue();
+	gsconf.ManagedVsync		= m_check_ManagedVsync->GetValue();
 
 	appconf.IsToggleFullscreenOnDoubleClick = m_check_DclickFullscreen->GetValue();
 
-	long xr, yr;
+	long xr, yr = 1;
 
 	if( !m_text_WindowWidth->GetValue().ToLong( &xr ) || !m_text_WindowHeight->GetValue().ToLong( &yr ) )
 		throw Exception::CannotApplySettings( this )

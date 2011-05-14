@@ -15,6 +15,7 @@
 # control C flags             : -DUSER_CMAKE_C_FLAGS="cflags"
 # control C++ flags           : -DUSER_CMAKE_CXX_FLAGS="cxxflags"
 # control link flags          : -DUSER_CMAKE_LD_FLAGS="ldflags"
+# Special mode to ease package: -DPACKAGE_MODE=TRUE
 #-------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
@@ -119,11 +120,19 @@ endif(DEFINED USER_CMAKE_CXX_FLAGS)
 string(STRIP "${CMAKE_CXX_FLAGS} -m32 -msse -msse2 -march=i686 -pthread" CMAKE_CXX_FLAGS)
 
 #-------------------------------------------------------------------------------
+# By default use the standard compilation mode
+#-------------------------------------------------------------------------------
+if(NOT DEFINED PACKAGE_MODE)
+    set(PACKAGE_MODE FALSE)
+endif(NOT DEFINED PACKAGE_MODE)
+
+#-------------------------------------------------------------------------------
 # Select library system vs 3rdparty
 #-------------------------------------------------------------------------------
 if(FORCE_INTERNAL_ALL)
     set(FORCE_INTERNAL_SOUNDTOUCH TRUE)
     set(FORCE_INTERNAL_ZLIB TRUE)
+    set(FORCE_INTERNAL_SDL TRUE)
 endif(FORCE_INTERNAL_ALL)
 
 if(NOT DEFINED FORCE_INTERNAL_SOUNDTOUCH)
@@ -137,6 +146,10 @@ endif(NOT DEFINED FORCE_INTERNAL_SOUNDTOUCH)
 if(NOT DEFINED FORCE_INTERNAL_ZLIB)
     set(FORCE_INTERNAL_ZLIB FALSE)
 endif(NOT DEFINED FORCE_INTERNAL_ZLIB)
+
+if(NOT DEFINED FORCE_INTERNAL_SDL)
+    set(FORCE_INTERNAL_SDL FALSE)
+endif(NOT DEFINED FORCE_INTERNAL_SDL)
 
 #-------------------------------------------------------------------------------
 # Select nvidia cg shader api by default

@@ -31,6 +31,7 @@
 
 DEFINE_EVENT_TYPE( pxEvt_ApplySettings )
 DEFINE_EVENT_TYPE( pxEvt_SetSettingsPage )
+DEFINE_EVENT_TYPE( pxEvt_SomethingChanged )
 
 using namespace Panels;
 
@@ -165,6 +166,8 @@ Dialogs::BaseConfigurationDialog::BaseConfigurationDialog( wxWindow* parent, con
 	ConnectSomethingChanged( SPINCTRL_UPDATED );
 	ConnectSomethingChanged( SLIDER_UPDATED );
 	ConnectSomethingChanged( DIRPICKER_CHANGED );
+	
+	Connect( pxEvt_SomethingChanged, wxCommandEventHandler( BaseConfigurationDialog::OnSomethingChanged ) );
 }
 
 void Dialogs::BaseConfigurationDialog::AddListbook( wxSizer* sizer )
@@ -184,6 +187,7 @@ void Dialogs::BaseConfigurationDialog::AddOkCancel( wxSizer* sizer )
 {
 	_parent::AddOkCancel( sizer, true );
 	if( wxWindow* apply = FindWindow( wxID_APPLY ) ) apply->Disable();
+	SomethingChanged_StateModified_IsChanged();
 
 	wxBitmapButton& screenshotButton( *new wxBitmapButton( this, wxID_SAVE, EmbeddedImage<res_ButtonIcon_Camera>().Get() ) );
 	screenshotButton.SetToolTip( _("Saves a snapshot of this settings panel to a PNG file.") );
@@ -214,6 +218,7 @@ void Dialogs::BaseConfigurationDialog::OnSetSettingsPage( wxCommandEvent& evt )
 void Dialogs::BaseConfigurationDialog::SomethingChanged()
 {
 	if( wxWindow* apply = FindWindow( wxID_APPLY ) ) apply->Enable();
+	SomethingChanged_StateModified_IsChanged();
 }
 
 void Dialogs::BaseConfigurationDialog::OnSomethingChanged( wxCommandEvent& evt )
@@ -247,6 +252,7 @@ void Dialogs::BaseConfigurationDialog::OnOk_Click( wxCommandEvent& evt )
 	if( m_ApplyState.ApplyAll() )
 	{
 		if( wxWindow* apply = FindWindow( wxID_APPLY ) ) apply->Disable();
+		SomethingChanged_StateModified_IsChanged();
 		if( m_listbook ) GetConfSettingsTabName() = m_labels[m_listbook->GetSelection()];
 		AppSaveSettings();
 		disabler.DetachAll();
@@ -269,6 +275,8 @@ void Dialogs::BaseConfigurationDialog::OnApply_Click( wxCommandEvent& evt )
 
 	if( m_listbook ) GetConfSettingsTabName() = m_labels[m_listbook->GetSelection()];
 	AppSaveSettings();
+	
+	SomethingChanged_StateModified_IsChanged();
 }
 
 //avih: FIXME: ? for some reason, this OnCancel_Click is called twice when clicking cancel or closing the dialog (Jake's code?).

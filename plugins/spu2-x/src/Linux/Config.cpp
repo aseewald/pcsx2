@@ -32,7 +32,7 @@ int AutoDMAPlayRate[2] = {0,0};
 // Default settings.
 
 // MIXING
-int Interpolation = 1;
+int Interpolation = 4;
 /* values:
 		0: no interpolation (use nearest)
 		1. linear interpolation
@@ -42,6 +42,7 @@ int Interpolation = 1;
 */
 
 bool EffectsDisabled = false;
+float FinalVolume;
 int ReverbBoost = 0;
 bool postprocess_filter_enabled = 1;
 bool _visual_debug_enabled = false; // windows only feature
@@ -64,8 +65,10 @@ void ReadSettings()
 		return;
 	}
 	
-	Interpolation = CfgReadInt( L"MIXING",L"Interpolation", 1 );
+	Interpolation = CfgReadInt( L"MIXING",L"Interpolation", 4 );
 	EffectsDisabled = CfgReadBool( L"MIXING", L"Disable_Effects", false );
+	FinalVolume = ((float)CfgReadInt( L"MIXING", L"FinalVolume", 100 )) / 100;
+		if ( FinalVolume > 1.0f) FinalVolume = 1.0f;
 	ReverbBoost = CfgReadInt( L"MIXING",L"Reverb_Boost", 0 );
 
 	wxString temp;
@@ -107,6 +110,7 @@ void WriteSettings()
 	
 	CfgWriteInt(L"MIXING",L"Interpolation",Interpolation);
 	CfgWriteBool(L"MIXING",L"Disable_Effects",EffectsDisabled);
+	CfgWriteInt(L"MIXING",L"FinalVolume",(int)(FinalVolume*100));
 	CfgWriteInt(L"MIXING",L"Reverb_Boost",ReverbBoost);
 
 	CfgWriteStr(L"OUTPUT",L"Output_Module", mods[OutputModule]->GetIdent() );
@@ -163,10 +167,10 @@ void DisplayDialog()
     int_label = gtk_label_new ("Interpolation:");
     int_box = gtk_combo_box_new_text ();
     gtk_combo_box_append_text(GTK_COMBO_BOX(int_box), "0 - Nearest (fastest/bad quality)");
-    gtk_combo_box_append_text(GTK_COMBO_BOX(int_box), "1 - Linear (simple/nice)");
-    gtk_combo_box_append_text(GTK_COMBO_BOX(int_box), "2 - Cubic (slower/good highs)");
-    gtk_combo_box_append_text(GTK_COMBO_BOX(int_box), "3 - Hermite (slower/better highs)");
-    gtk_combo_box_append_text(GTK_COMBO_BOX(int_box), "4 - Catmull-Rom (slow/hq)");
+    gtk_combo_box_append_text(GTK_COMBO_BOX(int_box), "1 - Linear (simple/okay sound)");
+    gtk_combo_box_append_text(GTK_COMBO_BOX(int_box), "2 - Cubic (artificial highs)");
+    gtk_combo_box_append_text(GTK_COMBO_BOX(int_box), "3 - Hermite (better highs)");
+    gtk_combo_box_append_text(GTK_COMBO_BOX(int_box), "4 - Catmull-Rom (PS2-like/slow)");
     gtk_combo_box_set_active(GTK_COMBO_BOX(int_box), Interpolation);
 
     effects_check = gtk_check_button_new_with_label("Disable Effects Processing");
@@ -244,6 +248,7 @@ void DisplayDialog()
 	gtk_container_add(GTK_CONTAINER(main_box), output_frame);
 
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(effects_check), EffectsDisabled);
+	//FinalVolume;
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(debug_check), DebugEnabled);
 
     gtk_container_add (GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), main_frame);
@@ -261,8 +266,9 @@ void DisplayDialog()
     		Interpolation = gtk_combo_box_get_active(GTK_COMBO_BOX(int_box));
 
     	EffectsDisabled = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(effects_check));
-
-    	if (gtk_combo_box_get_active(GTK_COMBO_BOX(reverb_box)) != -1)
+		//FinalVolume;
+    	
+		if (gtk_combo_box_get_active(GTK_COMBO_BOX(reverb_box)) != -1)
 			ReverbBoost = gtk_combo_box_get_active(GTK_COMBO_BOX(reverb_box));
 
     	if (gtk_combo_box_get_active(GTK_COMBO_BOX(mod_box)) != -1)

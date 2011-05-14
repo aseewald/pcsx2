@@ -83,6 +83,12 @@ bool ApplyStateStruct::ApplyPage( int pageid )
 
 		// Note: apply first, then save -- in case the apply fails.
 
+		if( !PathDefs::GetSettings().Exists() )
+			PathDefs::GetSettings().Mkdir();//create the inis folder such that the plugins can be configured at the first time wizard.
+
+		if( !PathDefs::GetBios().Exists() )
+			PathDefs::GetBios().Mkdir();//create the bios folder such that it can be opened at the first time wizard without an error message.
+
 		AppApplySettings( &confcopy );
 	}
 	catch( Exception::CannotApplySettings& ex )
@@ -198,6 +204,13 @@ void BaseApplicableConfigPanel::OnSettingsApplied( wxCommandEvent& evt )
 
 void BaseApplicableConfigPanel::AppStatusEvent_OnSettingsApplied() {}
 
+void BaseApplicableConfigPanel::SomethingChanged()
+{
+	wxCommandEvent change(pxEvt_SomethingChanged);
+	AddPendingEvent(change);
+}
+
+
 BaseApplicableConfigPanel_SpecificConfig::BaseApplicableConfigPanel_SpecificConfig(wxWindow* parent, wxOrientation orient)
 	: BaseApplicableConfigPanel( parent, orient )
 {
@@ -207,4 +220,5 @@ BaseApplicableConfigPanel_SpecificConfig::BaseApplicableConfigPanel_SpecificConf
 	: BaseApplicableConfigPanel( parent, orient, staticLabel )
 {
 }
+
 

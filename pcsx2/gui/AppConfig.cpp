@@ -93,17 +93,22 @@ namespace PathDefs
 
 	// Specifies the root folder for the application install.
 	// (currently it's the CWD, but in the future I intend to move all binaries to a "bin"
-	// sub folder, in which case the approot will become "..")
+	// sub folder, in which case the approot will become "..") [- Air?]
+
+	//The installer installs the folders which are relative to AppRoot (that's plugins/themes/langs)
+	//  relative to the exe folder, and not relative to cwd. So the exe should be default AppRoot. - avih
 	const wxDirName& AppRoot()
 	{
 		AffinityAssert_AllowFrom_MainUI();
-
-		if (UserLocalDataMode == UserLocalFolder_System)
+/*
+		if (InstallationMode == InstallMode_Registered)
 		{
 			static const wxDirName cwdCache( (wxDirName)Path::Normalize(wxGetCwd()) );
 			return cwdCache;
 		}
-		else if (UserLocalDataMode == UserLocalFolder_Portable)
+		else if (InstallationMode == InstallMode_Portable)
+*/		
+		if (InstallationMode == InstallMode_Registered || InstallationMode == InstallMode_Portable)
 		{
 			static const wxDirName appCache( (wxDirName)
 				wxFileName(wxStandardPaths::Get().GetExecutablePath()).GetPath() );
@@ -376,7 +381,7 @@ bool AppConfig::FullpathMatchTest( PluginsEnum_t pluginId, const wxString& cmpto
 
 wxDirName GetLogFolder()
 {
-	return UseDefaultLogFolder ? PathDefs::GetLogs() : LogFolder;
+	return g_Conf->Folders.IsDefault( FolderId_Logs ) ? PathDefs::Get(FolderId_Logs) : g_Conf->Folders[FolderId_Logs];
 }
 
 wxDirName GetSettingsFolder()
@@ -404,6 +409,11 @@ wxString AppConfig::FullpathToBios() const				{ return Path::Combine( Folders.Bi
 wxString AppConfig::FullpathToMcd( uint slot ) const
 {
 	return Path::Combine( Folders.MemoryCards, Mcd[slot].Filename );
+}
+
+bool IsPortable()
+{
+	return InstallationMode==InstallMode_Portable;
 }
 
 AppConfig::AppConfig()
@@ -444,13 +454,23 @@ AppConfig::AppConfig()
 // ------------------------------------------------------------------------
 void App_LoadSaveInstallSettings( IniInterface& ini )
 {
+	// Portable installs of PCSX2 should not save any of the following information to
+	// the INI file.  Only the Run First Time Wizard option is saved, and that's done
+	// from EstablishAppUserMode code.  All other options have assumed (fixed) defaults in
+	// portable mode which cannot be changed/saved.
+
+	// Note: Settins are still *loaded* from portable.ini, in case the user wants to do
+	// low-level overrides of the default behavior of portable mode installs.
+
+	if (ini.IsSaving() && (InstallationMode == InstallMode_Portable)) return;
+
 	static const wxChar* DocsFolderModeNames[] =
 	{
 		L"User",
 		L"Custom",
 	};
 
-	ini.EnumEntry( L"DocumentsFolderMode",	DocsFolderMode,	DocsFolderModeNames, (UserLocalDataMode == UserLocalFolder_System) ? DocsFolder_User : DocsFolder_Custom);
+	ini.EnumEntry( L"DocumentsFolderMode",	DocsFolderMode,	DocsFolderModeNames, (InstallationMode == InstallMode_Registered) ? DocsFolder_User : DocsFolder_Custom);
 
 	ini.Entry( L"CustomDocumentsFolder",	CustomDocumentsFolder,		PathDefs::AppRoot() );
 
@@ -461,7 +481,9 @@ void App_LoadSaveInstallSettings( IniInterface& ini )
 	// Attempt to load plugins and themes based on the Install Folder.
 
 	ini.Entry( L"Install_Dir",				InstallFolder,				(wxDirName)(wxFileName(wxStandardPaths::Get().GetExecutablePath()).GetPath()) );
-	ini.Entry( L"PluginsFolder",			PluginsFolder,				InstallFolder + PathDefs::Base::Plugins() );
+	SetFullBaseDir( InstallFolder );
+
+	//ini.Entry( L"PluginsFolder",			PluginsFolder,				InstallFolder + PathDefs::Base::Plugins() );
 	ini.Entry( L"ThemesFolder",				ThemesFolder,				InstallFolder + PathDefs::Base::Themes() );
 
 	ini.Flush();
@@ -520,7 +542,10 @@ void AppConfig::LoadSaveRootItems( IniInterface& ini )
 	IniEntry( Toolbar_ImageSize );
 	IniEntry( Toolbar_ShowLabels );
 
-	IniEntry( CurrentIso );
+	wxFileName res(CurrentIso);
+	ini.Entry( L"CurrentIso", res, res, ini.IsLoading() || IsPortable() );
+	CurrentIso = res.GetFullPath();
+
 	IniEntry( CurrentELF );
 
 	IniEntry( EnableSpeedHacks );
@@ -578,12 +603,13 @@ void AppConfig::ConsoleLogOptions::LoadSave( IniInterface& ini, const wxChar* lo
 
 void AppConfig::FolderOptions::ApplyDefaults()
 {
-	if( UseDefaultBios )		Bios		= PathDefs::GetBios();
-	if( UseDefaultSnapshots )	Snapshots	= PathDefs::GetSnapshots();
-	if( UseDefaultSavestates )	Savestates	= PathDefs::GetSavestates();
-	if( UseDefaultMemoryCards )	MemoryCards	= PathDefs::GetMemoryCards();
-	if( UseDefaultLogs )		Logs		= PathDefs::GetLogs();
-	if( UseDefaultLangs )		Langs		= PathDefs::GetLangs();
+	if( UseDefaultBios )		Bios		  = PathDefs::GetBios();
+	if( UseDefaultSnapshots )	Snapshots	  = PathDefs::GetSnapshots();
+	if( UseDefaultSavestates )	Savestates	  = PathDefs::GetSavestates();
+	if( UseDefaultMemoryCards )	MemoryCards	  = PathDefs::GetMemoryCards();
+	if( UseDefaultLogs )		Logs		  = PathDefs::GetLogs();
+	if( UseDefaultLangs )		Langs		  = PathDefs::GetLangs();
+	if( UseDefaultPluginsFolder)PluginsFolder = PathDefs::GetPlugins();
 }
 
 // ------------------------------------------------------------------------
@@ -616,16 +642,22 @@ void AppConfig::FolderOptions::LoadSave( IniInterface& ini )
 	IniBitBool( UseDefaultMemoryCards );
 	IniBitBool( UseDefaultLogs );
 	IniBitBool( UseDefaultLangs );
+	IniBitBool( UseDefaultPluginsFolder );
 
-	IniEntry( Bios );
-	IniEntry( Snapshots );
-	IniEntry( Savestates );
-	IniEntry( MemoryCards );
-	IniEntry( Logs );
-	IniEntry( Langs );
+	//when saving in portable mode, we save relative paths if possible
+	 //  --> on load, these relative paths will be expanded relative to the exe folder.
+	bool rel = ( ini.IsLoading() || IsPortable() );
+	
+	IniEntryDirFile( Bios,  rel);
+	IniEntryDirFile( Snapshots,  rel );
+	IniEntryDirFile( Savestates,  rel );
+	IniEntryDirFile( MemoryCards,  rel );
+	IniEntryDirFile( Logs,  rel );
+	IniEntryDirFile( Langs,  rel );
+	ini.Entry( L"PluginsFolder", PluginsFolder, InstallFolder + PathDefs::Base::Plugins(), rel );
 
-	IniEntry( RunIso );
-	IniEntry( RunELF );
+	IniEntryDirFile( RunIso, rel );
+	IniEntryDirFile( RunELF, rel );
 
 	if( ini.IsLoading() )
 	{
@@ -649,10 +681,25 @@ void AppConfig::FilenameOptions::LoadSave( IniInterface& ini )
 
 	static const wxFileName pc( L"Please Configure" );
 
-	for( int i=0; i<PluginId_Count; ++i )
-		ini.Entry( tbl_PluginInfo[i].GetShortname(), Plugins[i], pc );
+	//when saving in portable mode, we just save the non-full-path filename
+ 	//  --> on load they'll be initialized with default (relative) paths (works both for plugins and bios)
+	//note: this will break if converting from install to portable, and custom folders are used. We can live with that.
+	bool needRelativeName = ini.IsSaving() && IsPortable();
 
-	ini.Entry( L"BIOS", Bios, pc );
+	for( int i=0; i<PluginId_Count; ++i )
+	{
+		if ( needRelativeName ) {
+			wxFileName plugin_filename = wxFileName( Plugins[i].GetFullName() );
+			ini.Entry( tbl_PluginInfo[i].GetShortname(), plugin_filename, pc );
+		} else
+			ini.Entry( tbl_PluginInfo[i].GetShortname(), Plugins[i], pc );
+	}
+
+	if( needRelativeName ) { 
+		wxFileName bios_filename = wxFileName( Bios.GetFullName() );
+		ini.Entry( L"BIOS", bios_filename, pc );
+	} else
+		ini.Entry( L"BIOS", Bios, pc );
 }
 
 // ------------------------------------------------------------------------
@@ -665,6 +712,10 @@ AppConfig::GSWindowOptions::GSWindowOptions()
 	DisableScreenSaver		= true;
 
 	AspectRatio				= AspectRatio_4_3;
+	Zoom					= 100;
+	StretchY				= 100;
+	OffsetX					= 0;
+	OffsetY					= 0;
 
 	WindowSize				= wxSize( 640, 480 );
 	WindowPos				= wxDefaultPosition;
@@ -718,6 +769,7 @@ void AppConfig::GSWindowOptions::LoadSave( IniInterface& ini )
 	};
 
 	ini.EnumEntry( L"AspectRatio", AspectRatio, AspectRatioNames, AspectRatio );
+	IniEntry( Zoom );
 
 	if( ini.IsLoading() ) SanityCheck();
 }
@@ -797,18 +849,16 @@ bool AppConfig::IsOkApplyPreset(int n)
 	AppConfig				default_AppConfig;
 	Pcsx2Config				default_Pcsx2Config;
 
-
 	//  NOTE:	Because the system currently only supports passing of an entire AppConfig to the GUI panels/menus to apply/reflect,
 	//			the GUI entities should be aware of the settings which the presets control, such that when presets are used:
 	//			1. The panels/entities should prevent manual modifications (by graying out) of settings which the presets control.
 	//			2. The panels should not apply values which the presets don't control if the value is initiated by a preset.
 	//			Currently controlled by the presets:
 	//			- AppConfig:	Framerate, EnableSpeedHacks, EnableGameFixes.
-	//			- EmuOptions:	Cpu, Gamefixes, SpeedHacks, EnablePatches, GS (except FrameLimitEnable).
+	//			- EmuOptions:	Cpu, Gamefixes, SpeedHacks, EnablePatches, GS (except for FrameLimitEnable, VsyncEnable and ManagedVsync).
 	//
 	//			This essentially currently covers all the options on all the panels except for framelimiter which isn't
-	//			controlled by the presets, and almost the entire GSWindow panel which also isn't controlled by presets
-	//			(however, vsync IS controlled by the presets).
+	//			controlled by the presets, and the entire GSWindow panel which also isn't controlled by presets
 	//
 	//			So, if changing the scope of the presets (making them affect more or less values), the relevant GUI entities
 	//			should me modified to support it.
@@ -822,7 +872,10 @@ bool AppConfig::IsOkApplyPreset(int n)
 
 	EmuOptions.EnablePatches		= true;
 	EmuOptions.GS					= default_Pcsx2Config.GS;
-	EmuOptions.GS.FrameLimitEnable	= original_GS.FrameLimitEnable;	//although GS is reset, frameLimiter isn't touched.
+	EmuOptions.GS.FrameLimitEnable	= original_GS.FrameLimitEnable;	//Frame limiter is not modified by presets
+	//EmuOptions.GS.VsyncEnable		= original_GS.VsyncEnable;
+	//EmuOptions.GS.ManagedVsync		= original_GS.ManagedVsync;
+	
 	EmuOptions.Cpu					= default_Pcsx2Config.Cpu;
 	EmuOptions.Gamefixes			= default_Pcsx2Config.Gamefixes;
 	EmuOptions.Speedhacks			= default_Pcsx2Config.Speedhacks;
@@ -849,16 +902,17 @@ bool AppConfig::IsOkApplyPreset(int n)
 					EmuOptions.Cpu.Recompiler.vuSignOverflow = false; //VU Clamp mode to 'none'
 
 		//best balanced hacks combo?
-		case 2 :	//enable mvu flag hack, enable EE timing hack, set EE cyclerate to 1 click.
+		case 2 :	//set EE cyclerate to 1 click.
 					eeUsed?0:(eeUsed=true, EmuOptions.Speedhacks.EECycleRate = 1);
-					EnableGameFixes = true;
-					EmuOptions.Gamefixes.EETimingHack = true;
-					EmuOptions.Speedhacks.vuFlagHack = true;
+					// EE timing hack appears to break the BIOS text and cause slowdowns in a few titles.
+					//EnableGameFixes = true;
+					//EmuOptions.Gamefixes.EETimingHack = true;
 
-		case 1 :	//Recommended speed hacks without mvu flag hack.
+		case 1 :	//Recommended speed hacks.
 					EnableSpeedHacks = true;
 					EmuOptions.Speedhacks.IntcStat = true;
 					EmuOptions.Speedhacks.WaitLoop = true;
+					EmuOptions.Speedhacks.vuFlagHack = true;
 
 		case 0 :	//Base preset: Mostly pcsx2's defaults.
 					
@@ -1084,6 +1138,19 @@ static void SaveVmSettings()
 	sApp.DispatchVmSettingsEvent( vmsaver );
 }
 
+static void SaveRegSettings()
+{
+	ScopedPtr<wxConfigBase> conf_install;
+
+	if (InstallationMode == InstallMode_Portable) return;
+
+	// sApp. macro cannot be use because you need the return value of OpenInstallSettingsFile method
+	if( Pcsx2App* __app_ = (Pcsx2App*)wxApp::GetInstance() ) conf_install = (*__app_).OpenInstallSettingsFile();
+	conf_install->SetRecordDefaults(false);
+
+	App_SaveInstallSettings( conf_install );
+}
+
 void AppSaveSettings()
 {
 	// If multiple SaveSettings messages are requested, we want to ignore most of them.
@@ -1093,16 +1160,17 @@ void AppSaveSettings()
 
 	if( !wxThread::IsMain() )
 	{
-		if( AtomicExchange(isPosted, true) )
+		if( !AtomicExchange(isPosted, true) )
 			wxGetApp().PostIdleMethod( AppSaveSettings );
 
 		return;
 	}
 
-	Console.WriteLn("Saving ini files...");
+	//Console.WriteLn("Saving ini files...");
 
 	SaveUiSettings();
 	SaveVmSettings();
+	SaveRegSettings(); // save register because of PluginsFolder change
 
 	AtomicExchange( isPosted, false );
 }
