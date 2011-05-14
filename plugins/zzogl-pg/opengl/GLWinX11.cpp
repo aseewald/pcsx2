@@ -170,18 +170,69 @@ void GLWindow::GetGLXVersion()
 	ZZLog::Error_Log("glX-Version %d.%d", glxMajorVersion, glxMinorVersion);
 }
 
+void GLWindow::CreateContextGL()
+{
+	if (!glWindow or !glDisplay) return;
+
+	// Create a 2.0 opengl context. My understanding, you need it to call the gl function to get the 3.0 context
+    context = glXCreateContext(glDisplay, vi, NULL, GL_TRUE);
+	// FIXME debug
+	return;
+
+	PFNGLXCREATECONTEXTATTRIBSARBPROC glXCreateContextAttribsARB = (PFNGLXCREATECONTEXTATTRIBSARBPROC) glXGetProcAddress((GLubyte *) "glXCreateContextAttribsARB");
+	if (!glXCreateContextAttribsARB) {
+		ZZLog::Error_Log("No support of OpenGL 3.0\n");
+		return;
+	}
+
+	// Note this part seems linux specific
+	int fbcount = 0;
+	PFNGLXCHOOSEFBCONFIGPROC glXChooseFBConfig = (PFNGLXCHOOSEFBCONFIGPROC) glXGetProcAddress((GLubyte *) "glXChooseFBConfig");
+	if (!glXChooseFBConfig) {
+		ZZLog::Error_Log("No support of glXChooseFBConfig\n");
+		return;
+	}
+
+	int fb_attrib[] = {
+		GLX_RGBA, GLX_DOUBLEBUFFER,
+		GLX_RED_SIZE, 8,
+		GLX_GREEN_SIZE, 8,
+		GLX_BLUE_SIZE, 8,
+		GLX_DEPTH_SIZE, 24,
+		None
+	};
+	GLXFBConfig *framebuffer_config = glXChooseFBConfig(glDisplay, DefaultScreen(glDisplay), NULL, &fbcount);
+	// GLXFBConfig *framebuffer_config = glXChooseFBConfig(glDisplay, DefaultScreen(glDisplay), fb_attrib, &fbcount);
+	if (!framebuffer_config) {
+		return;
+	}
+
+	// At least create a 3.0 context
+	int attribs[] = {
+		GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+		GLX_CONTEXT_MINOR_VERSION_ARB, 0,
+		GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
+		0
+	};
+	GLXContext context_temp = glXCreateContextAttribsARB(glDisplay, framebuffer_config[0], NULL, true, attribs);
+	if (context_temp) {
+		glXDestroyContext(glDisplay, context);
+		context = context_temp;
+	}
+}
+
 #ifdef USE_GSOPEN2
 bool GLWindow::DisplayWindow(int _width, int _height)
 {
 	GetWindowSize();
 
 	if (!CreateVisual()) return false;
-	context =  glXCreateContext(glDisplay, vi, NULL, GL_TRUE);
 
-	GetGLXVersion();
-
+	// connect the glx-context to the window
+	CreateContextGL();
 	glXMakeCurrent(glDisplay, glWindow, context);
 
+	GetGLXVersion();
 	if (glXIsDirect(glDisplay, context))
 		ZZLog::Error_Log("You have Direct Rendering!");
 	else
@@ -196,9 +247,6 @@ bool GLWindow::DisplayWindow(int _width, int _height)
 	backbuffer.h = _height;
 
 	if (!CreateVisual()) return false;
-	
-	/* create a GLX context */
-	context = glXCreateContext(glDisplay, vi, NULL, GL_TRUE);
 	
 	/* create a color map */
 	attr.colormap = XCreateColormap(glDisplay, RootWindow(glDisplay, vi->screen),
@@ -228,8 +276,10 @@ bool GLWindow::DisplayWindow(int _width, int _height)
     XSync(glDisplay, false);
 
 	// connect the glx-context to the window
+	CreateContextGL();
 	glXMakeCurrent(glDisplay, glWindow, context);
 	
+	GetGLXVersion();
 	if (glXIsDirect(glDisplay, context))
 		ZZLog::Error_Log("You have Direct Rendering!");
 	else
