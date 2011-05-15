@@ -82,7 +82,7 @@ GSPanel::GSPanel( wxWindow* parent )
 	m_HasFocus		= false;
 
 	if ( !wxWindow::Create(parent, wxID_ANY) )
-		throw Exception::RuntimeError().SetDiagMsg( L"GSPanel constructor esplode!!" );
+		throw Exception::RuntimeError().SetDiagMsg( L"GSPanel constructor explode!!" );
 
 	SetName( L"GSPanel" );
 
@@ -241,6 +241,9 @@ void GSPanel::DirectKeyCommand( const KeyAcceleratorCode& kac )
 
 	DbgCon.WriteLn( "(gsFrame) Invoking command: %s", cmd->Id );
 	cmd->Invoke();
+	
+	if( cmd->AlsoApplyToGui && !g_ConfigPanelChanged)
+		AppApplySettings();
 }
 
 void GSPanel::DirectKeyCommand( wxKeyEvent& evt )
