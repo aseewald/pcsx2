@@ -308,7 +308,7 @@ s32 CALLBACK GSopen(void *pDsp, char *Title, int multithread)
 }
 
 #ifdef USE_GSOPEN2
-EXPORT_C_(s32) GSopen2( void* pDsp, int flags )
+s32 CALLBACK GSopen2( void* pDsp, int flags )
 {
 	FUNCLOG
 
