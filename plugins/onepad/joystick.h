@@ -36,7 +36,12 @@ class JoystickInfo
 {
 	public:
 		JoystickInfo() : devname(""), _id(-1), numbuttons(0), numaxes(0), numhats(0), axisrange(0x7fff),
-		 deadzone(2000), pad(-1), vbuttonstate(NULL), vaxisstate(NULL), vhatstate(NULL), joy(NULL) {}
+		 deadzone(2000), pad(-1), joy(NULL) {
+			 vbuttonstate.clear();
+			 vaxisstate.clear();
+			 vhatstate.clear();
+		 }
+
 		~JoystickInfo()
 		{
 			Destroy();
@@ -48,6 +53,8 @@ class JoystickInfo
 		void Destroy();
 		// opens handles to all possible joysticks
 		static void EnumerateJoysticks(vector<JoystickInfo*>& vjoysticks);
+
+		static void InitHapticEffect();
 
 		bool Init(int id); // opens a handle and gets information
 		void Assign(int pad); // assigns a joystick to a pad

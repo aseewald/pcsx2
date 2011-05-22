@@ -43,14 +43,16 @@ __forceinline KeyType type_of_key(int pad, int index)
 	else if (key >= 0x20000 && key < 0x30000) return PAD_JOYSTICK;
 	else if (key >= 0x30000 && key < 0x40000) return PAD_POV;
 	else if (key >= 0x40000 && key < 0x50000) return PAD_HAT;
+	else if (key >= 0x50000 && key < 0x60000) return PAD_MOUSE;
 	else return PAD_NULL;
  }
 
-  __forceinline int pad_to_key(int pad, int index)
- {
-	return ((conf.keys[pad][index]) & 0xffff);
-}
+//*******************************************************
+//			onepad key -> input
+//*******************************************************
+// keyboard
 
+// joystick
 __forceinline int key_to_joystick_id(int pad, int index)
 {
 	return (((conf.keys[pad][index]) & 0xf000) >> 12);
@@ -66,6 +68,32 @@ __forceinline int key_to_axis(int pad, int index)
 	return ((conf.keys[pad][index]) & 0xff);
 }
 
+__forceinline int key_to_pov_sign(int pad, int index)
+{
+	return (((conf.keys[pad][index]) & 0x100) >> 8);
+}
+
+__forceinline int key_to_hat_dir(int pad, int index)
+{
+	return (((conf.keys[pad][index]) & 0xF00) >> 8);
+}
+
+// mouse
+__forceinline int key_to_mouse(int pad, int index)
+{
+	return ((conf.keys[pad][index]) & 0xff);
+}
+
+//*******************************************************
+//			input -> onepad key
+//*******************************************************
+// keyboard ???
+__forceinline int pad_to_key(int pad, int index)
+{
+	return ((conf.keys[pad][index]) & 0xffff);
+}
+
+// joystick
 __forceinline int button_to_key(int joy_id, int button_id)
 {
 	return (0x10000 | ((joy_id) << 12) | (button_id));
@@ -86,12 +114,8 @@ __forceinline int hat_to_key(int joy_id, int dir, int axis_id)
 	return (0x40000 | ((joy_id) << 12) | ((dir) << 8) | (axis_id));
 }
 
-__forceinline int key_to_pov_sign(int pad, int index)
+// mouse
+__forceinline int mouse_to_key(int button_id)
 {
-	return (((conf.keys[pad][index]) & 0x100) >> 8);
-}
-
-__forceinline int key_to_hat_dir(int pad, int index)
-{
-	return (((conf.keys[pad][index]) & 0xF00) >> 8);
+	return (0x50000 | button_id);
 }

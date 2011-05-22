@@ -23,15 +23,16 @@
 #include <gtk/gtk.h>
 
 #include "joystick.h"
+#include "keyboard.h"
 #include "onepad.h"
 #include "linux.h"
 
-extern char* KeysymToChar(int keysym);
 extern std::string s_strIniPath;
 
 string KeyName(int pad, int key)
 {
 	string tmp;
+	tmp.resize(28);
 	KeyType k = type_of_key(pad, key);
 
 	switch (k)
@@ -42,27 +43,33 @@ string KeyName(int pad, int key)
 				if (pstr != NULL) tmp = pstr;
 				break;
 			}
+			case PAD_MOUSE:
+			{
+				int button = key_to_mouse(pad, key);
+				switch (button) {
+					case 1: sprintf(&tmp[0], "Mouse Left"); break;
+					case 2: sprintf(&tmp[0], "Mouse Middle"); break;
+					case 3: sprintf(&tmp[0], "Mouse Right"); break;
+					default: // Use only number for extra button
+							sprintf(&tmp[0], "Mouse %d", button);
+				}
+				break;
+			}
 			case PAD_JOYBUTTONS:
 			{
 				int button = key_to_button(pad, key);
-				tmp.resize(28);
-
 				sprintf(&tmp[0], "JBut %d", button);
 				break;
 			}
 			case PAD_JOYSTICK:
 			{
 				int axis = key_to_axis(pad, key);
-				tmp.resize(28);
-
 				sprintf(&tmp[0], "JAxis %d", axis);
 				break;
 			}
 			case PAD_HAT:
 			{
 				int axis = key_to_axis(pad, key);
-				tmp.resize(28);
-
 				switch(key_to_hat_dir(pad, key))
 				{
 					case SDL_HAT_UP:
@@ -85,7 +92,6 @@ string KeyName(int pad, int key)
 			}
 			case PAD_POV:
 			{
-				tmp.resize(28);
 				sprintf(&tmp[0], "JPOV %d%s", key_to_axis(pad, key), key_to_pov_sign(pad, key) ? "-" : "+");
 				break;
 			}
@@ -128,11 +134,12 @@ void SaveConfig()
 	{
 		for (int key = 0; key < MAX_KEYS; key++)
 		{
-			fprintf(f, "[%d][%d] = 0x%lx\n", pad, key, get_key(pad,key));
+			fprintf(f, "[%d][%d] = 0x%x\n", pad, key, get_key(pad,key));
 		}
 	}
 	fprintf(f, "log = %d\n", conf.log);
 	fprintf(f, "options = %d\n", conf.options);
+	fprintf(f, "mouse_sensibility = %d\n", conf.sensibility);
 	fclose(f);
 }
 
@@ -144,6 +151,7 @@ void LoadConfig()
 	memset(&conf, 0, sizeof(conf));
 	DefaultValues();
 	conf.log = 0;
+	conf.sensibility = 500;
 
 	const std::string iniFile(s_strIniPath + "OnePAD.ini");
 	f = fopen(iniFile.c_str(), "r");
@@ -167,5 +175,6 @@ void LoadConfig()
 	}
 	fscanf(f, "log = %d\n", &conf.log);
 	fscanf(f, "options = %d\n", &conf.options);
+	fscanf(f, "mouse_sensibility = %d\n", &conf.sensibility);
 	fclose(f);
 }

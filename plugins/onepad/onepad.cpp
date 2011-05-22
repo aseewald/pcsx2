@@ -128,7 +128,12 @@ pthread_spinlock_t s_mutexStatus;
 pthread_mutex_t	   mutex_KeyEvent;
 u32 s_keyPress[2], s_keyRelease[2];
 
-vector<keyEvent> ev_fifo;
+queue<keyEvent> ev_fifo;
+
+static int padVib0[2];
+static int padVib1[2];
+static int padVibC[2];
+static int padVibF[2][4];
 
 static void InitLibraryName()
 {
@@ -281,7 +286,7 @@ EXPORT_C_(s32) PADopen(void *pDsp)
 {
 	memset(&event, 0, sizeof(event));
 
-	ev_fifo.clear();
+	while (!ev_fifo.empty()) ev_fifo.pop();
 	pthread_spin_init(&s_mutexStatus, PTHREAD_PROCESS_PRIVATE);
 	pthread_mutex_init(&mutex_KeyEvent, NULL);
 	s_keyPress[0] = s_keyPress[1] = 0;
@@ -289,6 +294,7 @@ EXPORT_C_(s32) PADopen(void *pDsp)
 
 #ifdef __LINUX__
 	JoystickInfo::EnumerateJoysticks(s_vjoysticks);
+	JoystickInfo::InitHapticEffect();
 #endif
 	return _PADopen(pDsp);
 }
@@ -311,7 +317,7 @@ EXPORT_C_(void) PADsetLogDir(const char* dir)
 
 EXPORT_C_(void) PADclose()
 {
-	ev_fifo.clear();
+	while (!ev_fifo.empty()) ev_fifo.pop();
 	pthread_spin_destroy(&s_mutexStatus);
 	pthread_mutex_destroy(&mutex_KeyEvent);
 	_PADclose();
@@ -345,6 +351,11 @@ EXPORT_C_(u32) PADquery()
 void PADsetMode(int pad, int mode)
 {
 	padMode[pad] = mode;
+	// FIXME FEEDBACK
+	padVib0[pad] = 0;
+	padVib1[pad] = 0;
+	padVibF[pad][0] = 0;
+	padVibF[pad][1] = 0;
 	switch (ds2mode)
 	{
 		case 0: // dualshock
@@ -385,10 +396,22 @@ EXPORT_C_(u8) PADstartPoll(int pad)
 	return 0xff;
 }
 
+void SetDeviceForceS(int pad, int force)
+{
+	// fprintf(stderr, "FEEDBACK small\n");
+};
+
+void SetDeviceForceB(int pad, int force)
+{
+	// fprintf(stderr, "FEEDBACK big\n");
+}
+
 u8  _PADpoll(u8 value)
 {
 	u8 button_check = 0;
 	const int avg_pressure = (pressure * 255) / 100;
+	int vib_small;
+	int vib_big;
 
 	if (curByte == 0)
 	{
@@ -497,6 +520,28 @@ u8  _PADpoll(u8 value)
 						break;
 				}
 				buf = stdpar[curPad];
+
+				// FIXME FEEDBACK. Set effect here
+				/* Small Motor */
+				vib_small = padVibF[curPad][0] ? 2000 : 0;
+				// if ((padVibF[curPad][2] != vib_small) && (padVibC[curPad] >= 0))
+				if (padVibF[curPad][2] != vib_small)
+				{
+					padVibF[curPad][2] = vib_small;
+					// SetDeviceForceS (padVibC[curPad], vib_small);
+					SetDeviceForceS (curPad, vib_small);
+				}
+
+				/* Big Motor */
+				vib_big = padVibF[curPad][1] ? 500 + 37*padVibF[curPad][1] : 0;
+				// if ((padVibF[curPad][3] != vib_big) && (padVibC[curPad] >= 0))
+				if (padVibF[curPad][3] != vib_big)
+				{
+					padVibF[curPad][3] = vib_big;
+					// SetDeviceForceB (padVibC[curPad], vib_big);
+					SetDeviceForceB (curPad, vib_big);
+				}
+
 				return padID[curPad];
 
 			case CMD_CONFIG_MODE: // CONFIG_MODE
@@ -553,6 +598,13 @@ u8  _PADpoll(u8 value)
 
 	switch (curCmd)
 	{
+		case CMD_READ_DATA_AND_VIBRATE:
+			// FIXME FEEDBACK
+			if (curByte == padVib0[curPad])
+				padVibF[curPad][0] = value;
+			if (curByte == padVib1[curPad])
+				padVibF[curPad][1] = value;
+			break;
 		case CMD_CONFIG_MODE:
 			if (curByte == 2)
 			{
@@ -611,6 +663,31 @@ u8  _PADpoll(u8 value)
 				}
 			}
 			break;
+
+		case CMD_VIBRATION_TOGGLE:
+			// FIXME FEEDBACK
+			if (curByte >= 2)
+			{
+				if (curByte == padVib0[curPad])
+					buf[curByte] = 0x00;
+				if (curByte == padVib1[curPad])
+					buf[curByte] = 0x01;
+				if (value == 0x00)
+				{
+					padVib0[curPad] = curByte;
+					// FIXME: code from SSSXPAD I'm not sure we need this part
+					// if ((padID[curPad] & 0x0f) < (curByte - 1) / 2)
+					// 	padID[curPad] = (padID[curPad] & 0xf0) + (curByte - 1) / 2;
+				}
+				else if (value == 0x01)
+				{
+					padVib1[curPad] = curByte;
+					// FIXME: code from SSSXPAD I'm not sure we need this part
+					// if ((padID[curPad] & 0x0f) < (curByte - 1) / 2)
+					// 	padID[curPad] = (padID[curPad] & 0xf0) + (curByte - 1) / 2;
+				}
+			}
+			break;
 	}
 
 	if (curByte >= cmdLen) return 0;
@@ -636,10 +713,10 @@ EXPORT_C_(keyEvent*) PADkeyEvent()
 }
 
 #ifdef __LINUX__
-EXPORT_C_(void) PADWriteEvent(keyEvent &evt) // FIXME interface
+EXPORT_C_(void) PADWriteEvent(keyEvent &evt)
 {
 	pthread_mutex_lock(&mutex_KeyEvent);
-	ev_fifo.push_back(evt);
+	ev_fifo.push(evt);
 	pthread_mutex_unlock(&mutex_KeyEvent);
 }
 #endif

@@ -38,20 +38,20 @@ int FindKey(int key, int pad)
 
 char* KeysymToChar(int keysym)
 {
- #ifdef __LINUX__
+#ifdef __LINUX__
 	return XKeysymToString(keysym);
 #else
 	LPWORD temp;
 
 	ToAscii((UINT) keysym, NULL, NULL, temp, NULL);
 	return (char*)temp;
-	#endif
+#endif
 }
 
 void PollForKeyboardInput(int pad)
 {
- #ifdef __LINUX__
-        PollForX11KeyboardInput(pad);
+#ifdef __LINUX__
+	PollForX11KeyboardInput(pad);
 #endif
 }
 
@@ -71,6 +71,8 @@ void SetAutoRepeat(bool autorep)
 #ifdef __LINUX__
 static bool s_grab_input = false;
 static bool s_Shift = false;
+static unsigned int  s_previous_mouse_x = 0;
+static unsigned int  s_previous_mouse_y = 0;
 void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 {
 	int i;
@@ -160,23 +162,87 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 		case FocusOut:
 			XAutoRepeatOn(GSdsp);
 			break;
+
+		case ButtonPress:
+			i = FindKey(mouse_to_key(evt.key), pad);
+			if (i != -1)
+			{
+				clear_bit(keyRelease, i);
+				set_bit(keyPress, i);
+			}
+			break;
+
+		case ButtonRelease:
+			i = FindKey(mouse_to_key(evt.key), pad);
+			if (i != -1)
+			{
+				clear_bit(keyPress, i);
+				set_bit(keyRelease, i);
+			}
+			break;
+
+		case MotionNotify:
+			// FIXME: How to handle when the mouse does not move, no event generated!!!
+			// 1/ small move == no move. Cons : can not do small movement
+			// 2/ use a watchdog timer thread
+			// 3/ ??? idea welcome ;)
+			if (conf.options & PADOPTION_MOUSE) {
+				unsigned pad_x = (conf.options & PADOPTION_MOUSE_RIGHT_PAD) ? PAD_RX : PAD_LX;
+				unsigned pad_y = (conf.options & PADOPTION_MOUSE_RIGHT_PAD) ? PAD_RY : PAD_LY;
+
+				unsigned x = evt.key & 0xFFFF;
+				unsigned int value = abs(s_previous_mouse_x - x) * conf.sensibility;
+				value = max(value, (unsigned int)DEF_VALUE);
+
+				if (x == 0)
+					Analog::ConfigurePad(pad, pad_x, -DEF_VALUE);
+				else if (x == 0xFFFF)
+					Analog::ConfigurePad(pad, pad_x, DEF_VALUE);
+				else if (x < (s_previous_mouse_x -2))
+					Analog::ConfigurePad(pad, pad_x, -value);
+				else if (x > (s_previous_mouse_x +2))
+					Analog::ConfigurePad(pad, pad_x, value);
+				else
+					Analog::ResetPad(pad, pad_x);
+
+
+				unsigned y = evt.key >> 16;
+				value = abs(s_previous_mouse_y - y) * conf.sensibility;
+				value = max(value, (unsigned int)DEF_VALUE);
+
+				if (y == 0)
+					Analog::ConfigurePad(pad, pad_y, -DEF_VALUE);
+				else if (y == 0xFFFF)
+					Analog::ConfigurePad(pad, pad_y, DEF_VALUE);
+				else if (y < (s_previous_mouse_y -2))
+					Analog::ConfigurePad(pad, pad_y, -value);
+				else if (y > (s_previous_mouse_y +2))
+					Analog::ConfigurePad(pad, pad_y, value);
+				else
+					Analog::ResetPad(pad, pad_y);
+
+				s_previous_mouse_x = x;
+				s_previous_mouse_y = y;
+			}
+
+			break;
 	}
 }
+
 void PollForX11KeyboardInput(int pad)
 {
 	keyEvent evt;
 	XEvent E;
+	XButtonEvent* BE;
 	int keyPress = 0, keyRelease = 0;
 
 	// Keyboard input send by PCSX2
-	pthread_mutex_lock(&mutex_KeyEvent);
-	vector<keyEvent>::iterator it = ev_fifo.begin();
-	while ( it != ev_fifo.end() ) {
-		AnalyzeKeyEvent(pad, *it, keyPress, keyRelease);
-		it++;
+	while (!ev_fifo.empty()) {
+		AnalyzeKeyEvent(pad, ev_fifo.front(), keyPress, keyRelease);
+		pthread_mutex_lock(&mutex_KeyEvent);
+		ev_fifo.pop();
+		pthread_mutex_unlock(&mutex_KeyEvent);
 	}
-	ev_fifo.clear();
-	pthread_mutex_unlock(&mutex_KeyEvent);
 
 	// keyboard input
 	while (XPending(GSdsp) > 0)
@@ -184,32 +250,37 @@ void PollForX11KeyboardInput(int pad)
 		XNextEvent(GSdsp, &E);
 		evt.evt = E.type;
 		evt.key = (int)XLookupKeysym((XKeyEvent *) & E, 0);
+		// Change the format of the structure to be compatible with GSOpen2
+		// mode (event come from pcsx2 not X)
+		BE = (XButtonEvent*)&E;
+		switch (evt.evt) {
+			case MotionNotify: evt.key = (BE->x & 0xFFFF) | (BE->y << 16); break;
+			case ButtonRelease:
+			case ButtonPress: evt.key = BE->button; break;
+			default: break;
+		}
 		AnalyzeKeyEvent(pad, evt, keyPress, keyRelease);
 	}
 
 	UpdateKeys(pad, keyPress, keyRelease);
 }
 
-bool PollX11Keyboard(char* &temp, u32 &pkey)
+bool PollX11Keyboard(u32 &pkey)
 {
 	GdkEvent *ev = gdk_event_get();
 
 	if (ev != NULL)
 	{
-		if (ev->type == GDK_KEY_PRESS)
-		{
+		if (ev->type == GDK_KEY_PRESS) {
 
 			if (ev->key.keyval == GDK_Escape)
-			{
-				temp = "Unknown";
-				pkey = NULL;
-			}
+				pkey = 0;
 			else
-			{
-				temp = KeysymToChar(ev->key.keyval);
 				pkey = ev->key.keyval;
-			}
 
+			return true;
+		} else if(ev->type == GDK_BUTTON_PRESS) {
+			pkey = mouse_to_key(ev->button.button);
 			return true;
 		}
 	}

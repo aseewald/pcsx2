@@ -154,7 +154,7 @@ EXPORT_C_(void) PADupdate(int pad)
 				{
 					int value = pjoy->GetAxisFromKey(cpad, i);
 
-					PAD_LOG("%s: %d (%d)\n", KeyName(cpad, i).c_str(), value, key_to_pov_sign(cpad, i));
+					// PAD_LOG("%s: %d (%d)\n", KeyName(cpad, i).c_str(), value, key_to_pov_sign(cpad, i));
 					if (key_to_pov_sign(cpad, i) && (value < -2048))
 					{
 						//PAD_LOG("%s Released+.\n", KeyName(cpad, i).c_str());
@@ -184,7 +184,10 @@ EXPORT_C_(void) PADupdate(int pad)
 						case PAD_RY:
 							if (abs(value) > (pjoy)->GetDeadzone(/*value*/))
 								Analog::ConfigurePad(pad, i, value);
-							else
+							else if (!conf.options & PADOPTION_MOUSE)
+								// There is a conflict between mouse and joystick configuration.
+								// Do nothing when the mouse is enabled. It avoids of unsetting
+								// the pad everytime the mouse is selected -- gregory
 								Analog::ResetPad(pad, i);
 							break;
 					}

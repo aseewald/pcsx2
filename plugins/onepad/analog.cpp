@@ -124,7 +124,6 @@ namespace Analog
 
 	void ConfigurePad( u8 pad, int index, int value)
 	{
-		Pad(pad, index);
 		SetPad(pad, index, value / 256);
 		if (ReversePad(index)) InvertPad(pad,index);
 		SetPad(pad, index, Pad(pad, index) + 0x80);

@@ -107,16 +107,18 @@ GSPanel::GSPanel( wxWindow* parent )
 	// Any and all events which should result in the mouse cursor being made visible
 	// are connected here.  If I missed one, feel free to add it in! --air
 
-	Connect(wxEVT_MIDDLE_DOWN,		wxMouseEventHandler	(GSPanel::OnShowMouse));
-	Connect(wxEVT_MIDDLE_UP,		wxMouseEventHandler	(GSPanel::OnShowMouse));
-	Connect(wxEVT_RIGHT_DOWN,		wxMouseEventHandler	(GSPanel::OnShowMouse));
-	Connect(wxEVT_RIGHT_UP,			wxMouseEventHandler	(GSPanel::OnShowMouse));
-	Connect(wxEVT_MOTION,			wxMouseEventHandler	(GSPanel::OnShowMouse));
-	Connect(wxEVT_LEFT_DCLICK,		wxMouseEventHandler	(GSPanel::OnShowMouse));
+	Connect(wxEVT_LEFT_DOWN,		wxMouseEventHandler	(GSPanel::OnMouseEvent));
+	Connect(wxEVT_LEFT_UP,			wxMouseEventHandler	(GSPanel::OnMouseEvent));
+	Connect(wxEVT_MIDDLE_DOWN,		wxMouseEventHandler	(GSPanel::OnMouseEvent));
+	Connect(wxEVT_MIDDLE_UP,		wxMouseEventHandler	(GSPanel::OnMouseEvent));
+	Connect(wxEVT_RIGHT_DOWN,		wxMouseEventHandler	(GSPanel::OnMouseEvent));
+	Connect(wxEVT_RIGHT_UP,			wxMouseEventHandler	(GSPanel::OnMouseEvent));
+	Connect(wxEVT_MOTION,			wxMouseEventHandler	(GSPanel::OnMouseEvent));
+	Connect(wxEVT_LEFT_DCLICK,		wxMouseEventHandler	(GSPanel::OnMouseEvent));
 	Connect(wxEVT_LEFT_DCLICK,		wxMouseEventHandler	(GSPanel::OnLeftDclick));
-	Connect(wxEVT_MIDDLE_DCLICK,	wxMouseEventHandler	(GSPanel::OnShowMouse));
-	Connect(wxEVT_RIGHT_DCLICK,		wxMouseEventHandler	(GSPanel::OnShowMouse));
-	Connect(wxEVT_MOUSEWHEEL,		wxMouseEventHandler	(GSPanel::OnShowMouse));
+	Connect(wxEVT_MIDDLE_DCLICK,	wxMouseEventHandler	(GSPanel::OnMouseEvent));
+	Connect(wxEVT_RIGHT_DCLICK,		wxMouseEventHandler	(GSPanel::OnMouseEvent));
+	Connect(wxEVT_MOUSEWHEEL,		wxMouseEventHandler	(GSPanel::OnMouseEvent));
 }
 
 GSPanel::~GSPanel() throw()
@@ -188,11 +190,60 @@ void GSPanel::OnCloseWindow(wxCloseEvent& evt)
 	evt.Skip();		// and close it.
 }
 
-void GSPanel::OnShowMouse( wxMouseEvent& evt )
+void GSPanel::OnMouseEvent( wxMouseEvent& evt )
 {
 	if( IsBeingDeleted() ) return;
-	evt.Skip();
-	DoShowMouse();
+
+	// Do nothing for left-button event
+	if (!evt.Button(1)) {
+		evt.Skip();
+		DoShowMouse();
+	}
+
+#ifdef __LINUX__
+	// HACK2: In gsopen2 there is one event buffer read by both wx/gui and pad plugin. Wx deletes
+	// the event before the pad see it. So you send key event directly to the pad.
+	if( (PADWriteEvent != NULL) && (GSopen2 != NULL) ) {
+		keyEvent event;
+		// FIXME how to handle double click ???
+		if (evt.ButtonDown()) {
+			event.evt = 4; // X equivalent of ButtonPress
+			event.key = evt.GetButton();
+		} else if (evt.ButtonUp()) {
+			event.evt = 5; // X equivalent of ButtonRelease
+			event.key = evt.GetButton();
+		} else if (evt.Moving() || evt.Dragging()) {
+			event.evt = 6; // X equivalent of MotionNotify
+			long x,y;
+			evt.GetPosition(&x, &y);
+
+			wxCoord w, h;
+			wxWindowDC dc( this );
+			dc.GetSize(&w, &h);
+
+			// Special case to allow continuous mouvement near the border
+			if (x < 10)
+				x = 0;
+			else if (x > (w-10))
+				x = 0xFFFF;
+
+			if (y < 10)
+				y = 0;
+			else if (y > (w-10))
+				y = 0xFFFF;
+
+			// For compatibility purpose with the existing structure. I decide to reduce
+			// the position to 16 bits.
+			event.key = ((y & 0xFFFF) << 16) | (x & 0xFFFF);
+
+		} else {
+			event.key = 0;
+			event.evt = 0;
+		}
+
+		PADWriteEvent(event);
+	}
+#endif
 }
 
 void GSPanel::OnHideMouseTimeout( wxTimerEvent& evt )

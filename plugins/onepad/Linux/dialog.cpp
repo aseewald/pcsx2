@@ -20,10 +20,10 @@
  */
 
 #include "joystick.h"
+#include "keyboard.h"
 #include "onepad.h"
 #include <gtk/gtk.h>
 
-extern bool PollX11Keyboard(char* &temp, u32 &pkey);
 extern string KeyName(int pad, int key);
 
 void config_key(int pad, int key);
@@ -272,10 +272,9 @@ void config_key(int pad, int key)
 	while (!captured)
 	{
 		vector<JoystickInfo*>::iterator itjoy;
-		char *tmp;
 
 		u32 pkey = get_key(pad, key);
-		if (PollX11Keyboard(tmp, pkey))
+		if (PollX11Keyboard(pkey))
 		{
 			set_key(pad, key, pkey);
 			PAD_LOG("%s\n", KeyName(pad, key).c_str());

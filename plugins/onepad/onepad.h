@@ -24,6 +24,7 @@
 
 #include <stdio.h>
 #include <assert.h>
+#include <queue>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -67,7 +68,9 @@ enum PadOptions
 	PADOPTION_REVERSELX = 0x2,
 	PADOPTION_REVERSELY = 0x4,
 	PADOPTION_REVERSERX = 0x8,
-	PADOPTION_REVERSERY = 0x10
+	PADOPTION_REVERSERY = 0x10,
+	PADOPTION_MOUSE = 0x20,
+	PADOPTION_MOUSE_RIGHT_PAD = 0x40
 };
 
 extern FILE *padLog;
@@ -134,7 +137,7 @@ enum gamePadValues
 
 extern keyEvent event;
 
-extern vector<keyEvent> ev_fifo;
+extern queue<keyEvent> ev_fifo;
 extern pthread_mutex_t	mutex_KeyEvent;
 
 extern u16 status[2];

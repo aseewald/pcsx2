@@ -77,7 +77,7 @@ void JoystickInfo::EnumerateJoysticks(vector<JoystickInfo*>& vjoysticks)
 		// Example of X11 symbol are XAutoRepeatOn/XAutoRepeatOff
 		// Just to play it safe I separate 1.2 and 1.3 but I think it will be 
 		// fine in 1.2 too -- greg
-		if (SDL_Init(SDL_INIT_JOYSTICK|SDL_INIT_VIDEO) < 0) return;
+		if (SDL_Init(SDL_INIT_JOYSTICK|SDL_INIT_VIDEO|SDL_INIT_HAPTIC) < 0) return;
 #else
 		if (SDL_Init(SDL_INIT_JOYSTICK) < 0) return;
 #endif
@@ -121,6 +121,10 @@ void JoystickInfo::EnumerateJoysticks(vector<JoystickInfo*>& vjoysticks)
 		if ((joyid >= 0) && (joyid < (int)s_vjoysticks.size())) s_vjoysticks[joyid]->Assign(pad);
 	}
 
+}
+
+void JoystickInfo::InitHapticEffect()
+{
 }
 
 void JoystickInfo::Destroy()
