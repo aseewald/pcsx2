@@ -167,7 +167,11 @@ void GLWindow::GetGLXVersion()
 	
 	glXQueryVersion(glDisplay, &glxMajorVersion, &glxMinorVersion);
 
-	ZZLog::Error_Log("glX-Version %d.%d", glxMajorVersion, glxMinorVersion);
+	if (glXIsDirect(glDisplay, context))
+		ZZLog::Error_Log("glX-Version %d.%d with Direct Rendering", glxMajorVersion, glxMinorVersion);
+	else
+		ZZLog::Error_Log("glX-Version %d.%d with Indirect Rendering !!! It will be slow", glxMajorVersion, glxMinorVersion);
+
 }
 
 void GLWindow::CreateContextGL()
@@ -216,10 +220,6 @@ bool GLWindow::DisplayWindow(int _width, int _height)
 	glXMakeCurrent(glDisplay, glWindow, context);
 
 	GetGLXVersion();
-	if (glXIsDirect(glDisplay, context))
-		ZZLog::Error_Log("You have Direct Rendering!");
-	else
-		ZZLog::Error_Log("No Direct Rendering possible!");
 
 	return true;
 }
@@ -230,7 +230,7 @@ bool GLWindow::DisplayWindow(int _width, int _height)
 	backbuffer.h = _height;
 
 	if (!CreateVisual()) return false;
-	
+
 	/* create a color map */
 	attr.colormap = XCreateColormap(glDisplay, RootWindow(glDisplay, vi->screen),
 						   vi->visual, AllocNone);
@@ -238,8 +238,6 @@ bool GLWindow::DisplayWindow(int _width, int _height)
     attr.event_mask = ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask |
         StructureNotifyMask | SubstructureRedirectMask | SubstructureNotifyMask |
         EnterWindowMask | LeaveWindowMask | FocusChangeMask ;
-
-	GetGLXVersion();
 
     // Create a window at the last position/size
     glWindow = XCreateWindow(glDisplay, RootWindow(glDisplay, vi->screen),
@@ -263,10 +261,6 @@ bool GLWindow::DisplayWindow(int _width, int _height)
 	glXMakeCurrent(glDisplay, glWindow, context);
 	
 	GetGLXVersion();
-	if (glXIsDirect(glDisplay, context))
-		ZZLog::Error_Log("You have Direct Rendering!");
-	else
-		ZZLog::Error_Log("No Direct Rendering possible!");
 
     // Always start in window mode
 	fullScreen = 0;
