@@ -294,7 +294,6 @@ EXPORT_C_(s32) PADopen(void *pDsp)
 
 #ifdef __LINUX__
 	JoystickInfo::EnumerateJoysticks(s_vjoysticks);
-	JoystickInfo::InitHapticEffect();
 #endif
 	return _PADopen(pDsp);
 }
@@ -394,16 +393,6 @@ EXPORT_C_(u8) PADstartPoll(int pad)
 	curByte = 0;
 
 	return 0xff;
-}
-
-void SetDeviceForceS(int pad, int force)
-{
-	// fprintf(stderr, "FEEDBACK small\n");
-};
-
-void SetDeviceForceB(int pad, int force)
-{
-	// fprintf(stderr, "FEEDBACK big\n");
 }
 
 u8  _PADpoll(u8 value)
@@ -529,7 +518,7 @@ u8  _PADpoll(u8 value)
 				{
 					padVibF[curPad][2] = vib_small;
 					// SetDeviceForceS (padVibC[curPad], vib_small);
-					SetDeviceForceS (curPad, vib_small);
+					JoystickInfo::DoHapticEffect(0, curPad, vib_small);
 				}
 
 				/* Big Motor */
@@ -539,7 +528,7 @@ u8  _PADpoll(u8 value)
 				{
 					padVibF[curPad][3] = vib_big;
 					// SetDeviceForceB (padVibC[curPad], vib_big);
-					SetDeviceForceB (curPad, vib_big);
+					JoystickInfo::DoHapticEffect(1, curPad, vib_big);
 				}
 
 				return padID[curPad];

@@ -65,6 +65,7 @@ bool JoystickIdWithinBounds(int joyid)
 {
 	return ((joyid >= 0) && (joyid < (int)s_vjoysticks.size()));
 }
+
 // opens handles to all possible joysticks
 void JoystickInfo::EnumerateJoysticks(vector<JoystickInfo*>& vjoysticks)
 {
@@ -125,12 +126,112 @@ void JoystickInfo::EnumerateJoysticks(vector<JoystickInfo*>& vjoysticks)
 
 void JoystickInfo::InitHapticEffect()
 {
+#if SDL_VERSION_ATLEAST(1,3,0)
+	if (haptic == NULL) return;
+
+#if 0
+	additional field of the effect
+    /* Trigger */
+    Uint16 button;      /**< Button that triggers the effect. */
+    Uint16 interval;    /**< How soon it can be triggered again after button. */
+
+	// periodic parameter
+    Sint16 offset;      /**< Mean value of the wave. */
+    Uint16 phase;       /**< Horizontal shift given by hundredth of a cycle. */
+#endif
+
+	/*******************************************************************/
+	/* Effect small													   */
+	/*******************************************************************/
+	haptic_effect_data[0].type = SDL_HAPTIC_SQUARE;
+
+	// Direction of the effect SDL_HapticDirection
+    haptic_effect_data[0].periodic.direction.type = SDL_HAPTIC_POLAR; // Polar coordinates
+    haptic_effect_data[0].periodic.direction.dir[0] = 18000; // Force comes from south
+
+	// periodic parameter
+    haptic_effect_data[0].periodic.period = 1000; // 1000 ms
+    haptic_effect_data[0].periodic.magnitude = 2000; // 2000/32767 strength
+
+	// Replay
+    haptic_effect_data[0].periodic.length = 2000; // 2 seconds long
+    haptic_effect_data[0].periodic.delay  = 0;	   // start 0 second after the upload
+
+	// enveloppe
+    haptic_effect_data[0].periodic.attack_length = 500;// Takes 0.5 second to get max strength
+	haptic_effect_data[0].periodic.attack_level = 0;   // start at 0
+    haptic_effect_data[0].periodic.fade_length = 500;	// Takes 0.5 second to fade away
+	haptic_effect_data[0].periodic.fade_level = 0;    	// finish at 0
+
+	/*******************************************************************/
+	/* Effect big													   */
+	/*******************************************************************/
+	haptic_effect_data[1].type = SDL_HAPTIC_TRIANGLE;
+
+	// Direction of the effect SDL_HapticDirection
+    haptic_effect_data[1].periodic.direction.type = SDL_HAPTIC_POLAR; // Polar coordinates
+    haptic_effect_data[1].periodic.direction.dir[0] = 18000; // Force comes from south
+
+	// periodic parameter
+    haptic_effect_data[1].periodic.period = 1000; // 1000 ms
+    haptic_effect_data[1].periodic.magnitude = 2000; // 2000/32767 strength
+
+	// Replay
+    haptic_effect_data[1].periodic.length = 2000; // 2 seconds long
+    haptic_effect_data[1].periodic.delay  = 0;	   // start 0 second after the upload
+
+	// enveloppe
+    haptic_effect_data[1].periodic.attack_length = 500;// Takes 0.5 second to get max strength
+	haptic_effect_data[1].periodic.attack_level = 0;   // start at 0
+    haptic_effect_data[1].periodic.fade_length = 500;	// Takes 0.5 second to fade away
+	haptic_effect_data[1].periodic.fade_level = 0;    	// finish at 0
+
+	/*******************************************************************/
+	/* Upload effect to the device									   */
+	/*******************************************************************/
+	for (int i = 0 ; i < 2 ; i++)
+		haptic_effect_id[i] = SDL_HapticNewEffect(haptic, &haptic_effect_data[i]);
+#endif
+}
+
+
+void JoystickInfo::DoHapticEffect(int type, int pad, int force)
+{
+	if (type > 1) return;
+	if ( !(!conf.options & PADOPTION_FORCEFEEDBACK) ) return;
+
+#if SDL_VERSION_ATLEAST(1,3,0)
+	// first search the joy associated to the pad
+	vector<JoystickInfo*>::iterator itjoy = s_vjoysticks.begin();
+	while (itjoy != s_vjoysticks.end())
+		if ((*itjoy)->GetPAD() == pad) break;
+
+	if (itjoy == s_vjoysticks.end()) return;
+	if ((*itjoy)->haptic == NULL) return;
+	if ((*itjoy)->haptic_effect_id[type] < 0) return;
+
+	// FIXME: might need to multiply force
+	(*itjoy)->haptic_effect_data[type].periodic.magnitude = force; // force/32767 strength
+	// Upload the new effect
+	SDL_HapticUpdateEffect((*itjoy)->haptic, (*itjoy)->haptic_effect_id[type], &(*itjoy)->haptic_effect_data[type]);
+
+	// run the effect once
+	SDL_HapticRunEffect( (*itjoy)->haptic, (*itjoy)->haptic_effect_id[type], 1 );
+#endif
 }
 
 void JoystickInfo::Destroy()
 {
 	if (joy != NULL)
 	{
+#if SDL_VERSION_ATLEAST(1,3,0)
+		// Haptic must be closed before the joystick
+		if (haptic != NULL) {
+			SDL_HapticClose(haptic);
+			haptic = NULL;
+		}
+#endif
+
 		if (SDL_JoystickOpened(_id)) SDL_JoystickClose(joy);
 		joy = NULL;
 	}
@@ -156,6 +257,18 @@ bool JoystickInfo::Init(int id)
 	vaxisstate.resize(numaxes);
 	vbuttonstate.resize(numbuttons);
 	vhatstate.resize(numhats);
+
+#if SDL_VERSION_ATLEAST(1,3,0)
+	if ( haptic == NULL ) {
+		if (!SDL_JoystickIsHaptic(joy)) {
+			PAD_LOG("Haptic devices not supported!\n");
+		} else {
+			haptic = SDL_HapticOpenFromJoystick(joy);
+			// upload some default effect
+			InitHapticEffect();
+		}
+	}
+#endif
 
 	//PAD_LOG("There are %d buttons, %d axises, and %d hats.\n", numbuttons, numaxes, numhats);
 	return true;

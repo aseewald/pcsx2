@@ -22,10 +22,9 @@
 #ifndef __JOYSTICK_H__
 #define __JOYSTICK_H__
 
-#ifdef __LINUX__
-#include <SDL/SDL.h>
-#else
-#include <SDL.h>
+#include "SDL.h"
+#if SDL_VERSION_ATLEAST(1,3,0)
+#include "SDL_haptic.h"
 #endif
 
 #include "onepad.h"
@@ -40,6 +39,11 @@ class JoystickInfo
 			 vbuttonstate.clear();
 			 vaxisstate.clear();
 			 vhatstate.clear();
+#if SDL_VERSION_ATLEAST(1,3,0)
+			 haptic = NULL;
+			 for (int i = 0 ; i < 2 ; i++)
+				 haptic_effect_id[i] = -1;
+#endif
 		 }
 
 		~JoystickInfo()
@@ -54,7 +58,8 @@ class JoystickInfo
 		// opens handles to all possible joysticks
 		static void EnumerateJoysticks(vector<JoystickInfo*>& vjoysticks);
 
-		static void InitHapticEffect();
+		void InitHapticEffect();
+		static void DoHapticEffect(int type, int pad, int force);
 
 		bool Init(int id); // opens a handle and gets information
 		void Assign(int pad); // assigns a joystick to a pad
@@ -152,7 +157,12 @@ class JoystickInfo
 
 		vector<int> vbuttonstate, vaxisstate, vhatstate;
 
-		SDL_Joystick* joy;
+		SDL_Joystick*		joy;
+#if SDL_VERSION_ATLEAST(1,3,0)
+		SDL_Haptic*   		haptic;
+		SDL_HapticEffect	haptic_effect_data[2];
+		int   				haptic_effect_id[2];
+#endif
 };
 
 

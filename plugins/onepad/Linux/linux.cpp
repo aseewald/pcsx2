@@ -67,22 +67,7 @@ EXPORT_C_(s32) PADtest()
 
 s32  _PADopen(void *pDsp)
 {
-    GtkScrolledWindow *win;
-
-    win = *(GtkScrolledWindow**) pDsp;
-
-	if (GTK_IS_WIDGET(win))
-	{
-	    // Since we have a GtkScrolledWindow, for now we'll grab whatever display
-	    // comes along instead. Later, we can fiddle with this, but I'm not sure the
-	    // best way to get a Display* out of a GtkScrolledWindow. A GtkWindow I might
-	    // be able to manage... --arcum42
-        GSdsp = GDK_DISPLAY_XDISPLAY(gdk_display_get_default());
-	}
-	else
-	{
-        GSdsp = *(Display**)pDsp;
-	}
+	GSdsp = *(Display**)pDsp;
 	GSwin = (Window)*(((u32*)pDsp)+1);
 
     SetAutoRepeat(false);
