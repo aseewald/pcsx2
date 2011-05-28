@@ -66,34 +66,6 @@ bool JoystickIdWithinBounds(int joyid)
 	return ((joyid >= 0) && (joyid < (int)s_vjoysticks.size()));
 }
 
-int _GetJoystickId()
-{
-	// select the right joystick id
-	u32 joyid = -1;
-
-	if (!JoystickIdWithinBounds(joyid))
-	{
-		// get first unused joystick
-		for (joyid = 0; joyid < s_vjoysticks.size(); ++joyid)
-		{
-			if (s_vjoysticks[joyid]->GetPAD() < 0) break;
-		}
-	}
-
-	return joyid;
-}
-
-int Get_Current_Joystick()
-{
-	// check bounds
-	int joyid = _GetJoystickId();
-
-	if (JoystickIdWithinBounds(joyid))
-		return joyid + 1; // select the combo
-	else
-		return 0; //s_vjoysticks.size(); // no gamepad
-}
-
 // opens handles to all possible joysticks
 void JoystickInfo::EnumerateJoysticks(vector<JoystickInfo*>& vjoysticks)
 {
@@ -104,8 +76,6 @@ void JoystickInfo::EnumerateJoysticks(vector<JoystickInfo*>& vjoysticks)
 		// SDL in 3rdparty wrap X11 call. In order to get x11 symbols loaded
 		// video must be loaded too.
 		// Example of X11 symbol are XAutoRepeatOn/XAutoRepeatOff
-		// Just to play it safe I separate 1.2 and 1.3 but I think it will be 
-		// fine in 1.2 too -- greg
 		if (SDL_Init(SDL_INIT_JOYSTICK|SDL_INIT_VIDEO|SDL_INIT_HAPTIC) < 0) return;
 #else
 		if (SDL_Init(SDL_INIT_JOYSTICK) < 0) return;
@@ -226,7 +196,7 @@ void JoystickInfo::InitHapticEffect()
 void JoystickInfo::DoHapticEffect(int type, int pad, int force)
 {
 	if (type > 1) return;
-	if ( !(!conf.options & PADOPTION_FORCEFEEDBACK) ) return;
+	if ( !(!conf.options & (PADOPTION_FORCEFEEDBACK << 16 * (pad & 1))) ) return;
 
 #if SDL_VERSION_ATLEAST(1,3,0)
 	// first search the joy associated to the pad

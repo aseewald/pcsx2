@@ -30,7 +30,8 @@ void config_key(int pad, int key);
 void on_conf_key(GtkButton *button, gpointer user_data);
 
 static int current_pad = 0;
-static GtkWidget *rev_lx_check, *rev_ly_check, *force_feedback_check, *rev_rx_check, *rev_ry_check;
+static GtkWidget *rev_lx_check, *rev_ly_check, *rev_rx_check, *rev_ry_check;
+static GtkWidget *mouse_l_check, *forcefeedback_check, *mouse_r_check;
 static GtkComboBox *joy_choose_cbox;
 
 const char* s_pGuiKeyMap[] =
@@ -342,10 +343,52 @@ void on_modify_clicked(GtkButton *button, gpointer user_data)
 	key_tree_manager->modify_selected();
 }
 
+void update_option(int option, bool value)
+{
+	// Note: current_pad can be 2 or 3 (which are alternate configuration of pad 0 and 1)
+	int mask = (current_pad & 1) ? (option << 16) : option;
+    
+    if (value)
+		conf.options |= mask;
+	else
+		conf.options &= ~mask;
+}
+
+// Save to conf.options the value of gtk element
+void update_options()
+{
+	update_option(PADOPTION_REVERSELX, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_lx_check)));
+	update_option(PADOPTION_REVERSELY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_ly_check)));
+	update_option(PADOPTION_REVERSERX, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_rx_check)));
+	update_option(PADOPTION_REVERSERY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_ry_check)));
+
+	update_option(PADOPTION_FORCEFEEDBACK, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(forcefeedback_check)));
+	update_option(PADOPTION_MOUSE_L, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(mouse_l_check)));
+	update_option(PADOPTION_MOUSE_R, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(mouse_r_check)));
+}
+
+// Set gtk element from the conf.options value
+void restore_option()
+{
+	// Note: current_pad can be 2 or 3 (which are alternate configuration of pad 0 and 1)
+	int options = (current_pad & 1) ? (conf.options >> 16) : (conf.options & 0xFFFF);
+	
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_lx_check), (options & PADOPTION_REVERSELX));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_ly_check), (options & PADOPTION_REVERSELY));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_rx_check), (options & PADOPTION_REVERSERX));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_ry_check), (options & PADOPTION_REVERSERY));
+
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(forcefeedback_check), (options & PADOPTION_FORCEFEEDBACK));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(mouse_l_check), (options & PADOPTION_MOUSE_L));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(mouse_r_check), (options & PADOPTION_MOUSE_R));
+}
+
+
 void joy_changed(GtkComboBox *box, gpointer user_data)
 {
 	int joyid = gtk_combo_box_get_active(box);
 
+	// FIXME might be a good idea to ask the user first ;)
 	// unassign every joystick with this pad
 	for (int i = 0; i < (int)s_vjoysticks.size(); ++i)
 		if (s_vjoysticks[i]->GetPAD() == current_pad) s_vjoysticks[i]->Assign(-1);
@@ -362,30 +405,17 @@ void joy_changed(GtkComboBox *box, gpointer user_data)
 
 void pad_changed(GtkComboBox *box, gpointer user_data)
 {
+	// save gui element state before changing the pad
+	update_options();
+
 	int temp = gtk_combo_box_get_active(box);
 	if (temp >= 0) current_pad = temp;
 	key_tree_manager->update();
-	// Note: current_pad can be 2 or 3 (which are alternate configuration of pad 0 and 1)
-	int options = (current_pad & 1) ? (conf.options >> 16) : (conf.options & 0xFFFF);
 	
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_lx_check), (options & PADOPTION_REVERSELX));
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_ly_check), (options & PADOPTION_REVERSELY));
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_rx_check), (options & PADOPTION_REVERSERX));
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_ry_check), (options & PADOPTION_REVERSERY));
+	restore_option();
 
 	// update joy
 	set_current_joy();
-}
-
-void update_option(int option, bool value)
-{
-	// Note: current_pad can be 2 or 3 (which are alternate configuration of pad 0 and 1)
-	int mask = (current_pad & 1) ? (option << 16) : option;
-    
-    if (value)
-		conf.options |= mask;
-	else
-		conf.options &= ~mask;
 }
 
 //void on_forcefeedback_toggled(GtkToggleButton *togglebutton, gpointer user_data)
@@ -497,6 +527,8 @@ void DisplayDialog()
 		(GtkDialogFlags)(GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT),
 		GTK_STOCK_OK,
 			GTK_RESPONSE_ACCEPT,
+		GTK_STOCK_APPLY,
+			GTK_RESPONSE_APPLY,
 		GTK_STOCK_CANCEL,
 			GTK_RESPONSE_REJECT,
 		NULL);
@@ -557,13 +589,14 @@ void DisplayDialog()
 		btn[i].put(b_pos[i].label, i, GTK_FIXED(keys_static_area), b_pos[i].x, b_pos[i].y);
 	}
     
-	// Note: current_pad can be 2 or 3 (which are alternate configuration of pad 0 and 1)
-	int options = (current_pad & 1) ? (conf.options >> 16) : (conf.options & 0xFFFF);
-    
-    rev_lx_check = create_dialog_checkbox(keys_static_area, "Reverse Lx", 40, 344, (options & PADOPTION_REVERSELX));
-    rev_ly_check = create_dialog_checkbox(keys_static_area, "Reverse Ly", 40, 368, (options & PADOPTION_REVERSELY));
-    rev_rx_check = create_dialog_checkbox(keys_static_area, "Reverse Rx", 368, 344, (options & PADOPTION_REVERSERX));
-    rev_ry_check = create_dialog_checkbox(keys_static_area, "Reverse Ry", 368, 368, (options & PADOPTION_REVERSERY));
+    rev_lx_check = create_dialog_checkbox(keys_static_area, "Reverse Lx", 40, 344, 0);
+    rev_ly_check = create_dialog_checkbox(keys_static_area, "Reverse Ly", 40, 368, 0);
+    rev_rx_check = create_dialog_checkbox(keys_static_area, "Reverse Rx", 368, 344, 0);
+    rev_ry_check = create_dialog_checkbox(keys_static_area, "Reverse Ry", 368, 368, 0);
+
+	mouse_l_check = create_dialog_checkbox(keys_static_area, "Use mouse for left analog joy", 40, 400, 0);
+	mouse_r_check = create_dialog_checkbox(keys_static_area, "Use mouse for right analog joy", 368, 400, 0);
+	forcefeedback_check = create_dialog_checkbox(keys_static_area, "Enable force feedback", 40, 500, 0);
     
     keys_box = gtk_hbox_new(false, 5);
     keys_frame = gtk_frame_new ("Key Settings");
@@ -587,19 +620,18 @@ void DisplayDialog()
     gtk_container_add (GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), main_frame);
     
     key_tree_manager->update();
+	restore_option();
     
     gtk_widget_show_all (dialog);
 
-    return_value = gtk_dialog_run (GTK_DIALOG (dialog));
-    if (return_value == GTK_RESPONSE_ACCEPT) 
-    {
-		update_option(PADOPTION_REVERSELX, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_lx_check)));
-		update_option(PADOPTION_REVERSELY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_ly_check)));
-		update_option(PADOPTION_REVERSERX, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_rx_check)));
-		update_option(PADOPTION_REVERSERY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_ry_check)));
-    	SaveConfig();
-    }
-	
+	do {
+		return_value = gtk_dialog_run (GTK_DIALOG (dialog));
+		if (return_value == GTK_RESPONSE_APPLY || return_value == GTK_RESPONSE_ACCEPT) {
+			update_options();
+			SaveConfig();
+		}
+	} while (return_value == GTK_RESPONSE_APPLY);
+
 	LoadConfig();
 	delete key_tree_manager;
     gtk_widget_destroy (dialog);
