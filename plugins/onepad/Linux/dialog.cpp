@@ -53,7 +53,7 @@ enum
 	COL_VALUE,
 	NUM_COLS
 };
-
+	
 class keys_tree
 {	
 	private:
@@ -413,26 +413,6 @@ void on_refresh(GtkComboBox *box, gpointer user_data)
 		gtk_combo_box_set_active(joy_choose_cbox, current_joystick);
 }
 
-void on_rev_lx(GtkComboBox *box, gpointer user_data)
-{
-	update_option(PADOPTION_REVERSELX, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_lx_check)));
-}
-
-void on_rev_ly(GtkComboBox *box, gpointer user_data)
-{
-	update_option(PADOPTION_REVERSELY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_ly_check)));
-}
-
-void on_rev_rx(GtkComboBox *box, gpointer user_data)
-{
-	update_option(PADOPTION_REVERSERX, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_rx_check)));
-}
-
-void on_rev_ry(GtkComboBox *box, gpointer user_data)
-{
-	update_option(PADOPTION_REVERSERY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_ry_check)));
-}
-
 //void on_forcefeedback_toggled(GtkToggleButton *togglebutton, gpointer user_data)
 //{
 //	int mask = PADOPTION_REVERSELX << (16 * s_selectedpad);
@@ -451,6 +431,15 @@ void on_rev_ry(GtkComboBox *box, gpointer user_data)
 //	}
 //}
 
+GtkWidget *create_dialog_checkbox(GtkWidget* area, char* label, u32 x, u32 y, bool flag)
+{
+	GtkWidget *temp;
+	
+    temp = gtk_check_button_new_with_label(label);
+	gtk_fixed_put(GTK_FIXED(area), temp, x, y);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(temp), flag);
+    return temp;
+}
 void DisplayDialog()
 {
     int return_value;
@@ -473,6 +462,7 @@ void DisplayDialog()
     
     GtkWidget *keys_static_frame, *keys_static_box;
     GtkWidget *keys_static_area;
+	
     dialog_buttons btn[29];
     
 	LoadConfig();
@@ -588,25 +578,11 @@ void DisplayDialog()
 	btn[27].put("Left", 27, GTK_FIXED(keys_static_area), static_offset + 328, 272);
     
     int options = (conf.options >> (16 * current_pad));
-    rev_lx_check = gtk_check_button_new_with_label("Reverse Lx");
-	gtk_fixed_put(GTK_FIXED(keys_static_area), rev_lx_check, static_offset + 40, 344);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_lx_check), (options & PADOPTION_REVERSELX));
-	g_signal_connect(GTK_OBJECT (rev_lx_check), "toggled", G_CALLBACK(on_rev_lx), NULL);
-	
-    rev_ly_check = gtk_check_button_new_with_label("Reverse Ly");
-	gtk_fixed_put(GTK_FIXED(keys_static_area), rev_ly_check, static_offset + 40, 368);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_ly_check), (options & PADOPTION_REVERSELY));
-	g_signal_connect(GTK_OBJECT (rev_ly_check), "toggled", G_CALLBACK(on_rev_ly), NULL);
-	
-    rev_rx_check = gtk_check_button_new_with_label("Reverse Rx");
-	gtk_fixed_put(GTK_FIXED(keys_static_area), rev_rx_check, static_offset + 368, 344);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_rx_check), (options & PADOPTION_REVERSERX));
-	g_signal_connect(GTK_OBJECT (rev_rx_check), "toggled", G_CALLBACK(on_rev_rx), NULL);
-	
-    rev_ry_check = gtk_check_button_new_with_label("Reverse Ry");
-	gtk_fixed_put(GTK_FIXED(keys_static_area), rev_ry_check, static_offset + 368, 368);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_ry_check), (options & PADOPTION_REVERSERY));
-	g_signal_connect(GTK_OBJECT (rev_ry_check), "toggled", G_CALLBACK(on_rev_ry), NULL);
+    
+    rev_lx_check = create_dialog_checkbox(keys_static_area, "Reverse Lx", static_offset + 40, 344, (options & PADOPTION_REVERSELX));
+    rev_ly_check = create_dialog_checkbox(keys_static_area, "Reverse Ly", static_offset + 40, 368, (options & PADOPTION_REVERSELY));
+    rev_rx_check = create_dialog_checkbox(keys_static_area, "Reverse Rx", static_offset + 368, 344, (options & PADOPTION_REVERSERX));
+    rev_ry_check = create_dialog_checkbox(keys_static_area, "Reverse Ry", static_offset + 368, 368, (options & PADOPTION_REVERSERY));
     
     keys_box = gtk_hbox_new(false, 5);
     keys_frame = gtk_frame_new ("Key Settings");
@@ -635,7 +611,14 @@ void DisplayDialog()
     gtk_widget_show_all (dialog);
 
     return_value = gtk_dialog_run (GTK_DIALOG (dialog));
-    if (return_value == GTK_RESPONSE_ACCEPT) SaveConfig();
+    if (return_value == GTK_RESPONSE_ACCEPT) 
+    {
+		update_option(PADOPTION_REVERSELX, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_lx_check)));
+		update_option(PADOPTION_REVERSELY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_ly_check)));
+		update_option(PADOPTION_REVERSERX, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_rx_check)));
+		update_option(PADOPTION_REVERSERY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_ry_check)));
+    	SaveConfig();
+    }
 	
 	LoadConfig();
 	delete fir;
