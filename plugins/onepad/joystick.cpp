@@ -66,6 +66,34 @@ bool JoystickIdWithinBounds(int joyid)
 	return ((joyid >= 0) && (joyid < (int)s_vjoysticks.size()));
 }
 
+int _GetJoystickId()
+{
+	// select the right joystick id
+	u32 joyid = -1;
+
+	if (!JoystickIdWithinBounds(joyid))
+	{
+		// get first unused joystick
+		for (joyid = 0; joyid < s_vjoysticks.size(); ++joyid)
+		{
+			if (s_vjoysticks[joyid]->GetPAD() < 0) break;
+		}
+	}
+
+	return joyid;
+}
+
+int Get_Current_Joystick()
+{
+	// check bounds
+	int joyid = _GetJoystickId();
+
+	if (JoystickIdWithinBounds(joyid))
+		return joyid + 1; // select the combo
+	else
+		return 0; //s_vjoysticks.size(); // no gamepad
+}
+
 // opens handles to all possible joysticks
 void JoystickInfo::EnumerateJoysticks(vector<JoystickInfo*>& vjoysticks)
 {

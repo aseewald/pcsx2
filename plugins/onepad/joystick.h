@@ -171,4 +171,6 @@ extern vector<JoystickInfo*> s_vjoysticks;
 extern void UpdateJoysticks();
 extern const char *HatName(int value);
 extern bool JoystickIdWithinBounds(int joyid);
+extern int _GetJoystickId();
+extern int Get_Current_Joystick();
 #endif

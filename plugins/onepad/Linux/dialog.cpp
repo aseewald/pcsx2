@@ -198,35 +198,7 @@ class keys_tree
 			}
 		}
 };
-keys_tree *fir;
-
-int _GetJoystickId()
-{
-	// select the right joystick id
-	u32 joyid = -1;
-
-	if (!JoystickIdWithinBounds(joyid))
-	{
-		// get first unused joystick
-		for (joyid = 0; joyid < s_vjoysticks.size(); ++joyid)
-		{
-			if (s_vjoysticks[joyid]->GetPAD() < 0) break;
-		}
-	}
-
-	return joyid;
-}
-
-int Get_Current_Joystick()
-{
-	// check bounds
-	int joyid = _GetJoystickId();
-
-	if (JoystickIdWithinBounds(joyid))
-		return joyid + 1; // select the combo
-	else
-		return 0; //s_vjoysticks.size(); // no gamepad
-}
+keys_tree *key_tree_manager;
 
 void populate_new_joysticks(GtkComboBox *box)
 {
@@ -344,22 +316,22 @@ void on_conf_key(GtkButton *button, gpointer user_data)
 	if (key == -1) return;
 	
 	config_key(current_pad, key);
-	fir->update();
+	key_tree_manager->update();
 }
 
 void on_remove_clicked(GtkButton *button, gpointer user_data)
 {
-	fir->remove_selected();
+	key_tree_manager->remove_selected();
 }
 
 void on_clear_clicked(GtkButton *button, gpointer user_data)
 {
-	fir->clear_all();
+	key_tree_manager->clear_all();
 }
 
 void on_modify_clicked(GtkButton *button, gpointer user_data)
 {
-	fir->modify_selected();
+	key_tree_manager->modify_selected();
 }
 
 void joy_changed(GtkComboBox *box, gpointer user_data)
@@ -379,7 +351,7 @@ void pad_changed(GtkComboBox *box, gpointer user_data)
 {
 	int temp = gtk_combo_box_get_active(box);
 	if (temp >= 0) current_pad = temp;
-	fir->update();
+	key_tree_manager->update();
     int options = (conf.options >> (16 * current_pad));
 	
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_lx_check), (options & PADOPTION_REVERSELX));
@@ -431,7 +403,54 @@ void on_refresh(GtkComboBox *box, gpointer user_data)
 //	}
 //}
 
-GtkWidget *create_dialog_checkbox(GtkWidget* area, char* label, u32 x, u32 y, bool flag)
+struct button_positions
+{
+	const char* label;
+	u32 x,y;
+};
+
+button_positions b_pos[28] = 
+{
+	{ "L2", 64, 8},
+	{ "R2", 392, 8},
+	{ "L1", 64, 32},
+	{ "R1", 392, 32},
+	
+	{ "Triangle", 392, 80},
+	{ "Circle", 456, 104},
+	{ "Cross", 392, 128},
+	{ "Square", 328, 104},
+	
+	{ "Select", 200, 48},
+	{ "L3", 200, 8},
+	{ "R3", 272, 8},
+	{ "Start", 272, 48},
+	
+	// Arrow pad
+	{ "Up", 64, 80},
+	{ "Right", 128, 104},
+	{ "Down", 64, 128},
+	{ "Left", 0, 104},
+	
+	{ "Lx", 64, 264},
+	{ "Rx", 392, 264},
+	{ "Ly", 64, 288},
+	{ "Ry", 392, 288},
+	
+	// Left Analog joystick
+	{ "Up", 64, 240},
+	{ "Right", 128, 272},
+	{ "Down", 64, 312},
+	{ "Left", 0, 272},
+	
+	// Right Analog joystick
+	{ "Up", 392, 240},
+	{ "Right", 456, 272},
+	{ "Down", 392, 312},
+	{ "Left", 328, 272}
+};
+
+GtkWidget *create_dialog_checkbox(GtkWidget* area, const char* label, u32 x, u32 y, bool flag)
 {
 	GtkWidget *temp;
 	
@@ -440,6 +459,7 @@ GtkWidget *create_dialog_checkbox(GtkWidget* area, char* label, u32 x, u32 y, bo
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(temp), flag);
     return temp;
 }
+
 void DisplayDialog()
 {
     int return_value;
@@ -463,11 +483,11 @@ void DisplayDialog()
     GtkWidget *keys_static_frame, *keys_static_box;
     GtkWidget *keys_static_area;
 	
-    dialog_buttons btn[29];
+    dialog_buttons btn[28];
     
 	LoadConfig();
-	fir = new keys_tree;
-	fir->init();
+	key_tree_manager = new keys_tree;
+	key_tree_manager->init();
 	
     /* Create the widgets */
     dialog = gtk_dialog_new_with_buttons (
@@ -536,59 +556,23 @@ void DisplayDialog()
     
 	keys_static_area = gtk_fixed_new();
 	
-	u32 static_offset = 0; //320
-	btn[0].put("L2", 0, GTK_FIXED(keys_static_area), static_offset + 64, 8);
-	btn[1].put("R2", 1, GTK_FIXED(keys_static_area), static_offset + 392, 8);
-	btn[2].put("L1", 2, GTK_FIXED(keys_static_area), static_offset + 64, 32);
-	btn[3].put("R1", 3, GTK_FIXED(keys_static_area), static_offset + 392, 32);
-	
-	btn[4].put("Triangle", 4, GTK_FIXED(keys_static_area), static_offset + 392, 80);
-	btn[5].put("Circle", 5, GTK_FIXED(keys_static_area), static_offset + 456, 104);
-	btn[6].put("Cross", 6, GTK_FIXED(keys_static_area), static_offset + 392,128);
-	btn[7].put("Square", 7, GTK_FIXED(keys_static_area), static_offset + 328, 104);
-	
-	btn[8].put("Select", 8, GTK_FIXED(keys_static_area), static_offset + 200, 48);
-	btn[9].put("L3", 9, GTK_FIXED(keys_static_area), static_offset + 200, 8);
-	btn[10].put("R3", 10, GTK_FIXED(keys_static_area), static_offset + 272, 8);
-	btn[11].put("Start", 11, GTK_FIXED(keys_static_area), static_offset + 272, 48);
-	
-	// Arrow pad
-	btn[12].put("Up", 12, GTK_FIXED(keys_static_area), static_offset + 64, 80);
-	btn[13].put("Right", 13, GTK_FIXED(keys_static_area), static_offset + 128, 104);
-	btn[14].put("Down", 14, GTK_FIXED(keys_static_area), static_offset + 64, 128);
-	btn[15].put("Left", 15, GTK_FIXED(keys_static_area), static_offset + 0, 104);
-	
-	//btn[xx].put("Analog", GTK_FIXED(keys_static_area), static_offset + 232, 104);
-	
-	btn[16].put("Lx", 16, GTK_FIXED(keys_static_area), static_offset + 64, 264);
-	btn[17].put("Rx", 17, GTK_FIXED(keys_static_area), static_offset + 392, 264);
-	btn[18].put("Ly", 18, GTK_FIXED(keys_static_area), static_offset + 64, 288);
-	btn[19].put("Ry", 19, GTK_FIXED(keys_static_area), static_offset + 392, 288);
-	
-	// Left Joystick
-	btn[20].put("Up", 20, GTK_FIXED(keys_static_area), static_offset + 64, 240);
-	btn[21].put("Right", 21, GTK_FIXED(keys_static_area), static_offset + 128, 272);
-	btn[22].put("Down", 22, GTK_FIXED(keys_static_area), static_offset + 64, 312);
-	btn[23].put("Left", 23, GTK_FIXED(keys_static_area), static_offset + 0, 272);
-	
-	// Right Joystick
-	btn[24].put("Up", 24, GTK_FIXED(keys_static_area), static_offset + 392, 240);
-	btn[25].put("Right", 25, GTK_FIXED(keys_static_area), static_offset + 456, 272);
-	btn[26].put("Down", 26, GTK_FIXED(keys_static_area), static_offset + 392, 312);
-	btn[27].put("Left", 27, GTK_FIXED(keys_static_area), static_offset + 328, 272);
+	for(int i = 0; i <= 27; i++)
+	{
+		btn[i].put(b_pos[i].label, i, GTK_FIXED(keys_static_area), b_pos[i].x, b_pos[i].y);
+	}
     
     int options = (conf.options >> (16 * current_pad));
     
-    rev_lx_check = create_dialog_checkbox(keys_static_area, "Reverse Lx", static_offset + 40, 344, (options & PADOPTION_REVERSELX));
-    rev_ly_check = create_dialog_checkbox(keys_static_area, "Reverse Ly", static_offset + 40, 368, (options & PADOPTION_REVERSELY));
-    rev_rx_check = create_dialog_checkbox(keys_static_area, "Reverse Rx", static_offset + 368, 344, (options & PADOPTION_REVERSERX));
-    rev_ry_check = create_dialog_checkbox(keys_static_area, "Reverse Ry", static_offset + 368, 368, (options & PADOPTION_REVERSERY));
+    rev_lx_check = create_dialog_checkbox(keys_static_area, "Reverse Lx", 40, 344, (options & PADOPTION_REVERSELX));
+    rev_ly_check = create_dialog_checkbox(keys_static_area, "Reverse Ly", 40, 368, (options & PADOPTION_REVERSELY));
+    rev_rx_check = create_dialog_checkbox(keys_static_area, "Reverse Rx", 368, 344, (options & PADOPTION_REVERSERX));
+    rev_ry_check = create_dialog_checkbox(keys_static_area, "Reverse Ry", 368, 368, (options & PADOPTION_REVERSERY));
     
     keys_box = gtk_hbox_new(false, 5);
     keys_frame = gtk_frame_new ("Key Settings");
     gtk_container_add (GTK_CONTAINER(keys_frame), keys_box);
     
-	gtk_box_pack_start (GTK_BOX (keys_tree_box), fir->view_widget(), true, true, 0);
+	gtk_box_pack_start (GTK_BOX (keys_tree_box), key_tree_manager->view_widget(), true, true, 0);
 	gtk_box_pack_end (GTK_BOX (keys_btn_box), keys_tree_clear_btn, false, false, 0);
 	gtk_box_pack_end (GTK_BOX (keys_btn_box), keys_tree_remove_btn, false, false, 0);
 	gtk_box_pack_end (GTK_BOX (keys_btn_box), keys_tree_modify_btn, false, false, 0);
@@ -606,7 +590,7 @@ void DisplayDialog()
 
     gtk_container_add (GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), main_frame);
     
-    fir->update();
+    key_tree_manager->update();
     
     gtk_widget_show_all (dialog);
 
@@ -621,6 +605,6 @@ void DisplayDialog()
     }
 	
 	LoadConfig();
-	delete fir;
+	delete key_tree_manager;
     gtk_widget_destroy (dialog);
 }
