@@ -120,6 +120,18 @@ typedef struct
 	u32 log;
 	u32 options;  // upper 16 bits are for pad2
 	u32 sensibility;
+	u32 joyid_map;
+
+	void set_joyid(u32 pad, u32 joy_id) {
+		int shift = 8 * pad;
+		joyid_map &= ~(0xFF << shift); // clear
+		joyid_map |= (joy_id & 0xFF) << shift; // set
+	}
+
+	u32 get_joyid(u32 pad) {
+		int shift = 8 * pad;
+		return ((joyid_map >> shift) & 0xFF);
+	}
 } PADconf;
 
 typedef struct

@@ -30,8 +30,8 @@ void config_key(int pad, int key);
 void on_conf_key(GtkButton *button, gpointer user_data);
 
 static int current_pad = 0;
-static int current_joystick = -1;
-GtkWidget *rev_lx_check, *rev_ly_check, *force_feedback_check, *rev_rx_check, *rev_ry_check;
+static GtkWidget *rev_lx_check, *rev_ly_check, *force_feedback_check, *rev_rx_check, *rev_ry_check;
+static GtkComboBox *joy_choose_cbox;
 
 const char* s_pGuiKeyMap[] =
 {
@@ -188,6 +188,7 @@ class keys_tree
 				update();
 			}
 		}
+
 		void modify_selected()
 		{
 			int key, pad;
@@ -209,7 +210,7 @@ void populate_new_joysticks(GtkComboBox *box)
 	
 	vector<JoystickInfo*>::iterator it = s_vjoysticks.begin();
 
-	// Delete everything in the vector vjoysticks.
+	// Get everything in the vector vjoysticks.
 	while (it != s_vjoysticks.end())
 	{
 		sprintf(str, "%d: %s - but: %d, axes: %d, hats: %d", (*it)->GetId(), (*it)->GetName().c_str(),
@@ -217,7 +218,14 @@ void populate_new_joysticks(GtkComboBox *box)
 		gtk_combo_box_append_text(box, str);
 		it++;
 	}
-    current_joystick = Get_Current_Joystick();
+}
+
+void set_current_joy()
+{
+	u32 joyid = conf.get_joyid(current_pad);
+	// 0 is special case for no gamepad. So you must decrease of 1.
+	if (!JoystickIdWithinBounds(joyid-1)) joyid = 0;
+    gtk_combo_box_set_active(joy_choose_cbox, joyid);
 }
 
 typedef struct
@@ -340,11 +348,16 @@ void joy_changed(GtkComboBox *box, gpointer user_data)
 
 	// unassign every joystick with this pad
 	for (int i = 0; i < (int)s_vjoysticks.size(); ++i)
-	{
 		if (s_vjoysticks[i]->GetPAD() == current_pad) s_vjoysticks[i]->Assign(-1);
-	}
 
-	if (joyid >= 0 && joyid < (int)s_vjoysticks.size()) s_vjoysticks[joyid]->Assign(current_pad);
+	for (int i = 0; i < 4; ++i)
+		if (joyid == conf.get_joyid(i)) conf.set_joyid(i, 0);
+
+	conf.set_joyid(current_pad, joyid);
+
+	// 0 is special case for no gamepad. So you must decrease of 1.
+	joyid--;
+	if (JoystickIdWithinBounds(joyid)) s_vjoysticks[joyid]->Assign(current_pad);
 }
 
 void pad_changed(GtkComboBox *box, gpointer user_data)
@@ -352,37 +365,27 @@ void pad_changed(GtkComboBox *box, gpointer user_data)
 	int temp = gtk_combo_box_get_active(box);
 	if (temp >= 0) current_pad = temp;
 	key_tree_manager->update();
-    int options = (conf.options >> (16 * current_pad));
+	// Note: current_pad can be 2 or 3 (which are alternate configuration of pad 0 and 1)
+	int options = (current_pad & 1) ? (conf.options >> 16) : (conf.options & 0xFFFF);
 	
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_lx_check), (options & PADOPTION_REVERSELX));
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_ly_check), (options & PADOPTION_REVERSELY));
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_rx_check), (options & PADOPTION_REVERSERX));
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_ry_check), (options & PADOPTION_REVERSERY));
+
+	// update joy
+	set_current_joy();
 }
 
 void update_option(int option, bool value)
 {
-    int mask = (option << (16 * current_pad));
+	// Note: current_pad can be 2 or 3 (which are alternate configuration of pad 0 and 1)
+	int mask = (current_pad & 1) ? (option << 16) : option;
     
     if (value)
 		conf.options |= mask;
 	else
 		conf.options &= ~mask;
-}
-
-void on_refresh(GtkComboBox *box, gpointer user_data)
-{
-    GtkComboBox *joy_choose_cbox = (GtkComboBox*)user_data;
-    
-    if (current_joystick < 0) current_joystick = Get_Current_Joystick();
-    
-    for(int i=0; i <= (int)s_vjoysticks.size(); i++)
-    {
-    	gtk_combo_box_remove_text(joy_choose_cbox, 0);
-    }
-    populate_new_joysticks(joy_choose_cbox);
-    if (gtk_combo_box_get_active(joy_choose_cbox) != current_joystick)
-		gtk_combo_box_set_active(joy_choose_cbox, current_joystick);
 }
 
 //void on_forcefeedback_toggled(GtkToggleButton *togglebutton, gpointer user_data)
@@ -471,8 +474,6 @@ void DisplayDialog()
     GtkComboBox *pad_choose_cbox;
     
     GtkWidget *joy_choose_frame, *joy_choose_box;
-    GtkComboBox *joy_choose_cbox;
-    //GtkWidget *joy_refresh;
     
     GtkWidget *keys_frame, *keys_box;
     
@@ -508,15 +509,10 @@ void DisplayDialog()
     gtk_combo_box_set_active(pad_choose_cbox, current_pad);
 	g_signal_connect(GTK_OBJECT (pad_choose_cbox), "changed", G_CALLBACK(pad_changed), NULL);
     
-    if (current_joystick == -1) current_joystick = Get_Current_Joystick();
     joy_choose_cbox = GTK_COMBO_BOX(gtk_combo_box_new_text());
     populate_new_joysticks(joy_choose_cbox);
-    gtk_combo_box_set_active(joy_choose_cbox, current_joystick);
+	set_current_joy();
 	g_signal_connect(GTK_OBJECT (joy_choose_cbox), "changed", G_CALLBACK(joy_changed), NULL);
-	
-	//joy_refresh = gtk_button_new_with_label("Refresh");
-	//g_signal_connect(GTK_OBJECT (joy_refresh), "clicked", G_CALLBACK(on_refresh), joy_choose_cbox);
-	//gtk_widget_set_size_request(joy_refresh, 64, 24);
 	
 	keys_tree_clear_btn = gtk_button_new_with_label("Clear All");
 	g_signal_connect(GTK_OBJECT (keys_tree_clear_btn), "clicked", G_CALLBACK(on_clear_clicked), NULL);
@@ -561,7 +557,8 @@ void DisplayDialog()
 		btn[i].put(b_pos[i].label, i, GTK_FIXED(keys_static_area), b_pos[i].x, b_pos[i].y);
 	}
     
-    int options = (conf.options >> (16 * current_pad));
+	// Note: current_pad can be 2 or 3 (which are alternate configuration of pad 0 and 1)
+	int options = (current_pad & 1) ? (conf.options >> 16) : (conf.options & 0xFFFF);
     
     rev_lx_check = create_dialog_checkbox(keys_static_area, "Reverse Lx", 40, 344, (options & PADOPTION_REVERSELX));
     rev_ly_check = create_dialog_checkbox(keys_static_area, "Reverse Ly", 40, 368, (options & PADOPTION_REVERSELY));
@@ -579,7 +576,6 @@ void DisplayDialog()
     
 	gtk_container_add(GTK_CONTAINER(pad_choose_box), GTK_WIDGET(pad_choose_cbox));
 	gtk_container_add(GTK_CONTAINER(joy_choose_box), GTK_WIDGET(joy_choose_cbox));
-	//gtk_container_add(GTK_CONTAINER(joy_choose_box), joy_refresh);
 	gtk_container_add(GTK_CONTAINER(keys_tree_box), keys_btn_frame);
 	gtk_box_pack_start (GTK_BOX (keys_box), keys_tree_frame, true, true, 0);
 	gtk_container_add(GTK_CONTAINER(keys_box), keys_static_area);

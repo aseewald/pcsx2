@@ -140,6 +140,7 @@ void SaveConfig()
 	fprintf(f, "log = %d\n", conf.log);
 	fprintf(f, "options = %d\n", conf.options);
 	fprintf(f, "mouse_sensibility = %d\n", conf.sensibility);
+	fprintf(f, "joy_pad_map = %d\n", conf.joyid_map);
 	fclose(f);
 }
 
@@ -150,7 +151,6 @@ void LoadConfig()
 
 	memset(&conf, 0, sizeof(conf));
 	DefaultValues();
-	conf.log = 0;
 	conf.sensibility = 500;
 
 	const std::string iniFile(s_strIniPath + "OnePAD.ini");
@@ -176,5 +176,6 @@ void LoadConfig()
 	fscanf(f, "log = %d\n", &conf.log);
 	fscanf(f, "options = %d\n", &conf.options);
 	fscanf(f, "mouse_sensibility = %d\n", &conf.sensibility);
+	fscanf(f, "joy_pad_map = %d\n", &conf.joyid_map);
 	fclose(f);
 }
