@@ -36,7 +36,7 @@ __forceinline int get_key(int pad, int index)
 
 __forceinline KeyType type_of_key(int pad, int index)
  {
-	 int key = conf.keys[pad][index];
+	 int key = get_key(pad, index);
 
 	if (key < 0x10000) return PAD_KEYBOARD;
 	else if (key >= 0x10000 && key < 0x20000) return PAD_JOYBUTTONS;
@@ -53,35 +53,30 @@ __forceinline KeyType type_of_key(int pad, int index)
 // keyboard
 
 // joystick
-__forceinline int key_to_joystick_id(int pad, int index)
-{
-	return (((conf.keys[pad][index]) & 0xf000) >> 12);
-}
-
 __forceinline int key_to_button(int pad, int index)
 {
-	return ((conf.keys[pad][index]) & 0xff);
+	return (get_key(pad, index) & 0xff);
 }
 
 __forceinline int key_to_axis(int pad, int index)
 {
-	return ((conf.keys[pad][index]) & 0xff);
+	return (get_key(pad, index) & 0xff);
 }
 
 __forceinline int key_to_pov_sign(int pad, int index)
 {
-	return (((conf.keys[pad][index]) & 0x100) >> 8);
+	return ((get_key(pad, index) & 0x100) >> 8);
 }
 
 __forceinline int key_to_hat_dir(int pad, int index)
 {
-	return (((conf.keys[pad][index]) & 0xF00) >> 8);
+	return ((get_key(pad, index) & 0xF00) >> 8);
 }
 
 // mouse
 __forceinline int key_to_mouse(int pad, int index)
 {
-	return ((conf.keys[pad][index]) & 0xff);
+	return (get_key(pad, index) & 0xff);
 }
 
 //*******************************************************
@@ -90,28 +85,28 @@ __forceinline int key_to_mouse(int pad, int index)
 // keyboard ???
 __forceinline int pad_to_key(int pad, int index)
 {
-	return ((conf.keys[pad][index]) & 0xffff);
+	return (get_key(pad, index) & 0xffff);
 }
 
 // joystick
-__forceinline int button_to_key(int joy_id, int button_id)
+__forceinline int button_to_key(int button_id)
 {
-	return (0x10000 | ((joy_id) << 12) | (button_id));
+	return (0x10000 | button_id);
 }
 
-__forceinline int joystick_to_key(int joy_id, int axis_id)
+__forceinline int joystick_to_key(int axis_id)
 {
-	return (0x20000 | ((joy_id) << 12) | (axis_id));
+	return (0x20000 | axis_id);
 }
 
-__forceinline int pov_to_key(int joy_id, int sign, int axis_id)
+__forceinline int pov_to_key(int sign, int axis_id)
 {
-	return (0x30000 | ((joy_id) << 12) | ((sign) << 8) | (axis_id));
+	return (0x30000 | ((sign) << 8) | (axis_id));
 }
 
-__forceinline int hat_to_key(int joy_id, int dir, int axis_id)
+__forceinline int hat_to_key(int dir, int axis_id)
 {
-	return (0x40000 | ((joy_id) << 12) | ((dir) << 8) | (axis_id));
+	return (0x40000 | ((dir) << 8) | (axis_id));
 }
 
 // mouse

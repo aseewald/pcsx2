@@ -214,7 +214,7 @@ void populate_new_joysticks(GtkComboBox *box)
 	// Get everything in the vector vjoysticks.
 	while (it != s_vjoysticks.end())
 	{
-		sprintf(str, "%d: %s - but: %d, axes: %d, hats: %d", (*it)->GetId(), (*it)->GetName().c_str(),
+		sprintf(str, "%s - but: %d, axes: %d, hats: %d", (*it)->GetName().c_str(),
 		        (*it)->GetNumButtons(), (*it)->GetNumAxes(), (*it)->GetNumHats());
 		gtk_combo_box_append_text(box, str);
 		it++;
@@ -255,7 +255,7 @@ void config_key(int pad, int key)
 		vector<JoystickInfo*>::iterator itjoy;
 
 		u32 pkey = get_key(pad, key);
-		if (PollX11Keyboard(pkey))
+		if (PollX11KeyboardMouseEvent(pkey))
 		{
 			set_key(pad, key, pkey);
 			PAD_LOG("%s\n", KeyName(pad, key).c_str());
@@ -388,19 +388,17 @@ void joy_changed(GtkComboBox *box, gpointer user_data)
 {
 	int joyid = gtk_combo_box_get_active(box);
 
-	// FIXME might be a good idea to ask the user first ;)
-	// unassign every joystick with this pad
-	for (int i = 0; i < (int)s_vjoysticks.size(); ++i)
-		if (s_vjoysticks[i]->GetPAD() == current_pad) s_vjoysticks[i]->Assign(-1);
+	// FIXME: might be a good idea to ask the user first ;)
+	// FIXME: do you need to clean the previous key association. or what the user want
+	// 1 : keep previous joy
+	// 2 : use new joy with old key binding
+	// 3 : use new joy with fresh key binding
 
+	// unassign every joystick with this pad
 	for (int i = 0; i < 4; ++i)
 		if (joyid == conf.get_joyid(i)) conf.set_joyid(i, 0);
 
 	conf.set_joyid(current_pad, joyid);
-
-	// 0 is special case for no gamepad. So you must decrease of 1.
-	joyid--;
-	if (JoystickIdWithinBounds(joyid)) s_vjoysticks[joyid]->Assign(current_pad);
 }
 
 void pad_changed(GtkComboBox *box, gpointer user_data)

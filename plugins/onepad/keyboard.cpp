@@ -28,7 +28,7 @@
 #include <gdk/gdkkeysyms.h>
 #include "keyboard.h"
 
-int FindKey(int key, int pad)
+static int FindKey(int key, int pad)
 {
 	for (int p = 0; p < MAX_SUB_KEYS; p++)
 		for (int i = 0; i < MAX_KEYS; i++)
@@ -273,7 +273,7 @@ void PollForX11KeyboardInput(int pad)
 	UpdateKeys(pad, keyPress, keyRelease);
 }
 
-bool PollX11Keyboard(u32 &pkey)
+bool PollX11KeyboardMouseEvent(u32 &pkey)
 {
 	GdkEvent *ev = gdk_event_get();
 

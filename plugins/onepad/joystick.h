@@ -62,7 +62,6 @@ class JoystickInfo
 		static void DoHapticEffect(int type, int pad, int force);
 
 		bool Init(int id); // opens a handle and gets information
-		void Assign(int pad); // assigns a joystick to a pad
 
 		void TestForce();
 
@@ -89,11 +88,6 @@ class JoystickInfo
 		int GetNumHats()
 		{
 			return numhats;
-		}
-
-		int GetId()
-		{
-			return _id;
 		}
 
 		int GetPAD()

@@ -126,7 +126,7 @@ FILE *padLog = NULL;
 
 pthread_spinlock_t s_mutexStatus;
 pthread_mutex_t	   mutex_KeyEvent;
-u32 s_keyPress[2], s_keyRelease[2];
+static u32 s_keyPress[2], s_keyRelease[2];
 
 queue<keyEvent> ev_fifo;
 

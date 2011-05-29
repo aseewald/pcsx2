@@ -92,93 +92,96 @@ void _PADclose()
 
 EXPORT_C_(void) PADupdate(int pad)
 {
+	// FIXME for me pad is alway 0 and we need to do a for loop
+
+	int cpad = pad;
+
 	// Poll keyboard.
-	PollForKeyboardInput(pad);
+	PollForKeyboardInput(cpad);
 
 	// joystick info
 	SDL_JoystickUpdate();
 
-	for (int i = 0; i < MAX_KEYS; i++)
-	{
-		int cpad = PadEnum[pad][0];
+	// Note 0 is a special case for no joystick so decrease the value of 1
+	int joyid = conf.get_joyid(cpad) -1;
 
-		if (JoystickIdWithinBounds(key_to_joystick_id(cpad, i)))
+	if (JoystickIdWithinBounds(joyid)) {
+		for (int i = 0; i < MAX_KEYS; i++)
 		{
-			JoystickInfo* pjoy = s_vjoysticks[key_to_joystick_id(cpad, i)];
-			int pad = (pjoy)->GetPAD();
+			JoystickInfo* pjoy = s_vjoysticks[joyid];
 
 			switch (type_of_key(cpad, i))
 			{
 				case PAD_JOYBUTTONS:
-				{
-					int value = SDL_JoystickGetButton((pjoy)->GetJoy(), key_to_button(cpad, i));
+					{
+						int value = SDL_JoystickGetButton((pjoy)->GetJoy(), key_to_button(cpad, i));
 
-					if (value)
-						clear_bit(status[pad], i); // released
-					else
-						set_bit(status[pad], i); // pressed
-					break;
-				}
-			case PAD_HAT:
-				{
-					int value = SDL_JoystickGetHat((pjoy)->GetJoy(), key_to_axis(cpad, i));
+						if (value)
+							clear_bit(status[cpad], i); // released
+						else
+							set_bit(status[cpad], i); // pressed
+						break;
+					}
+				case PAD_HAT:
+					{
+						int value = SDL_JoystickGetHat((pjoy)->GetJoy(), key_to_axis(cpad, i));
 
-					if (key_to_hat_dir(cpad, i) == value)
-					{
-						clear_bit(status[pad], i);
-						//PAD_LOG("Registered %s\n", HatName(value), i);
-						//PAD_LOG("%s\n", KeyName(cpad, i).c_str());
+						if (key_to_hat_dir(cpad, i) == value)
+						{
+							clear_bit(status[cpad], i);
+							//PAD_LOG("Registered %s\n", HatName(value), i);
+							//PAD_LOG("%s\n", KeyName(cpad, i).c_str());
+						}
+						else
+						{
+							set_bit(status[cpad], i);
+						}
+						break;
 					}
-					else
+				case PAD_POV:
 					{
-						set_bit(status[pad], i);
-					}
-					break;
-				}
-			case PAD_POV:
-				{
-					int value = pjoy->GetAxisFromKey(cpad, i);
+						int value = pjoy->GetAxisFromKey(cpad, i);
 
-					// PAD_LOG("%s: %d (%d)\n", KeyName(cpad, i).c_str(), value, key_to_pov_sign(cpad, i));
-					if (key_to_pov_sign(cpad, i) && (value < -2048))
-					{
-						//PAD_LOG("%s Released+.\n", KeyName(cpad, i).c_str());
-						clear_bit(status[pad], i);
+						// PAD_LOG("%s: %d (%d)\n", KeyName(cpad, i).c_str(), value, key_to_pov_sign(cpad, i));
+						if (key_to_pov_sign(cpad, i) && (value < -2048))
+						{
+							//PAD_LOG("%s Released+.\n", KeyName(cpad, i).c_str());
+							clear_bit(status[cpad], i);
+						}
+						else if (!key_to_pov_sign(cpad, i) && (value > 2048))
+						{
+							//PAD_LOG("%s Released-\n", KeyName(cpad, i).c_str());
+							clear_bit(status[cpad], i);
+						}
+						else
+						{
+							//PAD_LOG("%s Pressed.\n", KeyName(cpad, i).c_str());
+							set_bit(status[cpad], i);
+						}
+						break;
 					}
-					else if (!key_to_pov_sign(cpad, i) && (value > 2048))
-					{
-						//PAD_LOG("%s Released-\n", KeyName(cpad, i).c_str());
-						clear_bit(status[pad], i);
-					}
-					else
-					{
-						//PAD_LOG("%s Pressed.\n", KeyName(cpad, i).c_str());
-						set_bit(status[pad], i);
-					}
-					break;
-				}
 				case PAD_JOYSTICK:
-				{
-					int value = pjoy->GetAxisFromKey(cpad, i);
-
-					switch (i)
 					{
-						case PAD_LX:
-						case PAD_LY:
-						case PAD_RX:
-						case PAD_RY:
-							if (abs(value) > (pjoy)->GetDeadzone(/*value*/))
-								Analog::ConfigurePad(pad, i, value);
-							else if (! (conf.options & ((PADOPTION_MOUSE_R|PADOPTION_MOUSE_L) << 16 * (pad & 1) )) )
-								// There is a conflict between mouse and joystick configuration.
-								// Do nothing when the mouse is enabled. It avoids of unsetting
-								// the pad everytime the mouse is selected -- gregory
-								Analog::ResetPad(pad, i);
-							break;
+						int value = pjoy->GetAxisFromKey(cpad, i);
+
+						switch (i)
+						{
+							case PAD_LX:
+							case PAD_LY:
+							case PAD_RX:
+							case PAD_RY:
+								if (abs(value) > (pjoy)->GetDeadzone(/*value*/))
+									Analog::ConfigurePad(cpad, i, value);
+								else if (! (conf.options & ((PADOPTION_MOUSE_R|PADOPTION_MOUSE_L) << 16 * (cpad & 1) )) )
+									// There is a conflict between mouse and joystick configuration.
+									// Do nothing when the mouse is enabled. It avoids of unsetting
+									// the pad everytime the mouse is selected -- gregory
+									Analog::ResetPad(cpad, i);
+								break;
+						}
+						break;
 					}
-					break;
-				}
-			default: break;
+				default: break;
 			}
 		}
 	}

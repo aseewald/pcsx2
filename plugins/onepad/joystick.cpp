@@ -100,26 +100,6 @@ void JoystickInfo::EnumerateJoysticks(vector<JoystickInfo*>& vjoysticks)
 		vjoysticks[i] = new JoystickInfo();
 		vjoysticks[i]->Init(i);
 	}
-
-	// set the pads
-	for (int pad = 0; pad < 2; ++pad)
-	{
-		// select the right joystick id
-		int joyid = -1;
-
-		for (int i = 0; i < MAX_KEYS; ++i)
-		{
-			KeyType k = type_of_key(pad,i);
-			if (k == PAD_JOYSTICK || k == PAD_JOYBUTTONS)
-			{
-				joyid = key_to_joystick_id(pad,i);
-				break;
-			}
-		}
-
-		if ((joyid >= 0) && (joyid < (int)s_vjoysticks.size())) s_vjoysticks[joyid]->Assign(pad);
-	}
-
 }
 
 void JoystickInfo::InitHapticEffect()
@@ -272,30 +252,6 @@ bool JoystickInfo::Init(int id)
 	return true;
 }
 
-// assigns a joystick to a pad
-void JoystickInfo::Assign(int newpad)
-{
-	if (pad == newpad) return;
-	pad = newpad;
-
-	if (pad >= 0)
-	{
-		for (int i = 0; i < MAX_KEYS; ++i)
-		{
-			KeyType k = type_of_key(pad,i);
-
-			if (k == PAD_JOYBUTTONS)
-			{
-				set_key(pad, i, button_to_key(_id, key_to_button(pad,i)));
-			}
-			else if (k == PAD_JOYSTICK)
-			{
-				set_key(pad, i, joystick_to_key(_id, key_to_button(pad,i)));
-			}
-		}
-	}
-}
-
 void JoystickInfo::SaveState()
 {
 	for (int i = 0; i < numbuttons; ++i)
@@ -325,7 +281,7 @@ bool JoystickInfo::PollButtons(int &jbutton, u32 &pkey)
 				break;
 			}
 
-			pkey = button_to_key(GetId(), i);
+			pkey = button_to_key(i);
 			jbutton = i;
 			return true;
 		}
@@ -356,7 +312,7 @@ bool JoystickInfo::PollPOV(int &axis_id, bool &sign, u32 &pkey)
 				axis_id = i;
 
 				sign = (value < 0);
-				pkey = pov_to_key(GetId(), sign, i);
+				pkey = pov_to_key(sign, i);
 
 				return true;
 			}
@@ -385,7 +341,7 @@ bool JoystickInfo::PollAxes(int &axis_id, u32 &pkey)
 			if (abs(value) > 0x3fff)
 			{
 				axis_id = i;
-				pkey = joystick_to_key(GetId(), i);
+				pkey = joystick_to_key(i);
 
 				return true;
 			}
@@ -408,7 +364,7 @@ bool JoystickInfo::PollHats(int &jbutton, int &dir, u32 &pkey)
 				case SDL_HAT_RIGHT:
 				case SDL_HAT_DOWN:
 				case SDL_HAT_LEFT:
-					pkey = hat_to_key(GetId(), value, i);
+					pkey = hat_to_key(value, i);
 					jbutton = i;
 					dir = value;
 					PAD_LOG("Hat Pressed!");

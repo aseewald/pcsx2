@@ -50,17 +50,16 @@ extern int get_key(int pad, int index);
 
 extern KeyType type_of_key(int pad, int index);
 extern int pad_to_key(int pad, int index);
-extern int key_to_joystick_id(int pad, int index);
 extern int key_to_button(int pad, int index);
 extern int key_to_axis(int pad, int index);
 extern int key_to_pov_sign(int pad, int index);
 extern int key_to_hat_dir(int pad, int index);
 extern int key_to_mouse(int pad, int index);
 
-extern int button_to_key(int joy_id, int button_id);
-extern int joystick_to_key(int joy_id, int axis_id);
-extern int pov_to_key(int joy_id, int sign, int axis_id);
-extern int hat_to_key(int joy_id, int dir, int axis_id);
+extern int button_to_key(int button_id);
+extern int joystick_to_key(int axis_id);
+extern int pov_to_key(int sign, int axis_id);
+extern int hat_to_key(int dir, int axis_id);
 extern int mouse_to_key(int button_id);
 
 extern int PadEnum[2][2];

@@ -30,7 +30,7 @@
 
 extern Display *GSdsp;
 extern void PollForX11KeyboardInput(int pad);
-extern bool PollX11Keyboard(u32 &pkey);
+extern bool PollX11KeyboardMouseEvent(u32 &pkey);
 extern Window GSwin;
 
 #else
@@ -43,6 +43,5 @@ extern HWND GShwnd;
 extern char* KeysymToChar(int keysym);
 extern void PollForKeyboardInput(int pad);
 extern void SetAutoRepeat(bool autorep);
-extern int FindKey(int key, int pad);
 
 #endif
