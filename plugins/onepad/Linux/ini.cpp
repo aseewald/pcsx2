@@ -130,17 +130,24 @@ void SaveConfig()
 		return;
 	}
 
-	for (int pad = 0; pad < 2 * MAX_SUB_KEYS; pad++)
+	fprintf(f, "log = %d\n", conf.log);
+	fprintf(f, "options = %d\n", conf.options);
+	fprintf(f, "mouse_sensibility = %d\n", conf.sensibility);
+	fprintf(f, "joy_pad_map = %d\n", conf.joyid_map);
+
+	for (int pad = 0; pad < 2; pad++)
 	{
 		for (int key = 0; key < MAX_KEYS; key++)
 		{
 			fprintf(f, "[%d][%d] = 0x%x\n", pad, key, get_key(pad,key));
 		}
 	}
-	fprintf(f, "log = %d\n", conf.log);
-	fprintf(f, "options = %d\n", conf.options);
-	fprintf(f, "mouse_sensibility = %d\n", conf.sensibility);
-	fprintf(f, "joy_pad_map = %d\n", conf.joyid_map);
+
+	map<u32,u32>::iterator it;
+	for (int pad = 0; pad < 2 ; pad++)
+		for (it = conf.keysym_map[pad].begin(); it != conf.keysym_map[pad].end(); ++it)
+				fprintf(f, "PAD %d:KEYSYM 0x%x = %d\n", pad, it->first, it->second);
+
 	fclose(f);
 }
 
@@ -162,7 +169,12 @@ void LoadConfig()
 		return;
 	}
 
-	for (int pad = 0; pad < 2 * MAX_SUB_KEYS; pad++)
+	fscanf(f, "log = %d\n", &conf.log);
+	fscanf(f, "options = %d\n", &conf.options);
+	fscanf(f, "mouse_sensibility = %d\n", &conf.sensibility);
+	fscanf(f, "joy_pad_map = %d\n", &conf.joyid_map);
+	for (int pad = 0; pad < 2; pad++)
+
 	{
 		for (int key = 0; key < MAX_KEYS; key++)
 		{
@@ -173,9 +185,15 @@ void LoadConfig()
 			set_key(pad, key, temp);
 		}
 	}
-	fscanf(f, "log = %d\n", &conf.log);
-	fscanf(f, "options = %d\n", &conf.options);
-	fscanf(f, "mouse_sensibility = %d\n", &conf.sensibility);
-	fscanf(f, "joy_pad_map = %d\n", &conf.joyid_map);
+
+	for (int pad = 0; pad < 2 ; pad++)
+		conf.keysym_map[pad].clear();
+
+	u32 pad;
+	u32 key;
+	u32 value;
+	while( fscanf(f, "PAD %d:KEYSYM 0x%x = %d\n", &pad, &key, &value) != EOF )
+		conf.keysym_map[pad][key] = value;
+
 	fclose(f);
 }

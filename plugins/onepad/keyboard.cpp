@@ -30,9 +30,8 @@
 
 static int FindKey(int key, int pad)
 {
-	for (int p = 0; p < MAX_SUB_KEYS; p++)
-		for (int i = 0; i < MAX_KEYS; i++)
-			if (key ==  get_key(PadEnum[pad][p], i)) return i;
+	for (int i = 0; i < MAX_KEYS; i++)
+		if (key ==  get_key(pad, i)) return i;
 	return -1;
 }
 
@@ -99,7 +98,8 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 				}
 			}
 
-			i = FindKey(key, pad);
+			// i = FindKey(key, pad);
+			i = get_keyboard_key(pad, key);
 
 			// Analog controls.
 			if ((i > PAD_RY) && (i <= PAD_R_LEFT))
@@ -136,7 +136,8 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 		case KeyRelease:
 			if (key == XK_Shift_R || key == XK_Shift_L) s_Shift = false;
 
-			i = FindKey(key, pad);
+			// i = FindKey(key, pad);
+			i = get_keyboard_key(pad, key);
 
 			// Analog Controls.
 			if ((i > PAD_RY) && (i <= PAD_R_LEFT))
@@ -186,11 +187,11 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 			// 1/ small move == no move. Cons : can not do small movement
 			// 2/ use a watchdog timer thread
 			// 3/ ??? idea welcome ;)
-			if (conf.options & ((PADOPTION_MOUSE_L|PADOPTION_MOUSE_R) << 16 * (pad & 1) )) {
+			if (conf.options & ((PADOPTION_MOUSE_L|PADOPTION_MOUSE_R) << 16 * pad )) {
 				unsigned int pad_x;
 				unsigned int pad_y;
 				// Note when both PADOPTION_MOUSE_R and PADOPTION_MOUSE_L are set, take only the right one
-				if (conf.options & (PADOPTION_MOUSE_R << 16 * (pad & 1))) {
+				if (conf.options & (PADOPTION_MOUSE_R << 16 * pad)) {
 					pad_x = PAD_RX;
 					pad_y = PAD_RY;
 				} else {

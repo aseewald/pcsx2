@@ -28,12 +28,6 @@
 #define MAX_KEYS 20
 #endif
 
-#ifdef _WIN32
-#define MAX_SUB_KEYS 1
-#else
-#define MAX_SUB_KEYS 2
-#endif
-
 enum KeyType
 {
 	PAD_KEYBOARD = 0,
@@ -45,6 +39,8 @@ enum KeyType
 	PAD_NULL = -1
 };
 
+extern void set_keyboad_key(int pad, int index, int keysym);
+extern int get_keyboard_key(int pad, int keysym);
 extern void set_key(int pad, int index, int value);
 extern int get_key(int pad, int index);
 
@@ -115,11 +111,12 @@ static __forceinline void set_hat_pins(int tilt_o_the_hat)
 
 typedef struct
 {
-	u32 keys[2 * MAX_SUB_KEYS][MAX_KEYS];
+	u32 keys[2][MAX_KEYS];
 	u32 log;
 	u32 options;  // upper 16 bits are for pad2
 	u32 sensibility;
 	u32 joyid_map;
+	map<u32,u32> keysym_map[2];
 
 	void set_joyid(u32 pad, u32 joy_id) {
 		int shift = 8 * pad;

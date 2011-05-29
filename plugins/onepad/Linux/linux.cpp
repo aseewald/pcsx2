@@ -172,7 +172,7 @@ EXPORT_C_(void) PADupdate(int pad)
 							case PAD_RY:
 								if (abs(value) > (pjoy)->GetDeadzone(/*value*/))
 									Analog::ConfigurePad(cpad, i, value);
-								else if (! (conf.options & ((PADOPTION_MOUSE_R|PADOPTION_MOUSE_L) << 16 * (cpad & 1) )) )
+								else if (! (conf.options & ((PADOPTION_MOUSE_R|PADOPTION_MOUSE_L) << 16 * cpad )) )
 									// There is a conflict between mouse and joystick configuration.
 									// Do nothing when the mouse is enabled. It avoids of unsetting
 									// the pad everytime the mouse is selected -- gregory

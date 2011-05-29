@@ -249,12 +249,11 @@ void CloseLogging()
 
 void clearPAD()
 {
-	for (int pad = 0; pad < MAX_SUB_KEYS; pad++)
+	for (int pad = 0; pad < 2; pad++)
 	{
+		conf.keysym_map[pad].clear();
 		for (int key= 0; key < MAX_KEYS; ++key)
-		{
 			set_key(pad, key, 0);
-		}
 	}
 }
 

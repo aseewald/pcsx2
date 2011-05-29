@@ -69,7 +69,7 @@ class keys_tree
 
 			gtk_tree_store_clear(treestore);
 
-			for (int pad = 0; pad < 2 * MAX_SUB_KEYS; pad++)
+			for (int pad = 0; pad < 2 ; pad++)
 			{
 				for (int key = 0; key < MAX_KEYS; key++)
 				{
@@ -79,9 +79,7 @@ class keys_tree
 						switch(pad)
 						{
 							case 0: pad_value = "Pad 1"; break;
-							case 2: pad_value = "Pad 1"; break;
 							case 1: pad_value = "Pad 2"; break;
-							case 3: pad_value = "Pad 2"; break;
 							default: pad_value = "Invalid"; break;
 						}
 						gtk_tree_store_append(treestore, &toplevel, NULL);
@@ -246,6 +244,7 @@ typedef struct
 void config_key(int pad, int key)
 {
 	bool captured = false;
+	u32 pkey = 0;
 
 	// save the joystick states
 	UpdateJoysticks();
@@ -254,11 +253,12 @@ void config_key(int pad, int key)
 	{
 		vector<JoystickInfo*>::iterator itjoy;
 
-		u32 pkey = get_key(pad, key);
 		if (PollX11KeyboardMouseEvent(pkey))
 		{
-			set_key(pad, key, pkey);
-			PAD_LOG("%s\n", KeyName(pad, key).c_str());
+			/* special case for keyboard to handle multiple keys */
+			if (pkey < 0x10000)
+				set_keyboad_key(pad, key, pkey);
+
 			captured = true;
 			break;
 		}
@@ -270,11 +270,8 @@ void config_key(int pad, int key)
 		{
 			int button_id, direction;
 
-			pkey = get_key(pad, key);
 			if ((*itjoy)->PollButtons(button_id, pkey))
 			{
-				set_key(pad, key, pkey);
-				PAD_LOG("%s\n", KeyName(pad, key).c_str());
 				captured = true;
 				break;
 			}
@@ -288,8 +285,6 @@ void config_key(int pad, int key)
 			{
 				if ((*itjoy)->PollPOV(axis_id, sign, pkey))
 				{
-					set_key(pad, key, pkey);
-					PAD_LOG("%s\n", KeyName(pad, key).c_str());
 					captured = true;
 					break;
 				}
@@ -298,8 +293,6 @@ void config_key(int pad, int key)
 			{
 				if ((*itjoy)->PollAxes(axis_id, pkey))
 				{
-					set_key(pad, key, pkey);
-					PAD_LOG("%s\n", KeyName(pad, key).c_str());
 					captured = true;
 					break;
 				}
@@ -307,14 +300,15 @@ void config_key(int pad, int key)
 
 			if ((*itjoy)->PollHats(axis_id, direction, pkey))
 			{
-				set_key(pad, key, pkey);
-				PAD_LOG("%s\n", KeyName(pad, key).c_str());
 				captured = true;
 				break;
 			}
 			itjoy++;
 		}
 	}
+
+	set_key(pad, key, pkey);
+	PAD_LOG("%s\n", KeyName(pad, key).c_str());
 }
 
 void on_conf_key(GtkButton *button, gpointer user_data)
@@ -345,8 +339,7 @@ void on_modify_clicked(GtkButton *button, gpointer user_data)
 
 void update_option(int option, bool value)
 {
-	// Note: current_pad can be 2 or 3 (which are alternate configuration of pad 0 and 1)
-	int mask = (current_pad & 1) ? (option << 16) : option;
+	int mask = current_pad ? (option << 16) : option;
     
     if (value)
 		conf.options |= mask;
@@ -370,8 +363,7 @@ void update_options()
 // Set gtk element from the conf.options value
 void restore_option()
 {
-	// Note: current_pad can be 2 or 3 (which are alternate configuration of pad 0 and 1)
-	int options = (current_pad & 1) ? (conf.options >> 16) : (conf.options & 0xFFFF);
+	int options = current_pad ? (conf.options >> 16) : (conf.options & 0xFFFF);
 	
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_lx_check), (options & PADOPTION_REVERSELX));
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_ly_check), (options & PADOPTION_REVERSELY));
@@ -534,8 +526,6 @@ void DisplayDialog()
     pad_choose_cbox = GTK_COMBO_BOX(gtk_combo_box_new_text());
     gtk_combo_box_append_text(pad_choose_cbox, "Pad 1");
     gtk_combo_box_append_text(pad_choose_cbox, "Pad 2");
-    gtk_combo_box_append_text(pad_choose_cbox, "Pad 1 (alt)");
-    gtk_combo_box_append_text(pad_choose_cbox, "Pad 2 (alt)");
     gtk_combo_box_set_active(pad_choose_cbox, current_pad);
 	g_signal_connect(GTK_OBJECT (pad_choose_cbox), "changed", G_CALLBACK(pad_changed), NULL);
     

@@ -24,6 +24,22 @@
 
 HatPins hat_position = {false, false, false, false};
 
+__forceinline void set_keyboad_key(int pad, int index, int keysym)
+{
+	conf.keysym_map[pad][keysym] = index;
+}
+
+__forceinline int get_keyboard_key(int pad, int keysym)
+{
+	// You must use find instead of []
+	// [] will create an element if the key does not exist and return 0
+	map<u32,u32>::iterator it = conf.keysym_map[pad].find(keysym);
+	if (it != conf.keysym_map[pad].end())
+		return it->second;
+	else
+		return -1;
+}
+
 __forceinline void set_key(int pad, int index, int value)
 {
 	conf.keys[pad][index] = value;
