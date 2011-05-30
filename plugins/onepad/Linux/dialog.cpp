@@ -61,7 +61,7 @@ class keys_tree
 		GtkTreeModel *model;
 		GtkTreeView *view;
 		bool has_columns;
-		
+
 		void repopulate()
 		{
 			GtkTreeIter toplevel;
@@ -129,7 +129,7 @@ class keys_tree
 			gtk_tree_view_column_pack_start(col, renderer, TRUE);
 
 			/* connect 'text' property of the cell renderer to
-			*  model column that contains the first name */
+			 *  model column that contains the first name */
 			gtk_tree_view_column_add_attribute(col, renderer, "text", num);
 			gtk_tree_view_column_set_visible(col, visible);
 		}
@@ -152,36 +152,37 @@ class keys_tree
 		{
 			return GTK_WIDGET(view);
 		}
-	
+
 		void init()
 		{
 			has_columns = false;
 			view = GTK_TREE_VIEW(gtk_tree_view_new());
 			treestore = gtk_tree_store_new(NUM_COLS,
-										G_TYPE_STRING,
-										G_TYPE_STRING,
-										G_TYPE_STRING,
-										G_TYPE_UINT,
-										G_TYPE_UINT);
+					G_TYPE_STRING,
+					G_TYPE_STRING,
+					G_TYPE_STRING,
+					G_TYPE_UINT,
+					G_TYPE_UINT,
+					G_TYPE_UINT);
 
 			model = GTK_TREE_MODEL(treestore);
 			gtk_tree_view_set_model(view, model);
 			g_object_unref(model); /* destroy model automatically with view */
 			gtk_tree_selection_set_mode(gtk_tree_view_get_selection(view), GTK_SELECTION_SINGLE);
 		}
-		
+
 		void update()
 		{
 			create_columns();
 			repopulate();
 		}
-		
+
 		void clear_all()
 		{
 			clearPAD();
 			update();
 		}
-		
+
 		bool get_selected(int &pad, int &key, int &keysym)
 		{
 			GtkTreeSelection *selection;
@@ -195,7 +196,7 @@ class keys_tree
 			}
 			return false;
 		}
-		
+
 		void remove_selected()
 		{
 			int key, pad, keysym;
@@ -299,7 +300,7 @@ void config_key(int pad, int key)
 			}
 
 			bool sign = false;
-			bool pov = (!((key == PAD_RY) || (key == PAD_LY) || (key == PAD_RX) || (key == PAD_LX)));
+			bool pov = !IsAnalogKey(key);
 
 			int axis_id;
 
@@ -456,7 +457,7 @@ struct button_positions
 	u32 x,y;
 };
 
-button_positions b_pos[28] = 
+button_positions b_pos[MAX_KEYS] =
 {
 	{ "L2", 64, 8},
 	{ "R2", 392, 8},
@@ -479,10 +480,12 @@ button_positions b_pos[28] =
 	{ "Down", 64, 128},
 	{ "Left", 0, 104},
 	
+#if 0
 	{ "Lx", 64, 264},
 	{ "Rx", 392, 264},
 	{ "Ly", 64, 288},
 	{ "Ry", 392, 288},
+#endif
 	
 	// Left Analog joystick
 	{ "Up", 64, 240},
@@ -528,7 +531,7 @@ void DisplayDialog()
     GtkWidget *keys_static_frame, *keys_static_box;
     GtkWidget *keys_static_area;
 	
-    dialog_buttons btn[28];
+    dialog_buttons btn[MAX_KEYS];
     
 	LoadConfig();
 	key_tree_manager = new keys_tree;
@@ -600,7 +603,7 @@ void DisplayDialog()
     
 	keys_static_area = gtk_fixed_new();
 	
-	for(int i = 0; i <= 27; i++)
+	for(int i = 0; i < MAX_KEYS; i++)
 	{
 		btn[i].put(b_pos[i].label, i, GTK_FIXED(keys_static_area), b_pos[i].x, b_pos[i].y);
 	}

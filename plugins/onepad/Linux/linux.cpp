@@ -162,22 +162,15 @@ EXPORT_C_(void) PADupdate(int pad)
 					{
 						int value = pjoy->GetAxisFromKey(cpad, i);
 
-						switch (i)
-						{
-							case PAD_LX:
-							case PAD_LY:
-							case PAD_RX:
-							case PAD_RY:
-								if (abs(value) > (pjoy)->GetDeadzone(/*value*/))
-									Analog::ConfigurePad(cpad, i, value);
-								else if (! (conf.options & ((PADOPTION_MOUSE_R|PADOPTION_MOUSE_L) << 16 * cpad )) )
-									// There is a conflict between mouse and joystick configuration.
-									// Do nothing when the mouse is enabled. It avoids of unsetting
-									// the pad everytime the mouse is selected -- gregory
-									Analog::ResetPad(cpad, i);
-								break;
+						if (IsAnalogKey(i)) {
+							if (abs(value) > (pjoy)->GetDeadzone())
+								Analog::ConfigurePad(cpad, i, value);
+							else if (! (conf.options & ((PADOPTION_MOUSE_R|PADOPTION_MOUSE_L) << 16 * cpad )) )
+								// There is a conflict between mouse and joystick configuration.
+								// Do nothing when the mouse is enabled. It avoids of unsetting
+								// the pad everytime the mouse is selected -- gregory
+								Analog::ResetPad(cpad, i);
 						}
-						break;
 					}
 				default: break;
 			}

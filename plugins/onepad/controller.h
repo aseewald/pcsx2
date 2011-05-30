@@ -23,7 +23,7 @@
 #define __CONTROLLER_H__
 
 #ifdef __LINUX__
-#define MAX_KEYS 28
+#define MAX_KEYS 24
 #else
 #define MAX_KEYS 20
 #endif
@@ -43,6 +43,7 @@ extern void set_keyboad_key(int pad, int keysym, int index);
 extern int get_keyboard_key(int pad, int keysym);
 extern void set_key(int pad, int index, int value);
 extern int get_key(int pad, int index);
+extern bool IsAnalogKey(int index);
 
 extern KeyType type_of_key(int pad, int index);
 // extern int pad_to_key(int pad, int index);

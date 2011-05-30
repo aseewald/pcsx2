@@ -180,7 +180,7 @@ void LoadConfig()
 		for (int key = 0; key < MAX_KEYS; key++)
 		{
 			sprintf(str, "[%d][%d] = 0x%%x\n", pad, key);
-			u32 temp;
+			u32 temp = 0;
 
 			if (fscanf(f, str, &temp) == 0) temp = 0;
 			set_key(pad, key, temp);

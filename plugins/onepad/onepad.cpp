@@ -426,10 +426,10 @@ u8  _PADpoll(u8 value)
 
 				stdpar[curPad][2] = status[curPad] >> 8;
 				stdpar[curPad][3] = status[curPad] & 0xff;
-				stdpar[curPad][4] = Analog::Pad(curPad, PAD_RX);
-				stdpar[curPad][5] = Analog::Pad(curPad, PAD_RY);
-				stdpar[curPad][6] = Analog::Pad(curPad, PAD_LX);
-				stdpar[curPad][7] = Analog::Pad(curPad, PAD_LY);
+				stdpar[curPad][4] = Analog::Pad(curPad, PAD_R_RIGHT);
+				stdpar[curPad][5] = Analog::Pad(curPad, PAD_R_UP);
+				stdpar[curPad][6] = Analog::Pad(curPad, PAD_L_RIGHT);
+				stdpar[curPad][7] = Analog::Pad(curPad, PAD_L_UP);
 
 				if (padMode[curPad] == 1)
 					cmdLen = 20;

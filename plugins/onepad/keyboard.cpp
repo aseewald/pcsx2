@@ -28,15 +28,6 @@
 #include <gdk/gdkkeysyms.h>
 #include "keyboard.h"
 
-#if 0
-static int FindKey(int key, int pad)
-{
-	for (int i = 0; i < MAX_KEYS; i++)
-		if (key ==  get_key(pad, i)) return i;
-	return -1;
-}
-#endif
-
 char* KeysymToChar(int keysym)
 {
 #ifdef __LINUX__
@@ -103,7 +94,7 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 			i = get_keyboard_key(pad, key);
 
 			// Analog controls.
-			if ((i > PAD_RY) && (i <= PAD_R_LEFT))
+			if (IsAnalogKey(i))
 			{
 				switch (i)
 				{
@@ -111,13 +102,13 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 					case PAD_R_UP:
 					case PAD_L_LEFT:
 					case PAD_L_UP:
-						Analog::ConfigurePad(pad, Analog::AnalogToPad(i), DEF_VALUE);
+						Analog::ConfigurePad(pad, i, DEF_VALUE);
 						break;
 					case PAD_R_RIGHT:
 					case PAD_R_DOWN:
 					case PAD_L_RIGHT:
 					case PAD_L_DOWN:
-						Analog::ConfigurePad(pad, Analog::AnalogToPad(i), -DEF_VALUE);
+						Analog::ConfigurePad(pad, i, -DEF_VALUE);
 						break;
 				}
 				i += 0xff00;
@@ -140,9 +131,9 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 			i = get_keyboard_key(pad, key);
 
 			// Analog Controls.
-			if ((i > PAD_RY) && (i <= PAD_R_LEFT))
+			if (IsAnalogKey(i))
 			{
-				Analog::ResetPad(pad, Analog::AnalogToPad(i));
+				Analog::ResetPad(pad, i);
 				i += 0xff00;
 			}
 
@@ -192,11 +183,11 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 				unsigned int pad_y;
 				// Note when both PADOPTION_MOUSE_R and PADOPTION_MOUSE_L are set, take only the right one
 				if (conf.options & (PADOPTION_MOUSE_R << 16 * pad)) {
-					pad_x = PAD_RX;
-					pad_y = PAD_RY;
+					pad_x = PAD_R_RIGHT;
+					pad_y = PAD_R_UP;
 				} else {
-					pad_x = PAD_LX;
-					pad_y = PAD_LY;
+					pad_x = PAD_L_RIGHT;
+					pad_y = PAD_L_LEFT;
 				}
 
 				unsigned x = evt.key & 0xFFFF;

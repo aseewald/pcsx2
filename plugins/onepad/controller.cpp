@@ -63,6 +63,11 @@ __forceinline KeyType type_of_key(int pad, int index)
 	else return PAD_NULL;
  }
 
+__forceinline bool IsAnalogKey(int index)
+{
+	return ((index >= PAD_L_UP) && (index <= PAD_R_LEFT));
+}
+
 //*******************************************************
 //			onepad key -> input
 //*******************************************************

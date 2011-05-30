@@ -28,25 +28,19 @@ namespace Analog
 	{
 		switch (index)
 		{
-			case PAD_LX:
-				return g_lanalog[pad].x;
-				break;
+			case PAD_R_LEFT:
+			case PAD_R_RIGHT: return g_ranalog[pad].x;
 
-			case PAD_RX:
-				return g_ranalog[pad].x;
-				break;
+			case PAD_R_DOWN:
+			case PAD_R_UP: return g_ranalog[pad].y;
 
-			case PAD_LY:
-				return g_lanalog[pad].y;
-				break;
+			case PAD_L_LEFT:
+			case PAD_L_RIGHT: return g_lanalog[pad].x;
 
-			case PAD_RY:
-				return g_ranalog[pad].y;
-				break;
+			case PAD_L_DOWN:
+			case PAD_L_UP: return g_lanalog[pad].y;
 
-			default:
-				return 0;
-				break;
+			default: return 0;
 		}
 	}
 
@@ -54,24 +48,19 @@ namespace Analog
 	{
 		switch (index)
 		{
-			case PAD_LX:
-				g_lanalog[pad].x = value;
-				break;
+			case PAD_R_LEFT:
+			case PAD_R_RIGHT: g_ranalog[ pad].x = value; break;
 
-			case PAD_RX:
-				g_ranalog[ pad].x = value;
-				break;
+			case PAD_R_DOWN:
+			case PAD_R_UP: g_ranalog[pad].y = value; break;
 
-			case PAD_LY:
-				g_lanalog[ pad].y = value;
-				break;
+			case PAD_L_LEFT:
+			case PAD_L_RIGHT: g_lanalog[pad].x = value; break;
 
-			case PAD_RY:
-				g_ranalog[pad].y = value;
-				break;
+			case PAD_L_DOWN:
+			case PAD_L_UP:  g_lanalog[ pad].y = value; break;
 
-			default:
-				break;
+			default: break;
 		}
 	}
 
@@ -89,10 +78,11 @@ namespace Analog
 	{
 		for (u8 pad = 0; pad < 2; ++pad)
 		{
-			ResetPad(pad, PAD_LX);
-			ResetPad(pad, PAD_LY);
-			ResetPad(pad, PAD_RX);
-			ResetPad(pad, PAD_RY);
+			// no need to put the 2 part of the axis
+			ResetPad(pad, PAD_R_LEFT);
+			ResetPad(pad, PAD_R_DOWN);
+			ResetPad(pad, PAD_L_LEFT);
+			ResetPad(pad, PAD_L_DOWN);
 		}
 	}
 
@@ -100,25 +90,23 @@ namespace Analog
 	{
 		switch (index)
 		{
-			case PAD_LX:
+			case PAD_L_RIGHT:
+			case PAD_L_LEFT:
 				return ((conf.options & PADOPTION_REVERSELX) != 0);
-				break;
 
-			case PAD_RX:
+			case PAD_R_LEFT:
+			case PAD_R_RIGHT:
 				return ((conf.options & PADOPTION_REVERSERX) != 0);
-				break;
 
-			case PAD_LY:
+			case PAD_L_UP:
+			case PAD_L_DOWN:
 				return ((conf.options & PADOPTION_REVERSELY) != 0);
-				break;
 
-			case PAD_RY:
+			case PAD_R_DOWN:
+			case PAD_R_UP:
 				return ((conf.options & PADOPTION_REVERSERY) != 0);
-				break;
 
-			default:
-				return false;
-				break;
+			default: return false;
 		}
 	}
 
@@ -127,37 +115,5 @@ namespace Analog
 		SetPad(pad, index, value / 256);
 		if (ReversePad(index)) InvertPad(pad,index);
 		SetPad(pad, index, Pad(pad, index) + 0x80);
-	}
-
-	int AnalogToPad(int index)
-	{
-		switch (index)
-		{
-			case PAD_R_LEFT:
-				return PAD_RX;
-				break;
-			case PAD_R_UP:
-				return PAD_RY;
-				break;
-			case PAD_L_LEFT:
-				return PAD_LX;
-				break;
-			case PAD_L_UP:
-				return PAD_LY;
-				break;
-			case PAD_R_DOWN:
-				return PAD_RY;
-				break;
-			case PAD_R_RIGHT:
-				return PAD_RX;
-				break;
-			case PAD_L_DOWN:
-				return PAD_LY;
-				break;
-			case PAD_L_RIGHT:
-				return PAD_LX;
-				break;
-		}
-		return 0;
 	}
 }
