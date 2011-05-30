@@ -497,7 +497,7 @@ void DisplayDialog()
     
     GtkWidget *keys_frame, *keys_box;
     
-    GtkWidget *keys_tree_frame, *keys_tree_box;
+    GtkWidget *keys_tree_frame, *keys_tree_box, *keys_tree_scroll;
     GtkWidget *keys_tree_clear_btn, *keys_tree_remove_btn, *keys_tree_modify_btn;
     GtkWidget *keys_btn_box, *keys_btn_frame;
     
@@ -533,7 +533,11 @@ void DisplayDialog()
     populate_new_joysticks(joy_choose_cbox);
 	set_current_joy();
 	g_signal_connect(GTK_OBJECT (joy_choose_cbox), "changed", G_CALLBACK(joy_changed), NULL);
-	
+    
+    keys_tree_scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add (GTK_CONTAINER(keys_tree_scroll), key_tree_manager->view_widget());
+    gtk_widget_set_size_request(keys_tree_scroll, 200, 300);
+    
 	keys_tree_clear_btn = gtk_button_new_with_label("Clear All");
 	g_signal_connect(GTK_OBJECT (keys_tree_clear_btn), "clicked", G_CALLBACK(on_clear_clicked), NULL);
 	gtk_widget_set_size_request(keys_tree_clear_btn, 64, 24);
@@ -590,15 +594,15 @@ void DisplayDialog()
     keys_frame = gtk_frame_new ("Key Settings");
     gtk_container_add (GTK_CONTAINER(keys_frame), keys_box);
     
-	gtk_box_pack_start (GTK_BOX (keys_tree_box), key_tree_manager->view_widget(), true, true, 0);
+	gtk_box_pack_start (GTK_BOX (keys_tree_box), keys_tree_scroll, true, true, 0);
 	gtk_box_pack_end (GTK_BOX (keys_btn_box), keys_tree_clear_btn, false, false, 0);
 	gtk_box_pack_end (GTK_BOX (keys_btn_box), keys_tree_remove_btn, false, false, 0);
 	gtk_box_pack_end (GTK_BOX (keys_btn_box), keys_tree_modify_btn, false, false, 0);
     
 	gtk_container_add(GTK_CONTAINER(pad_choose_box), GTK_WIDGET(pad_choose_cbox));
 	gtk_container_add(GTK_CONTAINER(joy_choose_box), GTK_WIDGET(joy_choose_cbox));
-	gtk_container_add(GTK_CONTAINER(keys_tree_box), keys_btn_frame);
-	gtk_box_pack_start (GTK_BOX (keys_box), keys_tree_frame, true, true, 0);
+	gtk_box_pack_start (GTK_BOX (keys_tree_box), keys_btn_frame, false, false, 0);
+	gtk_box_pack_start (GTK_BOX (keys_box), keys_tree_frame, false, false, 0);
 	gtk_container_add(GTK_CONTAINER(keys_box), keys_static_area);
 
 	gtk_container_add(GTK_CONTAINER(main_box), pad_choose_frame);
