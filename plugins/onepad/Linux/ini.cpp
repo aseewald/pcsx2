@@ -29,74 +29,75 @@
 
 extern std::string s_strIniPath;
 
-string KeyName(int pad, int key)
+string KeyName(int pad, int key, int keysym)
 {
 	string tmp;
 	tmp.resize(28);
-	KeyType k = type_of_key(pad, key);
 
-	switch (k)
+	if (keysym) {
+		if (keysym < 10) {
+			// mouse
+			switch (keysym) {
+				case 1: sprintf(&tmp[0], "Mouse Left"); break;
+				case 2: sprintf(&tmp[0], "Mouse Middle"); break;
+				case 3: sprintf(&tmp[0], "Mouse Right"); break;
+				default: // Use only number for extra button
+						sprintf(&tmp[0], "Mouse %d", keysym);
+			}
+		} else {
+			// keyboard
+			char* pstr = KeysymToChar(keysym);
+			if (pstr != NULL) tmp = pstr;
+		}
+	} else {
+		// joystick
+		KeyType k = type_of_key(pad, key);
+		switch (k)
 		{
-			case PAD_KEYBOARD:
-			{
-				char* pstr = KeysymToChar(pad_to_key(pad, key));
-				if (pstr != NULL) tmp = pstr;
-				break;
-			}
-			case PAD_MOUSE:
-			{
-				int button = key_to_mouse(pad, key);
-				switch (button) {
-					case 1: sprintf(&tmp[0], "Mouse Left"); break;
-					case 2: sprintf(&tmp[0], "Mouse Middle"); break;
-					case 3: sprintf(&tmp[0], "Mouse Right"); break;
-					default: // Use only number for extra button
-							sprintf(&tmp[0], "Mouse %d", button);
-				}
-				break;
-			}
 			case PAD_JOYBUTTONS:
-			{
-				int button = key_to_button(pad, key);
-				sprintf(&tmp[0], "JBut %d", button);
-				break;
-			}
-			case PAD_JOYSTICK:
-			{
-				int axis = key_to_axis(pad, key);
-				sprintf(&tmp[0], "JAxis %d", axis);
-				break;
-			}
-			case PAD_HAT:
-			{
-				int axis = key_to_axis(pad, key);
-				switch(key_to_hat_dir(pad, key))
 				{
-					case SDL_HAT_UP:
-						sprintf(&tmp[0], "JPOVU-%d", axis);
-						break;
-
-					case SDL_HAT_RIGHT:
-						sprintf(&tmp[0], "JPOVR-%d", axis);
-						break;
-
-					case SDL_HAT_DOWN:
-						sprintf(&tmp[0], "JPOVD-%d", axis);
-						break;
-
-					case SDL_HAT_LEFT:
-						sprintf(&tmp[0], "JPOVL-%d", axis);
-						break;
+					int button = key_to_button(pad, key);
+					sprintf(&tmp[0], "JBut %d", button);
+					break;
 				}
-				break;
-			}
+			case PAD_JOYSTICK:
+				{
+					int axis = key_to_axis(pad, key);
+					sprintf(&tmp[0], "JAxis %d", axis);
+					break;
+				}
+			case PAD_HAT:
+				{
+					int axis = key_to_axis(pad, key);
+					switch(key_to_hat_dir(pad, key))
+					{
+						case SDL_HAT_UP:
+							sprintf(&tmp[0], "JPOVU-%d", axis);
+							break;
+
+						case SDL_HAT_RIGHT:
+							sprintf(&tmp[0], "JPOVR-%d", axis);
+							break;
+
+						case SDL_HAT_DOWN:
+							sprintf(&tmp[0], "JPOVD-%d", axis);
+							break;
+
+						case SDL_HAT_LEFT:
+							sprintf(&tmp[0], "JPOVL-%d", axis);
+							break;
+					}
+					break;
+				}
 			case PAD_POV:
-			{
-				sprintf(&tmp[0], "JPOV %d%s", key_to_axis(pad, key), key_to_pov_sign(pad, key) ? "-" : "+");
-				break;
-			}
+				{
+					sprintf(&tmp[0], "JPOV %d%s", key_to_axis(pad, key), key_to_pov_sign(pad, key) ? "-" : "+");
+					break;
+				}
 			default: break;
 		}
+	}
+
 	return tmp;
 }
 
@@ -190,10 +191,10 @@ void LoadConfig()
 		conf.keysym_map[pad].clear();
 
 	u32 pad;
-	u32 key;
-	u32 value;
-	while( fscanf(f, "PAD %d:KEYSYM 0x%x = %d\n", &pad, &key, &value) != EOF )
-		conf.keysym_map[pad][key] = value;
+	u32 keysym;
+	u32 index;
+	while( fscanf(f, "PAD %d:KEYSYM 0x%x = %d\n", &pad, &keysym, &index) != EOF )
+		set_keyboad_key(pad, keysym, index);
 
 	fclose(f);
 }

@@ -24,8 +24,6 @@
 #include "onepad.h"
 #include <gtk/gtk.h>
 
-extern string KeyName(int pad, int key);
-
 void config_key(int pad, int key);
 void on_conf_key(GtkButton *button, gpointer user_data);
 
@@ -52,6 +50,7 @@ enum
 	COL_KEY,
 	COL_PAD_NUM,
 	COL_VALUE,
+	COL_KEYSYM,
 	NUM_COLS
 };
 	
@@ -71,26 +70,44 @@ class keys_tree
 
 			for (int pad = 0; pad < 2 ; pad++)
 			{
+				string pad_value;
+				switch(pad) {
+					case 0: pad_value = "Pad 1"; break;
+					case 1: pad_value = "Pad 2"; break;
+					default: pad_value = "Invalid"; break;
+				}
+
+				// joystick key
 				for (int key = 0; key < MAX_KEYS; key++)
 				{
 					if (get_key(pad, key) != 0)
 					{
-						string pad_value;
-						switch(pad)
-						{
-							case 0: pad_value = "Pad 1"; break;
-							case 1: pad_value = "Pad 2"; break;
-							default: pad_value = "Invalid"; break;
-						}
 						gtk_tree_store_append(treestore, &toplevel, NULL);
 						gtk_tree_store_set(treestore, &toplevel,
+								COL_PAD, pad_value.c_str(),
+								COL_BUTTON, s_pGuiKeyMap[key],
+								COL_KEY, KeyName(pad, key).c_str(),
+								COL_PAD_NUM, pad,
+								COL_VALUE, key,
+								COL_KEYSYM, 0,
+								-1);
+					}
+				}
+
+				// keyboard/mouse key
+				map<u32,u32>::iterator it;
+				for (it = conf.keysym_map[pad].begin(); it != conf.keysym_map[pad].end(); ++it) {
+					int keysym = it->first;
+					int key = it->second;
+					gtk_tree_store_append(treestore, &toplevel, NULL);
+					gtk_tree_store_set(treestore, &toplevel,
 							COL_PAD, pad_value.c_str(),
 							COL_BUTTON, s_pGuiKeyMap[key],
-							COL_KEY, KeyName(pad, key).c_str(),
+							COL_KEY, KeyName(pad, key, keysym).c_str(),
 							COL_PAD_NUM, pad,
 							COL_VALUE, key,
-						-1);
-					}
+							COL_KEYSYM, keysym,
+							-1);
 				}
 			}
 		}
@@ -126,6 +143,7 @@ class keys_tree
 				create_a_column("Key Value", COL_KEY, true);
 				create_a_column("Pad Num", COL_PAD_NUM, false);
 				create_a_column("Internal", COL_VALUE, false);
+				create_a_column("Keysym", COL_KEYSYM, false);
 				has_columns = true;
 			}
 		}
@@ -164,7 +182,7 @@ class keys_tree
 			update();
 		}
 		
-		bool get_selected(int &pad, int &key)
+		bool get_selected(int &pad, int &key, int &keysym)
 		{
 			GtkTreeSelection *selection;
 			GtkTreeIter iter;
@@ -172,7 +190,7 @@ class keys_tree
 			selection = gtk_tree_view_get_selection(view);
 			if (gtk_tree_selection_get_selected(selection, &model, &iter))
 			{
-				gtk_tree_model_get(model, &iter, COL_PAD_NUM, &pad, COL_VALUE, &key,-1);
+				gtk_tree_model_get(model, &iter, COL_PAD_NUM, &pad, COL_VALUE, &key, COL_KEYSYM, &keysym,-1);
 				return true;
 			}
 			return false;
@@ -180,19 +198,23 @@ class keys_tree
 		
 		void remove_selected()
 		{
-			int key, pad;
-			if (get_selected(pad, key))
+			int key, pad, keysym;
+			if (get_selected(pad, key, keysym))
 			{
-				set_key(pad, key, 0);
+				if (keysym)
+					conf.keysym_map[pad].erase(keysym);
+				else
+					set_key(pad, key, 0);
 				update();
 			}
 		}
 
 		void modify_selected()
 		{
-			int key, pad;
-			if (get_selected(pad, key))
+			int key, pad, keysym;
+			if (get_selected(pad, key, keysym))
 			{
+				remove_selected();
 				config_key(pad,key);
 				update();
 			}
@@ -255,9 +277,8 @@ void config_key(int pad, int key)
 
 		if (PollX11KeyboardMouseEvent(pkey))
 		{
-			/* special case for keyboard to handle multiple keys */
-			if (pkey < 0x10000)
-				set_keyboad_key(pad, key, pkey);
+			/* special case for keyboard/mouse to handle multiple keys */
+			set_keyboad_key(pad, pkey, key);
 
 			captured = true;
 			break;
@@ -272,6 +293,7 @@ void config_key(int pad, int key)
 
 			if ((*itjoy)->PollButtons(button_id, pkey))
 			{
+				set_key(pad, key, pkey);
 				captured = true;
 				break;
 			}
@@ -285,6 +307,7 @@ void config_key(int pad, int key)
 			{
 				if ((*itjoy)->PollPOV(axis_id, sign, pkey))
 				{
+					set_key(pad, key, pkey);
 					captured = true;
 					break;
 				}
@@ -293,6 +316,7 @@ void config_key(int pad, int key)
 			{
 				if ((*itjoy)->PollAxes(axis_id, pkey))
 				{
+					set_key(pad, key, pkey);
 					captured = true;
 					break;
 				}
@@ -300,6 +324,7 @@ void config_key(int pad, int key)
 
 			if ((*itjoy)->PollHats(axis_id, direction, pkey))
 			{
+				set_key(pad, key, pkey);
 				captured = true;
 				break;
 			}
@@ -307,7 +332,6 @@ void config_key(int pad, int key)
 		}
 	}
 
-	set_key(pad, key, pkey);
 	PAD_LOG("%s\n", KeyName(pad, key).c_str());
 }
 

@@ -28,12 +28,14 @@
 #include <gdk/gdkkeysyms.h>
 #include "keyboard.h"
 
+#if 0
 static int FindKey(int key, int pad)
 {
 	for (int i = 0; i < MAX_KEYS; i++)
 		if (key ==  get_key(pad, i)) return i;
 	return -1;
 }
+#endif
 
 char* KeysymToChar(int keysym)
 {
@@ -98,7 +100,6 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 				}
 			}
 
-			// i = FindKey(key, pad);
 			i = get_keyboard_key(pad, key);
 
 			// Analog controls.
@@ -136,7 +137,6 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 		case KeyRelease:
 			if (key == XK_Shift_R || key == XK_Shift_L) s_Shift = false;
 
-			// i = FindKey(key, pad);
 			i = get_keyboard_key(pad, key);
 
 			// Analog Controls.
@@ -165,7 +165,7 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 			break;
 
 		case ButtonPress:
-			i = FindKey(mouse_to_key(evt.key), pad);
+			i = get_keyboard_key(pad, evt.key);
 			if (i != -1)
 			{
 				clear_bit(keyRelease, i);
@@ -174,7 +174,7 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 			break;
 
 		case ButtonRelease:
-			i = FindKey(mouse_to_key(evt.key), pad);
+			i = get_keyboard_key(pad, evt.key);
 			if (i != -1)
 			{
 				clear_bit(keyPress, i);
@@ -289,7 +289,7 @@ bool PollX11KeyboardMouseEvent(u32 &pkey)
 
 			return true;
 		} else if(ev->type == GDK_BUTTON_PRESS) {
-			pkey = mouse_to_key(ev->button.button);
+			pkey = ev->button.button;
 			return true;
 		}
 	}

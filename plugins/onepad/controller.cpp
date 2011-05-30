@@ -24,7 +24,7 @@
 
 HatPins hat_position = {false, false, false, false};
 
-__forceinline void set_keyboad_key(int pad, int index, int keysym)
+__forceinline void set_keyboad_key(int pad, int keysym, int index)
 {
 	conf.keysym_map[pad][keysym] = index;
 }
@@ -99,10 +99,12 @@ __forceinline int key_to_mouse(int pad, int index)
 //			input -> onepad key
 //*******************************************************
 // keyboard ???
+#if 0
 __forceinline int pad_to_key(int pad, int index)
 {
 	return (get_key(pad, index) & 0xffff);
 }
+#endif
 
 // joystick
 __forceinline int button_to_key(int button_id)
@@ -125,8 +127,10 @@ __forceinline int hat_to_key(int dir, int axis_id)
 	return (0x40000 | ((dir) << 8) | (axis_id));
 }
 
+#if 0
 // mouse
 __forceinline int mouse_to_key(int button_id)
 {
 	return (0x50000 | button_id);
 }
+#endif

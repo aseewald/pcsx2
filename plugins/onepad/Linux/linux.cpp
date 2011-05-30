@@ -32,8 +32,6 @@ extern void SetAutoRepeat(bool autorep);
 Display *GSdsp;
 Window	GSwin;
 
-extern string KeyName(int pad, int key);
-
 void SysMessage(const char *fmt, ...)
 {
     va_list list;
