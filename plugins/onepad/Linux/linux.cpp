@@ -21,14 +21,13 @@
 
 #include "joystick.h"
 #include "onepad.h"
+#include "keyboard.h"
 
 #include <string.h>
 #include <gtk/gtk.h>
 #include "linux.h"
 #include <gdk/gdkx.h>
 
-extern void PollForKeyboardInput(int pad);
-extern void SetAutoRepeat(bool autorep);
 Display *GSdsp;
 Window	GSwin;
 
@@ -95,20 +94,19 @@ EXPORT_C_(void) PADupdate(int pad)
 	int cpad = pad;
 
 	// Poll keyboard.
-	PollForKeyboardInput(cpad);
+	PollForX11KeyboardInput(cpad);
 
 	// joystick info
 	SDL_JoystickUpdate();
 
-	// Note 0 is a special case for no joystick so decrease the value of 1
-	int joyid = conf.get_joyid(cpad) -1;
+	int joyid = conf->get_joyid(cpad);
 
 	if (JoystickIdWithinBounds(joyid)) {
 		for (int i = 0; i < MAX_KEYS; i++)
 		{
 			JoystickInfo* pjoy = s_vjoysticks[joyid];
 
-			switch (type_of_key(cpad, i))
+			switch (type_of_joykey(cpad, i))
 			{
 				case PAD_JOYBUTTONS:
 					{
@@ -118,6 +116,7 @@ EXPORT_C_(void) PADupdate(int pad)
 							clear_bit(status[cpad], i); // released
 						else
 							set_bit(status[cpad], i); // pressed
+
 						break;
 					}
 				case PAD_HAT:
@@ -125,37 +124,23 @@ EXPORT_C_(void) PADupdate(int pad)
 						int value = SDL_JoystickGetHat((pjoy)->GetJoy(), key_to_axis(cpad, i));
 
 						if (key_to_hat_dir(cpad, i) == value)
-						{
 							clear_bit(status[cpad], i);
-							//PAD_LOG("Registered %s\n", HatName(value), i);
-							//PAD_LOG("%s\n", KeyName(cpad, i).c_str());
-						}
 						else
-						{
 							set_bit(status[cpad], i);
-						}
+
 						break;
 					}
 				case PAD_POV:
 					{
 						int value = pjoy->GetAxisFromKey(cpad, i);
 
-						// PAD_LOG("%s: %d (%d)\n", KeyName(cpad, i).c_str(), value, key_to_pov_sign(cpad, i));
 						if (key_to_pov_sign(cpad, i) && (value < -2048))
-						{
-							//PAD_LOG("%s Released+.\n", KeyName(cpad, i).c_str());
 							clear_bit(status[cpad], i);
-						}
 						else if (!key_to_pov_sign(cpad, i) && (value > 2048))
-						{
-							//PAD_LOG("%s Released-\n", KeyName(cpad, i).c_str());
 							clear_bit(status[cpad], i);
-						}
 						else
-						{
-							//PAD_LOG("%s Pressed.\n", KeyName(cpad, i).c_str());
 							set_bit(status[cpad], i);
-						}
+
 						break;
 					}
 				case PAD_JOYSTICK:
@@ -165,7 +150,7 @@ EXPORT_C_(void) PADupdate(int pad)
 						if (IsAnalogKey(i)) {
 							if (abs(value) > (pjoy)->GetDeadzone())
 								Analog::ConfigurePad(cpad, i, value);
-							else if (! (conf.options & ((PADOPTION_MOUSE_R|PADOPTION_MOUSE_L) << 16 * cpad )) )
+							else if (! (conf->options & ((PADOPTION_MOUSE_R|PADOPTION_MOUSE_L) << 16 * cpad )) )
 								// There is a conflict between mouse and joystick configuration.
 								// Do nothing when the mouse is enabled. It avoids of unsetting
 								// the pad everytime the mouse is selected -- gregory

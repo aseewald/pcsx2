@@ -28,24 +28,15 @@
 #include <gdk/gdkkeysyms.h>
 #include "keyboard.h"
 
+#ifndef __LINUX__
 char* KeysymToChar(int keysym)
 {
-#ifdef __LINUX__
-	return XKeysymToString(keysym);
-#else
 	LPWORD temp;
 
 	ToAscii((UINT) keysym, NULL, NULL, temp, NULL);
 	return (char*)temp;
-#endif
 }
-
-void PollForKeyboardInput(int pad)
-{
-#ifdef __LINUX__
-	PollForX11KeyboardInput(pad);
 #endif
-}
 
 void SetAutoRepeat(bool autorep)
 {
@@ -178,11 +169,11 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 			// 1/ small move == no move. Cons : can not do small movement
 			// 2/ use a watchdog timer thread
 			// 3/ ??? idea welcome ;)
-			if (conf.options & ((PADOPTION_MOUSE_L|PADOPTION_MOUSE_R) << 16 * pad )) {
+			if (conf->options & ((PADOPTION_MOUSE_L|PADOPTION_MOUSE_R) << 16 * pad )) {
 				unsigned int pad_x;
 				unsigned int pad_y;
 				// Note when both PADOPTION_MOUSE_R and PADOPTION_MOUSE_L are set, take only the right one
-				if (conf.options & (PADOPTION_MOUSE_R << 16 * pad)) {
+				if (conf->options & (PADOPTION_MOUSE_R << 16 * pad)) {
 					pad_x = PAD_R_RIGHT;
 					pad_y = PAD_R_UP;
 				} else {
@@ -191,7 +182,7 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 				}
 
 				unsigned x = evt.key & 0xFFFF;
-				unsigned int value = abs(s_previous_mouse_x - x) * conf.sensibility;
+				unsigned int value = abs(s_previous_mouse_x - x) * conf->sensibility;
 				value = max(value, (unsigned int)DEF_VALUE);
 
 				if (x == 0)
@@ -207,7 +198,7 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 
 
 				unsigned y = evt.key >> 16;
-				value = abs(s_previous_mouse_y - y) * conf.sensibility;
+				value = abs(s_previous_mouse_y - y) * conf->sensibility;
 				value = max(value, (unsigned int)DEF_VALUE);
 
 				if (y == 0)
@@ -287,6 +278,7 @@ bool PollX11KeyboardMouseEvent(u32 &pkey)
 
 	return false;
 }
+
 #else
 LRESULT WINAPI PADwndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {

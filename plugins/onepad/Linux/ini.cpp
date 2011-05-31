@@ -46,12 +46,12 @@ string KeyName(int pad, int key, int keysym)
 			}
 		} else {
 			// keyboard
-			char* pstr = KeysymToChar(keysym);
+			char* pstr = XKeysymToString(keysym);
 			if (pstr != NULL) tmp = pstr;
 		}
 	} else {
 		// joystick
-		KeyType k = type_of_key(pad, key);
+		KeyType k = type_of_joykey(pad, key);
 		switch (k)
 		{
 			case PAD_JOYBUTTONS:
@@ -101,22 +101,22 @@ string KeyName(int pad, int key, int keysym)
 	return tmp;
 }
 
-void DefaultValues()
+void DefaultKeyboardValues()
 {
-	set_key(0, PAD_L2, XK_a);
-	set_key(0, PAD_R2, XK_semicolon);
-	set_key(0, PAD_L1, XK_w);
-	set_key(0, PAD_R1, XK_p);
-	set_key(0, PAD_TRIANGLE, XK_i);
-	set_key(0, PAD_CIRCLE, XK_l);
-	set_key(0, PAD_CROSS, XK_k);
-	set_key(0, PAD_SQUARE, XK_j);
-	set_key(0, PAD_SELECT, XK_v);
-	set_key(0, PAD_START, XK_n);
-	set_key(0, PAD_UP, XK_e);
-	set_key(0, PAD_RIGHT, XK_f);
-	set_key(0, PAD_DOWN, XK_d);
-	set_key(0, PAD_LEFT, XK_s);
+	set_keyboad_key(0, XK_a, PAD_L2);
+	set_keyboad_key(0, XK_semicolon, PAD_R2);
+	set_keyboad_key(0, XK_w, PAD_L1);
+	set_keyboad_key(0, XK_p, PAD_R1);
+	set_keyboad_key(0, XK_i, PAD_TRIANGLE);
+	set_keyboad_key(0, XK_l, PAD_CIRCLE);
+	set_keyboad_key(0, XK_k, PAD_CROSS);
+	set_keyboad_key(0, XK_j, PAD_SQUARE);
+	set_keyboad_key(0, XK_v, PAD_SELECT);
+	set_keyboad_key(0, XK_n, PAD_START);
+	set_keyboad_key(0, XK_e, PAD_UP);
+	set_keyboad_key(0, XK_f, PAD_RIGHT);
+	set_keyboad_key(0, XK_d, PAD_DOWN);
+	set_keyboad_key(0, XK_s, PAD_LEFT);
 }
 
 void SaveConfig()
@@ -131,10 +131,10 @@ void SaveConfig()
 		return;
 	}
 
-	fprintf(f, "log = %d\n", conf.log);
-	fprintf(f, "options = %d\n", conf.options);
-	fprintf(f, "mouse_sensibility = %d\n", conf.sensibility);
-	fprintf(f, "joy_pad_map = %d\n", conf.joyid_map);
+	fprintf(f, "log = %d\n", conf->log);
+	fprintf(f, "options = %d\n", conf->options);
+	fprintf(f, "mouse_sensibility = %d\n", conf->sensibility);
+	fprintf(f, "joy_pad_map = %d\n", conf->joyid_map);
 
 	for (int pad = 0; pad < 2; pad++)
 	{
@@ -146,7 +146,7 @@ void SaveConfig()
 
 	map<u32,u32>::iterator it;
 	for (int pad = 0; pad < 2 ; pad++)
-		for (it = conf.keysym_map[pad].begin(); it != conf.keysym_map[pad].end(); ++it)
+		for (it = conf->keysym_map[pad].begin(); it != conf->keysym_map[pad].end(); ++it)
 				fprintf(f, "PAD %d:KEYSYM 0x%x = %d\n", pad, it->first, it->second);
 
 	fclose(f);
@@ -157,9 +157,12 @@ void LoadConfig()
 	FILE *f;
 	char str[256];
 
-	memset(&conf, 0, sizeof(conf));
-	DefaultValues();
-	conf.sensibility = 500;
+	if (!conf)
+		conf = new PADconf;
+
+	conf->init();
+
+	DefaultKeyboardValues();
 
 	const std::string iniFile(s_strIniPath + "OnePAD.ini");
 	f = fopen(iniFile.c_str(), "r");
@@ -170,10 +173,10 @@ void LoadConfig()
 		return;
 	}
 
-	fscanf(f, "log = %d\n", &conf.log);
-	fscanf(f, "options = %d\n", &conf.options);
-	fscanf(f, "mouse_sensibility = %d\n", &conf.sensibility);
-	fscanf(f, "joy_pad_map = %d\n", &conf.joyid_map);
+	fscanf(f, "log = %d\n", &conf->log);
+	fscanf(f, "options = %d\n", &conf->options);
+	fscanf(f, "mouse_sensibility = %d\n", &conf->sensibility);
+	fscanf(f, "joy_pad_map = %d\n", &conf->joyid_map);
 	for (int pad = 0; pad < 2; pad++)
 
 	{
@@ -186,9 +189,6 @@ void LoadConfig()
 			set_key(pad, key, temp);
 		}
 	}
-
-	for (int pad = 0; pad < 2 ; pad++)
-		conf.keysym_map[pad].clear();
 
 	u32 pad;
 	u32 keysym;

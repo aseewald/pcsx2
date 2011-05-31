@@ -35,13 +35,12 @@ extern Window GSwin;
 
 #else
 
+extern char* KeysymToChar(int keysym);
 extern WNDPROC GSwndProc;
 extern HWND GShwnd;
 
 #endif
 
-extern char* KeysymToChar(int keysym);
-extern void PollForKeyboardInput(int pad);
 extern void SetAutoRepeat(bool autorep);
 
 #endif

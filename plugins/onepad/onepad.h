@@ -139,7 +139,7 @@ extern pthread_mutex_t	mutex_KeyEvent;
 extern u16 status[2];
 extern u32 pads;
 
-void clearPAD();
+void clearPAD(int pad);
 int POV(u32 direction, u32 angle);
 s32  _PADopen(void *pDsp);
 void _PADclose();

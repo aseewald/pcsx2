@@ -62,53 +62,50 @@ class keys_tree
 		GtkTreeView *view;
 		bool has_columns;
 
-		void repopulate()
+		void repopulate(int pad)
 		{
 			GtkTreeIter toplevel;
 
 			gtk_tree_store_clear(treestore);
 
-			for (int pad = 0; pad < 2 ; pad++)
+			string pad_value;
+			switch(pad) {
+				case 0: pad_value = "Pad 1"; break;
+				case 1: pad_value = "Pad 2"; break;
+				default: pad_value = "Invalid"; break;
+			}
+
+			// joystick key
+			for (int key = 0; key < MAX_KEYS; key++)
 			{
-				string pad_value;
-				switch(pad) {
-					case 0: pad_value = "Pad 1"; break;
-					case 1: pad_value = "Pad 2"; break;
-					default: pad_value = "Invalid"; break;
-				}
-
-				// joystick key
-				for (int key = 0; key < MAX_KEYS; key++)
+				if (get_key(pad, key) != 0)
 				{
-					if (get_key(pad, key) != 0)
-					{
-						gtk_tree_store_append(treestore, &toplevel, NULL);
-						gtk_tree_store_set(treestore, &toplevel,
-								COL_PAD, pad_value.c_str(),
-								COL_BUTTON, s_pGuiKeyMap[key],
-								COL_KEY, KeyName(pad, key).c_str(),
-								COL_PAD_NUM, pad,
-								COL_VALUE, key,
-								COL_KEYSYM, 0,
-								-1);
-					}
-				}
-
-				// keyboard/mouse key
-				map<u32,u32>::iterator it;
-				for (it = conf.keysym_map[pad].begin(); it != conf.keysym_map[pad].end(); ++it) {
-					int keysym = it->first;
-					int key = it->second;
 					gtk_tree_store_append(treestore, &toplevel, NULL);
 					gtk_tree_store_set(treestore, &toplevel,
 							COL_PAD, pad_value.c_str(),
 							COL_BUTTON, s_pGuiKeyMap[key],
-							COL_KEY, KeyName(pad, key, keysym).c_str(),
+							COL_KEY, KeyName(pad, key).c_str(),
 							COL_PAD_NUM, pad,
 							COL_VALUE, key,
-							COL_KEYSYM, keysym,
+							COL_KEYSYM, 0,
 							-1);
 				}
+			}
+
+			// keyboard/mouse key
+			map<u32,u32>::iterator it;
+			for (it = conf->keysym_map[pad].begin(); it != conf->keysym_map[pad].end(); ++it) {
+				int keysym = it->first;
+				int key = it->second;
+				gtk_tree_store_append(treestore, &toplevel, NULL);
+				gtk_tree_store_set(treestore, &toplevel,
+						COL_PAD, pad_value.c_str(),
+						COL_BUTTON, s_pGuiKeyMap[key],
+						COL_KEY, KeyName(pad, key, keysym).c_str(),
+						COL_PAD_NUM, pad,
+						COL_VALUE, key,
+						COL_KEYSYM, keysym,
+						-1);
 			}
 		}
 
@@ -171,16 +168,16 @@ class keys_tree
 			gtk_tree_selection_set_mode(gtk_tree_view_get_selection(view), GTK_SELECTION_SINGLE);
 		}
 
-		void update()
+		void update(int pad)
 		{
 			create_columns();
-			repopulate();
+			repopulate(pad);
 		}
 
-		void clear_all()
+		void clear_all(int pad)
 		{
-			clearPAD();
-			update();
+			clearPAD(pad);
+			update(pad);
 		}
 
 		bool get_selected(int &pad, int &key, int &keysym)
@@ -197,27 +194,27 @@ class keys_tree
 			return false;
 		}
 
-		void remove_selected()
+		void remove_selected(int cpad)
 		{
 			int key, pad, keysym;
 			if (get_selected(pad, key, keysym))
 			{
 				if (keysym)
-					conf.keysym_map[pad].erase(keysym);
+					conf->keysym_map[pad].erase(keysym);
 				else
 					set_key(pad, key, 0);
-				update();
+				update(cpad);
 			}
 		}
 
-		void modify_selected()
+		void modify_selected(int cpad)
 		{
 			int key, pad, keysym;
 			if (get_selected(pad, key, keysym))
 			{
-				remove_selected();
+				remove_selected(cpad);
 				config_key(pad,key);
-				update();
+				update(cpad);
 			}
 		}
 };
@@ -228,14 +225,14 @@ void populate_new_joysticks(GtkComboBox *box)
 	char str[255];
 	JoystickInfo::EnumerateJoysticks(s_vjoysticks);
 
-	gtk_combo_box_append_text(box, "No Gamepad");
+	gtk_combo_box_append_text(box, "Keyboard/mouse only");
 	
 	vector<JoystickInfo*>::iterator it = s_vjoysticks.begin();
 
 	// Get everything in the vector vjoysticks.
 	while (it != s_vjoysticks.end())
 	{
-		sprintf(str, "%s - but: %d, axes: %d, hats: %d", (*it)->GetName().c_str(),
+		sprintf(str, "Keyboard/mouse and %s - but: %d, axes: %d, hats: %d", (*it)->GetName().c_str(),
 		        (*it)->GetNumButtons(), (*it)->GetNumAxes(), (*it)->GetNumHats());
 		gtk_combo_box_append_text(box, str);
 		it++;
@@ -244,10 +241,12 @@ void populate_new_joysticks(GtkComboBox *box)
 
 void set_current_joy()
 {
-	u32 joyid = conf.get_joyid(current_pad);
-	// 0 is special case for no gamepad. So you must decrease of 1.
-	if (!JoystickIdWithinBounds(joyid-1)) joyid = 0;
-    gtk_combo_box_set_active(joy_choose_cbox, joyid);
+	u32 joyid = conf->get_joyid(current_pad);
+	if (JoystickIdWithinBounds(joyid))
+		// 0 is special case for no gamepad. So you must increase of 1.
+		gtk_combo_box_set_active(joy_choose_cbox, joyid+1);
+	else
+		gtk_combo_box_set_active(joy_choose_cbox, 0);
 }
 
 typedef struct
@@ -267,7 +266,7 @@ typedef struct
 void config_key(int pad, int key)
 {
 	bool captured = false;
-	u32 pkey = 0;
+	u32 key_pressed = 0;
 
 	// save the joystick states
 	UpdateJoysticks();
@@ -276,10 +275,12 @@ void config_key(int pad, int key)
 	{
 		vector<JoystickInfo*>::iterator itjoy;
 
-		if (PollX11KeyboardMouseEvent(pkey))
+		if (PollX11KeyboardMouseEvent(key_pressed))
 		{
-			/* special case for keyboard/mouse to handle multiple keys */
-			set_keyboad_key(pad, pkey, key);
+			// special case for keyboard/mouse to handle multiple keys
+			// Note: key_pressed == 0 when ESC is hit to abort the capture
+			if (key_pressed > 0)
+				set_keyboad_key(pad, key_pressed, key);
 
 			captured = true;
 			break;
@@ -292,40 +293,38 @@ void config_key(int pad, int key)
 		{
 			int button_id, direction;
 
-			if ((*itjoy)->PollButtons(button_id, pkey))
+			if ((*itjoy)->PollButtons(button_id, key_pressed))
 			{
-				set_key(pad, key, pkey);
+				set_key(pad, key, key_pressed);
 				captured = true;
 				break;
 			}
 
 			bool sign = false;
-			bool pov = !IsAnalogKey(key);
-
 			int axis_id;
 
-			if (pov)
+			if (IsAnalogKey(key))
 			{
-				if ((*itjoy)->PollPOV(axis_id, sign, pkey))
+				if ((*itjoy)->PollAxes(axis_id, key_pressed))
 				{
-					set_key(pad, key, pkey);
+					set_key(pad, key, key_pressed);
 					captured = true;
 					break;
 				}
 			}
 			else
 			{
-				if ((*itjoy)->PollAxes(axis_id, pkey))
+				if ((*itjoy)->PollPOV(axis_id, sign, key_pressed))
 				{
-					set_key(pad, key, pkey);
+					set_key(pad, key, key_pressed);
 					captured = true;
 					break;
 				}
 			}
 
-			if ((*itjoy)->PollHats(axis_id, direction, pkey))
+			if ((*itjoy)->PollHats(axis_id, direction, key_pressed))
 			{
-				set_key(pad, key, pkey);
+				set_key(pad, key, key_pressed);
 				captured = true;
 				break;
 			}
@@ -344,22 +343,22 @@ void on_conf_key(GtkButton *button, gpointer user_data)
 	if (key == -1) return;
 	
 	config_key(current_pad, key);
-	key_tree_manager->update();
+	key_tree_manager->update(current_pad);
 }
 
 void on_remove_clicked(GtkButton *button, gpointer user_data)
 {
-	key_tree_manager->remove_selected();
+	key_tree_manager->remove_selected(current_pad);
 }
 
 void on_clear_clicked(GtkButton *button, gpointer user_data)
 {
-	key_tree_manager->clear_all();
+	key_tree_manager->clear_all(current_pad);
 }
 
 void on_modify_clicked(GtkButton *button, gpointer user_data)
 {
-	key_tree_manager->modify_selected();
+	key_tree_manager->modify_selected(current_pad);
 }
 
 void update_option(int option, bool value)
@@ -367,12 +366,12 @@ void update_option(int option, bool value)
 	int mask = current_pad ? (option << 16) : option;
     
     if (value)
-		conf.options |= mask;
+		conf->options |= mask;
 	else
-		conf.options &= ~mask;
+		conf->options &= ~mask;
 }
 
-// Save to conf.options the value of gtk element
+// Save to conf->options the value of gtk element
 void update_options()
 {
 	update_option(PADOPTION_REVERSELX, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_lx_check)));
@@ -385,10 +384,10 @@ void update_options()
 	update_option(PADOPTION_MOUSE_R, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(mouse_r_check)));
 }
 
-// Set gtk element from the conf.options value
+// Set gtk element from the conf->options value
 void restore_option()
 {
-	int options = current_pad ? (conf.options >> 16) : (conf.options & 0xFFFF);
+	int options = current_pad ? (conf->options >> 16) : (conf->options & 0xFFFF);
 	
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_lx_check), (options & PADOPTION_REVERSELX));
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_ly_check), (options & PADOPTION_REVERSELY));
@@ -404,6 +403,8 @@ void restore_option()
 void joy_changed(GtkComboBox *box, gpointer user_data)
 {
 	int joyid = gtk_combo_box_get_active(box);
+	// Note position 0 of the combo box is no gamepad
+	joyid--;
 
 	// FIXME: might be a good idea to ask the user first ;)
 	// FIXME: do you need to clean the previous key association. or what the user want
@@ -413,19 +414,18 @@ void joy_changed(GtkComboBox *box, gpointer user_data)
 
 	// unassign every joystick with this pad
 	for (int i = 0; i < 4; ++i)
-		if (joyid == conf.get_joyid(i)) conf.set_joyid(i, 0);
+		if (joyid == conf->get_joyid(i)) conf->set_joyid(i, -1);
 
-	conf.set_joyid(current_pad, joyid);
+	conf->set_joyid(current_pad, joyid);
 }
 
-void pad_changed(GtkComboBox *box, gpointer user_data)
+void pad_changed(GtkNotebook *notebook, GtkNotebookPage *notebook_page, int page, void *data)
 {
 	// save gui element state before changing the pad
 	update_options();
 
-	int temp = gtk_combo_box_get_active(box);
-	if (temp >= 0) current_pad = temp;
-	key_tree_manager->update();
+	current_pad = page;
+	key_tree_manager->update(current_pad);
 	
 	restore_option();
 
@@ -439,15 +439,14 @@ void pad_changed(GtkComboBox *box, gpointer user_data)
 //
 //	if (gtk_toggle_button_get_active(togglebutton))
 //	{
-//		conf.options |= mask;
+//		conf->options |= mask;
 //
-//		int joyid = gtk_combo_box_get_active(GTK_COMBO_BOX(s_devicecombo));
-//
-//		if (joyid >= 0 && joyid < (int)s_vjoysticks.size()) s_vjoysticks[joyid]->TestForce();
+//		u32 joyid = conf->get_joyid(current_pad);
+//		if (JoystickIdWithinBounds(joyid)) s_vjoysticks[joyid]->TestForce();
 //	}
 //	else
 //	{
-//		conf.options &= ~mask;
+//		conf->options &= ~mask;
 //	}
 //}
 
@@ -457,6 +456,7 @@ struct button_positions
 	u32 x,y;
 };
 
+// Warning position is important and must match the order of the gamePadValues structure
 button_positions b_pos[MAX_KEYS] =
 {
 	{ "L2", 64, 8},
@@ -470,9 +470,9 @@ button_positions b_pos[MAX_KEYS] =
 	{ "Square", 328, 104},
 	
 	{ "Select", 200, 48},
-	{ "L3", 200, 8},
-	{ "R3", 272, 8},
 	{ "Start", 272, 48},
+	{ "L3", 64, 264},
+	{ "R3", 392, 264},
 	
 	// Arrow pad
 	{ "Up", 64, 80},
@@ -480,24 +480,17 @@ button_positions b_pos[MAX_KEYS] =
 	{ "Down", 64, 128},
 	{ "Left", 0, 104},
 	
-#if 0
-	{ "Lx", 64, 264},
-	{ "Rx", 392, 264},
-	{ "Ly", 64, 288},
-	{ "Ry", 392, 288},
-#endif
-	
 	// Left Analog joystick
 	{ "Up", 64, 240},
-	{ "Right", 128, 272},
-	{ "Down", 64, 312},
-	{ "Left", 0, 272},
+	{ "Right", 128, 264},
+	{ "Down", 64, 288},
+	{ "Left", 0, 264},
 	
 	// Right Analog joystick
 	{ "Up", 392, 240},
-	{ "Right", 456, 272},
-	{ "Down", 392, 312},
-	{ "Left", 328, 272}
+	{ "Right", 456, 264},
+	{ "Down", 392, 288},
+	{ "Left", 328, 264}
 };
 
 GtkWidget *create_dialog_checkbox(GtkWidget* area, const char* label, u32 x, u32 y, bool flag)
@@ -517,9 +510,10 @@ void DisplayDialog()
     GtkWidget *dialog;
     GtkWidget *main_frame, *main_box;
 
-    GtkWidget *pad_choose_frame, *pad_choose_box;
-    GtkComboBox *pad_choose_cbox;
-    
+	GtkWidget *notebook;
+	GtkWidget *page1_label = gtk_label_new("Pad 1");
+	GtkWidget *page2_label = gtk_label_new("Pad 2");
+
     GtkWidget *joy_choose_frame, *joy_choose_box;
     
     GtkWidget *keys_frame, *keys_box;
@@ -550,12 +544,6 @@ void DisplayDialog()
 			GTK_RESPONSE_REJECT,
 		NULL);
 
-    pad_choose_cbox = GTK_COMBO_BOX(gtk_combo_box_new_text());
-    gtk_combo_box_append_text(pad_choose_cbox, "Pad 1");
-    gtk_combo_box_append_text(pad_choose_cbox, "Pad 2");
-    gtk_combo_box_set_active(pad_choose_cbox, current_pad);
-	g_signal_connect(GTK_OBJECT (pad_choose_cbox), "changed", G_CALLBACK(pad_changed), NULL);
-    
     joy_choose_cbox = GTK_COMBO_BOX(gtk_combo_box_new_text());
     populate_new_joysticks(joy_choose_cbox);
 	set_current_joy();
@@ -563,27 +551,28 @@ void DisplayDialog()
     
     keys_tree_scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_container_add (GTK_CONTAINER(keys_tree_scroll), key_tree_manager->view_widget());
-    gtk_widget_set_size_request(keys_tree_scroll, 200, 300);
+    gtk_widget_set_size_request(keys_tree_scroll, 300, 300);
     
 	keys_tree_clear_btn = gtk_button_new_with_label("Clear All");
 	g_signal_connect(GTK_OBJECT (keys_tree_clear_btn), "clicked", G_CALLBACK(on_clear_clicked), NULL);
-	gtk_widget_set_size_request(keys_tree_clear_btn, 64, 24);
+	gtk_widget_set_size_request(keys_tree_clear_btn, 80, 24);
 	
 	keys_tree_remove_btn = gtk_button_new_with_label("Remove");
 	g_signal_connect(GTK_OBJECT (keys_tree_remove_btn), "clicked", G_CALLBACK(on_remove_clicked), NULL);
-    gtk_widget_set_size_request(keys_tree_remove_btn, 64, 24);
+    gtk_widget_set_size_request(keys_tree_remove_btn, 80, 24);
     
 	keys_tree_modify_btn = gtk_button_new_with_label("Modify");
 	g_signal_connect(GTK_OBJECT (keys_tree_modify_btn), "clicked", G_CALLBACK(on_modify_clicked), NULL);
-    gtk_widget_set_size_request(keys_tree_modify_btn, 64, 24);
+    gtk_widget_set_size_request(keys_tree_modify_btn, 80, 24);
 		
+	notebook = gtk_notebook_new();
     main_box = gtk_vbox_new(false, 5);
     main_frame = gtk_frame_new ("Onepad Config");
-    gtk_container_add (GTK_CONTAINER(main_frame), main_box);
+    gtk_container_add (GTK_CONTAINER(main_frame), notebook);
 
-    pad_choose_box = gtk_vbox_new(false, 5);
-    pad_choose_frame = gtk_frame_new ("Choose a Pad to modify:");
-    gtk_container_add (GTK_CONTAINER(pad_choose_frame), pad_choose_box);
+	gtk_notebook_append_page(GTK_NOTEBOOK(notebook), main_box, page1_label);
+	gtk_notebook_append_page(GTK_NOTEBOOK(notebook), main_box, page2_label);
+	g_signal_connect(GTK_OBJECT (notebook), "switch-page", G_CALLBACK(pad_changed), NULL);
 
     joy_choose_box = gtk_hbox_new(false, 5);
     joy_choose_frame = gtk_frame_new ("Joystick to use for this pad");
@@ -626,19 +615,17 @@ void DisplayDialog()
 	gtk_box_pack_end (GTK_BOX (keys_btn_box), keys_tree_remove_btn, false, false, 0);
 	gtk_box_pack_end (GTK_BOX (keys_btn_box), keys_tree_modify_btn, false, false, 0);
     
-	gtk_container_add(GTK_CONTAINER(pad_choose_box), GTK_WIDGET(pad_choose_cbox));
 	gtk_container_add(GTK_CONTAINER(joy_choose_box), GTK_WIDGET(joy_choose_cbox));
 	gtk_box_pack_start (GTK_BOX (keys_tree_box), keys_btn_frame, false, false, 0);
 	gtk_box_pack_start (GTK_BOX (keys_box), keys_tree_frame, false, false, 0);
 	gtk_container_add(GTK_CONTAINER(keys_box), keys_static_area);
 
-	gtk_container_add(GTK_CONTAINER(main_box), pad_choose_frame);
 	gtk_container_add(GTK_CONTAINER(main_box), joy_choose_frame);
 	gtk_container_add(GTK_CONTAINER(main_box), keys_frame);
 
     gtk_container_add (GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), main_frame);
     
-    key_tree_manager->update();
+    key_tree_manager->update(current_pad);
 	restore_option();
     
     gtk_widget_show_all (dialog);

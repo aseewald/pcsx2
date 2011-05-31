@@ -34,9 +34,8 @@
 #include "svnrev.h"
 #endif
 
+PADconf* conf;
 char libraryName[256];
-
-PADconf conf;
 
 keyEvent event;
 
@@ -247,14 +246,11 @@ void CloseLogging()
 #endif
 }
 
-void clearPAD()
+void clearPAD(int pad)
 {
-	for (int pad = 0; pad < 2; pad++)
-	{
-		conf.keysym_map[pad].clear();
-		for (int key= 0; key < MAX_KEYS; ++key)
-			set_key(pad, key, 0);
-	}
+	conf->keysym_map[pad].clear();
+	for (int key= 0; key < MAX_KEYS; ++key)
+		set_key(pad, key, 0);
 }
 
 EXPORT_C_(s32) PADinit(u32 flags)
@@ -279,6 +275,7 @@ EXPORT_C_(s32) PADinit(u32 flags)
 EXPORT_C_(void) PADshutdown()
 {
     CloseLogging();
+	if (conf) delete conf;
 }
 
 EXPORT_C_(s32) PADopen(void *pDsp)

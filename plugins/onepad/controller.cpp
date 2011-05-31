@@ -26,15 +26,15 @@ HatPins hat_position = {false, false, false, false};
 
 __forceinline void set_keyboad_key(int pad, int keysym, int index)
 {
-	conf.keysym_map[pad][keysym] = index;
+	conf->keysym_map[pad][keysym] = index;
 }
 
 __forceinline int get_keyboard_key(int pad, int keysym)
 {
 	// You must use find instead of []
 	// [] will create an element if the key does not exist and return 0
-	map<u32,u32>::iterator it = conf.keysym_map[pad].find(keysym);
-	if (it != conf.keysym_map[pad].end())
+	map<u32,u32>::iterator it = conf->keysym_map[pad].find(keysym);
+	if (it != conf->keysym_map[pad].end())
 		return it->second;
 	else
 		return -1;
@@ -42,26 +42,24 @@ __forceinline int get_keyboard_key(int pad, int keysym)
 
 __forceinline void set_key(int pad, int index, int value)
 {
-	conf.keys[pad][index] = value;
+	conf->keys[pad][index] = value;
 }
 
 __forceinline int get_key(int pad, int index)
 {
-	return conf.keys[pad][index];
+	return conf->keys[pad][index];
 }
 
-__forceinline KeyType type_of_key(int pad, int index)
- {
-	 int key = get_key(pad, index);
+__forceinline KeyType type_of_joykey(int pad, int index)
+{
+	int key = get_key(pad, index);
 
-	if (key < 0x10000) return PAD_KEYBOARD;
-	else if (key >= 0x10000 && key < 0x20000) return PAD_JOYBUTTONS;
+	if	    (key >= 0x10000 && key < 0x20000) return PAD_JOYBUTTONS;
 	else if (key >= 0x20000 && key < 0x30000) return PAD_JOYSTICK;
 	else if (key >= 0x30000 && key < 0x40000) return PAD_POV;
 	else if (key >= 0x40000 && key < 0x50000) return PAD_HAT;
-	else if (key >= 0x50000 && key < 0x60000) return PAD_MOUSE;
 	else return PAD_NULL;
- }
+}
 
 __forceinline bool IsAnalogKey(int index)
 {
@@ -69,11 +67,8 @@ __forceinline bool IsAnalogKey(int index)
 }
 
 //*******************************************************
-//			onepad key -> input
+//			onepad key -> joy input
 //*******************************************************
-// keyboard
-
-// joystick
 __forceinline int key_to_button(int pad, int index)
 {
 	return (get_key(pad, index) & 0xff);
@@ -94,24 +89,9 @@ __forceinline int key_to_hat_dir(int pad, int index)
 	return ((get_key(pad, index) & 0xF00) >> 8);
 }
 
-// mouse
-__forceinline int key_to_mouse(int pad, int index)
-{
-	return (get_key(pad, index) & 0xff);
-}
-
 //*******************************************************
-//			input -> onepad key
+//			joy input -> onepad key
 //*******************************************************
-// keyboard ???
-#if 0
-__forceinline int pad_to_key(int pad, int index)
-{
-	return (get_key(pad, index) & 0xffff);
-}
-#endif
-
-// joystick
 __forceinline int button_to_key(int button_id)
 {
 	return (0x10000 | button_id);
@@ -131,11 +111,3 @@ __forceinline int hat_to_key(int dir, int axis_id)
 {
 	return (0x40000 | ((dir) << 8) | (axis_id));
 }
-
-#if 0
-// mouse
-__forceinline int mouse_to_key(int button_id)
-{
-	return (0x50000 | button_id);
-}
-#endif

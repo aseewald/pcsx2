@@ -176,7 +176,7 @@ void JoystickInfo::InitHapticEffect()
 void JoystickInfo::DoHapticEffect(int type, int pad, int force)
 {
 	if (type > 1) return;
-	if ( !(!conf.options & (PADOPTION_FORCEFEEDBACK << 16 * pad)) ) return;
+	if ( !(!conf->options & (PADOPTION_FORCEFEEDBACK << 16 * pad)) ) return;
 
 #if SDL_VERSION_ATLEAST(1,3,0)
 	// first search the joy associated to the pad

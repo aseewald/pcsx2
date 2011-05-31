@@ -30,12 +30,10 @@
 
 enum KeyType
 {
-	PAD_KEYBOARD = 0,
-	PAD_JOYBUTTONS,
+	PAD_JOYBUTTONS = 0,
 	PAD_JOYSTICK,
 	PAD_POV,
 	PAD_HAT,
-	PAD_MOUSE,
 	PAD_NULL = -1
 };
 
@@ -45,19 +43,16 @@ extern void set_key(int pad, int index, int value);
 extern int get_key(int pad, int index);
 extern bool IsAnalogKey(int index);
 
-extern KeyType type_of_key(int pad, int index);
-// extern int pad_to_key(int pad, int index);
+extern KeyType type_of_joykey(int pad, int index);
 extern int key_to_button(int pad, int index);
 extern int key_to_axis(int pad, int index);
 extern int key_to_pov_sign(int pad, int index);
 extern int key_to_hat_dir(int pad, int index);
-extern int key_to_mouse(int pad, int index);
 
 extern int button_to_key(int button_id);
 extern int joystick_to_key(int axis_id);
 extern int pov_to_key(int sign, int axis_id);
 extern int hat_to_key(int dir, int axis_id);
-// extern int mouse_to_key(int button_id);
 
 extern int PadEnum[2][2];
 
@@ -110,14 +105,25 @@ static __forceinline void set_hat_pins(int tilt_o_the_hat)
 	}
 }
 
-typedef struct
+struct PADconf
 {
+	public:
 	u32 keys[2][MAX_KEYS];
 	u32 log;
 	u32 options;  // upper 16 bits are for pad2
 	u32 sensibility;
 	u32 joyid_map;
 	map<u32,u32> keysym_map[2];
+
+	PADconf() { init(); }
+
+	void init() {
+		memset(&keys, 0, sizeof(keys));
+		log = options = joyid_map = 0;
+		sensibility = 500;
+		for (int pad = 0; pad < 2 ; pad++)
+			keysym_map[pad].clear();
+	}
 
 	void set_joyid(u32 pad, u32 joy_id) {
 		int shift = 8 * pad;
@@ -129,14 +135,14 @@ typedef struct
 		int shift = 8 * pad;
 		return ((joyid_map >> shift) & 0xFF);
 	}
-} PADconf;
+};
+extern PADconf *conf;
 
 typedef struct
 {
 	u8 x, y;
 } PADAnalog;
 
-extern PADconf conf;
 extern PADAnalog g_lanalog[2], g_ranalog[2];
 
 #endif
