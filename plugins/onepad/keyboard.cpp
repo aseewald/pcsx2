@@ -178,7 +178,7 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 					pad_y = PAD_R_UP;
 				} else {
 					pad_x = PAD_L_RIGHT;
-					pad_y = PAD_L_LEFT;
+					pad_y = PAD_L_UP;
 				}
 
 				unsigned x = evt.key & 0xFFFF;

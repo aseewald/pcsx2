@@ -26,10 +26,9 @@
 
 void config_key(int pad, int key);
 void on_conf_key(GtkButton *button, gpointer user_data);
+void on_toggle_option(GtkToggleButton *togglebutton, gpointer user_data);
 
 static int current_pad = 0;
-static GtkWidget *rev_lx_check, *rev_ly_check, *rev_rx_check, *rev_ry_check;
-static GtkWidget *mouse_l_check, *forcefeedback_check, *mouse_r_check;
 static GtkComboBox *joy_choose_cbox;
 
 const char* s_pGuiKeyMap[] =
@@ -38,7 +37,6 @@ const char* s_pGuiKeyMap[] =
 	"Triangle", "Circle", "Cross", "Square",
 	"Select", "L3", "R3", "Start",
 	"Up", "Right", "Down", "Left",
-	"Lx", "Rx", "Ly", "Ry",
 	"L_Up", "L_Right", "L_Down", "L_Left",
 	"R_Up", "R_Right", "R_Down", "R_Left"
 };
@@ -59,17 +57,18 @@ class keys_tree
 	private:
 		GtkTreeStore *treestore;
 		GtkTreeModel *model;
-		GtkTreeView *view;
+		GtkTreeView *view[2];
 		bool has_columns;
+		int show_pad;
 
-		void repopulate(int pad)
+		void repopulate()
 		{
 			GtkTreeIter toplevel;
 
 			gtk_tree_store_clear(treestore);
 
 			string pad_value;
-			switch(pad) {
+			switch(show_pad) {
 				case 0: pad_value = "Pad 1"; break;
 				case 1: pad_value = "Pad 2"; break;
 				default: pad_value = "Invalid"; break;
@@ -78,14 +77,14 @@ class keys_tree
 			// joystick key
 			for (int key = 0; key < MAX_KEYS; key++)
 			{
-				if (get_key(pad, key) != 0)
+				if (get_key(show_pad, key) != 0)
 				{
 					gtk_tree_store_append(treestore, &toplevel, NULL);
 					gtk_tree_store_set(treestore, &toplevel,
 							COL_PAD, pad_value.c_str(),
 							COL_BUTTON, s_pGuiKeyMap[key],
-							COL_KEY, KeyName(pad, key).c_str(),
-							COL_PAD_NUM, pad,
+							COL_KEY, KeyName(show_pad, key).c_str(),
+							COL_PAD_NUM, show_pad,
 							COL_VALUE, key,
 							COL_KEYSYM, 0,
 							-1);
@@ -94,15 +93,15 @@ class keys_tree
 
 			// keyboard/mouse key
 			map<u32,u32>::iterator it;
-			for (it = conf->keysym_map[pad].begin(); it != conf->keysym_map[pad].end(); ++it) {
+			for (it = conf->keysym_map[show_pad].begin(); it != conf->keysym_map[show_pad].end(); ++it) {
 				int keysym = it->first;
 				int key = it->second;
 				gtk_tree_store_append(treestore, &toplevel, NULL);
 				gtk_tree_store_set(treestore, &toplevel,
 						COL_PAD, pad_value.c_str(),
 						COL_BUTTON, s_pGuiKeyMap[key],
-						COL_KEY, KeyName(pad, key, keysym).c_str(),
-						COL_PAD_NUM, pad,
+						COL_KEY, KeyName(show_pad, key, keysym).c_str(),
+						COL_PAD_NUM, show_pad,
 						COL_VALUE, key,
 						COL_KEYSYM, keysym,
 						-1);
@@ -111,24 +110,26 @@ class keys_tree
 
 		void create_a_column(const char *name, int num, bool visible)
 		{
-			GtkCellRenderer     *renderer;
-			GtkTreeViewColumn   *col;
+			for (int i = 0; i < 2; i++) {
+				GtkCellRenderer     *renderer;
+				GtkTreeViewColumn   *col;
 
-			col = gtk_tree_view_column_new();
-			gtk_tree_view_column_set_title(col, name);
+				col = gtk_tree_view_column_new();
+				gtk_tree_view_column_set_title(col, name);
 
-			/* pack tree view column into tree view */
-			gtk_tree_view_append_column(view, col);
+				/* pack tree view column into tree view */
+				gtk_tree_view_append_column(view[i], col);
 
-			renderer = gtk_cell_renderer_text_new();
+				renderer = gtk_cell_renderer_text_new();
 
-			/* pack cell renderer into tree view column */
-			gtk_tree_view_column_pack_start(col, renderer, TRUE);
+				/* pack cell renderer into tree view column */
+				gtk_tree_view_column_pack_start(col, renderer, TRUE);
 
-			/* connect 'text' property of the cell renderer to
-			 *  model column that contains the first name */
-			gtk_tree_view_column_add_attribute(col, renderer, "text", num);
-			gtk_tree_view_column_set_visible(col, visible);
+				/* connect 'text' property of the cell renderer to
+				 *  model column that contains the first name */
+				gtk_tree_view_column_add_attribute(col, renderer, "text", num);
+				gtk_tree_view_column_set_visible(col, visible);
+			}
 		}
 
 		void create_columns()
@@ -145,15 +146,16 @@ class keys_tree
 			}
 		}
 	public:
-		GtkWidget *view_widget()
+		GtkWidget *view_widget(int i)
 		{
-			return GTK_WIDGET(view);
+			return GTK_WIDGET(view[i]);
 		}
 
 		void init()
 		{
+			show_pad = 0;
 			has_columns = false;
-			view = GTK_TREE_VIEW(gtk_tree_view_new());
+
 			treestore = gtk_tree_store_new(NUM_COLS,
 					G_TYPE_STRING,
 					G_TYPE_STRING,
@@ -163,21 +165,27 @@ class keys_tree
 					G_TYPE_UINT);
 
 			model = GTK_TREE_MODEL(treestore);
-			gtk_tree_view_set_model(view, model);
+
+			for (int i = 0; i < 2; i++) {
+				view[i] = GTK_TREE_VIEW(gtk_tree_view_new());
+				gtk_tree_view_set_model(view[i], model);
+				gtk_tree_selection_set_mode(gtk_tree_view_get_selection(view[i]), GTK_SELECTION_SINGLE);
+			}
 			g_object_unref(model); /* destroy model automatically with view */
-			gtk_tree_selection_set_mode(gtk_tree_view_get_selection(view), GTK_SELECTION_SINGLE);
 		}
 
-		void update(int pad)
+		void set_show_pad(int pad) { show_pad = pad; }
+
+		void update()
 		{
 			create_columns();
-			repopulate(pad);
+			repopulate();
 		}
 
-		void clear_all(int pad)
+		void clear_all()
 		{
-			clearPAD(pad);
-			update(pad);
+			clearPAD(show_pad);
+			update();
 		}
 
 		bool get_selected(int &pad, int &key, int &keysym)
@@ -185,7 +193,7 @@ class keys_tree
 			GtkTreeSelection *selection;
 			GtkTreeIter iter;
 
-			selection = gtk_tree_view_get_selection(view);
+			selection = gtk_tree_view_get_selection(view[show_pad&1]);
 			if (gtk_tree_selection_get_selected(selection, &model, &iter))
 			{
 				gtk_tree_model_get(model, &iter, COL_PAD_NUM, &pad, COL_VALUE, &key, COL_KEYSYM, &keysym,-1);
@@ -194,7 +202,7 @@ class keys_tree
 			return false;
 		}
 
-		void remove_selected(int cpad)
+		void remove_selected()
 		{
 			int key, pad, keysym;
 			if (get_selected(pad, key, keysym))
@@ -203,18 +211,18 @@ class keys_tree
 					conf->keysym_map[pad].erase(keysym);
 				else
 					set_key(pad, key, 0);
-				update(cpad);
+				update();
 			}
 		}
 
-		void modify_selected(int cpad)
+		void modify_selected()
 		{
 			int key, pad, keysym;
 			if (get_selected(pad, key, keysym))
 			{
-				remove_selected(cpad);
+				remove_selected();
 				config_key(pad,key);
-				update(cpad);
+				update();
 			}
 		}
 };
@@ -256,12 +264,28 @@ typedef struct
 	void put(const char* lbl, int i, GtkFixed *fix, int x, int y)
 	{
 		widget = gtk_button_new_with_label(lbl);
+		index = i;
+
 		gtk_fixed_put(fix, widget, x, y);
 		gtk_widget_set_size_request(widget, 64, 24);
-		index = i;
 		g_signal_connect(GTK_OBJECT (widget), "clicked", G_CALLBACK(on_conf_key), this);
 	}
 } dialog_buttons;
+
+typedef struct
+{
+	GtkWidget *widget;
+	unsigned int mask;
+	void create(GtkWidget* area, const char* label, u32 x, u32 y, u32 mask_value)
+	{
+		widget = gtk_check_button_new_with_label(label);
+		mask = mask_value;
+
+		gtk_fixed_put(GTK_FIXED(area), widget, x, y);
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), mask & conf->options);
+		g_signal_connect(GTK_OBJECT (widget), "toggled", G_CALLBACK(on_toggle_option), this);
+	}
+} dialog_checkbox;
 
 void config_key(int pad, int key)
 {
@@ -343,60 +367,32 @@ void on_conf_key(GtkButton *button, gpointer user_data)
 	if (key == -1) return;
 	
 	config_key(current_pad, key);
-	key_tree_manager->update(current_pad);
+	key_tree_manager->update();
 }
 
 void on_remove_clicked(GtkButton *button, gpointer user_data)
 {
-	key_tree_manager->remove_selected(current_pad);
+	key_tree_manager->remove_selected();
 }
 
 void on_clear_clicked(GtkButton *button, gpointer user_data)
 {
-	key_tree_manager->clear_all(current_pad);
+	key_tree_manager->clear_all();
 }
 
 void on_modify_clicked(GtkButton *button, gpointer user_data)
 {
-	key_tree_manager->modify_selected(current_pad);
+	key_tree_manager->modify_selected();
 }
 
-void update_option(int option, bool value)
+void on_toggle_option(GtkToggleButton *togglebutton, gpointer user_data)
 {
-	int mask = current_pad ? (option << 16) : option;
-    
-    if (value)
-		conf->options |= mask;
+	dialog_checkbox *checkbox = (dialog_checkbox*)user_data;
+
+	if (gtk_toggle_button_get_active(togglebutton))
+		conf->options |= checkbox->mask;
 	else
-		conf->options &= ~mask;
-}
-
-// Save to conf->options the value of gtk element
-void update_options()
-{
-	update_option(PADOPTION_REVERSELX, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_lx_check)));
-	update_option(PADOPTION_REVERSELY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_ly_check)));
-	update_option(PADOPTION_REVERSERX, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_rx_check)));
-	update_option(PADOPTION_REVERSERY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rev_ry_check)));
-
-	update_option(PADOPTION_FORCEFEEDBACK, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(forcefeedback_check)));
-	update_option(PADOPTION_MOUSE_L, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(mouse_l_check)));
-	update_option(PADOPTION_MOUSE_R, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(mouse_r_check)));
-}
-
-// Set gtk element from the conf->options value
-void restore_option()
-{
-	int options = current_pad ? (conf->options >> 16) : (conf->options & 0xFFFF);
-	
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_lx_check), (options & PADOPTION_REVERSELX));
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_ly_check), (options & PADOPTION_REVERSELY));
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_rx_check), (options & PADOPTION_REVERSERX));
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rev_ry_check), (options & PADOPTION_REVERSERY));
-
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(forcefeedback_check), (options & PADOPTION_FORCEFEEDBACK));
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(mouse_l_check), (options & PADOPTION_MOUSE_L));
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(mouse_r_check), (options & PADOPTION_MOUSE_R));
+		conf->options &= ~checkbox->mask;
 }
 
 
@@ -413,7 +409,7 @@ void joy_changed(GtkComboBox *box, gpointer user_data)
 	// 3 : use new joy with fresh key binding
 
 	// unassign every joystick with this pad
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < 2; ++i)
 		if (joyid == conf->get_joyid(i)) conf->set_joyid(i, -1);
 
 	conf->set_joyid(current_pad, joyid);
@@ -421,14 +417,10 @@ void joy_changed(GtkComboBox *box, gpointer user_data)
 
 void pad_changed(GtkNotebook *notebook, GtkNotebookPage *notebook_page, int page, void *data)
 {
-	// save gui element state before changing the pad
-	update_options();
-
 	current_pad = page;
-	key_tree_manager->update(current_pad);
+	key_tree_manager->set_show_pad(current_pad);
+	key_tree_manager->update();
 	
-	restore_option();
-
 	// update joy
 	set_current_joy();
 }
@@ -470,9 +462,9 @@ button_positions b_pos[MAX_KEYS] =
 	{ "Square", 328, 104},
 	
 	{ "Select", 200, 48},
-	{ "Start", 272, 48},
 	{ "L3", 64, 264},
 	{ "R3", 392, 264},
+	{ "Start", 272, 48},
 	
 	// Arrow pad
 	{ "Up", 64, 80},
@@ -493,64 +485,40 @@ button_positions b_pos[MAX_KEYS] =
 	{ "Left", 328, 264}
 };
 
-GtkWidget *create_dialog_checkbox(GtkWidget* area, const char* label, u32 x, u32 y, bool flag)
+// Warning position is important and must match the order of the PadOptions structure
+button_positions check_pos[7] =
 {
-	GtkWidget *temp;
-	
-    temp = gtk_check_button_new_with_label(label);
-	gtk_fixed_put(GTK_FIXED(area), temp, x, y);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(temp), flag);
-    return temp;
-}
+	{ "Enable force feedback", 40, 488},
+	{ "Reverse Lx", 40, 344},
+	{ "Reverse Ly", 40, 368},
+	{ "Reverse Rx", 368, 344},
+	{ "Reverse Ry", 368, 368},
+	{ "Use mouse for left analog joy", 40, 392},
+	{ "Use mouse for right analog joy", 368,392},
+};
 
-void DisplayDialog()
+GtkWidget *create_notebook_page_dialog(int page, dialog_buttons btn[MAX_KEYS], dialog_checkbox checkbox[7])
 {
-    int return_value;
-
-    GtkWidget *dialog;
-    GtkWidget *main_frame, *main_box;
-
-	GtkWidget *notebook;
-	GtkWidget *page1_label = gtk_label_new("Pad 1");
-	GtkWidget *page2_label = gtk_label_new("Pad 2");
-
+    GtkWidget *main_box;
     GtkWidget *joy_choose_frame, *joy_choose_box;
     
     GtkWidget *keys_frame, *keys_box;
     
-    GtkWidget *keys_tree_frame, *keys_tree_box, *keys_tree_scroll;
+    GtkWidget *keys_tree_box, *keys_tree_scroll;
     GtkWidget *keys_tree_clear_btn, *keys_tree_remove_btn, *keys_tree_modify_btn;
-    GtkWidget *keys_btn_box, *keys_btn_frame;
+    GtkWidget *keys_btn_box;
     
     GtkWidget *keys_static_frame, *keys_static_box;
     GtkWidget *keys_static_area;
 	
-    dialog_buttons btn[MAX_KEYS];
-    
-	LoadConfig();
-	key_tree_manager = new keys_tree;
-	key_tree_manager->init();
-	
-    /* Create the widgets */
-    dialog = gtk_dialog_new_with_buttons (
-		"OnePAD Config",
-		NULL, /* parent window*/
-		(GtkDialogFlags)(GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT),
-		GTK_STOCK_OK,
-			GTK_RESPONSE_ACCEPT,
-		GTK_STOCK_APPLY,
-			GTK_RESPONSE_APPLY,
-		GTK_STOCK_CANCEL,
-			GTK_RESPONSE_REJECT,
-		NULL);
-
     joy_choose_cbox = GTK_COMBO_BOX(gtk_combo_box_new_text());
     populate_new_joysticks(joy_choose_cbox);
 	set_current_joy();
 	g_signal_connect(GTK_OBJECT (joy_choose_cbox), "changed", G_CALLBACK(joy_changed), NULL);
     
     keys_tree_scroll = gtk_scrolled_window_new(NULL, NULL);
-    gtk_container_add (GTK_CONTAINER(keys_tree_scroll), key_tree_manager->view_widget());
+	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(keys_tree_scroll), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+	gtk_container_add (GTK_CONTAINER(keys_tree_scroll), key_tree_manager->view_widget(page));
     gtk_widget_set_size_request(keys_tree_scroll, 300, 300);
     
 	keys_tree_clear_btn = gtk_button_new_with_label("Clear All");
@@ -564,27 +532,14 @@ void DisplayDialog()
 	keys_tree_modify_btn = gtk_button_new_with_label("Modify");
 	g_signal_connect(GTK_OBJECT (keys_tree_modify_btn), "clicked", G_CALLBACK(on_modify_clicked), NULL);
     gtk_widget_set_size_request(keys_tree_modify_btn, 80, 24);
-		
-	notebook = gtk_notebook_new();
-    main_box = gtk_vbox_new(false, 5);
-    main_frame = gtk_frame_new ("Onepad Config");
-    gtk_container_add (GTK_CONTAINER(main_frame), notebook);
-
-	gtk_notebook_append_page(GTK_NOTEBOOK(notebook), main_box, page1_label);
-	gtk_notebook_append_page(GTK_NOTEBOOK(notebook), main_box, page2_label);
-	g_signal_connect(GTK_OBJECT (notebook), "switch-page", G_CALLBACK(pad_changed), NULL);
 
     joy_choose_box = gtk_hbox_new(false, 5);
     joy_choose_frame = gtk_frame_new ("Joystick to use for this pad");
     gtk_container_add (GTK_CONTAINER(joy_choose_frame), joy_choose_box);
 
     keys_btn_box = gtk_hbox_new(false, 5);
-    keys_btn_frame = gtk_frame_new ("");
-    gtk_container_add (GTK_CONTAINER(keys_btn_frame), keys_btn_box);
     
     keys_tree_box = gtk_vbox_new(false, 5);
-    keys_tree_frame = gtk_frame_new ("");
-    gtk_container_add (GTK_CONTAINER(keys_tree_frame), keys_tree_box);
     
     keys_static_box = gtk_hbox_new(false, 5);
     keys_static_frame = gtk_frame_new ("");
@@ -597,15 +552,12 @@ void DisplayDialog()
 		btn[i].put(b_pos[i].label, i, GTK_FIXED(keys_static_area), b_pos[i].x, b_pos[i].y);
 	}
     
-    rev_lx_check = create_dialog_checkbox(keys_static_area, "Reverse Lx", 40, 344, 0);
-    rev_ly_check = create_dialog_checkbox(keys_static_area, "Reverse Ly", 40, 368, 0);
-    rev_rx_check = create_dialog_checkbox(keys_static_area, "Reverse Rx", 368, 344, 0);
-    rev_ry_check = create_dialog_checkbox(keys_static_area, "Reverse Ry", 368, 368, 0);
+	u32 mask = 1 << (16*page);
+	for(int i = 0; i < 7; i++) {
+		checkbox[i].create(keys_static_area, check_pos[i].label, check_pos[i].x, check_pos[i].y, mask);
+		mask = mask << 1;
+	}
 
-	mouse_l_check = create_dialog_checkbox(keys_static_area, "Use mouse for left analog joy", 40, 400, 0);
-	mouse_r_check = create_dialog_checkbox(keys_static_area, "Use mouse for right analog joy", 368, 400, 0);
-	forcefeedback_check = create_dialog_checkbox(keys_static_area, "Enable force feedback", 40, 500, 0);
-    
     keys_box = gtk_hbox_new(false, 5);
     keys_frame = gtk_frame_new ("Key Settings");
     gtk_container_add (GTK_CONTAINER(keys_frame), keys_box);
@@ -616,24 +568,65 @@ void DisplayDialog()
 	gtk_box_pack_end (GTK_BOX (keys_btn_box), keys_tree_modify_btn, false, false, 0);
     
 	gtk_container_add(GTK_CONTAINER(joy_choose_box), GTK_WIDGET(joy_choose_cbox));
-	gtk_box_pack_start (GTK_BOX (keys_tree_box), keys_btn_frame, false, false, 0);
-	gtk_box_pack_start (GTK_BOX (keys_box), keys_tree_frame, false, false, 0);
+	gtk_box_pack_start(GTK_BOX (keys_tree_box), keys_btn_box, false, false, 0);
+	gtk_box_pack_start(GTK_BOX (keys_box), keys_tree_box, false, false, 0);
 	gtk_container_add(GTK_CONTAINER(keys_box), keys_static_area);
 
+    main_box = gtk_vbox_new(false, 5);
 	gtk_container_add(GTK_CONTAINER(main_box), joy_choose_frame);
 	gtk_container_add(GTK_CONTAINER(main_box), keys_frame);
 
-    gtk_container_add (GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), main_frame);
+	return main_box;
+}
+
+void DisplayDialog()
+{
+    int return_value;
+
+    GtkWidget *dialog;
+
+	GtkWidget *notebook, *page[2];
+	GtkWidget *page_label[2];
+
+	dialog_buttons btn[2][MAX_KEYS];
+	dialog_checkbox checkbox[2][7];
+
+	LoadConfig();
+	key_tree_manager = new keys_tree;
+	key_tree_manager->init();
+
+    /* Create the widgets */
+    dialog = gtk_dialog_new_with_buttons (
+		"OnePAD Config",
+		NULL, /* parent window*/
+		(GtkDialogFlags)(GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT),
+		GTK_STOCK_OK,
+			GTK_RESPONSE_ACCEPT,
+		GTK_STOCK_APPLY,
+			GTK_RESPONSE_APPLY,
+		GTK_STOCK_CANCEL,
+			GTK_RESPONSE_REJECT,
+		NULL);
+
+	notebook = gtk_notebook_new();
+
+	page_label[0] = gtk_label_new("Pad 1");
+	page_label[1] = gtk_label_new("Pad 2");
+	for (int i = 0; i < 2; i++) {
+		page[i] = create_notebook_page_dialog(i, btn[i], checkbox[i]);
+		gtk_notebook_append_page(GTK_NOTEBOOK(notebook), page[i], page_label[i]);
+	}
+	g_signal_connect(GTK_OBJECT (notebook), "switch-page", G_CALLBACK(pad_changed), NULL);
+
+    gtk_container_add (GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), notebook);
     
-    key_tree_manager->update(current_pad);
-	restore_option();
+    key_tree_manager->update();
     
     gtk_widget_show_all (dialog);
 
 	do {
 		return_value = gtk_dialog_run (GTK_DIALOG (dialog));
 		if (return_value == GTK_RESPONSE_APPLY || return_value == GTK_RESPONSE_ACCEPT) {
-			update_options();
 			SaveConfig();
 		}
 	} while (return_value == GTK_RESPONSE_APPLY);

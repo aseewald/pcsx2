@@ -110,8 +110,8 @@ EXPORT_C_(void) PADupdate(int pad)
 			{
 				case PAD_JOYBUTTONS:
 					{
-						int value = SDL_JoystickGetButton((pjoy)->GetJoy(), key_to_button(cpad, i));
 
+						int value = SDL_JoystickGetButton((pjoy)->GetJoy(), key_to_button(cpad, i));
 						if (value)
 							clear_bit(status[cpad], i); // released
 						else
@@ -151,7 +151,7 @@ EXPORT_C_(void) PADupdate(int pad)
 							if (abs(value) > (pjoy)->GetDeadzone())
 								Analog::ConfigurePad(cpad, i, value);
 							else if (! (conf->options & ((PADOPTION_MOUSE_R|PADOPTION_MOUSE_L) << 16 * cpad )) )
-								// There is a conflict between mouse and joystick configuration.
+								// There is a conflict between keyboard/mouse and joystick configuration.
 								// Do nothing when the mouse is enabled. It avoids of unsetting
 								// the pad everytime the mouse is selected -- gregory
 								Analog::ResetPad(cpad, i);

@@ -49,7 +49,7 @@ namespace Analog
 		switch (index)
 		{
 			case PAD_R_LEFT:
-			case PAD_R_RIGHT: g_ranalog[ pad].x = value; break;
+			case PAD_R_RIGHT: g_ranalog[pad].x = value; break;
 
 			case PAD_R_DOWN:
 			case PAD_R_UP: g_ranalog[pad].y = value; break;
@@ -58,7 +58,7 @@ namespace Analog
 			case PAD_L_RIGHT: g_lanalog[pad].x = value; break;
 
 			case PAD_L_DOWN:
-			case PAD_L_UP:  g_lanalog[ pad].y = value; break;
+			case PAD_L_UP:  g_lanalog[pad].y = value; break;
 
 			default: break;
 		}

@@ -156,13 +156,12 @@ void LoadConfig()
 {
 	FILE *f;
 	char str[256];
+	bool have_user_setting = false;
 
 	if (!conf)
 		conf = new PADconf;
 
 	conf->init();
-
-	DefaultKeyboardValues();
 
 	const std::string iniFile(s_strIniPath + "OnePAD.ini");
 	f = fopen(iniFile.c_str(), "r");
@@ -187,14 +186,19 @@ void LoadConfig()
 
 			if (fscanf(f, str, &temp) == 0) temp = 0;
 			set_key(pad, key, temp);
+			if (temp && pad == 0) have_user_setting = true;
 		}
 	}
 
 	u32 pad;
 	u32 keysym;
 	u32 index;
-	while( fscanf(f, "PAD %d:KEYSYM 0x%x = %d\n", &pad, &keysym, &index) != EOF )
+	while( fscanf(f, "PAD %d:KEYSYM 0x%x = %d\n", &pad, &keysym, &index) != EOF ) {
 		set_keyboad_key(pad, keysym, index);
+		if(pad == 0) have_user_setting = true;
+	}
 
 	fclose(f);
+
+	if (!have_user_setting) DefaultKeyboardValues();
 }
