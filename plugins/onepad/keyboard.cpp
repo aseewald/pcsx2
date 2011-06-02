@@ -125,6 +125,7 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease, boo
 			// Analog Controls.
 			if (IsAnalogKey(i))
 			{
+				used_by_keyboard = false; // allow the joystick to reset the analog pad...
 				Analog::ResetPad(pad, i);
 				i += 0xff00;
 			}

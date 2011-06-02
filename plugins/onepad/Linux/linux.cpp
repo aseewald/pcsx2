@@ -87,6 +87,7 @@ void _PADclose()
 	s_vjoysticks.clear();
 }
 
+static bool used_by_keyboard = false;
 EXPORT_C_(void) PADupdate(int pad)
 {
 	// FIXME for me pad is alway 0 and we need to do a for loop
@@ -94,7 +95,6 @@ EXPORT_C_(void) PADupdate(int pad)
 	// Keyboard does a nice roadtrip (with semaphore in the middle)
 	// s_keyRelease (by UpdateKeys) -> status (by _PADupdate -> by _PADpoll)
 	// If we need semaphore, joy part must be updated
-	bool used_by_keyboard = false;
 	int cpad = pad;
 	int keyPress = 0, keyRelease = 0;
 
