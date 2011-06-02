@@ -56,7 +56,7 @@ static bool s_grab_input = false;
 static bool s_Shift = false;
 static unsigned int  s_previous_mouse_x = 0;
 static unsigned int  s_previous_mouse_y = 0;
-void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
+void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease, bool& used_by_keyboard)
 {
 	int i;
 	KeySym key = (KeySym)evt.key;
@@ -87,19 +87,20 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 			// Analog controls.
 			if (IsAnalogKey(i))
 			{
+				used_by_keyboard = true; // avoid the joystick to reset the analog pad...
 				switch (i)
 				{
 					case PAD_R_LEFT:
 					case PAD_R_UP:
 					case PAD_L_LEFT:
 					case PAD_L_UP:
-						Analog::ConfigurePad(pad, i, DEF_VALUE);
+						Analog::ConfigurePad(pad, i, -DEF_VALUE);
 						break;
 					case PAD_R_RIGHT:
 					case PAD_R_DOWN:
 					case PAD_L_RIGHT:
 					case PAD_L_DOWN:
-						Analog::ConfigurePad(pad, i, -DEF_VALUE);
+						Analog::ConfigurePad(pad, i, DEF_VALUE);
 						break;
 				}
 				i += 0xff00;
@@ -220,16 +221,15 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt, int& keyPress, int& keyRelease)
 	}
 }
 
-void PollForX11KeyboardInput(int pad)
+void PollForX11KeyboardInput(int pad, int& keyPress, int& keyRelease, bool& used_by_keyboard)
 {
 	keyEvent evt;
 	XEvent E;
 	XButtonEvent* BE;
-	int keyPress = 0, keyRelease = 0;
 
 	// Keyboard input send by PCSX2
 	while (!ev_fifo.empty()) {
-		AnalyzeKeyEvent(pad, ev_fifo.front(), keyPress, keyRelease);
+		AnalyzeKeyEvent(pad, ev_fifo.front(), keyPress, keyRelease, used_by_keyboard);
 		pthread_mutex_lock(&mutex_KeyEvent);
 		ev_fifo.pop();
 		pthread_mutex_unlock(&mutex_KeyEvent);
@@ -250,10 +250,8 @@ void PollForX11KeyboardInput(int pad)
 			case ButtonPress: evt.key = BE->button; break;
 			default: break;
 		}
-		AnalyzeKeyEvent(pad, evt, keyPress, keyRelease);
+		AnalyzeKeyEvent(pad, evt, keyPress, keyRelease, used_by_keyboard);
 	}
-
-	UpdateKeys(pad, keyPress, keyRelease);
 }
 
 bool PollX11KeyboardMouseEvent(u32 &pkey)

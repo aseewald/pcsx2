@@ -90,11 +90,18 @@ void _PADclose()
 EXPORT_C_(void) PADupdate(int pad)
 {
 	// FIXME for me pad is alway 0 and we need to do a for loop
-
+	// FIXME joystick directly update the status variable
+	// Keyboard does a nice roadtrip (with semaphore in the middle)
+	// s_keyRelease (by UpdateKeys) -> status (by _PADupdate -> by _PADpoll)
+	// If we need semaphore, joy part must be updated
+	bool used_by_keyboard = false;
 	int cpad = pad;
+	int keyPress = 0, keyRelease = 0;
 
 	// Poll keyboard.
-	PollForX11KeyboardInput(cpad);
+	PollForX11KeyboardInput(cpad, keyPress, keyRelease, used_by_keyboard);
+
+	UpdateKeys(pad, keyPress, keyRelease);
 
 	// joystick info
 	SDL_JoystickUpdate();
@@ -150,10 +157,11 @@ EXPORT_C_(void) PADupdate(int pad)
 						if (IsAnalogKey(i)) {
 							if (abs(value) > (pjoy)->GetDeadzone())
 								Analog::ConfigurePad(cpad, i, value);
-							else if (! (conf->options & ((PADOPTION_MOUSE_R|PADOPTION_MOUSE_L) << 16 * cpad )) )
+							else if (! (conf->options & ((PADOPTION_MOUSE_R|PADOPTION_MOUSE_L) << 16 * cpad ))
+									&& !(used_by_keyboard) )
 								// There is a conflict between keyboard/mouse and joystick configuration.
-								// Do nothing when the mouse is enabled. It avoids of unsetting
-								// the pad everytime the mouse is selected -- gregory
+								// Do nothing when either the mouse or the keyboad is pressed/enabled.
+								// It avoid to be stuck in reset mode --Gregory
 								Analog::ResetPad(cpad, i);
 						}
 					}
