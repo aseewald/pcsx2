@@ -44,7 +44,7 @@ namespace Analog
 		}
 	}
 
-	void SetPad(u8 pad, int index, u8 value)
+	static void SetPad(u8 pad, int index, u8 value)
 	{
 		switch (index)
 		{
@@ -64,11 +64,6 @@ namespace Analog
 		}
 	}
 
-	void InvertPad(u8 pad, int key)
-	{
-		SetPad(pad, key, -Pad(pad, key));
-	}
-
 	void ResetPad( u8 pad, int key)
 	{
 		SetPad(pad, key, 0x80);
@@ -86,7 +81,7 @@ namespace Analog
 		}
 	}
 
-	bool ReversePad(u8 index)
+	static bool ReversePad(u8 index)
 	{
 		switch (index)
 		{
@@ -112,8 +107,13 @@ namespace Analog
 
 	void ConfigurePad( u8 pad, int index, int value)
 	{
-		SetPad(pad, index, value / 256);
-		if (ReversePad(index)) InvertPad(pad,index);
-		SetPad(pad, index, Pad(pad, index) + 0x80);
+		//                          Left -> -- -> Right
+		// Value range :        FFFF8002 -> 0  -> 7FFE
+		// Force range :			  80 -> 0  -> 7F
+		// Normal mode : expect value 0  -> 80 -> FF
+		// Reverse mode: expect value FF -> 7F -> 0
+		u8 force = (value / 256);
+		if (ReversePad(index)) SetPad(pad, index, 0x7F - force);
+		else				   SetPad(pad, index, 0x80 + force);
 	}
 }
