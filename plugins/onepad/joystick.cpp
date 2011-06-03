@@ -176,13 +176,15 @@ void JoystickInfo::InitHapticEffect()
 void JoystickInfo::DoHapticEffect(int type, int pad, int force)
 {
 	if (type > 1) return;
-	if ( !(!conf->options & (PADOPTION_FORCEFEEDBACK << 16 * pad)) ) return;
+	if ( !(conf->options & (PADOPTION_FORCEFEEDBACK << 16 * pad)) ) return;
 
 #if SDL_VERSION_ATLEAST(1,3,0)
 	// first search the joy associated to the pad
 	vector<JoystickInfo*>::iterator itjoy = s_vjoysticks.begin();
-	while (itjoy != s_vjoysticks.end())
+	while (itjoy != s_vjoysticks.end()) {
 		if ((*itjoy)->GetPAD() == pad) break;
+		itjoy++;
+	}
 
 	if (itjoy == s_vjoysticks.end()) return;
 	if ((*itjoy)->haptic == NULL) return;
