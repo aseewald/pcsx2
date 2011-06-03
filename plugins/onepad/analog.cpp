@@ -19,8 +19,8 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
- #include "analog.h"
-PADAnalog g_lanalog[NUM_OF_PADS], g_ranalog[NUM_OF_PADS];
+#include "analog.h"
+static PADAnalog g_lanalog[NUM_OF_PADS], g_ranalog[NUM_OF_PADS];
 
 namespace Analog
 {

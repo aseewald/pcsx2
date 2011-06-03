@@ -142,7 +142,4 @@ typedef struct
 {
 	u8 x, y;
 } PADAnalog;
-
-extern PADAnalog g_lanalog[2], g_ranalog[2];
-
 #endif

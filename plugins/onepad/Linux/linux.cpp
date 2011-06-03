@@ -90,82 +90,85 @@ void _PADclose()
 static bool used_by_keyboard = false;
 EXPORT_C_(void) PADupdate(int pad)
 {
-	// FIXME for me pad is alway 0 and we need to do a for loop
 	// FIXME joystick directly update the status variable
 	// Keyboard does a nice roadtrip (with semaphore in the middle)
 	// s_keyRelease (by UpdateKeys) -> status (by _PADupdate -> by _PADpoll)
 	// If we need semaphore, joy part must be updated
-	int cpad = pad;
-	int keyPress = 0, keyRelease = 0;
 
-	// Poll keyboard.
-	PollForX11KeyboardInput(cpad, keyPress, keyRelease, used_by_keyboard);
+	// Actually PADupdate is always call with pad == 0. So you need to update both 
+	// pads -- Gregory
+	for (int cpad = 0; cpad < 2; cpad++) {
+		int keyPress = 0, keyRelease = 0;
 
-	UpdateKeys(pad, keyPress, keyRelease);
+		// Poll keyboard.
+		PollForX11KeyboardInput(cpad, keyPress, keyRelease, used_by_keyboard);
 
-	// joystick info
-	SDL_JoystickUpdate();
+		UpdateKeys(pad, keyPress, keyRelease);
 
-	int joyid = conf->get_joyid(cpad);
+		// joystick info
+		SDL_JoystickUpdate();
 
-	if (JoystickIdWithinBounds(joyid)) {
-		for (int i = 0; i < MAX_KEYS; i++)
-		{
-			JoystickInfo* pjoy = s_vjoysticks[joyid];
+		int joyid = conf->get_joyid(cpad);
 
-			switch (type_of_joykey(cpad, i))
+		if (JoystickIdWithinBounds(joyid)) {
+			for (int i = 0; i < MAX_KEYS; i++)
 			{
-				case PAD_JOYBUTTONS:
-					{
+				JoystickInfo* pjoy = s_vjoysticks[joyid];
 
-						int value = SDL_JoystickGetButton((pjoy)->GetJoy(), key_to_button(cpad, i));
-						if (value)
-							clear_bit(status[cpad], i); // released
-						else
-							set_bit(status[cpad], i); // pressed
+				switch (type_of_joykey(cpad, i))
+				{
+					case PAD_JOYBUTTONS:
+						{
 
-						break;
-					}
-				case PAD_HAT:
-					{
-						int value = SDL_JoystickGetHat((pjoy)->GetJoy(), key_to_axis(cpad, i));
+							int value = SDL_JoystickGetButton((pjoy)->GetJoy(), key_to_button(cpad, i));
+							if (value)
+								clear_bit(status[cpad], i); // released
+							else
+								set_bit(status[cpad], i); // pressed
 
-						if (key_to_hat_dir(cpad, i) == value)
-							clear_bit(status[cpad], i);
-						else
-							set_bit(status[cpad], i);
-
-						break;
-					}
-				case PAD_POV:
-					{
-						int value = pjoy->GetAxisFromKey(cpad, i);
-
-						if (key_to_pov_sign(cpad, i) && (value < -2048))
-							clear_bit(status[cpad], i);
-						else if (!key_to_pov_sign(cpad, i) && (value > 2048))
-							clear_bit(status[cpad], i);
-						else
-							set_bit(status[cpad], i);
-
-						break;
-					}
-				case PAD_JOYSTICK:
-					{
-						int value = pjoy->GetAxisFromKey(cpad, i);
-
-						if (IsAnalogKey(i)) {
-							if (abs(value) > (pjoy)->GetDeadzone())
-								Analog::ConfigurePad(cpad, i, value);
-							else if (! (conf->options & ((PADOPTION_MOUSE_R|PADOPTION_MOUSE_L) << 16 * cpad ))
-									&& !(used_by_keyboard) )
-								// There is a conflict between keyboard/mouse and joystick configuration.
-								// Do nothing when either the mouse or the keyboad is pressed/enabled.
-								// It avoid to be stuck in reset mode --Gregory
-								Analog::ResetPad(cpad, i);
+							break;
 						}
-					}
-				default: break;
+					case PAD_HAT:
+						{
+							int value = SDL_JoystickGetHat((pjoy)->GetJoy(), key_to_axis(cpad, i));
+
+							if (key_to_hat_dir(cpad, i) == value)
+								clear_bit(status[cpad], i);
+							else
+								set_bit(status[cpad], i);
+
+							break;
+						}
+					case PAD_POV:
+						{
+							int value = pjoy->GetAxisFromKey(cpad, i);
+
+							if (key_to_pov_sign(cpad, i) && (value < -2048))
+								clear_bit(status[cpad], i);
+							else if (!key_to_pov_sign(cpad, i) && (value > 2048))
+								clear_bit(status[cpad], i);
+							else
+								set_bit(status[cpad], i);
+
+							break;
+						}
+					case PAD_JOYSTICK:
+						{
+							int value = pjoy->GetAxisFromKey(cpad, i);
+
+							if (IsAnalogKey(i)) {
+								if (abs(value) > (pjoy)->GetDeadzone())
+									Analog::ConfigurePad(cpad, i, value);
+								else if (! (conf->options & ((PADOPTION_MOUSE_R|PADOPTION_MOUSE_L) << 16 * cpad ))
+										&& !(used_by_keyboard) )
+									// There is a conflict between keyboard/mouse and joystick configuration.
+									// Do nothing when either the mouse or the keyboad is pressed/enabled.
+									// It avoid to be stuck in reset mode --Gregory
+									Analog::ResetPad(cpad, i);
+							}
+						}
+					default: break;
+				}
 			}
 		}
 	}

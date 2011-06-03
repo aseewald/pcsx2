@@ -19,10 +19,11 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
- #define NUM_OF_PADS 2
+#define NUM_OF_PADS 2
 
- #include "onepad.h"
- namespace Analog
+#include "onepad.h"
+
+namespace Analog
 {
 	extern void Init();
 	extern u8 Pad(int pad, u8 index);
