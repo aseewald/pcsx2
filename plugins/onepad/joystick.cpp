@@ -282,6 +282,15 @@ bool JoystickInfo::PollButtons(int &jbutton, u32 &pkey)
 				SetButtonState(i, 0);
 				break;
 			}
+			// Pressure sensitive button are detected as both button (digital) and axe (analog). So better
+			// drop the button to emulate the pressure sensiblity of the ds2 :) -- Gregory
+			for (int j = 0; j < GetNumAxes(); ++j) {
+				int value = SDL_JoystickGetAxis(GetJoy(), j);
+				if (value != GetAxisState(j) && abs(value) >= GetAxisState(j)) {
+					return false;
+				}
+
+			}
 
 			pkey = button_to_key(i);
 			jbutton = i;

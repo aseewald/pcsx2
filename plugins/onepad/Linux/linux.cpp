@@ -143,12 +143,16 @@ EXPORT_C_(void) PADupdate(int pad)
 						{
 							int value = pjoy->GetAxisFromKey(cpad, i);
 
-							if (key_to_pov_sign(cpad, i) && (value < -2048))
+							if (key_to_pov_sign(cpad, i) && (value < -2048)) {
 								clear_bit(status[cpad], i);
-							else if (!key_to_pov_sign(cpad, i) && (value > 2048))
+								status_pressure[cpad][i] = (min(-value,DEF_VALUE) / 128) & 0xFF; // Max pressure is 255
+							} else if (!key_to_pov_sign(cpad, i) && (value > 2048)) {
 								clear_bit(status[cpad], i);
-							else
+								status_pressure[cpad][i] = (min(value,DEF_VALUE) / 128) & 0xFF; // Max pressure is 255
+							} else {
 								set_bit(status[cpad], i);
+								status_pressure[cpad][i] = 0; // no pressure
+							}
 
 							break;
 						}
@@ -173,7 +177,6 @@ EXPORT_C_(void) PADupdate(int pad)
 		}
 	}
 }
-
 
 EXPORT_C_(void) PADconfigure()
 {

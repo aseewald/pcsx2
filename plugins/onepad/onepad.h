@@ -137,6 +137,7 @@ extern queue<keyEvent> ev_fifo;
 extern pthread_mutex_t	mutex_KeyEvent;
 
 extern u16 status[2];
+extern int status_pressure[2][8];
 extern u32 pads;
 
 void clearPAD(int pad);

@@ -40,6 +40,7 @@ char libraryName[256];
 keyEvent event;
 
 u16 status[2];
+int status_pressure[2][8];
 int pressure;
 static keyEvent s_event;
 std::string s_strIniPath("inis/");
@@ -258,8 +259,11 @@ EXPORT_C_(s32) PADinit(u32 flags)
 	initLogging();
 
 	pads |= flags;
-	status[0] = 0xffff;
-	status[1] = 0xffff;
+	for (int i = 0 ; i < 2 ; i++) {
+		status[i] = 0xffff;
+		for (int j = 0 ; j < 8 ; j++)
+			status_pressure[i][j] = 255;
+	}
 
 	LoadConfig();
 
@@ -437,35 +441,35 @@ u8  _PADpoll(u8 value)
 				switch (stdpar[curPad][3])
 				{
 					case 0xBF: // X
-						stdpar[curPad][14] = avg_pressure;
+						stdpar[curPad][14] = status_pressure[curPad][PAD_CROSS];
 						break;
 
 					case 0xDF: // Circle
-						stdpar[curPad][13] = avg_pressure;
+						stdpar[curPad][13] = status_pressure[curPad][PAD_CIRCLE];
 						break;
 
 					case 0xEF: // Triangle
-						stdpar[curPad][12] = avg_pressure;
+						stdpar[curPad][12] = status_pressure[curPad][PAD_TRIANGLE];
 						break;
 
 					case 0x7F: // Square
-						stdpar[curPad][15] = avg_pressure;
+						stdpar[curPad][15] = status_pressure[curPad][PAD_SQUARE];
 						break;
 
 					case 0xFB: // L1
-						stdpar[curPad][16] = avg_pressure;
+						stdpar[curPad][16] = status_pressure[curPad][PAD_L1];
 						break;
 
 					case 0xF7: // R1
-						stdpar[curPad][17] = avg_pressure;
+						stdpar[curPad][17] = status_pressure[curPad][PAD_R1];
 						break;
 
 					case 0xFE: // L2
-						stdpar[curPad][18] = avg_pressure;
+						stdpar[curPad][18] = status_pressure[curPad][PAD_L2];
 						break;
 
 					case 0xFD: // R2
-						stdpar[curPad][19] = avg_pressure;
+						stdpar[curPad][19] = status_pressure[curPad][PAD_R2];
 						break;
 
 					default:
