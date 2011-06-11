@@ -65,10 +65,9 @@ class JoystickInfo
 
 		void TestForce();
 
-		bool PollButtons(int &jbutton, u32 &pkey);
-		bool PollAxes(int &axis_id, u32 &pkey);
-		bool PollHats(int &jbutton, int &dir, u32 &pkey);
-		bool PollPOV(int &axis_id, bool &sign, u32 &pkey);
+		bool PollButtons(u32 &pkey);
+		bool PollAxes(u32 &pkey);
+		bool PollHats(u32 &pkey);
 
 		const string& GetName()
 		{

@@ -327,39 +327,19 @@ void config_key(int pad, int key)
 		itjoy = s_vjoysticks.begin();
 		while ((itjoy != s_vjoysticks.end()) && (!captured))
 		{
-			int button_id, direction;
-
-			if ((*itjoy)->PollButtons(button_id, key_pressed))
-			{
+			if ((*itjoy)->PollButtons(key_pressed)) {
 				set_key(pad, key, key_pressed);
 				captured = true;
 				break;
 			}
 
-			bool sign = false;
-			int axis_id;
-
-			if (IsAnalogKey(key))
-			{
-				if ((*itjoy)->PollAxes(axis_id, key_pressed))
-				{
-					set_key(pad, key, key_pressed);
-					captured = true;
-					break;
-				}
-			}
-			else
-			{
-				if ((*itjoy)->PollPOV(axis_id, sign, key_pressed))
-				{
-					set_key(pad, key, key_pressed);
-					captured = true;
-					break;
-				}
+			if ((*itjoy)->PollAxes(key_pressed)) {
+				set_key(pad, key, key_pressed);
+				captured = true;
+				break;
 			}
 
-			if ((*itjoy)->PollHats(axis_id, direction, key_pressed))
-			{
+			if ((*itjoy)->PollHats(key_pressed)) {
 				set_key(pad, key, key_pressed);
 				captured = true;
 				break;

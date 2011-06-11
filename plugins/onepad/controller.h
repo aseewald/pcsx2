@@ -31,8 +31,7 @@
 enum KeyType
 {
 	PAD_JOYBUTTONS = 0,
-	PAD_JOYSTICK,
-	PAD_POV,
+	PAD_AXIS,
 	PAD_HAT,
 	PAD_NULL = -1
 };
@@ -46,12 +45,12 @@ extern bool IsAnalogKey(int index);
 extern KeyType type_of_joykey(int pad, int index);
 extern int key_to_button(int pad, int index);
 extern int key_to_axis(int pad, int index);
-extern int key_to_pov_sign(int pad, int index);
+extern bool key_to_axis_sign(int pad, int index);
+extern bool key_to_axis_type(int pad, int index);
 extern int key_to_hat_dir(int pad, int index);
 
 extern int button_to_key(int button_id);
-extern int joystick_to_key(int axis_id);
-extern int pov_to_key(int sign, int axis_id);
+extern int axis_to_key(int full_axis, int sign, int axis_id);
 extern int hat_to_key(int dir, int axis_id);
 
 extern int PadEnum[2][2];

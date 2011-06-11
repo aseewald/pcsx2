@@ -60,10 +60,12 @@ string KeyName(int pad, int key, int keysym)
 					sprintf(&tmp[0], "JBut %d", button);
 					break;
 				}
-			case PAD_JOYSTICK:
+			case PAD_AXIS:
 				{
-					int axis = key_to_axis(pad, key);
-					sprintf(&tmp[0], "JAxis %d", axis);
+					if (key_to_axis_type(pad,key))
+						sprintf(&tmp[0], "JAxis %d Full", key_to_axis(pad, key), key_to_axis_sign(pad, key) ? "-" : "+");
+					else
+						sprintf(&tmp[0], "JAxis %d Half%s", key_to_axis(pad, key), key_to_axis_sign(pad, key) ? "-" : "+");
 					break;
 				}
 			case PAD_HAT:
@@ -87,11 +89,6 @@ string KeyName(int pad, int key, int keysym)
 							sprintf(&tmp[0], "JPOVL-%d", axis);
 							break;
 					}
-					break;
-				}
-			case PAD_POV:
-				{
-					sprintf(&tmp[0], "JPOV %d%s", key_to_axis(pad, key), key_to_pov_sign(pad, key) ? "-" : "+");
 					break;
 				}
 			default: break;

@@ -139,26 +139,11 @@ EXPORT_C_(void) PADupdate(int pad)
 
 							break;
 						}
-					case PAD_POV:
+					case PAD_AXIS:
 						{
 							int value = pjoy->GetAxisFromKey(cpad, i);
-
-							if (key_to_pov_sign(cpad, i) && (value < -2048)) {
-								clear_bit(status[cpad], i);
-								status_pressure[cpad][i] = (min(-value,DEF_VALUE) / 128) & 0xFF; // Max pressure is 255
-							} else if (!key_to_pov_sign(cpad, i) && (value > 2048)) {
-								clear_bit(status[cpad], i);
-								status_pressure[cpad][i] = (min(value,DEF_VALUE) / 128) & 0xFF; // Max pressure is 255
-							} else {
-								set_bit(status[cpad], i);
-								status_pressure[cpad][i] = 0; // no pressure
-							}
-
-							break;
-						}
-					case PAD_JOYSTICK:
-						{
-							int value = pjoy->GetAxisFromKey(cpad, i);
+							bool sign = key_to_axis_sign(cpad, i);
+							bool full_axis = key_to_axis_type(cpad, i);
 
 							if (IsAnalogKey(i)) {
 								if (abs(value) > (pjoy)->GetDeadzone())
@@ -169,6 +154,29 @@ EXPORT_C_(void) PADupdate(int pad)
 									// Do nothing when either the mouse or the keyboad is pressed/enabled.
 									// It avoid to be stuck in reset mode --Gregory
 									Analog::ResetPad(cpad, i);
+
+							} else {
+								if (full_axis) {
+									value += 0x8000;
+									if (value > 2048) {
+										clear_bit(status[cpad], i);
+										status_pressure[cpad][i] = min(value/256 , 0xFF); // Max pressure is 255
+									} else {
+										set_bit(status[cpad], i);
+										status_pressure[cpad][i] = 0; // no pressure
+									}
+								} else {
+									if (sign && (value < -2048)) {
+										clear_bit(status[cpad], i);
+										status_pressure[cpad][i] = min(-value /128, 0xFF); // Max pressure is 255
+									} else if (!sign && (value > 2048)) {
+										clear_bit(status[cpad], i);
+										status_pressure[cpad][i] = min(value /128, 0xFF); // Max pressure is 255
+									} else {
+										set_bit(status[cpad], i);
+										status_pressure[cpad][i] = 0; // no pressure
+									}
+								}
 							}
 						}
 					default: break;

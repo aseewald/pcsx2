@@ -268,7 +268,7 @@ void JoystickInfo::TestForce()
 {
 }
 
-bool JoystickInfo::PollButtons(int &jbutton, u32 &pkey)
+bool JoystickInfo::PollButtons(u32 &pkey)
 {
 	// MAKE sure to look for changes in the state!!
 	for (int i = 0; i < GetNumButtons(); ++i)
@@ -279,21 +279,21 @@ bool JoystickInfo::PollButtons(int &jbutton, u32 &pkey)
 		{
 			if (!but)    // released, we don't really want this
 			{
-				SetButtonState(i, 0);
-				break;
+				continue;
 			}
 			// Pressure sensitive button are detected as both button (digital) and axe (analog). So better
 			// drop the button to emulate the pressure sensiblity of the ds2 :) -- Gregory
 			for (int j = 0; j < GetNumAxes(); ++j) {
 				int value = SDL_JoystickGetAxis(GetJoy(), j);
-				if (value != GetAxisState(j) && abs(value) >= GetAxisState(j)) {
+				int old_value = GetAxisState(j);
+				bool full_axis = (old_value < -0x3FFF) ? true : false;
+				if (value != old_value && ((full_axis && value > -0x6FFF ) || (!full_axis && abs(value) > old_value))) {
 					return false;
 				}
 
 			}
 
 			pkey = button_to_key(i);
-			jbutton = i;
 			return true;
 		}
 	}
@@ -301,29 +301,33 @@ bool JoystickInfo::PollButtons(int &jbutton, u32 &pkey)
 	return false;
 }
 
-bool JoystickInfo::PollPOV(int &axis_id, bool &sign, u32 &pkey)
+bool JoystickInfo::PollAxes(u32 &pkey)
 {
 	for (int i = 0; i < GetNumAxes(); ++i)
 	{
 		int value = SDL_JoystickGetAxis(GetJoy(), i);
+		int old_value = GetAxisState(i);
 
-		if (value != GetAxisState(i))
+		if (value != old_value)
 		{
 			PAD_LOG("Change in joystick %d: %d.\n", i, value);
+			// There is several kinds of axes
+			// Half+: 0 (release) -> 32768
+			// Half-: 0 (release) -> -32768
+			// Full (like dualshock 3): -32768 (release) ->32768
+			bool full_axis = (old_value < -0x2FFF) ? true : false;
 
-			if (abs(value) <= GetAxisState(i))  // we don't want this
+			if ((!full_axis && abs(value) <= 0x1FFF)
+					|| (full_axis && value <= -0x6FFF))  // we don't want this
 			{
-				// released, we don't really want this
-				SetAxisState(i, value);
-				break;
+				continue;
 			}
 
-			if (abs(value) > 0x3fff)
+			if ((!full_axis && abs(value) > 0x3FFF)
+					|| (full_axis && value > -0x6FFF)) 
 			{
-				axis_id = i;
-
-				sign = (value < 0);
-				pkey = pov_to_key(sign, i);
+				bool sign = (value < 0);
+				pkey = axis_to_key(full_axis, sign, i);
 
 				return true;
 			}
@@ -332,36 +336,7 @@ bool JoystickInfo::PollPOV(int &axis_id, bool &sign, u32 &pkey)
 	return false;
 }
 
-bool JoystickInfo::PollAxes(int &axis_id, u32 &pkey)
-{
-	for (int i = 0; i < GetNumAxes(); ++i)
-	{
-		int value = SDL_JoystickGetAxis(GetJoy(), i);
-
-		if (value != GetAxisState(i))
-		{
-			PAD_LOG("Change in joystick %d: %d.\n", i, value);
-
-			if (abs(value) <= GetAxisState(i))  // we don't want this
-			{
-				// released, we don't really want this
-				SetAxisState(i, value);
-				break;
-			}
-
-			if (abs(value) > 0x3fff)
-			{
-				axis_id = i;
-				pkey = joystick_to_key(i);
-
-				return true;
-			}
-		}
-	}
-	return false;
-}
-
-bool JoystickInfo::PollHats(int &jbutton, int &dir, u32 &pkey)
+bool JoystickInfo::PollHats(u32 &pkey)
 {
 	for (int i = 0; i < GetNumHats(); ++i)
 	{
@@ -376,8 +351,6 @@ bool JoystickInfo::PollHats(int &jbutton, int &dir, u32 &pkey)
 				case SDL_HAT_DOWN:
 				case SDL_HAT_LEFT:
 					pkey = hat_to_key(value, i);
-					jbutton = i;
-					dir = value;
 					PAD_LOG("Hat Pressed!");
 					return true;
 				default:
