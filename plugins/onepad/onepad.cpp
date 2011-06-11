@@ -40,8 +40,7 @@ char libraryName[256];
 keyEvent event;
 
 u16 status[2];
-int status_pressure[2][8];
-int pressure;
+int status_pressure[2][MAX_KEYS];
 static keyEvent s_event;
 std::string s_strIniPath("inis/");
 std::string s_strLogPath("logs/");
@@ -261,7 +260,7 @@ EXPORT_C_(s32) PADinit(u32 flags)
 	pads |= flags;
 	for (int i = 0 ; i < 2 ; i++) {
 		status[i] = 0xffff;
-		for (int j = 0 ; j < 8 ; j++)
+		for (int j = 0 ; j < MAX_KEYS ; j++)
 			status_pressure[i][j] = 255;
 	}
 
@@ -270,7 +269,6 @@ EXPORT_C_(s32) PADinit(u32 flags)
 	PADsetMode(0, 0);
 	PADsetMode(1, 0);
 
-	pressure = 100;
 	Analog::Init();
 
 	return 0;
@@ -398,7 +396,6 @@ EXPORT_C_(u8) PADstartPoll(int pad)
 u8  _PADpoll(u8 value)
 {
 	u8 button_check = 0;
-	const int avg_pressure = (pressure * 255) / 100;
 	int vib_small;
 	int vib_big;
 
@@ -486,19 +483,19 @@ u8  _PADpoll(u8 value)
 				switch (button_check)
 				{
 					case 0xE: // UP
-						stdpar[curPad][10] = avg_pressure;
+						stdpar[curPad][10] = status_pressure[curPad][PAD_UP];
 						break;
 
 					case 0xB: // DOWN
-						stdpar[curPad][11] = avg_pressure;
+						stdpar[curPad][11] =status_pressure[curPad][PAD_DOWN];
 						break;
 
 					case 0x7: // LEFT
-						stdpar[curPad][9] = avg_pressure;
+						stdpar[curPad][9] = status_pressure[curPad][PAD_LEFT];
 						break;
 
 					case 0xD: // RIGHT
-						stdpar[curPad][8] = avg_pressure;
+						stdpar[curPad][8] = status_pressure[curPad][PAD_RIGHT];
 						break;
 
 					default:
