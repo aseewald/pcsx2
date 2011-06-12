@@ -704,22 +704,19 @@ StereoOut32 V_Core::Mix( const VoiceMixSet& inVoices, const StereoOut32& Input, 
 
 	WaveDump::WriteCore( Index, CoreSrc_PreReverb, TW );
 
-	StereoOut32 RV( DoReverb( TW ) );
+	StereoOut32 RV;
+	// Custom reverb active?
+	if (ReverbMode == 1)
+		RV = DoReverb_Fake( TW );
+	else 
+		RV = DoReverb( TW );
+	
 
 	WaveDump::WriteCore( Index, CoreSrc_PostReverb, RV );
 
-	// Boost reverb volume
-	int temp = 1;
-	switch (ReverbBoost)
-	{
-		case 0: break;
-		case 1: temp = 2; break;
-		case 2: temp = 4; break;
-		case 3: temp = 8; break;
-	}
 	// Mix Dry + Wet
 	// (master volume is applied later to the result of both outputs added together).
-	return TD + ApplyVolume( RV*temp, FxVol );
+	return TD + ApplyVolume( RV, FxVol );
 }
 
 // Filters that work on the final output to de-alias and equlize it.
@@ -1089,8 +1086,9 @@ Air notes:
     buffer[MIX_DEST_B1] = (ACC1 * FB_ALPHA) + (FB_A1 * (1.0-FB_ALPHA)) - FB_B1 * FB_X;
 
   Which reduces to:
-    buffer[MIX_DEST_B0] = ACC0 + ((FB_A0-ACC0) * FB_ALPHA) - FB_B0 * FB_X;
-    buffer[MIX_DEST_B1] = ACC1 + ((FB_A1-ACC1) * FB_ALPHA) - FB_B1 * FB_X;
+    buffer[MIX_DEST_B0] = FB_A0 + ((ACC0-FB_A0) * FB_ALPHA) - FB_B0 * FB_X;
+    buffer[MIX_DEST_B1] = FB_A1 + ((ACC1-FB_A1) * FB_ALPHA) - FB_B1 * FB_X;
+
 
 
 -----------------------------------------------------------------------------
