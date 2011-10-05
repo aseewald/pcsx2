@@ -6,9 +6,13 @@ SET(FIND_LIBRARY_USE_LIB64_PATHS FALSE)
 
 ## Linux only libraries
 if(Linux)
-    # Most plugins (if not all) and PCSX2 core need gtk2, so 
-    # set the required flags
-    find_package(GTK2 REQUIRED gtk)
+    # Most plugins (if not all) and PCSX2 core need gtk2, so set the required flags
+    #
+    # Warning: because of multiarch Ubuntu move /usr/lib/glib-2.0/include/glibconfig.h to /usr/lib/i386-linux-gnu/glib-2.0/include/glibconfig.h
+    # So as temporary work around, I copy the FindGTK2 module inside pcsx2 and add the /usr/lib/i386-linux-gnu path... -- Gregory
+    #
+    # find_package(GTK2 REQUIRED gtk)
+    find_package(GTK2_pcsx2 REQUIRED gtk)
     if(GTK2_FOUND)
         # From version 2.21.3 gtk moved gdk-pixbuf into a separate module
         # Cmake need to be fixed. For the moment uses a manual detection.
@@ -53,6 +57,7 @@ if(NOT GLSL_API)
 	include(FindCg)
 endif(NOT GLSL_API)
 include(FindGlew)
+include(FindLibc)
 include(FindPortAudio)
 if(NOT FORCE_INTERNAL_SOUNDTOUCH)
     include(FindSoundTouch)
@@ -170,16 +175,18 @@ if(wxWidgets_FOUND)
         # Force the use of 32 bit library configuration on
         # 64 bits machine with 32 bits library in /usr/lib32
         if(CMAKE_SIZEOF_VOID_P MATCHES "8")
-            if (EXISTS "/usr/lib32")
-                # Debian/ubuntu. 64b in /usr/lib and 32b in /usr/lib32
+            ## There is no guarantee that wx-config is a link to a 32 bits library. So you need to force the destinity
+            # Library can go into 3 path major paths (+ multiarch but you will see that later when implementation is done)
+            # 1/ /usr/lib32 (32 bits only)
+            # 2/ /usr/lib64 (64 bits only)
+            # 3/ /usr/lib   (32 or 64 bits depends on distributions)
+            if (EXISTS "/usr/lib32/wx")
                 STRING(REGEX REPLACE "/usr/lib/wx" "/usr/lib32/wx" wxWidgets_INCLUDE_DIRS "${wxWidgets_INCLUDE_DIRS}")
-                # I'm sure someone did it! 64b in /usr/lib64 and 32b in /usr/lib32
                 STRING(REGEX REPLACE "/usr/lib64/wx" "/usr/lib32/wx" wxWidgets_INCLUDE_DIRS "${wxWidgets_INCLUDE_DIRS}")
-            endif (EXISTS "/usr/lib32")
-            if (EXISTS "/usr/lib")
-                # Fedora/Open suse. 64b in /usr/lib64 and 32b in /usr/lib
+            endif (EXISTS "/usr/lib32/wx")
+            if (EXISTS "/usr/lib/wx")
                 STRING(REGEX REPLACE "/usr/lib64/wx" "/usr/lib/wx" wxWidgets_INCLUDE_DIRS "${wxWidgets_INCLUDE_DIRS}")
-            endif (EXISTS "/usr/lib")
+            endif (EXISTS "/usr/lib/wx")
         endif(CMAKE_SIZEOF_VOID_P MATCHES "8")
     endif(Linux)
 

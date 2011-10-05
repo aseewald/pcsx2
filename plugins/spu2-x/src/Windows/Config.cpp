@@ -24,7 +24,8 @@ static const int LATENCY_MAX = 3000;
 static const int LATENCY_MAX = 750;
 #endif
 
-static const int LATENCY_MIN = 50;
+static const int LATENCY_MIN = 3;
+static const int LATENCY_MIN_TS = 50;
 
 // MIXING
 int Interpolation = 4;
@@ -35,10 +36,11 @@ int Interpolation = 4;
 		3. hermite interpolation
 		4. catmull-rom interpolation
 */
-int ReverbBoost = 0;
+
 bool EffectsDisabled = false;
 float FinalVolume;
 bool postprocess_filter_enabled = 1;
+bool postprocess_filter_dealias = false;
 
 // OUTPUT
 int SndOutLatencyMS = 150;
@@ -56,19 +58,27 @@ wchar_t dspPlugin[256];
 
 int numSpeakers = 0;
 
+int dplLevel = 0;
+
 /*****************************************************************************/
 
 void ReadSettings()
 {
 	Interpolation = CfgReadInt( L"MIXING",L"Interpolation", 4 );
-	ReverbBoost = CfgReadInt( L"MIXING",L"Reverb_Boost", 0 );
 
 	SynchMode = CfgReadInt( L"OUTPUT", L"Synch_Mode", 0);
 	EffectsDisabled = CfgReadBool( L"MIXING", L"Disable_Effects", false );
+	postprocess_filter_dealias = CfgReadBool( L"MIXING", L"DealiasFilter", false );
 	FinalVolume = ((float)CfgReadInt( L"MIXING", L"FinalVolume", 100 )) / 100;
 		if ( FinalVolume > 1.0f) FinalVolume = 1.0f;
-	numSpeakers = CfgReadInt( L"OUTPUT", L"XAudio2_SpeakerConfiguration", 0);
+	numSpeakers = CfgReadInt( L"OUTPUT", L"SpeakerConfiguration", 0);
+	dplLevel = CfgReadInt( L"OUTPUT", L"DplDecodingLevel", 0);
 	SndOutLatencyMS = CfgReadInt(L"OUTPUT",L"Latency", 150);
+
+	if((SynchMode == 0) && (SndOutLatencyMS < LATENCY_MIN_TS)) // can't use low-latency with timestretcher atm
+		SndOutLatencyMS = LATENCY_MIN_TS;
+	else if(SndOutLatencyMS < LATENCY_MIN)
+		SndOutLatencyMS = LATENCY_MIN;
 
 	wchar_t omodid[128];
 	CfgReadStr( L"OUTPUT", L"Output_Module", omodid, 127, XAudio2Out->GetIdent() );
@@ -85,6 +95,7 @@ void ReadSettings()
 	Config_WaveOut.NumBuffers = CfgReadInt( L"WAVEOUT", L"Buffer_Count", 4 );
 
 	DSoundOut->ReadSettings();
+	PortaudioOut->ReadSettings();
 
 	SoundtouchCfg::ReadSettings();
 	DebugConfig::ReadSettings();
@@ -97,7 +108,7 @@ void ReadSettings()
 	if( mods[OutputModule] == NULL )
 	{
 		// Unsupported or legacy module.
-		fprintf( stderr, "* SPU2-X: Unknown output module '%s' specified in configuration file.\n", omodid );
+		fwprintf( stderr, L"* SPU2-X: Unknown output module '%s' specified in configuration file.\n", omodid );
 		fprintf( stderr, "* SPU2-X: Defaulting to DirectSound (%S).\n", DSoundOut->GetIdent() );
 		OutputModule = FindOutputModuleById( DSoundOut->GetIdent() );
 	}
@@ -108,15 +119,16 @@ void ReadSettings()
 void WriteSettings()
 {
 	CfgWriteInt(L"MIXING",L"Interpolation",Interpolation);
-	CfgWriteInt(L"MIXING",L"Reverb_Boost",ReverbBoost);
 
 	CfgWriteBool(L"MIXING",L"Disable_Effects",EffectsDisabled);
-	CfgWriteInt(L"MIXING",L"FinalVolume",(int)(FinalVolume*100));
+	CfgWriteBool(L"MIXING",L"DealiasFilter",postprocess_filter_dealias);
+	CfgWriteInt(L"MIXING",L"FinalVolume",(int)(FinalVolume * 100 + 0.5f));
 
 	CfgWriteStr(L"OUTPUT",L"Output_Module", mods[OutputModule]->GetIdent() );
 	CfgWriteInt(L"OUTPUT",L"Latency", SndOutLatencyMS);
 	CfgWriteInt(L"OUTPUT",L"Synch_Mode", SynchMode);
-	CfgWriteInt(L"OUTPUT",L"XAudio2_SpeakerConfiguration", numSpeakers);
+	CfgWriteInt(L"OUTPUT",L"SpeakerConfiguration", numSpeakers);
+	CfgWriteInt( L"OUTPUT", L"DplDecodingLevel", dplLevel);
 
 	if( Config_WaveOut.Device.empty() ) Config_WaveOut.Device = L"default";
 	CfgWriteStr(L"WAVEOUT",L"Device",Config_WaveOut.Device);
@@ -125,7 +137,8 @@ void WriteSettings()
 	CfgWriteStr(L"DSP PLUGIN",L"Filename",dspPlugin);
 	CfgWriteInt(L"DSP PLUGIN",L"ModuleNum",dspPluginModule);
 	CfgWriteBool(L"DSP PLUGIN",L"Enabled",dspPluginEnabled);
-
+	
+	PortaudioOut->WriteSettings();
 	DSoundOut->WriteSettings();
 	SoundtouchCfg::WriteSettings();
 	DebugConfig::WriteSettings();
@@ -152,13 +165,6 @@ BOOL CALLBACK ConfigProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 			SendDialogMsg( hWnd, IDC_INTERPOLATE, CB_ADDSTRING,0,(LPARAM) L"4 - Catmull-Rom (PS2-like/slow)" );
 			SendDialogMsg( hWnd, IDC_INTERPOLATE, CB_SETCURSEL,Interpolation,0 );
 
-			SendDialogMsg( hWnd, IDC_REVERB_BOOST, CB_RESETCONTENT,0,0 );
-			SendDialogMsg( hWnd, IDC_REVERB_BOOST, CB_ADDSTRING,0,(LPARAM) L"1X - Normal Reverb Volume" );
-			SendDialogMsg( hWnd, IDC_REVERB_BOOST, CB_ADDSTRING,0,(LPARAM) L"2X - Reverb Volume * 2" );
-			SendDialogMsg( hWnd, IDC_REVERB_BOOST, CB_ADDSTRING,0,(LPARAM) L"4X - Reverb Volume * 4" );
-			SendDialogMsg( hWnd, IDC_REVERB_BOOST, CB_ADDSTRING,0,(LPARAM) L"8X - Reverb Volume * 8" );
-			SendDialogMsg( hWnd, IDC_REVERB_BOOST, CB_SETCURSEL,ReverbBoost,0 );
-
 			SendDialogMsg( hWnd, IDC_SYNCHMODE, CB_RESETCONTENT,0,0 );
 			SendDialogMsg( hWnd, IDC_SYNCHMODE, CB_ADDSTRING,0,(LPARAM) L"TimeStretch (Recommended)" );
 			SendDialogMsg( hWnd, IDC_SYNCHMODE, CB_ADDSTRING,0,(LPARAM) L"Async Mix (Breaks some games!)" );
@@ -183,7 +189,8 @@ BOOL CALLBACK ConfigProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 			}
 			SendDialogMsg( hWnd, IDC_OUTPUT, CB_SETCURSEL, OutputModule, 0 );
 
-			int minexp = (int)(pow( (double)LATENCY_MIN+1, 1.0/3.0 ) * 128.0);
+			double minlat = (SynchMode == 0)?LATENCY_MIN_TS:LATENCY_MIN;
+			int minexp = (int)(pow( minlat+1, 1.0/3.0 ) * 128.0);
 			int maxexp = (int)(pow( (double)LATENCY_MAX+2, 1.0/3.0 ) * 128.0);
 			INIT_SLIDER( IDC_LATENCY_SLIDER, minexp, maxexp, 200, 42, 1 );
 
@@ -191,11 +198,18 @@ BOOL CALLBACK ConfigProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 			swprintf_s(temp,L"%d ms (avg)",SndOutLatencyMS);
 			SetWindowText(GetDlgItem(hWnd,IDC_LATENCY_LABEL),temp);
 
+			int configvol = (int)(FinalVolume * 100 + 0.5f);
+			INIT_SLIDER( IDC_VOLUME_SLIDER, 0, 100, 10, 42, 1 );
+
+			SendDialogMsg( hWnd, IDC_VOLUME_SLIDER, TBM_SETPOS, TRUE, configvol );
+			swprintf_s(temp,L"%d%%",configvol);
+			SetWindowText(GetDlgItem(hWnd,IDC_VOLUME_LABEL),temp);
+			
 			EnableWindow( GetDlgItem( hWnd, IDC_OPEN_CONFIG_SOUNDTOUCH ), (SynchMode == 0) );
 			EnableWindow( GetDlgItem( hWnd, IDC_OPEN_CONFIG_DEBUG ), DebugEnabled );
 
 			SET_CHECK(IDC_EFFECTS_DISABLE,	EffectsDisabled);
-			//FinalVolume;
+			SET_CHECK(IDC_DEALIASFILTER,	postprocess_filter_dealias);
 			SET_CHECK(IDC_DEBUG_ENABLE,		DebugEnabled);
 			SET_CHECK(IDC_DSP_ENABLE,		dspPluginEnabled);
 		}
@@ -212,9 +226,8 @@ BOOL CALLBACK ConfigProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 					double res = ((int)SendDialogMsg( hWnd, IDC_LATENCY_SLIDER, TBM_GETPOS, 0, 0 )) / 128.0;
 					SndOutLatencyMS = (int)pow( res, 3.0 );
 					Clampify( SndOutLatencyMS, LATENCY_MIN, LATENCY_MAX );
-
+					FinalVolume = (float)(SendDialogMsg( hWnd, IDC_VOLUME_SLIDER, TBM_GETPOS, 0, 0 )) / 100;
 					Interpolation = (int)SendDialogMsg( hWnd, IDC_INTERPOLATE, CB_GETCURSEL,0,0 );
-					ReverbBoost = (int)SendDialogMsg( hWnd, IDC_REVERB_BOOST, CB_GETCURSEL,0,0 );
 					OutputModule = (int)SendDialogMsg( hWnd, IDC_OUTPUT, CB_GETCURSEL,0,0 );
 					SynchMode = (int)SendDialogMsg( hWnd, IDC_SYNCHMODE, CB_GETCURSEL,0,0 );
 					numSpeakers = (int)SendDialogMsg( hWnd, IDC_SPEAKERS, CB_GETCURSEL,0,0 );
@@ -247,12 +260,32 @@ BOOL CALLBACK ConfigProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 				}
 				break;
 
+				case IDC_SYNCHMODE:
+				{
+					if(wmEvent == CBN_SELCHANGE)
+					{
+						int sMode = (int)SendDialogMsg( hWnd, IDC_SYNCHMODE, CB_GETCURSEL,0,0 );
+						double minlat = (sMode == 0)?LATENCY_MIN_TS:LATENCY_MIN;
+						int minexp = (int)(pow( minlat+1, 1.0/3.0 ) * 128.0);
+						int maxexp = (int)(pow( (double)LATENCY_MAX+2, 1.0/3.0 ) * 128.0);
+						INIT_SLIDER( IDC_LATENCY_SLIDER, minexp, maxexp, 200, 42, 1 );
+						
+						int curpos = (int)SendMessage(GetDlgItem( hWnd, IDC_LATENCY_SLIDER ),TBM_GETPOS,0,0);
+						double res = pow( curpos / 128.0, 3.0 );
+						curpos = (int)res;
+						swprintf_s(temp,L"%d ms (avg)",curpos);
+						SetDlgItemText(hWnd,IDC_LATENCY_LABEL,temp);
+					}
+				}
+				break;
+
+
 				case IDC_OPEN_CONFIG_SOUNDTOUCH:
 					SoundtouchCfg::OpenDialog( hWnd );
 				break;
 
 				HANDLE_CHECK(IDC_EFFECTS_DISABLE,EffectsDisabled);
-				//FinalVolume;
+				HANDLE_CHECK(IDC_DEALIASFILTER,postprocess_filter_dealias);
 				HANDLE_CHECK(IDC_DSP_ENABLE,dspPluginEnabled);
 				
 				// Fixme : Eh, how to update this based on drop list selections? :p
@@ -306,6 +339,12 @@ BOOL CALLBACK ConfigProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 						curpos = (int)res;
 						swprintf_s(temp,L"%d ms (avg)",curpos);
 						SetDlgItemText(hWnd,IDC_LATENCY_LABEL,temp);
+					}
+					
+					if( hwndDlg == GetDlgItem( hWnd, IDC_VOLUME_SLIDER ) )
+					{
+						swprintf_s(temp,L"%d%%",curpos);
+						SetDlgItemText(hWnd,IDC_VOLUME_LABEL,temp);
 					}
 				break;
 

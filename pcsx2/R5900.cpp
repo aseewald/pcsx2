@@ -21,6 +21,7 @@
 #include "R3000A.h"
 #include "VUmicro.h"
 #include "COP0.h"
+#include "MTVU.h"
 
 #include "System/SysThreads.h"
 #include "R5900Exceptions.h"
@@ -54,6 +55,7 @@ extern SysMainMemory& GetVmMemory();
 
 void cpuReset()
 {
+	vu1Thread.WaitVU();
 	if (GetMTGS().IsOpen())
 		GetMTGS().WaitGS();		// GS better be done processing before we reset the EE, just in case.
 
@@ -87,6 +89,10 @@ void cpuReset()
 	ElfCRC = 0;
 	DiscSerial = L"";
 	ElfEntry = -1;
+
+	// Probably not the right place, but it has to be done when the ram is actually initialized
+	if(USBsetRAM != 0)
+		USBsetRAM(iopMem->Main);
 
 	// FIXME: LastELF should be reset on media changes as well as on CPU resets, in
 	// the very unlikely case that a user swaps to another media source that "looks"
@@ -278,10 +284,10 @@ static __fi void _cpuTestInterrupts()
 	   that depends on the cycle timings */
 
 	TESTINT(DMAC_VIF1,		vif1Interrupt);	
-	TESTINT(DMAC_GIF,		gsInterrupt);	
+	TESTINT(DMAC_GIF,		gifInterrupt);
 	TESTINT(DMAC_SIF0,		EEsif0Interrupt);
 	TESTINT(DMAC_SIF1,		EEsif1Interrupt);
-
+	
 	// Profile-guided Optimization (sorta)
 	// The following ints are rarely called.  Encasing them in a conditional
 	// as follows helps speed up most games.
@@ -488,7 +494,7 @@ __fi void cpuTestHwInts() {
 
 __fi void CPU_INT( EE_EventType n, s32 ecycle)
 {
-	if( n != 2 && cpuRegs.interrupt & (1<<n) ){ //2 is Gif, and every path 3 masking game triggers this :/
+	if( n != 2 && cpuRegs.interrupt & (1<<n) ){ // 2 is Gif, and every path 3 masking game triggers this :/
 		DevCon.Warning( "***** EE > Twice-thrown int on IRQ %d", n );
 	}
 

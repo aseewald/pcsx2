@@ -158,7 +158,7 @@ class GSRendererHW : public GSRendererT<Vertex>
 		uint32 FBW = m_context->FRAME.FBW;
 		uint32 FPSM = m_context->FRAME.PSM;
 
-		if((FBP == 0x00f00 || FBP == 0x00100) && FPSM == PSM_PSMZ24) // ntsc 0xf00, pal 0x100
+		if((FBP == 0x00f00 || FBP == 0x00100 || FBP == 0x01280) && FPSM == PSM_PSMZ24) // ntsc 0xf00, pal 0x100, ntsc "HD" 0x1280
 		{
 			// z buffer clear
 
@@ -250,9 +250,57 @@ class GSRendererHW : public GSRendererT<Vertex>
 		uint32 FBP = m_context->FRAME.Block();
 		uint32 FPSM = m_context->FRAME.PSM;
 
-		if((FBP == 0x025a0 || FBP == 0x02a60) && FPSM == PSM_PSMCT32)
+		if((FBP == 0x025a0 || FBP == 0x02800) && FPSM == PSM_PSMCT32)	//0x2800 pal, 0x25a0 ntsc
 		{
 			//only top half of the screen clears
+			m_dev->ClearDepth(ds, 0);
+		}
+
+		return true;
+	}
+
+	bool OI_TyTasmanianTiger(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)
+	{
+		uint32 FBP = m_context->FRAME.Block();
+		uint32 FBW = m_context->FRAME.FBW;
+		uint32 FPSM = m_context->FRAME.PSM;
+		
+		if((FBP == 0x02800 || FBP == 0x02BC0) && FPSM == PSM_PSMCT24)	//0x2800 pal, 0x2bc0 ntsc
+		{
+			//half height buffer clear
+			m_dev->ClearDepth(ds, 0);
+
+			return false;
+		}
+		
+		return true;
+	}
+
+	bool OI_DigimonRumbleArena2(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)	
+	{
+		uint32 FBP = m_context->FRAME.Block();
+		uint32 FPSM = m_context->FRAME.PSM;
+
+		if(!PRIM->TME)
+		{
+			if((FBP == 0x02300 || FBP == 0x03fc0) && FPSM == PSM_PSMCT32)
+			{
+				//half height buffer clear
+				m_dev->ClearDepth(ds, 0);
+			}
+		}
+
+		return true;
+	}
+
+	bool OI_BlackHawkDown(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)	
+	{
+		uint32 FBP = m_context->FRAME.Block();
+		uint32 FPSM = m_context->FRAME.PSM;
+
+		if(FBP == 0x02000 && FPSM == PSM_PSMZ24)
+		{
+			//half height buffer clear
 			m_dev->ClearDepth(ds, 0);
 
 			return false;
@@ -260,6 +308,128 @@ class GSRendererHW : public GSRendererT<Vertex>
 
 		return true;
 	}
+
+	bool OI_StarWarsForceUnleashed(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)	
+	{
+		uint32 FBP = m_context->FRAME.Block();
+		uint32 FPSM = m_context->FRAME.PSM;
+		
+		if(!PRIM->TME)
+		{
+			if(FPSM == PSM_PSMCT24 && FBP == 0x2bc0)
+			{
+				m_dev->ClearDepth(ds, 0);
+
+				return false;
+			}
+		}
+		else if(PRIM->TME)
+		{
+			if((FBP == 0x0 || FBP == 0x01180) && FPSM == PSM_PSMCT32 && (m_vt.m_max.p.z == m_vt.m_min.p.z && m_vt.m_max.p.z == 0))
+			{
+				m_dev->ClearDepth(ds, 0);
+			}
+		}
+		
+		return true;
+	}
+	
+	bool OI_XmenOriginsWolverine(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)	
+	{
+		uint32 FBP = m_context->FRAME.Block();
+		uint32 FPSM = m_context->FRAME.PSM;
+		
+		if(FBP == 0x0 && FPSM == PSM_PSMCT16)
+		{
+			//half height buffer clear
+			m_dev->ClearDepth(ds, 0);
+		}
+		
+		return true;
+	}
+
+	bool OI_CallofDutyFinalFronts(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)	
+	{
+		uint32 FBP = m_context->FRAME.Block();
+		uint32 FPSM = m_context->FRAME.PSM;
+		
+		if(FBP == 0x02300 && FPSM == PSM_PSMZ24)
+		{
+			//half height buffer clear
+			m_dev->ClearDepth(ds, 0);
+
+			return false;
+		}
+		
+		return true;
+	}
+
+	bool OI_SpyroNewBeginning(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)	
+	{
+		uint32 FBP = m_context->FRAME.Block();
+		uint32 FPSM = m_context->FRAME.PSM;
+		
+		if(!PRIM->TME)
+		{
+			if(FPSM == PSM_PSMCT24 && (FBP == 0x02800 || FBP == 0x02bc0))	//0x2800 pal, 0x2bc0 ntsc
+			{
+				//half height buffer clear
+				m_dev->ClearDepth(ds, 0);
+
+				return false;
+			}
+		}
+		else if(PRIM->TME)
+		{
+			if((FBP == 0x0 || FBP == 0x01180) && FPSM == PSM_PSMCT32 && (m_vt.m_max.p.z == m_vt.m_min.p.z && m_vt.m_min.p.z == 0x0))
+			{
+				m_dev->ClearDepth(ds, 0);
+			}
+		}
+		
+		return true;
+	}
+
+	bool OI_SpyroEternalNight(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)	
+	{
+		uint32 FBP = m_context->FRAME.Block();
+		uint32 FPSM = m_context->FRAME.PSM;
+		
+		if(!PRIM->TME)
+		{
+			if(FPSM == PSM_PSMCT24 && FBP == 0x2bc0)
+			{
+				//half height buffer clear
+				m_dev->ClearDepth(ds, 0);
+
+				return false;
+			}
+		}
+		else if(PRIM->TME)
+		{
+			if((FBP == 0x0 || FBP == 0x01180) && FPSM == PSM_PSMCT32 && (m_vt.m_max.p.z == m_vt.m_min.p.z && m_vt.m_min.p.z == 0x0))
+			{
+				m_dev->ClearDepth(ds, 0);
+			}
+		}
+		
+		return true;
+	}
+
+	bool OI_TalesOfLegendia(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)
+	{
+		uint32 FBP = m_context->FRAME.Block();
+		uint32 FPSM = m_context->FRAME.PSM;
+		
+		if (FPSM == PSM_PSMCT32 && FBP == 0x01c00 && !m_context->TEST.ATE && m_vt.m_max.p.z == m_vt.m_min.p.z)
+		{
+			m_context->TEST.ZTST = ZTST_ALWAYS;
+			//m_dev->ClearDepth(ds, 0);
+		}
+		
+		return true;
+	}
+
 
 	bool OI_PointListPalette(GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t)
 	{
@@ -442,7 +612,17 @@ class GSRendererHW : public GSRendererT<Vertex>
 			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::SimpsonsGame, CRC::RegionCount, &GSRendererHW::OI_SimpsonsGame));
 			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::RozenMaidenGebetGarden, CRC::RegionCount, &GSRendererHW::OI_RozenMaidenGebetGarden));
 			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::SpidermanWoS, CRC::RegionCount, &GSRendererHW::OI_SpidermanWoS));
-
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::TyTasmanianTiger, CRC::RegionCount, &GSRendererHW::OI_TyTasmanianTiger));
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::TyTasmanianTiger2, CRC::RegionCount, &GSRendererHW::OI_TyTasmanianTiger));
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::DigimonRumbleArena2, CRC::RegionCount, &GSRendererHW::OI_DigimonRumbleArena2));
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::StarWarsForceUnleashed, CRC::RegionCount, &GSRendererHW::OI_StarWarsForceUnleashed));
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::BlackHawkDown, CRC::RegionCount, &GSRendererHW::OI_BlackHawkDown));
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::XmenOriginsWolverine, CRC::RegionCount, &GSRendererHW::OI_XmenOriginsWolverine));
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::CallofDutyFinalFronts, CRC::RegionCount, &GSRendererHW::OI_CallofDutyFinalFronts));
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::SpyroNewBeginning, CRC::RegionCount, &GSRendererHW::OI_SpyroNewBeginning));
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::SpyroEternalNight, CRC::RegionCount, &GSRendererHW::OI_SpyroEternalNight));
+			m_oi_list.push_back(HackEntry<OI_Ptr>(CRC::TalesOfLegendia, CRC::RegionCount, &GSRendererHW::OI_TalesOfLegendia));
+			
 			m_oo_list.push_back(HackEntry<OO_Ptr>(CRC::DBZBT2, CRC::RegionCount, &GSRendererHW::OO_DBZBT2));
 			m_oo_list.push_back(HackEntry<OO_Ptr>(CRC::MajokkoALaMode2, CRC::RegionCount, &GSRendererHW::OO_MajokkoALaMode2));
 
@@ -568,14 +748,19 @@ protected:
 		TEX0.TBP0 = context->FRAME.Block();
 		TEX0.TBW = context->FRAME.FBW;
 		TEX0.PSM = context->FRAME.PSM;
-
 		GSTextureCache::Target* rt = m_tc->LookupTarget(TEX0, m_width, m_height, GSTextureCache::RenderTarget, true);
 
 		TEX0.TBP0 = context->ZBUF.Block();
 		TEX0.TBW = context->FRAME.FBW;
 		TEX0.PSM = context->ZBUF.PSM;
-
+		
 		GSTextureCache::Target* ds = m_tc->LookupTarget(TEX0, m_width, m_height, GSTextureCache::DepthStencil, m_context->DepthWrite());
+
+		if(!rt || !ds)
+		{
+			ASSERT(0);
+			return;
+		}
 
 		GSTextureCache::Source* tex = NULL;
 
@@ -770,6 +955,7 @@ public:
 				m_height = 512 * m_upscale_multiplier; // 448 is also common, but this is not always detected right.
 			}
 		}
+		else m_upscale_multiplier = 1;
 	}
 
 	virtual ~GSRendererHW()

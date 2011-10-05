@@ -132,6 +132,11 @@ int g_counter_cache_hits = 0;
 int g_counter_cache_misses = 0;
 int g_counter_cache_ignores = 0;
 
+// LOOP/END sets the ENDX bit and sets NAX to LSA, and the voice is muted if LOOP is not set
+// LOOP seems to only have any effect on the block with LOOP/END set, where it prevents muting the voice
+// (the documented requirement that every block in a loop has the LOOP bit set is nonsense according to tests)
+// LOOP/START sets LSA to NAX unless LSA was written manually since sound generation started
+// (see LoopMode, the method by which this is achieved on the real SPU2 is unknown)
 #define XAFLAG_LOOP_END		(1ul<<0)
 #define XAFLAG_LOOP			(1ul<<1)
 #define XAFLAG_LOOP_START	(1ul<<2)
@@ -140,31 +145,44 @@ static __forceinline s32 GetNextDataBuffered( V_Core& thiscore, uint voiceidx )
 {
 	V_Voice& vc( thiscore.Voices[voiceidx] );
 
-	if( vc.SCurrent == 28 )
+	if( (vc.SCurrent&3) == 0 )
 	{
-		if(vc.LoopFlags & XAFLAG_LOOP_END)
+		IncrementNextA( thiscore, voiceidx );
+		
+		if ((vc.NextA & 7) == 0) // vc.SCurrent == 24 equivalent
 		{
-			thiscore.Regs.ENDX |= (1 << voiceidx);
+			if(vc.LoopFlags & XAFLAG_LOOP_END)
+			{
+				thiscore.Regs.ENDX |= (1 << voiceidx);
+				vc.NextA = vc.LoopStartA | 1;
+				if (!(vc.LoopFlags & XAFLAG_LOOP))
+					vc.Stop();
 
-			if( vc.LoopFlags & XAFLAG_LOOP )
-			{
-				vc.NextA = vc.LoopStartA;
-			}
-			else
-			{
-				vc.Stop();
 				if( IsDevBuild )
 				{
 					if(MsgVoiceOff()) ConLog("* SPU2-X: Voice Off by EndPoint: %d \n", voiceidx);
 				}
 			}
+			else
+				vc.NextA++; // no, don't IncrementNextA here.  We haven't read the header yet.
 		}
+	}
+
+	if( vc.SCurrent == 28 )
+	{
+		vc.SCurrent = 0;
 
 		// We'll need the loop flags and buffer pointers regardless of cache status:
-		// Note to Self : NextA addresses WORDS (not bytes).
 
-		s16* memptr = GetMemPtr(vc.NextA&0xFFFFF);
+		for (int i=0; i<2; i++)
+			if (Cores[i].IRQEnable && Cores[i].IRQA == (vc.NextA & 0xFFFF8))
+				SetIrqCall(i);
+
+		s16* memptr = GetMemPtr(vc.NextA & 0xFFFF8);
 		vc.LoopFlags = *memptr >> 8;	// grab loop flags from the upper byte.
+
+		if( (vc.LoopFlags & XAFLAG_LOOP_START) && !vc.LoopMode )
+			vc.LoopStartA = vc.NextA & 0xFFFF8;
 
 		const int cacheIdx = vc.NextA / pcm_WordsPerBlock;
 		PcmCacheEntry& cacheLine = pcm_cache_data[cacheIdx];
@@ -199,18 +217,6 @@ static __forceinline s32 GetNextDataBuffered( V_Core& thiscore, uint voiceidx )
 
 			XA_decode_block( vc.SBuffer, memptr, vc.Prev1, vc.Prev2 );
 		}
-
-		vc.SCurrent = 0;
-		if( (vc.LoopFlags & XAFLAG_LOOP_START) && !vc.LoopMode )
-			vc.LoopStartA = vc.NextA;
-
-		goto _Increment;
-	}
-
-	if( (vc.SCurrent&3) == 3 )
-	{
-_Increment:
-		IncrementNextA( thiscore, voiceidx );
 	}
 
 	return vc.SBuffer[vc.SCurrent++];
@@ -220,30 +226,35 @@ static __forceinline void GetNextDataDummy(V_Core& thiscore, uint voiceidx)
 {
 	V_Voice& vc( thiscore.Voices[voiceidx] );
 
-	if (vc.SCurrent == 28)
+	IncrementNextA( thiscore, voiceidx );
+	
+	if ((vc.NextA & 7) == 0) // vc.SCurrent == 24 equivalent
 	{
 		if(vc.LoopFlags & XAFLAG_LOOP_END)
 		{
 			thiscore.Regs.ENDX |= (1 << voiceidx);
-
-			if( vc.LoopFlags & XAFLAG_LOOP )
-				vc.NextA = vc.LoopStartA;
-			// no else, already stopped
+			vc.NextA = vc.LoopStartA | 1;
 		}
+		else
+			vc.NextA++; // no, don't IncrementNextA here.  We haven't read the header yet.
+	}
 
-		vc.LoopFlags = *GetMemPtr(vc.NextA&0xFFFFF) >> 8;	// grab loop flags from the upper byte.
+	if (vc.SCurrent == 28)
+	{
+		for (int i=0; i<2; i++)
+			if (Cores[i].IRQEnable && Cores[i].IRQA == (vc.NextA & 0xFFFF8))
+				SetIrqCall(i);
+
+		vc.LoopFlags = *GetMemPtr(vc.NextA&0xFFFF8) >> 8;	// grab loop flags from the upper byte.
 
 		if ((vc.LoopFlags & XAFLAG_LOOP_START) && !vc.LoopMode)
-			vc.LoopStartA = vc.NextA;
-
-		IncrementNextA(thiscore, voiceidx);
+			vc.LoopStartA = vc.NextA & 0xFFFF8;
 
 		vc.SCurrent = 0;
 	}
 
 	vc.SP -= 4096 * (4 - (vc.SCurrent & 3));
 	vc.SCurrent += 4 - (vc.SCurrent & 3);
-	IncrementNextA(thiscore, voiceidx);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -330,7 +341,7 @@ static void __forceinline UpdatePitch( uint coreidx, uint voiceidx )
 	if( (vc.Modulated==0) || (voiceidx==0) )
 		pitch = vc.Pitch;
 	else
-		pitch = (vc.Pitch*(32768 + Cores[coreidx].Voices[voiceidx-1].OutX))>>15;
+		pitch = GetClamped((vc.Pitch*(32768 + Cores[coreidx].Voices[voiceidx-1].OutX))>>15, 0, 0x3fff);
 
 	vc.SP+=pitch;
 }
@@ -524,7 +535,7 @@ static __forceinline StereoOut32 MixVoice( uint coreidx, uint voiceidx )
 
 	// If this assertion fails, it mans SCurrent is being corrupted somewhere, or is not initialized
 	// properly.  Invalid values in SCurrent will cause errant IRQs and corrupted audio.
-	pxAssumeMsg( (vc.SCurrent <= 28) && (vc.SCurrent != 0), "Current sample should always range from 1->28" );
+	pxAssertMsg( (vc.SCurrent <= 28) && (vc.SCurrent != 0), "Current sample should always range from 1->28" );
 
 	// Most games don't use much volume slide effects.  So only call the UpdateVolume
 	// methods when needed by checking the flag outside the method here...
@@ -573,17 +584,15 @@ static __forceinline StereoOut32 MixVoice( uint coreidx, uint voiceidx )
 		
 		// Store Value for eventual modulation later
 		// Pseudonym's Crest calculation idea. Actually calculates a crest, unlike the old code which was just peak.
-		u32 Amplitude = std::abs(Value);
-		if(Amplitude < vc.NextCrest)
+		if(vc.PV1 < vc.NextCrest)
 		{
-			vc.OutX = vc.NextCrest;
-			vc.NextCrest = 0;
+			vc.OutX = MulShr32(vc.NextCrest, vc.ADSR.Value);
+			vc.NextCrest = -0x8000;
 		}
-		if(Amplitude > vc.PrevAmp)
+		if(vc.PV1 > vc.PV2)
 		{
-			vc.NextCrest = Amplitude;
+			vc.NextCrest = vc.PV1;
 		}
-		vc.PrevAmp = Amplitude;
 
 		if( IsDevBuild )
 			DebugCores[coreidx].Voices[voiceidx].displayPeak = std::max(DebugCores[coreidx].Voices[voiceidx].displayPeak,(s32)vc.OutX);
@@ -704,22 +713,13 @@ StereoOut32 V_Core::Mix( const VoiceMixSet& inVoices, const StereoOut32& Input, 
 
 	WaveDump::WriteCore( Index, CoreSrc_PreReverb, TW );
 
-	StereoOut32 RV( DoReverb( TW ) );
+	StereoOut32 RV = DoReverb( TW );
 
 	WaveDump::WriteCore( Index, CoreSrc_PostReverb, RV );
 
-	// Boost reverb volume
-	int temp = 1;
-	switch (ReverbBoost)
-	{
-		case 0: break;
-		case 1: temp = 2; break;
-		case 2: temp = 4; break;
-		case 3: temp = 8; break;
-	}
 	// Mix Dry + Wet
 	// (master volume is applied later to the result of both outputs added together).
-	return TD + ApplyVolume( RV*temp, FxVol );
+	return TD + ApplyVolume( RV, FxVol );
 }
 
 // Filters that work on the final output to de-alias and equlize it.
@@ -862,8 +862,11 @@ void Mix()
 		if(postprocess_filter_enabled)
 		#endif
 		{
-			// Dealias filter emphasizes the highs too much.
-			//Out = Apply_Dealias_Filter ( Out );
+			if(postprocess_filter_dealias)
+			{
+				// Dealias filter emphasizes the highs too much.
+				Out = Apply_Dealias_Filter ( Out );
+			}
 			Out = Apply_Frequency_Response_Filter ( Out );
 		}
 
@@ -1089,8 +1092,9 @@ Air notes:
     buffer[MIX_DEST_B1] = (ACC1 * FB_ALPHA) + (FB_A1 * (1.0-FB_ALPHA)) - FB_B1 * FB_X;
 
   Which reduces to:
-    buffer[MIX_DEST_B0] = ACC0 + ((FB_A0-ACC0) * FB_ALPHA) - FB_B0 * FB_X;
-    buffer[MIX_DEST_B1] = ACC1 + ((FB_A1-ACC1) * FB_ALPHA) - FB_B1 * FB_X;
+    buffer[MIX_DEST_B0] = FB_A0 + ((ACC0-FB_A0) * FB_ALPHA) - FB_B0 * FB_X;
+    buffer[MIX_DEST_B1] = FB_A1 + ((ACC1-FB_A1) * FB_ALPHA) - FB_B1 * FB_X;
+
 
 
 -----------------------------------------------------------------------------

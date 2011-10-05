@@ -20,6 +20,7 @@
 #include <wx/file.h>
 
 #include "GS.h"
+#include "Gif.h"
 #include "CDVD/CDVDisoReader.h"
 
 #include "Utilities/ScopedPtr.h"
@@ -196,12 +197,13 @@ void CALLBACK GS_getTitleInfo2( char* dest, size_t length )
 	dest[2] = 0;
 }
 
+#if COPY_GS_PACKET_TO_MTGS == 1
 // This legacy passthrough function is needed because the old GS plugins tended to assume that
 // a PATH1 transfer that didn't EOP needed an automatic EOP (which was needed to avoid a crash
 // in the BIOS when it starts an XGKICK prior to having an EOP written to VU1 memory).  The new
 // MTGS wraps data around the end of the MTGS buffer, so it often splits PATH1 data into two
 // transfers now.
-static void CALLBACK GS_gifTransferLegacy( const u32* src, u32 data )
+static void CALLBACK GS_Legacy_gifTransfer( const u32* src, u32 data )
 {
 	static __aligned16 u128 path1queue[0x400];
 	static uint path1size = 0;
@@ -227,7 +229,7 @@ static void CALLBACK GS_gifTransferLegacy( const u32* src, u32 data )
 
 			if (src128 == RingBuffer.m_Ring)
 			{
-				pxAssume( (data+path1size) <= 0x400 );
+				pxAssert( (data+path1size) <= 0x400 );
 				memcpy_qwc( &path1queue[path1size], src128, data );
 				path1size += data;
 			}
@@ -240,7 +242,19 @@ static void CALLBACK GS_gifTransferLegacy( const u32* src, u32 data )
 		}
 	}
 }
+#else
+// In this case the MTGS thread will only be using the "GSgifTransfer"
+// callback, which falls back to this function if its an old plugin.
+// Since GSgifTransfer2 is the least hacky old call-back, and MTGS will
+// just be using a single gif path, we'll just solely use path 2...
+static void CALLBACK GS_Legacy_gifTransfer(const u32* src, u32 data) {
+	GSgifTransfer2((u32*)src, data);
+}
+#endif
 
+static void CALLBACK GS_Legacy_GSreadFIFO2(u64* pMem, int qwc) {
+	while(qwc--) GSreadFIFO(pMem);
+}
 
 // PAD
 _PADinit           PADinit;
@@ -252,6 +266,7 @@ _PADupdate         PADupdate;
 _PADkeyEvent       PADkeyEvent;
 _PADsetSlot        PADsetSlot;
 _PADqueryMtap      PADqueryMtap;
+_PADWriteEvent	   PADWriteEvent;
 
 static void PAD_update( u32 padslot ) { }
 
@@ -323,7 +338,7 @@ _FWirqCallback     FWirqCallback;
 
 DEV9handler dev9Handler;
 USBhandler usbHandler;
-uptr pDsp;
+uptr pDsp[2];
 
 static s32 CALLBACK _hack_PADinit()
 {
@@ -360,10 +375,10 @@ static const LegacyApi_ReqMethod s_MethMessReq_GS[] =
 {
 	{	"GSopen",			(vMeth**)&GSopen,			NULL	},
 	{	"GSvsync",			(vMeth**)&GSvsync,			NULL	},
-	{	"GSgifTransfer",	(vMeth**)&GSgifTransfer,	(vMeth*)GS_gifTransferLegacy },
+	{	"GSgifTransfer",	(vMeth**)&GSgifTransfer,	(vMeth*)GS_Legacy_gifTransfer },
 	{	"GSgifTransfer2",	(vMeth**)&GSgifTransfer2,	NULL	},
 	{	"GSgifTransfer3",	(vMeth**)&GSgifTransfer3,	NULL	},
-	{	"GSreadFIFO2",		(vMeth**)&GSreadFIFO2,		NULL	},
+	{	"GSreadFIFO2",		(vMeth**)&GSreadFIFO2,		(vMeth*)GS_Legacy_GSreadFIFO2 },
 
 	{	"GSmakeSnapshot",	(vMeth**)&GSmakeSnapshot,	(vMeth*)GS_makeSnapshot },
 	{	"GSirqCallback",	(vMeth**)&GSirqCallback,	(vMeth*)GS_irqCallback },
@@ -417,6 +432,7 @@ static const LegacyApi_ReqMethod s_MethMessReq_PAD[] =
 static const LegacyApi_OptMethod s_MethMessOpt_PAD[] =
 {
 	{	"PADupdate",		(vMeth**)&PADupdate },
+	{   "PADWriteEvent",	(vMeth**)&PADWriteEvent },
 	{ NULL },
 };
 
@@ -630,6 +646,7 @@ static const LegacyApi_ReqMethod s_MethMessReq_USB[] =
 static const LegacyApi_OptMethod s_MethMessOpt_USB[] =
 {
 	{	"USBasync",		(vMeth**)&USBasync },
+	{	"USBsetRAM",	(vMeth**)&USBsetRAM },
 	{ NULL }
 };
 
@@ -949,7 +966,7 @@ SysCorePlugins::~SysCorePlugins() throw()
 void SysCorePlugins::Load( PluginsEnum_t pid, const wxString& srcfile )
 {
 	ScopedLock lock( m_mtx_PluginStatus );
-	pxAssume( (uint)pid < PluginId_Count );
+	pxAssert( (uint)pid < PluginId_Count );
 	Console.Indent().WriteLn( L"Binding %s\t: %s ", tbl_PluginInfo[pid].GetShortname().c_str(), srcfile.c_str() );
 	m_info[pid] = new PluginStatus_t( pid, srcfile );
 }
@@ -1015,7 +1032,7 @@ void SysCorePlugins::Load( const wxString (&folders)[PluginId_Count] )
 void SysCorePlugins::Unload(PluginsEnum_t pid)
 {
 	ScopedLock lock( m_mtx_PluginStatus );
-	pxAssume( (uint)pid < PluginId_Count );
+	pxAssert( (uint)pid < PluginId_Count );
 	m_info[pid].Delete();
 }
 
@@ -1058,12 +1075,12 @@ bool SysCorePlugins::OpenPlugin_GS()
 
 bool SysCorePlugins::OpenPlugin_PAD()
 {
-	return !PADopen( (void*)&pDsp );
+	return !PADopen( (void*)pDsp );
 }
 
 bool SysCorePlugins::OpenPlugin_SPU2()
 {
-	if( SPU2open((void*)&pDsp) ) return false;
+	if( SPU2open((void*)pDsp) ) return false;
 
 #ifdef ENABLE_NEW_IOPDMA_SPU2
 	SPU2irqCallback( spu2Irq );
@@ -1079,7 +1096,7 @@ bool SysCorePlugins::OpenPlugin_DEV9()
 {
 	dev9Handler = NULL;
 
-	if( DEV9open( (void*)&pDsp ) ) return false;
+	if( DEV9open( (void*)pDsp ) ) return false;
 	DEV9irqCallback( dev9Irq );
 	dev9Handler = DEV9irqHandler();
 	return true;
@@ -1089,17 +1106,18 @@ bool SysCorePlugins::OpenPlugin_USB()
 {
 	usbHandler = NULL;
 
-	if( USBopen((void*)&pDsp) ) return false;
+	if( USBopen((void*)pDsp) ) return false;
 	USBirqCallback( usbIrq );
 	usbHandler = USBirqHandler();
-	if( USBsetRAM != NULL )
-		USBsetRAM(iopMem->Main);
+	// iopMem is not initialized yet. Moved elsewhere
+	//if( USBsetRAM != NULL )
+	//	USBsetRAM(iopMem->Main);
 	return true;
 }
 
 bool SysCorePlugins::OpenPlugin_FW()
 {
-	if( FWopen((void*)&pDsp) ) return false;
+	if( FWopen((void*)pDsp) ) return false;
 	FWirqCallback( fwIrq );
 	return true;
 }
@@ -1117,7 +1135,7 @@ bool SysCorePlugins::OpenPlugin_Mcd()
 
 void SysCorePlugins::Open( PluginsEnum_t pid )
 {
-	pxAssume( (uint)pid < PluginId_Count );
+	pxAssert( (uint)pid < PluginId_Count );
 	if( IsOpen(pid) ) return;
 
 	Console.Indent().WriteLn( "Opening %s", tbl_PluginInfo[pid].shortname );
@@ -1159,7 +1177,15 @@ void SysCorePlugins::Open()
 		// If GS doesn't support GSopen2, need to wait until call to GSopen
 		// returns to populate pDsp.  If it does, can initialize other plugins
 		// at same time as GS, as long as GSopen2 does not subclass its window.
+#ifdef __LINUX__
+		// On linux, application have also a channel (named display) to communicate with the
+		// Xserver. The safe rule is 1 thread, 1 channel. In our case we use the display in
+		// several places. Save yourself of multithread headache. Wait few seconds the end of 
+		// gsopen -- Gregory
+		if (pi->id == PluginId_GS) GetMTGS().WaitForOpen();
+#else
 		if (pi->id == PluginId_GS && !GSopen2) GetMTGS().WaitForOpen();
+#endif
 	} while( ++pi, pi->shortname != NULL );
 
 	if (GSopen2) GetMTGS().WaitForOpen();
@@ -1230,7 +1256,7 @@ void SysCorePlugins::ClosePlugin_Mcd()
 
 void SysCorePlugins::Close( PluginsEnum_t pid )
 {
-	pxAssume( (uint)pid < PluginId_Count );
+	pxAssert( (uint)pid < PluginId_Count );
 
 	if( !IsOpen(pid) ) return;
 	
@@ -1643,21 +1669,21 @@ bool SysCorePlugins::AreAnyInitialized() const
 
 bool SysCorePlugins::IsOpen( PluginsEnum_t pid ) const
 {
-	pxAssume( (uint)pid < PluginId_Count );
+	pxAssert( (uint)pid < PluginId_Count );
 	ScopedLock lock( m_mtx_PluginStatus );
 	return m_info[pid] && m_info[pid]->IsInitialized && m_info[pid]->IsOpened;
 }
 
 bool SysCorePlugins::IsInitialized( PluginsEnum_t pid ) const
 {
-	pxAssume( (uint)pid < PluginId_Count );
+	pxAssert( (uint)pid < PluginId_Count );
 	ScopedLock lock( m_mtx_PluginStatus );
 	return m_info[pid] && m_info[pid]->IsInitialized;
 }
 
 bool SysCorePlugins::IsLoaded( PluginsEnum_t pid ) const
 {
-	pxAssume( (uint)pid < PluginId_Count );
+	pxAssert( (uint)pid < PluginId_Count );
 	return !!m_info[pid];
 }
 
@@ -1722,13 +1748,13 @@ bool SysCorePlugins::NeedsClose() const
 const wxString SysCorePlugins::GetName( PluginsEnum_t pid ) const
 {
 	ScopedLock lock( m_mtx_PluginStatus );
-	pxAssume( (uint)pid < PluginId_Count );
+	pxAssert( (uint)pid < PluginId_Count );
 	return m_info[pid] ? m_info[pid]->Name : (wxString)_("Unloaded Plugin");
 }
 
 const wxString SysCorePlugins::GetVersion( PluginsEnum_t pid ) const
 {
 	ScopedLock lock( m_mtx_PluginStatus );
-	pxAssume( (uint)pid < PluginId_Count );
+	pxAssert( (uint)pid < PluginId_Count );
 	return m_info[pid] ? m_info[pid]->Version : L"0.0";
 }

@@ -17,12 +17,12 @@
 
 #include "Global.h"
 #include "soundtouch/SoundTouch.h"
+#include <wx/datetime.h>
+
+//Uncomment the next line to use the old time stretcher
+//#define SPU2X_USE_OLD_STRETCHER
 
 static soundtouch::SoundTouch* pSoundTouch = NULL;
-static int ts_stats_stretchblocks = 0;
-static int ts_stats_normalblocks = 0;
-static int ts_stats_logcounter = 0;
-
 
 // data prediction amount, used to "commit" data that hasn't
 // finished timestretch processing.
@@ -54,10 +54,171 @@ float SndBuffer::GetStatusPct()
 
 	//ConLog( "Data %d >>> driver: %d   predict: %d\n", m_data, drvempty, m_predictData );
 
-	float result = (float)(m_data + m_predictData - drvempty) - (m_size/16);
+	int data = _GetApproximateDataInBuffer();
+	float result = (float)( data + m_predictData - drvempty) - (m_size/16);
 	result /= (m_size/16);
 	return result;
 }
+
+
+//Alternative simple tempo adjustment. Based only on the soundtouch buffer state.
+//Base algorithm: aim at specific average number of samples at the buffer (by GUI), and adjust tempo simply by current/target.
+//An extra mechanism is added to keep adjustment at perfect 1:1 ratio (when emulation speed is stable around 100%)
+//  to prevent constant stretching/shrinking of packets if possible.
+//  This mechanism is triggered when the adjustment is close to 1:1 for long enough (defaults to 100 iterations within hys_ok_factor - defaults to 3%).
+//  1:1 state is aborted when required adjustment goes beyond hys_bad_factor (defaults to 20%).
+//
+//To compensate for wide variation of the <num of samples> ratio due to relatively small size of the buffer,
+//  The required tempo is a running average of STRETCH_AVERAGE_LEN (defaults to 50) last calculations.
+//  This averaging slows down the respons time of the algorithm, but greatly stablize it towards steady stretching.
+//
+//Keeping the buffer at required latency:
+//  This algorithm stabilises when the actual latency is <speed>*<required_latency>. While this is just fine at 100% speed,
+//  it's problematic especially for slow speeds, as the number of actual samples at the buffer gets very small on that case,
+//  which may lead to underruns (or just too much latency when running very fast fast).
+//To compensate for that, the algorithm has a slowly moving compensation factor which will eventually bring the actual latency to the required one.
+//compensationDivider defines how slow this compensation changes. By default it's set to 100,
+//  which will finalize the compensation after about 200 iterations.
+//
+// Note, this algorithm is intentionally simplified by not taking extreme actions at extreme scenarios (mostly underruns when speed dtops sharply),
+//  and let's the overrun/underrun protections do what they should (doesn't happen much though in practice, even at big FPS variations).
+//
+//  These params were tested to show good respond and stability, on all audio systems (dsound, wav, port audio, xaudio2),
+//    even at extreme small latency of 50ms which can handle 50%-100% variations without audible glitches.
+
+int targetIPS=750;
+
+//Dynamic tuning changes the values of the base algorithm parameters (derived from targetIPS) to adapt, in real time, to
+//  diferent number of invocations/sec (mostly affects number of iterations to average).
+//  Dynamic tuning can have a slight negative effect on the behavior of the algorithm, so it's preferred to have it off.
+//Currently it looks like it's around 750/sec on all systems when playing at 100% speed (50/60fps),
+//  and proportional to that speed otherwise.
+//If changes are made to SPU2X which affects this number (but it's still the same on all systems), then just change targetIPS.
+//If we find out that some systems are very different, we can turn on dynamic tuning by uncommenting the next line.
+//#define NEWSTRETCHER_USE_DYNAMIC_TUNING
+
+
+//running average can be implemented in O(1) time. 
+//For the sake of simplicity, this average is calculated in O(<buffer-size>). Possibly improve later.
+#define MAX_STRETCH_AVERAGE_LEN 100
+int STRETCH_AVERAGE_LEN=50.0 *targetIPS/750;
+//adds a value to the running average buffer, and return new running average.
+float addToAvg(float val){
+	static float avg_fullness[MAX_STRETCH_AVERAGE_LEN]={0};
+	static int nextAvgPos=0;
+
+	avg_fullness[nextAvgPos]=val;
+	nextAvgPos=(nextAvgPos+1)%STRETCH_AVERAGE_LEN;
+	float sum=0;
+	for(int c=0, i=(nextAvgPos-1)%STRETCH_AVERAGE_LEN; c<STRETCH_AVERAGE_LEN; c++, i=(i+STRETCH_AVERAGE_LEN-1)%STRETCH_AVERAGE_LEN)
+		sum+=avg_fullness[i];
+
+	sum= (float)sum/(float)STRETCH_AVERAGE_LEN;
+	return sum?sum:1;
+}
+
+template <class T>
+bool IsInRange(const T& val, const T& min, const T& max)
+{
+	return ( min <= val && val <= max );
+}
+
+//actual stretch algorithm implementation
+void SndBuffer::UpdateTempoChangeSoundTouch2()
+{
+
+	long targetSamplesReservoir=48*SndOutLatencyMS;//48000*SndOutLatencyMS/1000
+	//base aim at buffer filled %
+	float baseTargetFullness=(double)targetSamplesReservoir;///(double)m_size;//0.05;
+
+	//state vars
+	static bool inside_hysteresis=false;
+	static int hys_ok_count=0;
+	static float dynamicTargetFullness=baseTargetFullness;
+
+	int data = _GetApproximateDataInBuffer();
+	float bufferFullness=(float)data;///(float)m_size;
+
+#ifdef NEWSTRETCHER_USE_DYNAMIC_TUNING
+	{//test current iterations/sec every 0.5s, and change algo params accordingly if different than previous IPS more than 30%
+		static long iters=0;
+		static wxDateTime last=wxDateTime::UNow();
+		wxDateTime unow=wxDateTime::UNow();
+		wxTimeSpan delta = unow.Subtract(last);
+		if( delta.GetMilliseconds()>500 ){
+			int pot_targetIPS=1000.0/delta.GetMilliseconds().ToDouble()*iters;
+			if(pot_targetIPS != clamp(pot_targetIPS, int((float)targetIPS/1.3f), int((float)targetIPS*1.3f)) ){
+				if(MsgOverruns()) ConLog("Stretcher: setting iters/sec from %d to %d\n", targetIPS, pot_targetIPS);
+				targetIPS=pot_targetIPS;
+				STRETCH_AVERAGE_LEN=clamp((int)(50.0f *(float)targetIPS/750.0f), 3, MAX_STRETCH_AVERAGE_LEN);
+			}
+			last=unow;
+			iters=0;
+		}
+		iters++;
+	}
+#endif
+
+	//Algorithm params: (threshold params (hysteresis), etc) 
+	const float hys_ok_factor=1.04;
+	int hys_min_ok_count = GetClamped((int)(50.0 *(float)targetIPS/750.0), 2, 100); //consecutive iterations within hys_ok before going to 1:1 mode
+	const float hys_bad_factor=1.2;
+	int compensationDivider = GetClamped((int)(100.0 *(float)targetIPS/750), 15, 150);
+
+	float tempoAdjust=bufferFullness/dynamicTargetFullness;
+	float avgerage = addToAvg(tempoAdjust);
+	tempoAdjust = avgerage;
+	tempoAdjust = GetClamped( tempoAdjust, 0.05f, 10.0f);
+
+
+	dynamicTargetFullness += (baseTargetFullness/tempoAdjust - dynamicTargetFullness)/(double)compensationDivider;
+	if( IsInRange(tempoAdjust, 0.9f, 1.1f) && IsInRange( dynamicTargetFullness, baseTargetFullness*0.9f, baseTargetFullness*1.1f) )
+		dynamicTargetFullness=baseTargetFullness;
+
+	if( !inside_hysteresis )
+	{
+		if( IsInRange( tempoAdjust, 1.0f/hys_ok_factor, hys_ok_factor ) )
+			hys_ok_count++;
+		else
+			hys_ok_count=0;
+
+		if( hys_ok_count >= hys_min_ok_count ){
+			inside_hysteresis=true;
+			if(MsgOverruns()) ConLog("======> stretch: None (1:1)\n");
+		}
+
+	}
+	else if( !IsInRange( tempoAdjust, 1.0f/hys_bad_factor, hys_bad_factor ) ){
+		if(MsgOverruns()) ConLog("~~~~~~> stretch: Dynamic\n");
+		inside_hysteresis=false;
+		hys_ok_count=0;
+	}
+
+	if(inside_hysteresis)
+		tempoAdjust=1.0;
+
+	if(MsgOverruns()){
+		static int iters=0;
+		static wxDateTime last=wxDateTime::UNow();
+		wxDateTime unow=wxDateTime::UNow();
+		wxTimeSpan delta = unow.Subtract(last);
+
+		if(delta.GetMilliseconds()>1000){//report buffers state and tempo adjust every second
+			ConLog("buffers: %4d ms (%3.0f%%), tempo: %f, comp: %2.3f, iters: %d, (N-IPS:%d -> avg:%d, minokc:%d, div:%d)\n", 
+				(int)(data/48), (double)(100.0*bufferFullness/baseTargetFullness), (double)tempoAdjust, (double)(dynamicTargetFullness/baseTargetFullness), iters, (int)targetIPS
+				, STRETCH_AVERAGE_LEN, hys_min_ok_count, compensationDivider
+				);
+			last=unow;
+			iters=0;
+		}
+		iters++;
+	}
+
+	pSoundTouch->setTempo(tempoAdjust);
+
+	return;
+}
+
 
 void SndBuffer::UpdateTempoChangeSoundTouch()
 {
@@ -167,7 +328,6 @@ void SndBuffer::UpdateTempoChangeSoundTouch()
 		else if( cTempo > 7.5f ) cTempo = 7.5f;
 
 		pSoundTouch->setTempo( eTempo = (float)newTempo );
-		ts_stats_stretchblocks++;
 
 		/*ConLog("* SPU2-X: [Nominal %d%%] [Emergency: %d%%] (baseTempo: %d%% ) (newTempo: %d%%) (buffer: %d%%)\n",
 			//(relation < 0.0) ? "Normalize" : "",
@@ -193,7 +353,6 @@ void SndBuffer::UpdateTempoChangeSoundTouch()
 		{
 			if( eTempo != cTempo )
 				pSoundTouch->setTempo( eTempo=cTempo );
-			ts_stats_normalblocks++;
 		}
 	}
 }
@@ -292,23 +451,12 @@ void SndBuffer::timeStretchWrite()
 		progress = true;
 	}
 
+#ifdef SPU2X_USE_OLD_STRETCHER
 	UpdateTempoChangeSoundTouch();
+#else
+	UpdateTempoChangeSoundTouch2();
+#endif
 
-	if( MsgOverruns() )
-	{
-		if( progress )
-		{
-			if( ++ts_stats_logcounter > 150 )
-			{
-				ts_stats_logcounter = 0;
-				ConLog( " * SPU2 > Timestretch Stats > %d percent stretched. Total stretchblocks = %d.\n",
-					( ts_stats_stretchblocks * 100 ) / ( ts_stats_normalblocks + ts_stats_stretchblocks ),
-					ts_stats_stretchblocks);
-				ts_stats_normalblocks = 0;
-				ts_stats_stretchblocks = 0;
-			}
-		}
-	}
 }
 
 void SndBuffer::soundtouchInit()

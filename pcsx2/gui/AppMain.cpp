@@ -36,6 +36,14 @@
 #	include <wx/msw/wrapwin.h>		// needed to implement the app!
 #endif
 
+#ifdef __WXGTK__
+// Need to tranform the GSPanel to a X11 window/display for the GS plugins
+#include <wx/gtk/win_gtk.h> // GTK_PIZZA interface
+#include <gdk/gdkx.h>
+#include <gtk/gtk.h>
+#endif
+
+
 IMPLEMENT_APP(Pcsx2App)
 
 DEFINE_EVENT_TYPE( pxEvt_LoadPluginsComplete );
@@ -223,7 +231,7 @@ void Pcsx2App::PadKeyDispatch( const keyEvent& ev )
 	const bool isDown = (ev.evt == KEYPRESS);
 
 #ifdef __WXMSW__
-	const int vkey = wxCharCodeMSWToWX( ev.key );
+	const int vkey = wxCharCodeMSWToWX( ev.key );	//returns 0 if plain ascii value or a WXK_... (<=32 or >=300) if a special key
 #elif defined( __WXGTK__ )
 	const int vkey = TranslateGDKtoWXK( ev.key );
 #else
@@ -239,7 +247,7 @@ void Pcsx2App::PadKeyDispatch( const keyEvent& ev )
 		case WXK_MENU:		m_kevt.m_altDown		= isDown; return;
 	}
 
-	m_kevt.m_keyCode = vkey;
+	m_kevt.m_keyCode = vkey? vkey : ev.key;
 
 	if( m_kevt.GetEventType() == wxEVT_KEY_DOWN )
 	{
@@ -682,7 +690,7 @@ void Pcsx2App::ClearPendingSave()
 	if( AppRpc_TryInvokeAsync(&Pcsx2App::ClearPendingSave) ) return;
 
 	--m_PendingSaves;
-	pxAssumeDev( m_PendingSaves >= 0, "Pending saves count mismatch (pending count is less than 0)" );
+	pxAssertDev( m_PendingSaves >= 0, "Pending saves count mismatch (pending count is less than 0)" );
 
 	if( (m_PendingSaves == 0) && m_ScheduledTermination )
 	{
@@ -700,17 +708,16 @@ MainEmuFrame& Pcsx2App::GetMainFrame() const
 {
 	MainEmuFrame* mainFrame = GetMainFramePtr();
 
-	pxAssume( mainFrame != NULL );
-	pxAssert( ((uptr)GetTopWindow()) == ((uptr)mainFrame) );
-	return *mainFrame;
+	pxAssert(mainFrame != NULL);
+	pxAssert(((uptr)GetTopWindow()) == ((uptr)mainFrame));
+	return  *mainFrame;
 }
 
 GSFrame& Pcsx2App::GetGsFrame() const
 {
-	GSFrame* gsFrame = (GSFrame*)wxWindow::FindWindowById( m_id_GsFrame );
-
-	pxAssume( gsFrame != NULL );
-	return *gsFrame;
+	GSFrame* gsFrame  = (GSFrame*)wxWindow::FindWindowById( m_id_GsFrame );
+	pxAssert(gsFrame != NULL);
+	return  *gsFrame;
 }
 
 // NOTE: Plugins are *not* applied by this function.  Changes to plugins need to handled
@@ -862,12 +869,30 @@ void Pcsx2App::OpenGsPanel()
 	}
 	
 	pxAssertDev( !GetCorePlugins().IsOpen( PluginId_GS ), "GS Plugin must be closed prior to opening a new Gs Panel!" );
-	pDsp = (uptr)gsFrame->GetViewport()->GetHandle();
+
+#ifdef __WXGTK__
+	// The x window/display are actually very deeper in the widget. You need both display and window
+	// because unlike window there are unrelated. One could think it would be easier to send directly the GdkWindow.
+	// Unfortunately there is a race condition between gui and gs threads when you called the
+	// GDK_WINDOW_* macro. To be safe I think it is best to do here. It only cost a slight
+	// extension (fully compatible) of the plugins API. -- Gregory
+	GtkWidget *child_window = gtk_bin_get_child(GTK_BIN(gsFrame->GetViewport()->GetHandle()));
+
+	gtk_widget_realize(child_window); // create the widget to allow to use GDK_WINDOW_* macro
+	gtk_widget_set_double_buffered(child_window, false); // Disable the widget double buffer, you will use the opengl one
+
+	GdkWindow* draw_window = GTK_PIZZA(child_window)->bin_window;
+	Window Xwindow = GDK_WINDOW_XWINDOW(draw_window);
+	Display* XDisplay = GDK_WINDOW_XDISPLAY(draw_window);
+
+	pDsp[0] = (uptr)XDisplay;
+	pDsp[1] = (uptr)Xwindow;
+#else
+	pDsp[0] = (uptr)gsFrame->GetViewport()->GetHandle();
+	pDsp[1] = NULL;
+#endif
 
 	gsFrame->ShowFullScreen( g_Conf->GSWindow.IsFullscreen );
-
-	// The "in the main window" quickie hack...
-	//pDsp = (uptr)m_MainFrame->m_background.GetHandle();
 }
 
 void Pcsx2App::CloseGsPanel()

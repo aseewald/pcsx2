@@ -282,6 +282,10 @@ bool GSDevice9::Create(GSWnd* wnd)
 		CompileShader(IDR_INTERLACE_FX, format("ps_main%d", i), NULL, &m_interlace.ps[i]);
 	}
 
+	// fxaa
+
+	CompileShader(IDR_FXAA_FX, "ps_main", NULL, &m_fxaa.ps);
+
 	// create shader layout
 
 	VSSelector sel;
@@ -697,6 +701,12 @@ GSTexture* GSDevice9::CopyOffscreen(GSTexture* src, const GSVector4& sr, int w, 
 
 void GSDevice9::CopyRect(GSTexture* st, GSTexture* dt, const GSVector4i& r)
 {
+	if(!st || !dt)
+	{
+		ASSERT(0);
+		return;
+	}
+
 	m_dev->StretchRect(*(GSTexture9*)st, r, *(GSTexture9*)dt, r, D3DTEXF_NONE);
 }
 
@@ -712,6 +722,12 @@ void GSDevice9::StretchRect(GSTexture* st, const GSVector4& sr, GSTexture* dt, c
 
 void GSDevice9::StretchRect(GSTexture* st, const GSVector4& sr, GSTexture* dt, const GSVector4& dr, IDirect3DPixelShader9* ps, const float* ps_cb, int ps_cb_len, Direct3DBlendState9* bs, bool linear)
 {
+	if(!st || !dt)
+	{
+		ASSERT(0);
+		return;
+	}
+
 	BeginScene();
 
 	GSVector2i ds = dt->GetSize();
@@ -798,6 +814,21 @@ void GSDevice9::DoInterlace(GSTexture* st, GSTexture* dt, int shader, bool linea
 	cb.hH = (float)s.y / 2;
 
 	StretchRect(st, sr, dt, dr, m_interlace.ps[shader], (const float*)&cb, 1, linear);
+}
+
+void GSDevice9::DoFXAA(GSTexture* st, GSTexture* dt)
+{
+	GSVector2i s = dt->GetSize();
+
+	GSVector4 sr(0, 0, 1, 1);
+	GSVector4 dr(0, 0, s.x, s.y);
+
+	FXAAConstantBuffer cb;
+
+	cb.rcpFrame = GSVector4(1.0f / s.x, 1.0f / s.y, 0.0f, 0.0f);
+	cb.rcpFrameOpt = GSVector4::zero();
+
+	StretchRect(st, sr, dt, dr, m_fxaa.ps, (const float*)&cb, 2, true);
 }
 
 void GSDevice9::SetupDATE(GSTexture* rt, GSTexture* ds, const GSVertexPT1* vertices, bool datm)

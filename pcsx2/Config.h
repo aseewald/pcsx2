@@ -53,6 +53,8 @@ enum GamefixId
 	Fix_OPHFlag,
 	Fix_DMABusy,
 	Fix_VIFFIFO,
+	Fix_VIF1Stall,
+	Fix_GIFReverse,
 
 	GamefixId_COUNT
 };
@@ -343,7 +345,9 @@ struct Pcsx2Config
 				SkipMPEGHack	:1,		// Skips MPEG videos (Katamari and other games need this)
 				OPHFlagHack		:1,		// Bleach Blade Battlers
 				DMABusyHack		:1,		// Denies writes to the DMAC when it's busy. This is correct behaviour but bad timing can cause problems.
-				VIFFIFOHack		:1;     // Pretends to fill the non-existant VIF FIFO Buffer.
+				VIFFIFOHack		:1,     // Pretends to fill the non-existant VIF FIFO Buffer.
+				VIF1StallHack   :1,     // Like above, processes FIFO data before the stall is allowed (to make sure data goes over).
+				GIFReverseHack  :1;		// Allows PATH3 to continue even if the FIFO is reversed.
 		BITFIELD_END
 
 		GamefixOptions();
@@ -377,7 +381,8 @@ struct Pcsx2Config
 				IntcStat		:1,		// tells Pcsx2 to fast-forward through intc_stat waits.
 				WaitLoop		:1,		// enables constant loop detection and fast-forwarding
 				vuFlagHack		:1,		// microVU specific flag hack
-				vuBlockHack		:1;		// microVU specific block flag no-propagation hack
+				vuBlockHack		:1,		// microVU specific block flag no-propagation hack
+				vuThread        :1;		// Enable Threaded VU1
 		BITFIELD_END
 
 		u8	EECycleRate;		// EE cycle rate selector (1.0, 1.5, 2.0)
@@ -471,6 +476,7 @@ TraceLogFilters&				SetTraceConfig();
 
 // ------------ CPU / Recompiler Options ---------------
 
+#define THREAD_VU1					(EmuConfig.Cpu.Recompiler.UseMicroVU1 && EmuConfig.Speedhacks.vuThread)
 #define CHECK_MICROVU0				(EmuConfig.Cpu.Recompiler.UseMicroVU0)
 #define CHECK_MICROVU1				(EmuConfig.Cpu.Recompiler.UseMicroVU1)
 #define CHECK_EEREC					(EmuConfig.Cpu.Recompiler.EnableEE && GetCpuProviders().IsRecAvailable_EE())
@@ -490,7 +496,8 @@ TraceLogFilters&				SetTraceConfig();
 #define CHECK_OPHFLAGHACK			(EmuConfig.Gamefixes.OPHFlagHack)	 // Bleach Blade Battlers
 #define CHECK_DMABUSYHACK			(EmuConfig.Gamefixes.DMABusyHack)    // Denies writes to the DMAC when it's busy. This is correct behaviour but bad timing can cause problems.
 #define CHECK_VIFFIFOHACK			(EmuConfig.Gamefixes.VIFFIFOHack)    // Pretends to fill the non-existant VIF FIFO Buffer.
-
+#define CHECK_VIF1STALLHACK			(EmuConfig.Gamefixes.VIF1StallHack)  // Like above, processes FIFO data before the stall is allowed (to make sure data goes over).
+#define CHECK_GIFREVERSEHACK		(EmuConfig.Gamefixes.GIFReverseHack) // Allows PATH3 to continue even if the FIFO is reversed.
 //------------ Advanced Options!!! ---------------
 #define CHECK_VU_OVERFLOW			(EmuConfig.Cpu.Recompiler.vuOverflow)
 #define CHECK_VU_EXTRA_OVERFLOW		(EmuConfig.Cpu.Recompiler.vuExtraOverflow) // If enabled, Operands are clamped before being used in the VU recs

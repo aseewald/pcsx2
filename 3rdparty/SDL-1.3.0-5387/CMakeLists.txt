@@ -14,15 +14,13 @@ set(CommonFlags
     -msse2
     -fvisibility=hidden
 	-pipe
-	-Wno-format
-	-Wno-unused-parameter
-	-Wno-unused-value
-	-Wunused-variable)
+    -w
+    )
 
 # set warning flags
 set(DebugFlags
-	-W
-	-g)
+	-g
+    )
 
 # set optimization flags
 set(OptimizationFlags
@@ -177,23 +175,23 @@ set(SDL_sources
    "${SDL_ROOT}/src/joystick/SDL_sysjoystick.h"
 
    #c/libm:
-   "${SDL_ROOT}/src/libm/e_atan2.c"
-   "${SDL_ROOT}/src/libm/e_log.c"
-   "${SDL_ROOT}/src/libm/e_pow.c"
-   "${SDL_ROOT}/src/libm/e_rem_pio2.c"
-   "${SDL_ROOT}/src/libm/e_sqrt.c"
-   "${SDL_ROOT}/src/libm/k_cos.c"
-   "${SDL_ROOT}/src/libm/k_rem_pio2.c"
-   "${SDL_ROOT}/src/libm/k_sin.c"
-   "${SDL_ROOT}/src/libm/math.h"
-   "${SDL_ROOT}/src/libm/math_private.h"
-   "${SDL_ROOT}/src/libm/s_atan.c"
-   "${SDL_ROOT}/src/libm/s_copysign.c"
-   "${SDL_ROOT}/src/libm/s_cos.c"
-   "${SDL_ROOT}/src/libm/s_fabs.c"
-   "${SDL_ROOT}/src/libm/s_floor.c"
-   "${SDL_ROOT}/src/libm/s_scalbn.c"
-   "${SDL_ROOT}/src/libm/s_sin.c"
+   #"${SDL_ROOT}/src/libm/e_atan2.c"
+   #"${SDL_ROOT}/src/libm/e_log.c"
+   #"${SDL_ROOT}/src/libm/e_pow.c"
+   #"${SDL_ROOT}/src/libm/e_rem_pio2.c"
+   #"${SDL_ROOT}/src/libm/e_sqrt.c"
+   #"${SDL_ROOT}/src/libm/k_cos.c"
+   #"${SDL_ROOT}/src/libm/k_rem_pio2.c"
+   #"${SDL_ROOT}/src/libm/k_sin.c"
+   #"${SDL_ROOT}/src/libm/math.h"
+   #"${SDL_ROOT}/src/libm/math_private.h"
+   #"${SDL_ROOT}/src/libm/s_atan.c"
+   #"${SDL_ROOT}/src/libm/s_copysign.c"
+   #"${SDL_ROOT}/src/libm/s_cos.c"
+   #"${SDL_ROOT}/src/libm/s_fabs.c"
+   #"${SDL_ROOT}/src/libm/s_floor.c"
+   #"${SDL_ROOT}/src/libm/s_scalbn.c"
+   #"${SDL_ROOT}/src/libm/s_sin.c"
 
    #c/power:
    "${SDL_ROOT}/src/power/SDL_power.c"
@@ -390,7 +388,26 @@ set(SDL_sources
 
 #include_directories( ${SDL_ROOT}/include /usr/include/kde/artsc /usr/include/directfb)
 
-add_library(${Output} STATIC ${SDL_sources} )
+# Hiden option. It is only a temporary workaround of issue 1003. The purpose is to LD_PRELOAD
+# the library so it avoid any conflict with previous SDL1.2 symbol
+if (DEFINED SHARED_SDL)
+    add_library(${Output} SHARED ${SDL_sources} )
+
+    # Install the library with others plugins
+    if(PACKAGE_MODE)
+        install(TARGETS ${Output} DESTINATION ${PLUGIN_DIR})
+    else(PACKAGE_MODE)
+        install(TARGETS ${Output} DESTINATION ${CMAKE_SOURCE_DIR}/bin/plugins)
+    endif(PACKAGE_MODE)
+
+else (DEFINED SHARED_SDL)
+    # Std build use static build
+    add_library(${Output} STATIC ${SDL_sources} )
+endif (DEFINED SHARED_SDL)
+
+# Gold (new linux linker) does not get automatically dependency of dependency so you must add
+# them manually.
+target_link_libraries(${Output} ${LIBC_LIBRARIES})
 
 # User flags options
 if(NOT USER_CMAKE_LD_FLAGS STREQUAL "")

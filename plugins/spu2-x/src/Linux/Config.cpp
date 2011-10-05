@@ -43,8 +43,8 @@ int Interpolation = 4;
 
 bool EffectsDisabled = false;
 float FinalVolume;
-int ReverbBoost = 0;
-bool postprocess_filter_enabled = 1;
+bool postprocess_filter_enabled = true;
+bool postprocess_filter_dealias = false;
 bool _visual_debug_enabled = false; // windows only feature
 
 // OUTPUT
@@ -53,6 +53,8 @@ int SndOutLatencyMS = 300;
 int SynchMode = 0; // Time Stretch, Async or Disabled
 static u32 OutputAPI = 0;
 
+int numSpeakers = 0;
+int dplLevel = 0;
 /*****************************************************************************/
 
 void ReadSettings()
@@ -67,9 +69,9 @@ void ReadSettings()
 	
 	Interpolation = CfgReadInt( L"MIXING",L"Interpolation", 4 );
 	EffectsDisabled = CfgReadBool( L"MIXING", L"Disable_Effects", false );
+	postprocess_filter_dealias = CfgReadBool( L"MIXING", L"DealiasFilter", false );
 	FinalVolume = ((float)CfgReadInt( L"MIXING", L"FinalVolume", 100 )) / 100;
 		if ( FinalVolume > 1.0f) FinalVolume = 1.0f;
-	ReverbBoost = CfgReadInt( L"MIXING",L"Reverb_Boost", 0 );
 
 	wxString temp;
 	CfgReadStr( L"OUTPUT", L"Output_Module", temp, PortaudioOut->GetIdent() );
@@ -110,8 +112,8 @@ void WriteSettings()
 	
 	CfgWriteInt(L"MIXING",L"Interpolation",Interpolation);
 	CfgWriteBool(L"MIXING",L"Disable_Effects",EffectsDisabled);
-	CfgWriteInt(L"MIXING",L"FinalVolume",(int)(FinalVolume*100));
-	CfgWriteInt(L"MIXING",L"Reverb_Boost",ReverbBoost);
+	CfgWriteBool(L"MIXING",L"DealiasFilter",postprocess_filter_dealias);
+	CfgWriteInt(L"MIXING",L"FinalVolume",(int)(FinalVolume * 100 +0.5f));
 
 	CfgWriteStr(L"OUTPUT",L"Output_Module", mods[OutputModule]->GetIdent() );
 	CfgWriteInt(L"OUTPUT",L"Latency", SndOutLatencyMS);
@@ -142,7 +144,7 @@ void DisplayDialog()
     GtkWidget *mixing_frame, *mixing_box;
     GtkWidget *int_label, *int_box;
     GtkWidget *effects_check;
-    GtkWidget *reverb_label, *reverb_box;
+    GtkWidget *dealias_filter;
     GtkWidget *debug_check;
     GtkWidget *debug_button;
 
@@ -174,14 +176,7 @@ void DisplayDialog()
     gtk_combo_box_set_active(GTK_COMBO_BOX(int_box), Interpolation);
 
     effects_check = gtk_check_button_new_with_label("Disable Effects Processing");
-
-    reverb_label = gtk_label_new ("Reverb Boost Factor:");
-    reverb_box = gtk_combo_box_new_text ();
-    gtk_combo_box_append_text(GTK_COMBO_BOX(reverb_box), "1X - Normal Reverb Volume");
-    gtk_combo_box_append_text(GTK_COMBO_BOX(reverb_box), "2X - Reverb Volume x 2");
-    gtk_combo_box_append_text(GTK_COMBO_BOX(reverb_box), "4X - Reverb Volume x 4");
-    gtk_combo_box_append_text(GTK_COMBO_BOX(reverb_box), "8X - Reverb Volume x 8");
-    gtk_combo_box_set_active(GTK_COMBO_BOX(reverb_box), ReverbBoost);
+    dealias_filter = gtk_check_button_new_with_label("Use the de-alias filter(overemphasizes the highs)");
 
     debug_check = gtk_check_button_new_with_label("Enable Debug Options");
 	debug_button = gtk_button_new_with_label("Debug...");
@@ -228,9 +223,8 @@ void DisplayDialog()
 
 	gtk_container_add(GTK_CONTAINER(mixing_box), int_label);
 	gtk_container_add(GTK_CONTAINER(mixing_box), int_box);
-	gtk_container_add(GTK_CONTAINER(mixing_box), reverb_label);
-	gtk_container_add(GTK_CONTAINER(mixing_box), reverb_box);
 	gtk_container_add(GTK_CONTAINER(mixing_box), effects_check);
+	gtk_container_add(GTK_CONTAINER(mixing_box), dealias_filter);
 	gtk_container_add(GTK_CONTAINER(mixing_box), debug_check);
 	gtk_container_add(GTK_CONTAINER(mixing_box), debug_button);
 
@@ -248,6 +242,7 @@ void DisplayDialog()
 	gtk_container_add(GTK_CONTAINER(main_box), output_frame);
 
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(effects_check), EffectsDisabled);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dealias_filter), postprocess_filter_dealias);
 	//FinalVolume;
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(debug_check), DebugEnabled);
 
@@ -262,14 +257,12 @@ void DisplayDialog()
     if (return_value == GTK_RESPONSE_ACCEPT)
     {
 		DebugEnabled = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(debug_check));
+		postprocess_filter_dealias = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(dealias_filter));
     	if (gtk_combo_box_get_active(GTK_COMBO_BOX(int_box)) != -1)
     		Interpolation = gtk_combo_box_get_active(GTK_COMBO_BOX(int_box));
 
     	EffectsDisabled = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(effects_check));
 		//FinalVolume;
-    	
-		if (gtk_combo_box_get_active(GTK_COMBO_BOX(reverb_box)) != -1)
-			ReverbBoost = gtk_combo_box_get_active(GTK_COMBO_BOX(reverb_box));
 
     	if (gtk_combo_box_get_active(GTK_COMBO_BOX(mod_box)) != -1)
 			OutputModule = gtk_combo_box_get_active(GTK_COMBO_BOX(mod_box));

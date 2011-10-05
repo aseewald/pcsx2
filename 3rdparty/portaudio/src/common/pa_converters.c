@@ -1,5 +1,5 @@
 /*
- * $Id: pa_converters.c 1495 2010-04-17 07:43:00Z dmitrykos $
+ * $Id: pa_converters.c 1748 2011-09-01 22:08:32Z philburk $
  * Portable Audio I/O Library sample conversion mechanism
  *
  * Based on the Open Source API proposed by Ross Bencina
@@ -45,12 +45,15 @@
 
  @todo Consider whether functions which dither but don't clip should exist,
  V18 automatically enabled clipping whenever dithering was selected. Perhaps
- we should do the same.
+ we should do the same. 
+    see: "require clipping for dithering sample conversion functions?"
+    http://www.portaudio.com/trac/ticket/112
 
- @todo implement the converters marked IMPLEMENT ME: Float32_To_UInt8_Dither,
- Float32_To_UInt8_Clip, Float32_To_UInt8_DitherClip, Int32_To_Int24_Dither,
+ @todo implement the converters marked IMPLEMENT ME: Int32_To_Int24_Dither,
  Int32_To_UInt8_Dither, Int24_To_Int16_Dither, Int24_To_Int8_Dither, 
- Int24_To_UInt8_Dither, Int16_To_Int8_Dither, Int16_To_UInt8_Dither,
+ Int24_To_UInt8_Dither, Int16_To_Int8_Dither, Int16_To_UInt8_Dither
+    see: "some conversion functions are not implemented in pa_converters.c"
+    http://www.portaudio.com/trac/ticket/35
 
  @todo review the converters marked REVIEW: Float32_To_Int32,
  Float32_To_Int32_Dither, Float32_To_Int32_Clip, Float32_To_Int32_DitherClip,
@@ -725,8 +728,7 @@ static void Float32_To_Int8_Dither(
 {
     float *src = (float*)sourceBuffer;
     signed char *dest =  (signed char*)destinationBuffer;
-    (void)ditherGenerator; /* unused parameter */
-
+    
     while( count-- )
     {
         float dither  = PaUtil_GenerateFloatTriangularDither( ditherGenerator );
@@ -817,12 +819,15 @@ static void Float32_To_UInt8_Dither(
 {
     float *src = (float*)sourceBuffer;
     unsigned char *dest =  (unsigned char*)destinationBuffer;
-    (void)ditherGenerator; /* unused parameter */
-
+    
     while( count-- )
     {
-        /* IMPLEMENT ME */
-
+        float dither  = PaUtil_GenerateFloatTriangularDither( ditherGenerator );
+        /* use smaller scaler to prevent overflow when we add the dither */
+        float dithered = (*src * (126.0f)) + dither;
+        PaInt32 samp = (PaInt32) dithered;
+        *dest = (unsigned char) (128 + samp);
+        
         src += sourceStride;
         dest += destinationStride;
     }
@@ -841,7 +846,9 @@ static void Float32_To_UInt8_Clip(
 
     while( count-- )
     {
-        /* IMPLEMENT ME */
+        PaInt32 samp = 128 + (PaInt32)(*src * (127.0f));
+        PA_CLIP_( samp, 0x0000, 0x00FF );
+        *dest = (unsigned char) samp;
 
         src += sourceStride;
         dest += destinationStride;
@@ -861,7 +868,12 @@ static void Float32_To_UInt8_DitherClip(
 
     while( count-- )
     {
-        /* IMPLEMENT ME */
+        float dither  = PaUtil_GenerateFloatTriangularDither( ditherGenerator );
+        /* use smaller scaler to prevent overflow when we add the dither */
+        float dithered = (*src * (126.0f)) + dither;
+        PaInt32 samp = 128 + (PaInt32) dithered;
+        PA_CLIP_( samp, 0x0000, 0x00FF );
+        *dest = (unsigned char) samp;
 
         src += sourceStride;
         dest += destinationStride;
@@ -1163,8 +1175,8 @@ static void Int24_To_Int16_Dither(
     void *sourceBuffer, signed int sourceStride,
     unsigned int count, struct PaUtilTriangularDitherGenerator *ditherGenerator )
 {
-    unsigned char *src = (unsigned char *)sourceBuffer;
-    PaInt16 *dest = (PaInt16 *)destinationBuffer;
+    unsigned char *src = (unsigned char*)sourceBuffer;
+    PaInt16 *dest = (PaInt16*)destinationBuffer;
 
     PaInt32 temp, dither;
 
@@ -1185,7 +1197,7 @@ static void Int24_To_Int16_Dither(
         dither = PaUtil_Generate16BitTriangularDither( ditherGenerator );
         *dest = (PaInt16) (((temp >> 1) + dither) >> 15);
 
-        src += sourceStride * 3;
+        src  += sourceStride * 3;
         dest += destinationStride;
     }
 }
@@ -1251,7 +1263,7 @@ static void Int24_To_Int8_Dither(
 
         src += sourceStride * 3;
         dest += destinationStride;
-}
+    }
 }
 
 /* -------------------------------------------------------------------------- */

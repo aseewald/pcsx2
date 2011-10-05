@@ -26,11 +26,11 @@
 template class EventSource< IEventListener_PageFault >;
 
 SrcType_PageFault* Source_PageFault = NULL;
+Threading::Mutex   PageFault_Mutex;
 
 void pxInstallSignalHandler()
 {
-	if (!Source_PageFault)
-	{
+	if(!Source_PageFault) {
 		Source_PageFault = new SrcType_PageFault();
 	}
 
@@ -44,7 +44,7 @@ void pxInstallSignalHandler()
 // --------------------------------------------------------------------------------------
 EventListener_PageFault::EventListener_PageFault()
 {
-	pxAssume(Source_PageFault);
+	pxAssert(Source_PageFault);
 	Source_PageFault->Add( *this );
 }
 

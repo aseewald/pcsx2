@@ -81,6 +81,13 @@ static const uint _DTbit_ = 0; //( _Dbit_ | _Tbit_ ) // ToDo: Implement this stu
 static const uint divI = 0x1040000;
 static const uint divD = 0x2080000;
 
+static const char branchSTR[16][8] = {
+	"None",  "B",     "BAL",   "IBEQ",
+	"IBGEZ", "IBGTZ", "IBLEZ", "IBLTZ",
+	"IBNE",  "JR",    "JALR",  "N/A",
+	"N/A",   "N/A",   "N/A",   "N/A"
+};
+
 //------------------------------------------------------------------
 // Helper Macros
 //------------------------------------------------------------------
@@ -234,11 +241,11 @@ typedef u32 (__fastcall *mVUCall)(void*, void*);
 }
 
 #define branchAddr (																	\
-	pxAssumeDev((iPC & 1) == 0, "microVU: Expected Lower Op for valid branch addr."),	\
+	pxAssertDev((iPC & 1) == 0, "microVU: Expected Lower Op for valid branch addr."),	\
 	((((iPC + 2)  + (_Imm11_ * 2)) & mVU.progMemMask) * 4)								\
 )
 #define branchAddrN (																	\
-	pxAssumeDev((iPC & 1) == 0, "microVU: Expected Lower Op for valid branch addr."),	\
+	pxAssertDev((iPC & 1) == 0, "microVU: Expected Lower Op for valid branch addr."),	\
 	((((iPC + 4)  + (_Imm11_ * 2)) & mVU.progMemMask) * 4)								\
 )
 

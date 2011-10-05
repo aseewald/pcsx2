@@ -180,9 +180,8 @@ struct V_Voice
 	s32 PV1;
 
 // Last outputted audio value, used for voice modulation.
-	u32 OutX;
-	u32 NextCrest; // temp value for Crest calculation
-	u32 PrevAmp;  // temp value for Crest calculation (abs of last value)
+	s32 OutX;
+	s32 NextCrest; // temp value for Crest calculation
 
 // SBuffer now points directly to an ADPCM cache entry.
 	s16 *SBuffer;
@@ -408,6 +407,8 @@ struct V_Core
 	V_ReverbBuffers	RevBuffers;		// buffer pointers for reverb, pre-calculated and pre-clipped.
 	u32				EffectsStartA;
 	u32				EffectsEndA;
+	u32				ExtEffectsStartA;
+	u32				ExtEffectsEndA;
 	u32				ReverbX;
 
 	// Current size of the effects buffer.  Pre-caculated when the effects start
@@ -422,7 +423,6 @@ struct V_Core
 	// from this for the odd Ts.
 	StereoOut32		LastEffect;
 
-	u8				InitDelay;
 	u8				CoreEnabled;
 
 	u8				AttrBit0;
@@ -455,9 +455,9 @@ struct V_Core
 	V_Core( int idx );			// our badass constructor
 	~V_Core() throw();
 
-	void	Reset( int index );
 	void	Init( int index );
 	void	UpdateEffectsBufferSize();
+	void	AnalyzeReverbPreset();
 
 	s32		EffectsBufferIndexer( s32 offset ) const;
 	void	UpdateFeedbackBuffersA();

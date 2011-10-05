@@ -28,32 +28,15 @@
 #include <gdk/gdkkeysyms.h>
 #include "keyboard.h"
 
-int FindKey(int key, int pad)
-{
-	for (int p = 0; p < MAX_SUB_KEYS; p++)
-		for (int i = 0; i < MAX_KEYS; i++)
-			if (key ==  get_key(PadEnum[pad][p], i)) return i;
-	return -1;
-}
-
+#ifndef __LINUX__
 char* KeysymToChar(int keysym)
 {
- #ifdef __LINUX__
-	return XKeysymToString(keysym);
-#else
 	LPWORD temp;
 
 	ToAscii((UINT) keysym, NULL, NULL, temp, NULL);
 	return (char*)temp;
-	#endif
 }
-
-void PollForKeyboardInput(int pad)
-{
- #ifdef __LINUX__
-        PollForX11KeyboardInput(pad);
 #endif
-}
 
 void SetAutoRepeat(bool autorep)
 {
@@ -69,122 +52,206 @@ void SetAutoRepeat(bool autorep)
 }
 
 #ifdef __LINUX__
-void PollForX11KeyboardInput(int pad)
+static bool s_grab_input = false;
+static bool s_Shift = false;
+static unsigned int  s_previous_mouse_x = 0;
+static unsigned int  s_previous_mouse_y = 0;
+void AnalyzeKeyEvent(int pad, keyEvent &evt)
 {
-	XEvent E;
-	KeySym key;
-	int keyPress = 0, keyRelease = 0;
-	int i;
+	KeySym key = (KeySym)evt.key;
+	int index = get_keyboard_key(pad, key);
 
-	// keyboard input
-	while (XPending(GSdsp) > 0)
+	switch (evt.evt)
 	{
-		XNextEvent(GSdsp, &E);
-		switch (E.type)
-		{
-			case KeyPress:
-				key = XLookupKeysym((XKeyEvent *) & E, 0);
+		case KeyPress:
+			// Shift F12 is not yet use by pcsx2. So keep it to grab/ungrab input
+			// I found it very handy vs the automatic fullscreen detection
+			// 1/ Does not need to detect full-screen
+			// 2/ Can use a debugger in full-screen
+			// 3/ Can grab input in window without the need of a pixelated full-screen
+			if (key == XK_Shift_R || key == XK_Shift_L) s_Shift = true;
+			if (key == XK_F12 && s_Shift) {
+				if(!s_grab_input) {
+					s_grab_input = true;
+					XGrabPointer(GSdsp, GSwin, True, ButtonPressMask, GrabModeAsync, GrabModeAsync, GSwin, None, CurrentTime);
+					XGrabKeyboard(GSdsp, GSwin, True, GrabModeAsync, GrabModeAsync, CurrentTime);
+				} else {
+					s_grab_input = false;
+					XUngrabPointer(GSdsp, CurrentTime);
+					XUngrabKeyboard(GSdsp, CurrentTime);
+				}
+			}
 
-				i = FindKey(key, pad);
-
-				// Analog controls.
-				if ((i > PAD_RY) && (i <= PAD_R_LEFT))
-				{
-				switch (i)
+			// Analog controls.
+			if (IsAnalogKey(index))
+			{
+				switch (index)
 				{
 					case PAD_R_LEFT:
 					case PAD_R_UP:
 					case PAD_L_LEFT:
 					case PAD_L_UP:
-						Analog::ConfigurePad(pad, Analog::AnalogToPad(i), DEF_VALUE);
+						key_status->press(pad, index, -MAX_ANALOG_VALUE);
 						break;
 					case PAD_R_RIGHT:
 					case PAD_R_DOWN:
 					case PAD_L_RIGHT:
 					case PAD_L_DOWN:
-						Analog::ConfigurePad(pad, Analog::AnalogToPad(i), -DEF_VALUE);
+						key_status->press(pad, index, MAX_ANALOG_VALUE);
 						break;
 				}
-				i += 0xff00;
+			} else if (index != -1)
+				key_status->press(pad, index);
+
+			//PAD_LOG("Key pressed:%d\n", index);
+
+			event.evt = KEYPRESS;
+			event.key = key;
+			break;
+
+		case KeyRelease:
+			if (key == XK_Shift_R || key == XK_Shift_L) s_Shift = false;
+
+			if (index != -1)
+				key_status->release(pad, index);
+
+			event.evt = KEYRELEASE;
+			event.key = key;
+			break;
+
+		case FocusIn:
+			XAutoRepeatOff(GSdsp);
+			break;
+
+		case FocusOut:
+			XAutoRepeatOn(GSdsp);
+			break;
+
+		case ButtonPress:
+			if (index != -1)
+				key_status->press(pad, index);
+			break;
+
+		case ButtonRelease:
+			if (index != -1)
+				key_status->release(pad, index);
+			break;
+
+		case MotionNotify:
+			// FIXME: How to handle when the mouse does not move, no event generated!!!
+			// 1/ small move == no move. Cons : can not do small movement
+			// 2/ use a watchdog timer thread
+			// 3/ ??? idea welcome ;)
+			if (conf->options & ((PADOPTION_MOUSE_L|PADOPTION_MOUSE_R) << 16 * pad )) {
+				unsigned int pad_x;
+				unsigned int pad_y;
+				// Note when both PADOPTION_MOUSE_R and PADOPTION_MOUSE_L are set, take only the right one
+				if (conf->options & (PADOPTION_MOUSE_R << 16 * pad)) {
+					pad_x = PAD_R_RIGHT;
+					pad_y = PAD_R_UP;
+				} else {
+					pad_x = PAD_L_RIGHT;
+					pad_y = PAD_L_UP;
 				}
 
-				if (i != -1)
-				{
-					clear_bit(keyRelease, i);
-					set_bit(keyPress, i);
-				}
-				//PAD_LOG("Key pressed:%d\n", i);
+				unsigned x = evt.key & 0xFFFF;
+				unsigned int value = abs(s_previous_mouse_x - x) * conf->sensibility;
 
-				event.evt = KEYPRESS;
-				event.key = key;
-				break;
+				if (x == 0)
+					key_status->press(pad, pad_x, -MAX_ANALOG_VALUE);
+				else if (x == 0xFFFF)
+					key_status->press(pad, pad_x, MAX_ANALOG_VALUE);
+				else if (x < (s_previous_mouse_x -2))
+					key_status->press(pad, pad_x, -value);
+				else if (x > (s_previous_mouse_x +2))
+					key_status->press(pad, pad_x, value);
+				else
+					key_status->release(pad, pad_x);
 
-			case KeyRelease:
-				key = XLookupKeysym((XKeyEvent *) & E, 0);
 
-				i = FindKey(key, pad);
+				unsigned y = evt.key >> 16;
+				value = abs(s_previous_mouse_y - y) * conf->sensibility;
 
-				// Analog Controls.
-				if ((i > PAD_RY) && (i <= PAD_R_LEFT))
-				{
-					Analog::ResetPad(pad, Analog::AnalogToPad(i));
-					i += 0xff00;
-				}
+				if (y == 0)
+					key_status->press(pad, pad_y, -MAX_ANALOG_VALUE);
+				else if (y == 0xFFFF)
+					key_status->press(pad, pad_y, MAX_ANALOG_VALUE);
+				else if (y < (s_previous_mouse_y -2))
+					key_status->press(pad, pad_y, -value);
+				else if (y > (s_previous_mouse_y +2))
+					key_status->press(pad, pad_y, value);
+				else
+					key_status->release(pad, pad_y);
 
-				if (i != -1)
-				{
-					clear_bit(keyPress, i);
-					set_bit(keyRelease, i);
-				}
+				s_previous_mouse_x = x;
+				s_previous_mouse_y = y;
+			}
 
-				event.evt = KEYRELEASE;
-				event.key = key;
-				break;
-
-			case FocusIn:
-				XAutoRepeatOff(GSdsp);
-				break;
-
-			case FocusOut:
-				XAutoRepeatOn(GSdsp);
-				break;
-		}
+			break;
 	}
-
-	UpdateKeys(pad, keyPress, keyRelease);
 }
 
-bool PollX11Keyboard(char* &temp, u32 &pkey)
+void PollForX11KeyboardInput(int pad)
+{
+	keyEvent evt;
+	XEvent E;
+	XButtonEvent* BE;
+
+	// Keyboard input send by PCSX2
+	while (!ev_fifo.empty()) {
+		AnalyzeKeyEvent(pad, ev_fifo.front());
+		pthread_spin_lock(&mutex_KeyEvent);
+		ev_fifo.pop();
+		pthread_spin_unlock(&mutex_KeyEvent);
+	}
+
+	// keyboard input
+	while (XPending(GSdsp) > 0)
+	{
+		XNextEvent(GSdsp, &E);
+		evt.evt = E.type;
+		evt.key = (int)XLookupKeysym((XKeyEvent *) & E, 0);
+		// Change the format of the structure to be compatible with GSOpen2
+		// mode (event come from pcsx2 not X)
+		BE = (XButtonEvent*)&E;
+		switch (evt.evt) {
+			case MotionNotify: evt.key = (BE->x & 0xFFFF) | (BE->y << 16); break;
+			case ButtonRelease:
+			case ButtonPress: evt.key = BE->button; break;
+			default: break;
+		}
+		AnalyzeKeyEvent(pad, evt);
+	}
+}
+
+bool PollX11KeyboardMouseEvent(u32 &pkey)
 {
 	GdkEvent *ev = gdk_event_get();
 
 	if (ev != NULL)
 	{
-		if (ev->type == GDK_KEY_PRESS)
-		{
+		if (ev->type == GDK_KEY_PRESS) {
 
 			if (ev->key.keyval == GDK_Escape)
-			{
-				temp = "Unknown";
-				pkey = NULL;
-			}
+				pkey = 0;
 			else
-			{
-				temp = KeysymToChar(ev->key.keyval);
 				pkey = ev->key.keyval;
-			}
 
+			return true;
+		} else if(ev->type == GDK_BUTTON_PRESS) {
+			pkey = ev->button.button;
 			return true;
 		}
 	}
 
 	return false;
 }
+
 #else
 LRESULT WINAPI PADwndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-	int keyPress[2] = {0}, keyRelease[2] = {0};
 	static bool lbutton = false, rbutton = false;
+	key_status->keyboard_state_acces(cpad);
 
 	switch (msg)
 	{
@@ -197,8 +264,7 @@ LRESULT WINAPI PADwndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				{
 					if (wParam ==  get_key(pad, i))
 					{
-						set_bit(keyPress[pad], i);
-						clear_bit(keyRelease[pad], i);
+						key_status->press(pad, i);
 						break;
 					}
 				}
@@ -215,8 +281,7 @@ LRESULT WINAPI PADwndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				{
 					if (wParam == get_key(pad,i))
 					{
-						set_bit(keyRelease[pad], i);
-						clear_bit(keyPress[pad], i);
+						key_status->release(pad, i);
 						break;
 					}
 				}
@@ -238,9 +303,7 @@ LRESULT WINAPI PADwndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	}
 
 	for (int pad = 0; pad < 2; ++pad)
-	{
-		UpdateKeys(pad, keyPress[pad], keyRelease[pad]);
-	}
+		key_status->commit_status(pad);
 
 	return TRUE;
 }

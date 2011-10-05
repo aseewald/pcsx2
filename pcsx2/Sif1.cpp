@@ -207,7 +207,7 @@ static __fi void HandleEETransfer()
 {
 	if(sif1dma.chcr.STR == false)
 	{
-		DevCon.Warning("Replacement for irq prevention hack EE SIF1");
+		//DevCon.Warning("Replacement for irq prevention hack EE SIF1");
 		sif1.ee.end = false;
 		sif1.ee.busy = false;
 		return;
@@ -351,8 +351,13 @@ __fi void dmaSIF1()
 	// These 2 games could be made playable again by increasing the time the EE or the IOP run,
 	// showing that this is very timing sensible.
 	// Doing this DMA unfortunately brings back an old warning in Legend of Legaia though, but it still works.
-	if (sif1.iop.busy)
-	{
-		SIF1Dma();
-	}
+	
+	//Updated 23/08/2011: The hangs are caused by the EE suspending SIF1 DMA and restarting it when in the middle 
+	//of processing a "REFE" tag, so the hangs can be solved by forcing the ee.end to be false
+	// (as it should always be at the beginning of a DMA).  using "if iop is busy" flags breaks Tom Clancy Rainbow Six.
+	// Legend of Legaia doesn't throw a warning either :)
+	sif1.ee.end = false;
+
+	SIF1Dma();
+
 }

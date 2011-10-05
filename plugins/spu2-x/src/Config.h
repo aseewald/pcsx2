@@ -62,11 +62,13 @@ extern wxString MemDumpFileName;
 extern wxString RegDumpFileName;
 
 extern int Interpolation;
-extern int ReverbBoost;
 extern int numSpeakers;
 extern bool EffectsDisabled;
 extern float FinalVolume;
 extern bool postprocess_filter_enabled;
+extern bool postprocess_filter_dealias;
+
+extern int dplLevel;
 
 extern u32 OutputModule;
 extern int SndOutLatencyMS;

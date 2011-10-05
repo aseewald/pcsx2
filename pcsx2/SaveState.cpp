@@ -21,6 +21,7 @@
 #include "ps2/BiosTools.h"
 #include "COP0.h"
 #include "VUmicro.h"
+#include "MTVU.h"
 #include "Cache.h"
 #include "AppConfig.h"
 
@@ -81,7 +82,7 @@ void SaveStateBase::Init( SafeArray<u8>* memblock )
 
 void SaveStateBase::PrepBlock( int size )
 {
-	pxAssumeDev( m_memory, "Savestate memory/buffer pointer is null!" );
+	pxAssertDev( m_memory, "Savestate memory/buffer pointer is null!" );
 
 	const int end = m_idx+size;
 	if( IsSaving() )
@@ -150,10 +151,9 @@ static const uint MainMemorySizeInBytes =
 
 SaveStateBase& SaveStateBase::FreezeMainMemory()
 {
-	if (IsLoading())
-		PreLoadPrep();
-	else
-		m_memory->MakeRoomFor( m_idx + MainMemorySizeInBytes );
+	vu1Thread.WaitVU(); // Finish VU1 just in-case...
+	if (IsLoading()) PreLoadPrep();
+	else m_memory->MakeRoomFor( m_idx + MainMemorySizeInBytes );
 
 	// First Block - Memory Dumps
 	// ---------------------------
@@ -175,8 +175,8 @@ SaveStateBase& SaveStateBase::FreezeMainMemory()
 
 SaveStateBase& SaveStateBase::FreezeInternals()
 {
-	if( IsLoading() )
-		PreLoadPrep();
+	vu1Thread.WaitVU(); // Finish VU1 just in-case...
+	if (IsLoading()) PreLoadPrep();
 
 	// Second Block - Various CPU Registers and States
 	// -----------------------------------------------
@@ -208,6 +208,7 @@ SaveStateBase& SaveStateBase::FreezeInternals()
 	ipuFreeze();
 	ipuDmaFreeze();
 	gifFreeze();
+	gifDmaFreeze();
 	sprFreeze();
 
 	// Fifth Block - iop-related systems
@@ -283,7 +284,7 @@ void memSavingState::FreezeMem( void* data, int size )
 
 void memSavingState::MakeRoomForData()
 {
-	pxAssumeDev( m_memory, "Savestate memory/buffer pointer is null!" );
+	pxAssertDev( m_memory, "Savestate memory/buffer pointer is null!" );
 
 	m_memory->ChunkSize = ReallocThreshold;
 	m_memory->MakeRoomFor( m_idx + MemoryBaseAllocSize );

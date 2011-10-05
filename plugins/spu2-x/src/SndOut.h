@@ -27,6 +27,7 @@ static const int SndOutPacketSize = 64;
 // downsamples 32 bit samples to 16 bit sound driver output (this way timestretching and
 // DSP effects get better precision results)
 static const int SndOutVolumeShift = 12;
+static const int SndOutVolumeShift32 = 16-SndOutVolumeShift; // shift up, not down
 
 // Samplerate of the SPU2. For accurate playback we need to match this
 // exactly.  Trying to scale samplerates and maintain SPU2's Ts timing accuracy
@@ -34,6 +35,18 @@ static const int SndOutVolumeShift = 12;
 static const int SampleRate = 48000;
 
 extern int FindOutputModuleById( const wchar_t* omodid );
+
+struct Stereo51Out16DplII;
+struct Stereo51Out32DplII;
+
+struct Stereo51Out16Dpl; // similar to DplII but without rear balancing
+struct Stereo51Out32Dpl;
+
+extern void ResetDplIIDecoder();
+extern void ProcessDplIISample16( const StereoOut32& src, Stereo51Out16DplII * s);
+extern void ProcessDplIISample32( const StereoOut32& src, Stereo51Out32DplII * s);
+extern void ProcessDplSample16( const StereoOut32& src, Stereo51Out16Dpl * s);
+extern void ProcessDplSample32( const StereoOut32& src, Stereo51Out32Dpl * s);
 
 struct StereoOut16
 {
@@ -111,7 +124,7 @@ struct Stereo21Out16
 	}
 };
 
-struct StereoQuadOut16
+struct Stereo40Out16
 {
 	s16 Left;
 	s16 Right;
@@ -124,6 +137,22 @@ struct StereoQuadOut16
 		Right = src.Right >> SndOutVolumeShift;
 		LeftBack = src.Left >> SndOutVolumeShift;
 		RightBack = src.Right >> SndOutVolumeShift;
+	}
+};
+
+struct Stereo40Out32
+{
+	s32 Left;
+	s32 Right;
+	s32 LeftBack;
+	s32 RightBack;
+
+	void ResampleFrom( const StereoOut32& src )
+	{
+		Left = src.Left << SndOutVolumeShift32;
+		Right = src.Right << SndOutVolumeShift32;
+		LeftBack = src.Left << SndOutVolumeShift32;
+		RightBack = src.Right << SndOutVolumeShift32;
 	}
 };
 
@@ -181,111 +210,53 @@ struct Stereo51Out16DplII
 
 	void ResampleFrom( const StereoOut32& src )
 	{
-		static const u8 sLogTable[256] = {
-			0x00,0x3C,0x60,0x78,0x8C,0x9C,0xA8,0xB4,0xBE,0xC8,0xD0,0xD8,0xDE,0xE4,0xEA,0xF0,
-			0xF6,0xFA,0xFE,0x04,0x08,0x0C,0x10,0x14,0x16,0x1A,0x1E,0x20,0x24,0x26,0x2A,0x2C,
-			0x2E,0x32,0x34,0x36,0x38,0x3A,0x3E,0x40,0x42,0x44,0x46,0x48,0x4A,0x4C,0x4E,0x50,
-			0x50,0x52,0x54,0x56,0x58,0x5A,0x5A,0x5C,0x5E,0x60,0x60,0x62,0x64,0x66,0x66,0x68,
-			0x6A,0x6A,0x6C,0x6E,0x6E,0x70,0x70,0x72,0x74,0x74,0x76,0x76,0x78,0x7A,0x7A,0x7C,
-			0x7C,0x7E,0x7E,0x80,0x80,0x82,0x82,0x84,0x84,0x86,0x86,0x88,0x88,0x8A,0x8A,0x8C,
-			0x8C,0x8C,0x8E,0x8E,0x90,0x90,0x92,0x92,0x92,0x94,0x94,0x96,0x96,0x96,0x98,0x98,
-			0x9A,0x9A,0x9A,0x9C,0x9C,0x9C,0x9E,0x9E,0xA0,0xA0,0xA0,0xA2,0xA2,0xA2,0xA4,0xA4,
-			0xA4,0xA6,0xA6,0xA6,0xA8,0xA8,0xA8,0xAA,0xAA,0xAA,0xAC,0xAC,0xAC,0xAC,0xAE,0xAE,
-			0xAE,0xB0,0xB0,0xB0,0xB2,0xB2,0xB2,0xB2,0xB4,0xB4,0xB4,0xB6,0xB6,0xB6,0xB6,0xB8,
-			0xB8,0xB8,0xB8,0xBA,0xBA,0xBA,0xBC,0xBC,0xBC,0xBC,0xBE,0xBE,0xBE,0xBE,0xC0,0xC0,
-			0xC0,0xC0,0xC2,0xC2,0xC2,0xC2,0xC2,0xC4,0xC4,0xC4,0xC4,0xC6,0xC6,0xC6,0xC6,0xC8,
-			0xC8,0xC8,0xC8,0xC8,0xCA,0xCA,0xCA,0xCA,0xCC,0xCC,0xCC,0xCC,0xCC,0xCE,0xCE,0xCE,
-			0xCE,0xCE,0xD0,0xD0,0xD0,0xD0,0xD0,0xD2,0xD2,0xD2,0xD2,0xD2,0xD4,0xD4,0xD4,0xD4,
-			0xD4,0xD6,0xD6,0xD6,0xD6,0xD6,0xD8,0xD8,0xD8,0xD8,0xD8,0xD8,0xDA,0xDA,0xDA,0xDA,
-			0xDA,0xDC,0xDC,0xDC,0xDC,0xDC,0xDC,0xDE,0xDE,0xDE,0xDE,0xDE,0xDE,0xE0,0xE0,0xE0,
-		};
+		ProcessDplIISample16(src, this);
+	}
+};
 
-		static s32 Gfl=0,Gfr=0;
-		static s32 LMax=0,RMax=0;
+struct Stereo51Out32DplII
+{
+	s32 Left;
+	s32 Right;
+	s32 Center;
+	s32 LFE;
+	s32 LeftBack;
+	s32 RightBack;
 
-		static s32 LAccum;
-		static s32 RAccum;
-		static s32 ANum;
+	void ResampleFrom( const StereoOut32& src )
+	{
+		ProcessDplIISample32(src, this);
+	}
+};
 
-		s32 ValL = src.Left >> (SndOutVolumeShift-8);
-		s32 ValR = src.Right >> (SndOutVolumeShift-8);
 
-		s32 XL = abs(ValL>>8);
-		s32 XR = abs(ValR>>8);
+struct Stereo51Out16Dpl
+{
+	s16 Left;
+	s16 Right;
+	s16 Center;
+	s16 LFE;
+	s16 LeftBack;
+	s16 RightBack;
 
-		if(XL>LMax) LMax = XL;
-		if(XR>RMax) RMax = XR;
+	void ResampleFrom( const StereoOut32& src )
+	{
+		ProcessDplSample16(src, this);
+	}
+};
 
-		ANum++;
-		if(ANum>=128)
-		{
-			ANum=0;
-			LAccum = 1+((LAccum * 224 + LMax * 31)>>8);
-			RAccum = 1+((RAccum * 224 + RMax * 31)>>8);
+struct Stereo51Out32Dpl
+{
+	s32 Left;
+	s32 Right;
+	s32 Center;
+	s32 LFE;
+	s32 LeftBack;
+	s32 RightBack;
 
-			LMax = 0;
-			RMax = 0;
-
-			s32 Tfl=(RAccum)*255/(LAccum);
-			s32 Tfr=(LAccum)*255/(RAccum);
-
-			int gMax = std::max(Tfl,Tfr);
-			Tfl = Tfl*255/gMax;
-			Tfr = Tfr*255/gMax;
-
-			if(Tfl>255) Tfl=255;
-			if(Tfr>255) Tfr=255;
-			if(Tfl<1) Tfl=1;
-			if(Tfr<1) Tfr=1;
-
-			Gfl = (Gfl * 200 + Tfl * 56)>>8;
-			Gfr = (Gfr * 200 + Tfr * 56)>>8;
-
-		}
-
-		s32 L,R,C,SUB,SL,SR;
-
-		C=(ValL+ValR)>>1; //16.8
-
-		ValL-=C;//16.8
-		ValR-=C;//16.8
-
-		L=ValL>>8; //16.0
-		R=ValR>>8; //16.0
-		C=C>>8;    //16.0
-		SUB = C;
-
-		{
-			s32 Cfl = 1+sLogTable[Gfl];
-			s32 Cfr = 1+sLogTable[Gfr];
-
-			s32 VL=(ValL>>4) * Cfl; //16.12
-			s32 VR=(ValR>>4) * Cfr;
-
-			//s32 SC = (VL-VR)>>15;
-
-			SL = (((VR/148 - VL/209)>>4)*Cfr)>>8;
-			SR = (((VR/209 - VL/148)>>4)*Cfl)>>8;
-
-		}
-
-		// Random-ish values to get it to compile
-		int GainL = 200;
-		int GainR = 200;
-		int GainC = 180;
-		int GainSL = 230;
-		int GainSR = 230;
-		int GainLFE = 200;
-		int AddCLR = 55;
-
-		int AddCX  = (C * AddCLR)>>8;
-
-		Left	= (((L   * GainL  ))>>8) + AddCX;
-		Right	= (((R   * GainR  ))>>8) + AddCX;
-		Center	= (((C   * GainC  ))>>8);
-		LFE		= (((SUB * GainLFE))>>8);
-		LeftBack	= (((SL  * GainSL ))>>8);
-		RightBack	= (((SR  * GainSR ))>>8);
+	void ResampleFrom( const StereoOut32& src )
+	{
+		ProcessDplSample32(src, this);
 	}
 };
 
@@ -314,11 +285,55 @@ struct Stereo71Out16
 	}
 };
 
+struct Stereo71Out32
+{
+	s32 Left;
+	s32 Right;
+	s32 Center;
+	s32 LFE;
+	s32 LeftBack;
+	s32 RightBack;
+	s32 LeftSide;
+	s32 RightSide;
+
+	void ResampleFrom( const StereoOut32& src )
+	{
+		Left = src.Left << SndOutVolumeShift32;
+		Right = src.Right << SndOutVolumeShift32;
+		Center = (src.Left + src.Right) << (SndOutVolumeShift32 - 1);
+		LFE = Center;
+		LeftBack = src.Left << SndOutVolumeShift32;
+		RightBack = src.Right << SndOutVolumeShift32;
+
+		LeftSide = src.Left << (SndOutVolumeShift32 - 1);
+		RightSide = src.Right << (SndOutVolumeShift32 - 1);
+	}
+};
+
+struct Stereo20Out32
+{
+	s32 Left;
+	s32 Right;
+	
+	void ResampleFrom( const StereoOut32& src )
+	{
+		Left = src.Left << SndOutVolumeShift32;
+		Right = src.Right << SndOutVolumeShift32;
+	}
+};
+
 struct Stereo21Out32
 {
 	s32 Left;
 	s32 Right;
 	s32 LFE;
+	
+	void ResampleFrom( const StereoOut32& src )
+	{
+		Left = src.Left << SndOutVolumeShift32;
+		Right = src.Right << SndOutVolumeShift32;
+		LFE = (src.Left + src.Right) << (SndOutVolumeShift32 - 1);
+	}
 };
 
 struct Stereo41Out32
@@ -328,6 +343,16 @@ struct Stereo41Out32
 	s32 LFE;
 	s32 LeftBack;
 	s32 RightBack;
+	
+	void ResampleFrom( const StereoOut32& src )
+	{
+		Left = src.Left << SndOutVolumeShift32;
+		Right = src.Right << SndOutVolumeShift32;
+		LFE = (src.Left + src.Right) << (SndOutVolumeShift32 - 1);
+
+		LeftBack = src.Left << SndOutVolumeShift32;
+		RightBack = src.Right << SndOutVolumeShift32;
+	}
 };
 
 struct Stereo51Out32
@@ -338,6 +363,16 @@ struct Stereo51Out32
 	s32 LFE;
 	s32 LeftBack;
 	s32 RightBack;
+
+	void ResampleFrom( const StereoOut32& src )
+	{
+		Left = src.Left << SndOutVolumeShift32;
+		Right = src.Right << SndOutVolumeShift32;
+		Center = (src.Left + src.Right) << (SndOutVolumeShift32 - 1);
+		LFE = Center;
+		LeftBack = src.Left << SndOutVolumeShift32;
+		RightBack = src.Right << SndOutVolumeShift32;
+	}
 };
 
 // Developer Note: This is a static class only (all static members).
@@ -350,7 +385,7 @@ private:
 
 	static StereoOut32* sndTempBuffer;
 	static StereoOut16* sndTempBuffer16;
-
+	
 	static int sndTempProgress;
 	static int m_dsp_progress;
 
@@ -359,17 +394,16 @@ private:
 
 	static StereoOut32 *m_buffer;
 	static s32 m_size;
-	static s32 m_rpos;
-	static s32 m_wpos;
-	static s32 m_data;
 
+	static __aligned(4) volatile s32 m_rpos;
+	static __aligned(4) volatile s32 m_wpos;
+	
 	static float lastEmergencyAdj;
 	static float cTempo;
 	static float eTempo;
 	static int ssFreeze;
 
 	static void _InitFail();
-	static void _WriteSamples(StereoOut32* bData, int nSamples);
 	static bool CheckUnderrunStatus( int& nSamples, int& quietSampleCount );
 
 	static void soundtouchInit();
@@ -382,7 +416,19 @@ private:
 	static void PredictDataWrite( int samples );
 	static float GetStatusPct();
 	static void UpdateTempoChangeSoundTouch();
+	static void UpdateTempoChangeSoundTouch2();
 
+	static void _WriteSamples(StereoOut32* bData, int nSamples);
+		
+	static void _WriteSamples_Safe(StereoOut32* bData, int nSamples);
+	static void _ReadSamples_Safe(StereoOut32* bData, int nSamples);
+
+	static void _WriteSamples_Internal(StereoOut32 *bData, int nSamples);
+	static void _DropSamples_Internal(int nSamples);
+	static void _ReadSamples_Internal(StereoOut32 *bData, int nSamples);
+
+	static int _GetApproximateDataInBuffer(); 
+	
 public:
 	static void UpdateTempoChangeAsyncMixing();
 	static void Init();
@@ -428,9 +474,7 @@ public:
 
 	// Saves settings to the INI file for this driver
 	virtual void WriteSettings() const=0;
-
-	virtual bool Is51Out() const=0;
-
+	
 	// Returns the number of empty samples in the output buffer.
 	// (which is effectively the amount of data played since the last update)
 	virtual int GetEmptySampleCount() =0;

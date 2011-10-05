@@ -7,7 +7,7 @@ endif(NOT TOP_CMAKE_WAS_SOURCED)
 
 
 # plugin name
-set(Output zzogl)
+set(Output zzogl-0.3.0)
 
 set(CommonFlags
     -pthread
@@ -147,18 +147,6 @@ add_library(${Output} SHARED
     ${zzoglLinuxSources}
     ${zzoglLinuxHeaders})
 
-# set output directory
-set_target_properties(${Output} PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin/plugins)
-
-# WARNING can conflict with zerogs plugin
-# copy ps2hw.dat to plugins folder
-add_custom_command(TARGET ${Output} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/plugins/zzogl-pg/opengl/ps2hw.dat ${PROJECT_SOURCE_DIR}/bin/plugins)
-# copy ps2glsl.fx to plugins folder
-add_custom_command(TARGET ${Output} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/plugins/zzogl-pg/opengl/ps2glsl.fx ${PROJECT_SOURCE_DIR}/bin/plugins)
-
 # link target with project internal libraries
 target_link_libraries(${Output} Utilities)
 
@@ -183,3 +171,13 @@ target_link_libraries(${Output} ${JPEG_LIBRARIES})
 if(NOT USER_CMAKE_LD_FLAGS STREQUAL "")
     target_link_libraries(${Output} "${USER_CMAKE_LD_FLAGS}")
 endif(NOT USER_CMAKE_LD_FLAGS STREQUAL "")
+
+if(PACKAGE_MODE)
+    install(TARGETS ${Output} DESTINATION ${PLUGIN_DIR})
+    install(FILES ${PROJECT_SOURCE_DIR}/plugins/zzogl-pg/opengl/ps2hw.dat DESTINATION ${PLUGIN_DIR})
+    install(FILES ${PROJECT_SOURCE_DIR}/plugins/zzogl-pg/opengl/ps2glsl.fx DESTINATION ${PLUGIN_DIR})
+else(PACKAGE_MODE)
+    install(TARGETS ${Output} DESTINATION ${CMAKE_SOURCE_DIR}/bin/plugins)
+    install(FILES ${PROJECT_SOURCE_DIR}/plugins/zzogl-pg/opengl/ps2hw.dat DESTINATION ${CMAKE_SOURCE_DIR}/bin/plugins)
+    install(FILES ${PROJECT_SOURCE_DIR}/plugins/zzogl-pg/opengl/ps2glsl.fx DESTINATION ${CMAKE_SOURCE_DIR}/bin/plugins)
+endif(PACKAGE_MODE)

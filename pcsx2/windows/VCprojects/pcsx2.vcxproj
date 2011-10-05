@@ -409,6 +409,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\GameDatabase.cpp" />
+    <ClCompile Include="..\..\Gif_Logger.cpp" />
+    <ClCompile Include="..\..\Gif_Unit.cpp" />
     <ClCompile Include="..\..\gui\AppGameDatabase.cpp" />
     <ClCompile Include="..\..\gui\AppUserMode.cpp" />
     <ClCompile Include="..\..\gui\Dialogs\GameDatabaseDialog.cpp" />
@@ -455,6 +457,7 @@
     <ClCompile Include="..\..\Memory.cpp" />
     <ClCompile Include="..\..\x86\ix86-32\recVTLB.cpp" />
     <ClCompile Include="..\..\vtlb.cpp" />
+    <ClCompile Include="..\..\MTVU.cpp" />
     <ClCompile Include="..\..\VUmicro.cpp" />
     <ClCompile Include="..\..\VUmicroMem.cpp" />
     <ClCompile Include="..\..\x86\iVU1micro.cpp" />
@@ -548,7 +551,6 @@
     <ClCompile Include="..\..\Ipu\yuv2rgb.cpp" />
     <ClCompile Include="..\..\Ipu\mpeg2lib\Idct.cpp" />
     <ClCompile Include="..\..\Ipu\mpeg2lib\Mpeg.cpp" />
-    <ClCompile Include="..\..\ps2\GIFpath.cpp" />
     <ClCompile Include="..\..\GS.cpp" />
     <ClCompile Include="..\..\GSState.cpp" />
     <ClCompile Include="..\..\MTGS.cpp" />
@@ -681,6 +683,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\GameDatabase.h" />
+    <ClInclude Include="..\..\Gif_Unit.h" />
     <ClInclude Include="..\..\gui\AppGameDatabase.h" />
     <ClInclude Include="..\..\gui\Panels\MemoryCardPanels.h" />
     <ClInclude Include="..\..\IPU\IPUdma.h" />
@@ -711,7 +714,8 @@
     <ClInclude Include="..\..\Cache.h" />
     <ClInclude Include="..\..\Memory.h" />
     <ClInclude Include="..\..\vtlb.h" />
-    <ClInclude Include="..\..\VU.h" />
+    <ClInclude Include="..\..\MTVU.h" />
+	<ClInclude Include="..\..\VU.h" />
     <ClInclude Include="..\..\VUmicro.h" />
     <ClInclude Include="..\..\x86\microVU.h" />
     <ClInclude Include="..\..\x86\microVU_IR.h" />

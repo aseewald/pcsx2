@@ -97,6 +97,10 @@ GSTextureCache::Source* GSTextureCache::LookupSource(const GIFRegTEX0& TEX0, con
 		uint32 bp = TEX0.TBP0;
 		uint32 psm = TEX0.PSM;
 
+		// This should get looked at if you feel like hackfixing the texture cache.
+		// Checking for type < 1 (so no only RenderTarget, not DepthStencil get checked), it fixes the fog in Arc the Lad.
+		// Simply not doing this code at all makes a lot of previsouly missing stuff show (but breaks pretty much everything
+		// else.
 		for(int type = 0; type < 2 && dst == NULL; type++)
 		{
 			for(list<Target*>::iterator i = m_dst[type].begin(); i != m_dst[type].end(); i++)
@@ -732,7 +736,10 @@ GSTextureCache::Source* GSTextureCache::CreateSource(const GIFRegTEX0& TEX0, con
 			src->m_texture = dt;
 		}
 
-		src->m_texture->SetScale(scale);
+		if( src->m_texture )
+			src->m_texture->SetScale(scale);
+		else
+			ASSERT(0);
 
 		switch(TEX0.PSM)
 		{

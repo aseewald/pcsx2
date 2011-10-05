@@ -51,10 +51,11 @@ void vuMemoryReserve::Reset()
 {
 	_parent::Reset();
 	
-	pxAssume( VU0.Mem );
-	pxAssume( VU1.Mem );
+	pxAssert( VU0.Mem );
+	pxAssert( VU1.Mem );
 
-	memMapVUmicro();
+	// Below memMap is already called by "void eeMemoryReserve::Reset()"
+	//memMapVUmicro();
 
 	// === VU0 Initialization ===
 	memzero(VU0.ACC);

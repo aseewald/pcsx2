@@ -21,17 +21,15 @@
 
 #include "joystick.h"
 #include "onepad.h"
+#include "keyboard.h"
 
 #include <string.h>
 #include <gtk/gtk.h>
 #include "linux.h"
 #include <gdk/gdkx.h>
 
-extern void PollForKeyboardInput(int pad);
-extern void SetAutoRepeat(bool autorep);
 Display *GSdsp;
-
-extern string KeyName(int pad, int key);
+Window	GSwin;
 
 void SysMessage(const char *fmt, ...)
 {
@@ -66,22 +64,8 @@ EXPORT_C_(s32) PADtest()
 
 s32  _PADopen(void *pDsp)
 {
-    GtkScrolledWindow *win;
-
-    win = *(GtkScrolledWindow**) pDsp;
-
-	if (GTK_IS_WIDGET(win))
-	{
-	    // Since we have a GtkScrolledWindow, for now we'll grab whatever display
-	    // comes along instead. Later, we can fiddle with this, but I'm not sure the
-	    // best way to get a Display* out of a GtkScrolledWindow. A GtkWindow I might
-	    // be able to manage... --arcum42
-        GSdsp = GDK_DISPLAY_XDISPLAY(gdk_display_get_default());
-	}
-	else
-	{
-        GSdsp = *(Display**)pDsp;
-	}
+	GSdsp = *(Display**)pDsp;
+	GSwin = (Window)*(((u32*)pDsp)+1);
 
     SetAutoRepeat(false);
 	return 0;
@@ -103,97 +87,94 @@ void _PADclose()
 	s_vjoysticks.clear();
 }
 
-EXPORT_C_(void) PADupdate(int pad)
+void PollForJoystickInput(int cpad)
 {
-	// Poll keyboard.
-	PollForKeyboardInput(pad);
+	int joyid = conf->get_joyid(cpad);
+	if (!JoystickIdWithinBounds(joyid)) return;
 
-	// joystick info
 	SDL_JoystickUpdate();
-
 	for (int i = 0; i < MAX_KEYS; i++)
 	{
-		int cpad = PadEnum[pad][0];
+		JoystickInfo* pjoy = s_vjoysticks[joyid];
 
-		if (JoystickIdWithinBounds(key_to_joystick_id(cpad, i)))
+		switch (type_of_joykey(cpad, i))
 		{
-			JoystickInfo* pjoy = s_vjoysticks[key_to_joystick_id(cpad, i)];
-			int pad = (pjoy)->GetPAD();
-
-			switch (type_of_key(cpad, i))
-			{
-				case PAD_JOYBUTTONS:
+			case PAD_JOYBUTTONS:
 				{
-					int value = SDL_JoystickGetButton((pjoy)->GetJoy(), key_to_button(cpad, i));
 
+					int value = SDL_JoystickGetButton((pjoy)->GetJoy(), key_to_button(cpad, i));
 					if (value)
-						clear_bit(status[pad], i); // released
+						key_status->press(cpad, i);
 					else
-						set_bit(status[pad], i); // pressed
+						key_status->release(cpad, i);
+
 					break;
 				}
 			case PAD_HAT:
 				{
 					int value = SDL_JoystickGetHat((pjoy)->GetJoy(), key_to_axis(cpad, i));
 
-					if (key_to_hat_dir(cpad, i) == value)
-					{
-						clear_bit(status[pad], i);
-						//PAD_LOG("Registered %s\n", HatName(value), i);
-						//PAD_LOG("%s\n", KeyName(cpad, i).c_str());
-					}
+					// key_to_hat_dir and SDL_JoystickGetHat are a 4 bits bitmap, one for each directions. Only 1 bit can be high for
+					// key_to_hat_dir. SDL_JoystickGetHat handles diagonal too (2 bits) so you must check the intersection
+					// '&' not only equality '=='. -- Gregory
+					if (key_to_hat_dir(cpad, i) & value)
+						key_status->press(cpad, i);
 					else
-					{
-						set_bit(status[pad], i);
-					}
+						key_status->release(cpad, i);
+
 					break;
 				}
-			case PAD_POV:
+			case PAD_AXIS:
 				{
 					int value = pjoy->GetAxisFromKey(cpad, i);
+					bool sign = key_to_axis_sign(cpad, i);
+					bool full_axis = key_to_axis_type(cpad, i);
 
-					PAD_LOG("%s: %d (%d)\n", KeyName(cpad, i).c_str(), value, key_to_pov_sign(cpad, i));
-					if (key_to_pov_sign(cpad, i) && (value < -2048))
-					{
-						//PAD_LOG("%s Released+.\n", KeyName(cpad, i).c_str());
-						clear_bit(status[pad], i);
-					}
-					else if (!key_to_pov_sign(cpad, i) && (value > 2048))
-					{
-						//PAD_LOG("%s Released-\n", KeyName(cpad, i).c_str());
-						clear_bit(status[pad], i);
-					}
-					else
-					{
-						//PAD_LOG("%s Pressed.\n", KeyName(cpad, i).c_str());
-						set_bit(status[pad], i);
-					}
-					break;
-				}
-				case PAD_JOYSTICK:
-				{
-					int value = pjoy->GetAxisFromKey(cpad, i);
+					if (IsAnalogKey(i)) {
+						if (abs(value) > pjoy->GetDeadzone())
+							key_status->press(cpad, i, value);
+						else
+							key_status->release(cpad, i);
 
-					switch (i)
-					{
-						case PAD_LX:
-						case PAD_LY:
-						case PAD_RX:
-						case PAD_RY:
-							if (abs(value) > (pjoy)->GetDeadzone(/*value*/))
-								Analog::ConfigurePad(pad, i, value);
+					} else {
+						if (full_axis) {
+							value += 0x8000;
+							if (value > pjoy->GetDeadzone())
+								key_status->press(cpad, i, min(value/256 , 0xFF));
 							else
-								Analog::ResetPad(pad, i);
-							break;
+								key_status->release(cpad, i);
+
+						} else {
+							if (sign && (-value > pjoy->GetDeadzone()))
+								key_status->press(cpad, i, min(-value /128, 0xFF));
+							else if (!sign && (value > pjoy->GetDeadzone()))
+								key_status->press(cpad, i, min(value /128, 0xFF));
+							else
+								key_status->release(cpad, i);
+						}
 					}
-					break;
 				}
 			default: break;
-			}
 		}
 	}
 }
 
+EXPORT_C_(void) PADupdate(int pad)
+{
+	// Actually PADupdate is always call with pad == 0. So you need to update both
+	// pads -- Gregory
+	for (int cpad = 0; cpad < 2; cpad++) {
+		// Poll keyboard/mouse event
+		key_status->keyboard_state_acces(cpad);
+		PollForX11KeyboardInput(cpad);
+
+		// Get joystick state
+		key_status->joystick_state_acces(cpad);
+		PollForJoystickInput(cpad);
+
+		key_status->commit_status(cpad);
+	}
+}
 
 EXPORT_C_(void) PADconfigure()
 {

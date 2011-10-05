@@ -347,6 +347,16 @@ void AddForce(ButtonSum *sum, u8 cmd, int delta = 255) {
 
 void ProcessButtonBinding(Binding *b, ButtonSum *sum, int value) {
 	if (value < b->deadZone || !value) return;
+	
+	if ( config.turboKeyHack == 1 ){ // send a tabulator keypress to emulator
+		if ( b->command == 0x12 ){ // R3 button
+			static unsigned int LastCheck = 0;
+			unsigned int t = timeGetTime();
+			if (t - LastCheck < 300 ) return;
+			QueueKeyEvent(VK_TAB, KEYPRESS);
+			LastCheck = t;
+		}
+	}
 
 	int sensitivity = b->sensitivity;
 	if (sensitivity < 0) {
@@ -713,7 +723,7 @@ void ResetPad(int port, int slot) {
 	pads[port][slot].umask[0] = pads[port][slot].umask[1] = 0xFF;
 	// Sets up vibrate variable.
 	ResetVibrate(port, slot);
-	if (config.padConfigs[port][slot].autoAnalog) {
+	if (config.padConfigs[port][slot].autoAnalog && !ps2e) {
 		pads[port][slot].mode = MODE_ANALOG;
 	}
 	pads[port][slot].initialized = 1;
@@ -823,8 +833,8 @@ ExtraWndProcResult TitleHackWndProc(HWND hWndTop, UINT uMsg, WPARAM wParam, LPAR
 				else {
 					len = MultiByteToWideChar(CP_ACP, 0, (char*) lParam, -1, text, sizeof(text)/sizeof(wchar_t));
 				}
-				if (len > 0 && len < 150 && !wcsstr(text, L" | State ")) {
-					wsprintfW(text+len, L" | State %i", saveStateIndex);
+				if (len > 0 && len < 150 && !wcsstr(text, L" | State(Lilypad) ")) {
+					wsprintfW(text+len, L" | State(Lilypad) %i", saveStateIndex);
 					SetWindowText(hWndTop, text);
 					return NO_WND_PROC;
 				}
@@ -1252,7 +1262,7 @@ u8 CALLBACK PADpoll(u8 value) {
 					}
 					else {
 						pad->modeLock = 0;
-						if (pad->mode == MODE_DIGITAL && config.padConfigs[query.port][query.slot].autoAnalog) {
+						if (pad->mode == MODE_DIGITAL && config.padConfigs[query.port][query.slot].autoAnalog && !ps2e) {
 							pad->mode = MODE_ANALOG;
 						}
 					}

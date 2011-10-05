@@ -20,8 +20,6 @@
 #include "Dma.h"
 #include "Dialogs.h"
 
-#include "x86emitter/tools.h"
-
 #ifdef _MSC_VER
 #	include "svnrev.h"
 #endif
@@ -296,6 +294,15 @@ EXPORT_C_(void) CALLBACK SPU2writeDMA7Mem(u16* pMem, u32 size)
 	Cores[1].DoDMAwrite(pMem,size);
 }
 
+EXPORT_C_(void) SPU2reset()
+{
+	memset(spu2regs, 0, 0x010000);
+	memset(_spu2mem, 0, 0x200000);
+	memset(_spu2mem + 0x2800, 7, 0x10); // from BIOS reversal. Locks the voices so they don't run free.
+	Cores[0].Init(0);
+	Cores[1].Init(1);
+}
+
 EXPORT_C_(s32) SPU2init()
 {
 	assert( regtable[0x400] == NULL );
@@ -349,17 +356,14 @@ EXPORT_C_(s32) SPU2init()
 		}
 	}
 
-	memset(spu2regs, 0, 0x010000);
-	memset(_spu2mem, 0, 0x200000);
-	Cores[0].Init(0);
-	Cores[1].Init(1);
+	SPU2reset();
 
 	DMALogOpen();
 	InitADSR();
 
 #ifdef S2R_ENABLE
 	if(!replay_mode)
-		s2r_open("replay_dump.s2r");
+		s2r_open(Cycles,"replay_dump.s2r");
 #endif
 	return 0;
 }

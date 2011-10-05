@@ -309,6 +309,12 @@ GSVector4i GSState::GetFrameRect(int i)
 	int w = r.width();
 	int h = r.height();
 
+	//Fixme: These games have an extra black bar at bottom of screen
+	if((m_game.title == CRC::DevilMayCry3 || m_game.title == CRC::SkyGunner) && (m_game.region == CRC::US || m_game.region == CRC::JP))
+	{
+		h = 448; //
+	}
+	
 	if(m_regs->SMODE2.INT && m_regs->SMODE2.FFMD && h > 1) h >>= 1;
 
 	//Breaks Disgaea2 FMV borders
@@ -966,7 +972,7 @@ template<int i> void GSState::GIFRegHandlerFRAME(const GIFReg* r)
 		m_env.CTXT[i].offset.zb = m_mem.GetOffset(m_env.CTXT[i].ZBUF.Block(), r->FRAME.FBW, m_env.CTXT[i].ZBUF.PSM);
 		m_env.CTXT[i].offset.fzb = m_mem.GetPixelOffset4(r->FRAME, m_env.CTXT[i].ZBUF);
 	}
-
+	
 	m_env.CTXT[i].FRAME = (GSVector4i)r->FRAME;
 #ifdef DISABLE_BITMASKING
 	m_env.CTXT[i].FRAME.FBMSK = GSVector4i::store(GSVector4i::load((int)m_env.CTXT[i].FRAME.FBMSK).eq8(GSVector4i::xffffffff()));
@@ -1908,6 +1914,7 @@ struct GSFrameInfo
 };
 
 typedef bool (*GetSkipCount)(const GSFrameInfo& fi, int& skip);
+CRC::Region g_crc_region = CRC::NoRegion;
 
 bool GSC_Okami(const GSFrameInfo& fi, int& skip)
 {
@@ -1948,9 +1955,16 @@ bool GSC_MetalGearSolid3(const GSFrameInfo& fi, int& skip)
 		{
 			skip = 0;
 		}
-		else if(!fi.TME && fi.FBP == fi.TBP0 && fi.FBP == 0x2000 && fi.FPSM == PSM_PSMCT32 && fi.TPSM == PSM_PSMCT24)
+		else if(!fi.TME && fi.FBP == fi.TBP0 && fi.TBP0 == 0x2000 && fi.FPSM == PSM_PSMCT32 && fi.TPSM == PSM_PSMCT24)
 		{
-			skip = 119;
+			if(g_crc_region == CRC::US || g_crc_region == CRC::JP || g_crc_region == CRC::KO)
+			{
+				skip = 119;	//ntsc
+			}
+			else
+			{
+				skip = 136;	//pal
+			}
 		}
 	}
 
@@ -1961,11 +1975,11 @@ bool GSC_DBZBT2(const GSFrameInfo& fi, int& skip)
 {
 	if(skip == 0)
 	{
-		if(fi.TME && /*fi.FBP == 0x00000 && fi.FPSM == PSM_PSMCT16 &&*/ fi.TBP0 == 0x02000 && fi.TPSM == PSM_PSMZ16)
+		if(fi.TME && /*fi.FBP == 0x00000 && fi.FPSM == PSM_PSMCT16 &&*/ (fi.TBP0 == 0x01c00 || fi.TBP0 == 0x02000) && fi.TPSM == PSM_PSMZ16)
 		{
-			skip = 27;
+			skip = 26; //27
 		}
-		else if(!fi.TME && fi.FBP == 0x03000 && fi.FPSM == PSM_PSMCT16)
+		else if(!fi.TME && (fi.FBP == 0x02a00 || fi.FBP == 0x03000) && fi.FPSM == PSM_PSMCT16)
 		{
 			skip = 10;
 		}
@@ -1978,17 +1992,40 @@ bool GSC_DBZBT3(const GSFrameInfo& fi, int& skip)
 {
 	if(skip == 0)
 	{
-		if(fi.TME && fi.FBP == 0x01c00 && fi.FPSM == PSM_PSMCT32 && (fi.TBP0 == 0x00000 || fi.TBP0 == 0x00e00) && fi.TPSM == PSM_PSMT8H)
+		if(fi.TME && fi.FBP == 0x01c00 && fi.FPSM == PSM_PSMCT32 && (fi.TBP0 == 0x00000 || fi.TBP0 == 0x00e00 || fi.TBP0 == 0x01000) && fi.TPSM == PSM_PSMT8H)
 		{
-			skip = 24; // blur
+			//not needed anymore?
+			//skip = 24; // blur
 		}
-		else if(fi.TME && (fi.FBP == 0x00000 || fi.FBP == 0x00e00) && fi.FPSM == PSM_PSMCT32 && fi.TPSM == PSM_PSMT8H)
+		else if(fi.TME && (fi.FBP == 0x00000 || fi.FBP == 0x00e00 || fi.FBP == 0x01000) && fi.FPSM == PSM_PSMCT32 && fi.TPSM == PSM_PSMT8H)
 		{
-			skip = 28; // outline
+			if(fi.FBMSK == 0x00000)
+			{
+				skip = 28; // outline
+			}
+			if(fi.FBMSK == 0x00FFFFFF)
+			{
+				skip = 1;
+			}
+		}
+		else if(fi.TME && (fi.FBP == 0x00000 || fi.FBP == 0x00e00 || fi.FBP == 0x01000) && fi.FPSM == PSM_PSMCT16 && fi.TPSM == PSM_PSMZ16)
+		{
+			skip = 5;
+		}
+		else if(fi.TME && fi.FPSM == fi.TPSM && fi.TBP0 == 0x03f00 && fi.TPSM == PSM_PSMCT32)
+		{
+			if (fi.FBP == 0x03400)
+			{
+				skip = 1;	//PAL
+			}
+			if(fi.FBP == 0x02e00)
+			{
+				skip = 3;	//NTSC
+			}
 		}
 	}
 
-	return true;
+    return true;
 }
 
 bool GSC_SFEX3(const GSFrameInfo& fi, int& skip)
@@ -2048,22 +2085,31 @@ bool GSC_BullyCC(const GSFrameInfo& fi, int& skip)
 }
 bool GSC_SoTC(const GSFrameInfo& fi, int& skip)
 {
-	// Not needed anymore? What did it fix anyway? (rama)
-	/*if(skip == 0)
-	{
-		if(fi.TME && fi.FBP == 0x02b80 && fi.FPSM == PSM_PSMCT24 && fi.TBP0 == 0x01e80 && fi.TPSM == PSM_PSMCT24)
-		{
-			skip = 9;
-		}
-		else if(fi.TME && fi.FBP == 0x01c00 && fi.FPSM == PSM_PSMCT32 && fi.TBP0 == 0x03800 && fi.TPSM == PSM_PSMCT32)
-		{
-			skip = 8;
-		}
-		else if(fi.TME && fi.FBP == 0x01e80 && fi.FPSM == PSM_PSMCT32 && fi.TBP0 == 0x03880 && fi.TPSM == PSM_PSMCT32)
-		{
-			skip = 8;
-		}
-	}*/
+            // Not needed anymore? What did it fix anyway? (rama)
+    if(skip == 0)
+    {
+            if(fi.TME /*&& fi.FBP == 0x03d80*/ && fi.FPSM == 0 && fi.TBP0 == 0x03fc0 && fi.TPSM == 1)
+            {
+                    skip = 48;	//removes sky bloom
+            }
+            /*
+            if(fi.TME && fi.FBP == 0x02b80 && fi.FPSM == PSM_PSMCT24 && fi.TBP0 == 0x01e80 && fi.TPSM == PSM_PSMCT24)
+            {
+                    skip = 9;
+            }
+            else if(fi.TME && fi.FBP == 0x01c00 && fi.FPSM == PSM_PSMCT32 && fi.TBP0 == 0x03800 && fi.TPSM == PSM_PSMCT32)
+            {
+                    skip = 8;
+            }
+            else if(fi.TME && fi.FBP == 0x01e80 && fi.FPSM == PSM_PSMCT32 && fi.TBP0 == 0x03880 && fi.TPSM == PSM_PSMCT32)
+            {
+                    skip = 8;
+            }*/
+    }
+
+
+     
+
 
 	return true;
 }
@@ -2122,9 +2168,13 @@ bool GSC_GT4(const GSFrameInfo& fi, int& skip)
 {
 	if(skip == 0)
 	{
-		if(fi.TME && (fi.FBP == 0x03440 || fi.FBP >= 0x03e00) && fi.FPSM == PSM_PSMCT32 && (fi.TBP0 == 0x00000 || fi.TBP0 == 0x01400) && fi.TPSM == PSM_PSMT8)
+		if(fi.TME && fi.FBP >= 0x02f00 && fi.FPSM == PSM_PSMCT32 && (fi.TBP0 == 0x00000 || fi.TBP0 == 0x01180 /*|| fi.TBP0 == 0x01a40*/) && fi.TPSM == PSM_PSMT8) //TBP0 0x1a40 progressive
 		{
-			skip = 880;
+			skip = 770;	//ntsc, progressive 1540
+		}
+		if(g_crc_region == CRC::EU && fi.TME && fi.FBP >= 0x03400 && fi.FPSM == PSM_PSMCT32 && (fi.TBP0 == 0x00000 || fi.TBP0 == 0x01400 ) && fi.TPSM == PSM_PSMT8)
+		{
+			skip = 880;	//pal
 		}
 		else if(fi.TME && (fi.FBP == 0x00000 || fi.FBP == 0x01400) && fi.FPSM == PSM_PSMCT24 && fi.TBP0 >= 0x03420 && fi.TPSM == PSM_PSMT8)
 		{
@@ -2349,9 +2399,9 @@ bool GSC_GodOfWar(const GSFrameInfo& fi, int& skip)
 {
 	if(skip == 0)
 	{
-		if(fi.TME && fi.FBP == 0x00000 && fi.FPSM == PSM_PSMCT16 && fi.TBP0 == 0x00000 && fi.TPSM == PSM_PSMCT16)
+		if(fi.TME && fi.FBP == 0x00000 && fi.FPSM == PSM_PSMCT16 && fi.TBP0 == 0x00000 && fi.TPSM == PSM_PSMCT16 && fi.FBMSK == 0x03FFF)
 		{
-			skip = 30;
+			skip = 1000;
 		}
 		else if(fi.TME && fi.FBP == 0x00000 && fi.FPSM == PSM_PSMCT32 && fi.TBP0 == 0x00000 && fi.TPSM == PSM_PSMCT32 && fi.FBMSK == 0xff000000)
 		{
@@ -2360,6 +2410,13 @@ bool GSC_GodOfWar(const GSFrameInfo& fi, int& skip)
 		else if(fi.FBP == 0x00000 && fi.FPSM == PSM_PSMCT32 && fi.TPSM == PSM_PSMT8 && ((fi.TZTST == 2 && fi.FBMSK == 0x00FFFFFF) || (fi.TZTST == 1 && fi.FBMSK == 0x00FFFFFF) || (fi.TZTST == 3 && fi.FBMSK == 0xFF000000)))
 		{
 			skip = 1; // wall of fog
+		}
+	}
+	else
+	{
+		if(fi.TME && fi.FBP == 0x00000 && fi.FPSM == PSM_PSMCT16)
+		{
+			skip = 3;
 		}
 	}
 
@@ -2372,19 +2429,27 @@ bool GSC_GodOfWar2(const GSFrameInfo& fi, int& skip)
 	{
 		if(fi.TME)
 		{
-			if(fi.FBP == 0x00100 && fi.FPSM == PSM_PSMCT16 && fi.TBP0 == 0x00100 && fi.TPSM == PSM_PSMCT16 // ntsc
+			if( fi.FBP == 0x00100 && fi.FPSM == PSM_PSMCT16 && fi.TBP0 == 0x00100 && fi.TPSM == PSM_PSMCT16 // ntsc
 				|| fi.FBP == 0x02100 && fi.FPSM == PSM_PSMCT16 && fi.TBP0 == 0x02100 && fi.TPSM == PSM_PSMCT16) // pal
 			{
-				skip = 29; // shadows
+				skip = 1000; // shadows
 			}
-			if(fi.FBP == 0x00100 && fi.FPSM == PSM_PSMCT32 && (fi.TBP0 & 0x03000) == 0x03000
+			if((fi.FBP == 0x00100 || fi.FBP == 0x02100) && fi.FPSM == PSM_PSMCT32 && (fi.TBP0 & 0x03000) == 0x03000
 				&& (fi.TPSM == PSM_PSMT8 || fi.TPSM == PSM_PSMT4)
-				&& ((fi.TZTST == 2 && fi.FBMSK == 0x00FFFFFF) || (fi.TZTST == 1 && fi.FBMSK == 0x00FFFFFF) || (fi.TZTST == 3 && fi.FBMSK == 0xFF000000))){
+				&& ((fi.TZTST == 2 && fi.FBMSK == 0x00FFFFFF) || (fi.TZTST == 1 && fi.FBMSK == 0x00FFFFFF) || (fi.TZTST == 3 && fi.FBMSK == 0xFF000000)))
+			{
 					skip = 1; // wall of fog
 			}
 		}
 	}
-
+	else
+	{
+		if(fi.TME && (fi.FBP == 0x00100 || fi.FBP == 0x02100) && fi.FPSM == PSM_PSMCT16)
+		{
+			skip = 3;
+		}
+	}
+	
 	return true;
 }
 
@@ -2442,14 +2507,14 @@ bool GSC_SonicUnleashed(const GSFrameInfo& fi, int& skip)
 {
 	if(skip == 0)
 	{
-		if(fi.TME && fi.FPSM == PSM_PSMCT16S && fi.TBP0 == 0x00000 && fi.TPSM == PSM_PSMCT16 && fi.FBMSK == 0x00000)
+		if(fi.TME && fi.FPSM == PSM_PSMCT16S && fi.TBP0 == 0x00000 && fi.TPSM == PSM_PSMCT16)
 		{
 			skip = 1000; // shadow
 		}
 	}
 	else
 	{
-		if(fi.TME && fi.FBP == 0x00000 && fi.FPSM == PSM_PSMCT16 && fi.TPSM == PSM_PSMCT16S && fi.FBMSK == 0x00000)
+		if(fi.TME && fi.FBP == 0x00000 && fi.FPSM == PSM_PSMCT16 && fi.TPSM == PSM_PSMCT16S)
 		{
 			skip = 2;
 		}
@@ -2597,20 +2662,7 @@ bool GSC_SuikodenTactics(const GSFrameInfo& fi, int& skip)
 	return true;
 }
 
-bool GSC_TenchuWoH(const GSFrameInfo& fi, int& skip)
-{
-	if(skip == 0)
-	{
-		if(fi.TME && fi.TPSM == PSM_PSMZ16 && fi.FPSM == PSM_PSMCT16 && fi.FBMSK == 0x03FFF)
-		{
-			skip = 3; 
-		}
-	}
-	
-	return true;
-}
-
-bool GSC_TenchuFS(const GSFrameInfo& fi, int& skip)
+bool GSC_Tenchu(const GSFrameInfo& fi, int& skip)
 {
 	if(skip == 0)
 	{
@@ -2627,7 +2679,7 @@ bool GSC_Sly3(const GSFrameInfo& fi, int& skip)
 {
 	if(skip == 0)
 	{
-		if(fi.TME && (fi.FBP == 0x00000 || fi.FBP == 0x00700) && fi.FPSM == fi.TPSM && (fi.TBP0 == 0x00000 || fi.TBP0 == 0x00700) && fi.TPSM == PSM_PSMCT16)
+		if(fi.TME && (fi.FBP == 0x00000 || fi.FBP == 0x00700 || fi.FBP == 0x00a80 || fi.FBP == 0x00e00) && fi.FPSM == fi.TPSM && (fi.TBP0 == 0x00000 || fi.TBP0 == 0x00700 || fi.TBP0 == 0x00a80 || fi.TBP0 == 0x00e00) && fi.TPSM == PSM_PSMCT16)
 		{
 			skip = 1000;
 		}
@@ -2711,13 +2763,14 @@ bool GSC_TimeSplitters2(const GSFrameInfo& fi, int& skip)
 
 bool GSC_ReZ(const GSFrameInfo& fi, int& skip)
 {
-	if(skip == 0)
+	//not needed anymore
+	/*if(skip == 0)
 	{
 		if(fi.TME && (fi.FBP == 0x00000 || fi.FBP == 0x008c0 || fi.FBP == 0x00a00) && fi.FPSM == fi.TPSM && fi.TPSM == PSM_PSMCT32)
 		{
 			skip = 1; 
 		}
-	}
+	}*/
 
 	return true;
 }
@@ -2740,6 +2793,26 @@ bool GSC_LordOfTheRingsTwoTowers(const GSFrameInfo& fi, int& skip)
 		if(fi.TME && (fi.FBP == 0x00000 || fi.FBP == 0x01000) && (fi.TBP0 == 0x01180 || fi.TBP0 == 0x01400) && fi.FPSM == PSM_PSMCT32)
 		{
 			skip = 2;
+		}
+	}
+	
+	return true;
+}
+
+bool GSC_LordOfTheRingsThirdAge(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+		if(!fi.TME && fi.FBP == 0x03000 && fi.FPSM == PSM_PSMCT32 && fi.TPSM == PSM_PSMT4 && fi.FBMSK == 0xFF000000)
+		{
+			skip = 1000;	//shadows
+		}
+	}
+	else
+	{
+		if (fi.TME && (fi.FBP == 0x0 || fi.FBP == 0x00e00 || fi.FBP == 0x01000) && fi.FPSM == PSM_PSMCT32 && fi.TBP0 == 0x03000 && fi.TPSM == PSM_PSMCT24)
+		{
+			skip = 1;
 		}
 	}
 	
@@ -2844,6 +2917,431 @@ bool GSC_Black(const GSFrameInfo& fi, int& skip)
 	return true;
 }
 
+bool GSC_FFVIIDoC(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+		if(fi.TME && fi.FBP == 0x01c00 && fi.FPSM == PSM_PSMCT32 && fi.TBP0 == 0x02c00 && fi.TPSM == PSM_PSMCT24)
+		{
+			skip = 1;
+		}
+		if(!fi.TME && fi.FBP == 0x01c00 && fi.FPSM == PSM_PSMCT32 && fi.TBP0 == 0x01c00 && fi.TPSM == PSM_PSMCT24)
+		{
+			//skip = 1;
+		}
+	}
+	
+	return true;
+}
+
+bool GSC_StarWarsForceUnleashed(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+		if(fi.TME && (fi.FBP == 0x038a0 || fi.FBP == 0x03ae0) && fi.FPSM == fi.TPSM && fi.TBP0 == 0x02300 && fi.TPSM == PSM_PSMZ24)
+		{
+			skip = 1000;	//9, shadows
+		}
+	}
+	else
+	{
+		if(fi.TME && fi.FBP == fi.TBP0 && fi.FPSM == fi.TPSM && (fi.TBP0 == 0x034a0 || fi.TBP0 == 0x36e0) && fi.TPSM == PSM_PSMCT16)
+		{
+			skip = 2;	
+		}
+
+	}
+	
+	return true;
+}
+
+bool GSC_StarWarsBattlefront(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+		if(fi.TME && (fi.FBP > 0x0 && fi.FBP < 0x01000) && fi.FPSM == PSM_PSMCT32 && (fi.TBP0 > 0x02000 && fi.TBP0 < 0x03000) && fi.TPSM == PSM_PSMT8)
+		{
+			skip = 1;
+		}
+	}
+	
+	return true;
+}
+
+bool GSC_StarWarsBattlefront2(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+		if(fi.TME && (fi.FBP > 0x01000 && fi.FBP < 0x02000) && fi.FPSM == PSM_PSMCT32 && (fi.TBP0 > 0x0 && fi.TBP0 < 0x01000) && fi.TPSM == PSM_PSMT8)
+		{
+			skip = 1;
+		}
+		if(fi.TME && (fi.FBP > 0x01000 && fi.FBP < 0x02000) && fi.FPSM == PSM_PSMZ32 && (fi.TBP0 > 0x0 && fi.TBP0 < 0x01000) && fi.TPSM == PSM_PSMT8)
+		{
+			skip = 1;
+		}
+	}
+	
+	return true;
+}
+
+bool GSC_BlackHawkDown(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+		if(fi.TME && fi.FBP == 0x00800 && fi.FPSM == PSM_PSMCT16 && fi.TBP0 == 0x01800 && fi.TPSM == PSM_PSMZ16)
+		{
+			skip = 2;	//wall of fog
+		}
+		if(fi.TME && fi.FBP == fi.TBP0 && fi.FPSM == PSM_PSMCT32 && fi.TPSM == PSM_PSMT8)
+		{
+			skip = 5;	//night filter
+		}
+	}
+	
+	return true;
+}
+
+bool GSC_DevilMayCry3(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+
+		if(fi.TME && fi.FBP == 0x01800 && fi.FPSM == PSM_PSMCT16 && fi.TBP0 == 0x01000 && fi.TPSM == PSM_PSMZ16)
+		{
+			skip = 32;
+		}
+		if(fi.TME && fi.FBP == 0x01800 && fi.FPSM == PSM_PSMZ32 && fi.TBP0 == 0x0800 && fi.TPSM == PSM_PSMT8H)
+		{
+			skip = 16;
+		}
+		if(fi.TME && fi.FBP == 0x01800 && fi.FPSM == PSM_PSMCT32 && fi.TBP0 == 0x0 && fi.TPSM == PSM_PSMT8H)
+		{
+			skip = 24;
+		}
+	}
+	
+	return true;
+}
+
+bool GSC_Burnout(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+		if(fi.TME && (fi.FBP == 0x01dc0 || fi.FBP == 0x02200) && fi.FPSM == fi.TPSM && (fi.TBP0 == 0x01dc0 || fi.TBP0 == 0x02200) && fi.TPSM == PSM_PSMCT32)
+		{
+			skip = 4;
+		}
+		else if(fi.TME && fi.FPSM == PSM_PSMCT16 && fi.TPSM == PSM_PSMZ16)	//fog
+		{
+			if(fi.FBP == 0x00a00 && fi.TBP0 == 0x01e00)	
+			{
+				skip = 4; //pal
+			}
+			if(fi.FBP == 0x008c0 && fi.TBP0 == 0x01a40)
+			{
+				skip = 3; //ntsc
+			}
+		}
+		else if (fi.TME && (fi.FBP == 0x02d60 || fi.FBP == 0x033a0) && fi.FPSM == fi.TPSM && (fi.TBP0 == 0x02d60 || fi.TBP0 == 0x033a0) && fi.TPSM == PSM_PSMCT32 && fi.FBMSK == 0x0)
+		{
+			skip = 2; //impact screen
+		}
+	}
+	
+	return true;
+}
+
+bool GSC_MidnightClub3(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+		if(fi.TME && (fi.FBP > 0x01d00 && fi.FBP <= 0x02a00) && fi.FPSM == PSM_PSMCT32 && (fi.FBP >= 0x01600 && fi.FBP < 0x03260) && fi.TPSM == PSM_PSMT8H)
+		{
+			skip = 1;
+		}
+	}
+	
+	return true;
+}
+
+bool GSC_SpyroNewBeginning(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+		if(fi.TME && fi.FBP == fi.TBP0 && fi.FPSM == fi.TPSM && fi.TBP0 == 0x034a0 && fi.TPSM == PSM_PSMCT16)
+		{
+			skip = 2;
+		}
+	}
+	
+	return true;
+}
+
+bool GSC_SpyroEternalNight(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+		if(fi.TME && fi.FBP == fi.TBP0 && fi.FPSM == fi.TPSM && (fi.TBP0 == 0x034a0 ||fi.TBP0 == 0x035a0 || fi.TBP0 == 0x036e0) && fi.TPSM == PSM_PSMCT16)
+		{
+			skip = 2;
+		}
+	}
+	
+	return true;
+}
+
+bool GSC_TalesOfLegendia(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+		if(fi.TME && (fi.FBP == 0x3f80 || fi.FBP == 0x03fa0) && fi.FPSM == PSM_PSMCT32 && fi.TPSM == PSM_PSMT8)
+		{
+			skip = 3; //3, 9
+		}
+		if(fi.TME && fi.FBP == 0x3800 && fi.FPSM == PSM_PSMCT32 && fi.TPSM == PSM_PSMZ32)
+		{
+			skip = 2;
+		}
+	}
+		
+	return true;
+}
+
+bool GSC_NanoBreaker(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+		if(fi.TME && fi.FBP == 0x0 && fi.FPSM == PSM_PSMCT32 && (fi.TBP0 == 0x03800 || fi.TBP0 == 0x03900) && fi.TPSM == PSM_PSMCT16S)
+		{
+			skip = 2;
+		}
+	}
+		
+	return true;
+}
+
+bool GSC_Kunoichi(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+		if(!fi.TME && (fi.FBP == 0x0 || fi.FBP == 0x00700 || fi.FBP == 0x00800) && fi.FPSM == PSM_PSMCT32 && (fi.TPSM == PSM_PSMT8 || fi.TPSM == PSM_PSMT4) && fi.FBMSK == 0x00FFFFFF)
+		{
+			skip = 3;
+		}
+	}
+		
+	return true;
+}
+
+bool GSC_Yakuza(const GSFrameInfo& fi, int& skip)
+{
+	if(1
+		&& !skip
+		&& !fi.TME
+		&& (0
+			|| fi.FBP == 0x1c20 && fi.TBP0 == 0xe00		//ntsc (EU and US DVDs)
+			|| fi.FBP == 0x1e20 && fi.TBP0 == 0x1000	//pal1
+			|| fi.FBP == 0x1620 && fi.TBP0 == 0x800		//pal2
+		)
+		&& fi.TPSM == PSM_PSMZ24
+		&& fi.FPSM == PSM_PSMCT32
+		/*
+		&& fi.FBMSK	==0xffffff
+		&& fi.TZTST
+		&& !GSUtil::HasSharedBits(fi.FBP, fi.FPSM, fi.TBP0, fi.TPSM)
+		*/
+	)
+	{
+		skip=17;
+	}
+	return true;
+}
+
+bool GSC_Yakuza2(const GSFrameInfo& fi, int& skip)
+{
+	if(1
+		&& !skip
+		&& !fi.TME
+		&& (0
+			|| fi.FBP == 0x1c20 && fi.TBP0 == 0xe00		//ntsc (EU DVD)
+			|| fi.FBP == 0x1e20 && fi.TBP0 == 0x1000	//pal1
+			|| fi.FBP == 0x1620 && fi.TBP0 == 0x800		//pal2
+		)
+		&& fi.TPSM == PSM_PSMZ24
+		&& fi.FPSM == PSM_PSMCT32
+		/*
+		&& fi.FBMSK	==0xffffff
+		&& fi.TZTST
+		&& !GSUtil::HasSharedBits(fi.FBP, fi.FPSM, fi.TBP0, fi.TPSM)
+		*/
+	)
+	{
+		skip=17;
+	}
+	return true;
+}
+
+bool GSC_SkyGunner(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+
+		if(!fi.TME && !(fi.FBP == 0x0 || fi.FBP == 0x00800 || fi.FBP == 0x008c0 || fi.FBP == 0x03e00) && fi.FPSM == PSM_PSMCT32 && (fi.TBP0 == 0x0 || fi.TBP0 == 0x01800) && fi.TPSM == PSM_PSMCT32)
+		{
+			skip = 1; //Huge Vram usage
+		}
+	}
+	
+	return true;
+}
+
+bool GSC_JamesBondEverythingOrNothing(const GSFrameInfo& fi, int& skip)
+{
+	if(skip == 0)
+	{
+
+		if(fi.TME && (fi.FBP < 0x02000 && !(fi.FBP == 0x0 || fi.FBP == 0x00e00)) && fi.FPSM == PSM_PSMCT32 && (fi.TBP0 > 0x01c00 && fi.TBP0 < 0x03000) && fi.TPSM == PSM_PSMT8)
+		{
+			skip = 1; //Huge Vram usage
+		}
+	}
+	
+	return true;
+}
+
+
+//#define USE_DYNAMIC_CRC_HACK
+#ifdef USE_DYNAMIC_CRC_HACK
+
+#define DYNA_DLL_PATH "c:/dev/pcsx2/trunk/tools/dynacrchack/DynaCrcHack.dll"
+
+#include <sys/stat.h>
+/***************************************************************************
+	AutoReloadLibrary : Automatically reloads a dll if the file was modified.
+		Uses a temporary copy of the watched dll such that the original
+		can be modified while the copy is loaded and used.
+
+	NOTE: The API is not platform specific, but current implementation is Win32.
+***************************************************************************/
+class AutoReloadLibrary
+{
+private:
+	string	m_dllPath, m_loadedDllPath;
+	DWORD	m_minMsBetweenProbes;
+	time_t	m_lastFileModification;
+	DWORD	m_lastProbe;
+	HMODULE	m_library;
+
+	string	GetTempName()
+	{
+		string result = m_loadedDllPath + ".tmp"; //default name
+		TCHAR tmpPath[MAX_PATH], tmpName[MAX_PATH];
+		DWORD ret = GetTempPath(MAX_PATH, tmpPath);
+		if(ret && ret <= MAX_PATH && GetTempFileName(tmpPath, TEXT("GSdx"), 0, tmpName))
+			result = tmpName;
+
+		return result;
+	};
+
+	void	UnloadLib()
+	{
+		if( !m_library )
+			return;
+
+		FreeLibrary( m_library );
+		m_library = NULL;
+
+		// If can't delete (might happen when GSdx closes), schedule delete on reboot
+		if(!DeleteFile( m_loadedDllPath.c_str() ) )
+			MoveFileEx( m_loadedDllPath.c_str(), NULL, MOVEFILE_DELAY_UNTIL_REBOOT );
+	}
+
+public:
+	AutoReloadLibrary( const string dllPath, const int minMsBetweenProbes=100 )
+		: m_minMsBetweenProbes( minMsBetweenProbes )
+		, m_dllPath( dllPath )
+		, m_lastFileModification( 0 )
+		, m_lastProbe( 0 )
+		, m_library( 0 )
+	{};
+
+	~AutoReloadLibrary(){ UnloadLib();	};
+
+	// If timeout has ellapsed, probe the dll for change, and reload if it was changed.
+	// If it returns true, then the dll was freed/reloaded, and any symbol addresse previously obtained is now invalid and needs to be re-obtained.
+	// Overhead is very low when when probe timeout has not ellapsed, and especially if current timestamp is supplied as argument.
+	// Note: there's no relation between the file modification date and currentMs value, so it need'nt neccessarily be an actual timestamp.
+	// Note: isChanged is guarenteed to return true at least once
+	//       (even if the file doesn't exist, at which case the following GetSymbolAddress will return NULL)
+	bool isChanged( const DWORD currentMs=0 )
+	{
+		DWORD current = currentMs? currentMs : GetTickCount();
+		if( current >= m_lastProbe && ( current - m_lastProbe ) < m_minMsBetweenProbes )
+			return false;
+
+		bool firstTime = !m_lastProbe;
+		m_lastProbe = current;
+
+		struct stat s;
+		if( stat( m_dllPath.c_str(), &s ) )
+		{	
+			// File doesn't exist or other error, unload dll
+			bool wasLoaded = m_library?true:false;
+			UnloadLib();	
+			return firstTime || wasLoaded;	// Changed if previously loaded or the first time accessing this method (and file doesn't exist)
+		}
+
+		if( m_lastFileModification == s.st_mtime )
+			return false;
+		m_lastFileModification = s.st_mtime;
+
+		// File modified, reload
+		UnloadLib();
+
+		if( !CopyFile( m_dllPath.c_str(), ( m_loadedDllPath = GetTempName() ).c_str(), false ) )
+			return true;
+
+		m_library = LoadLibrary( m_loadedDllPath.c_str() );
+		return true;
+	};
+
+	// Return value is NULL if the dll isn't loaded (failure or doesn't exist) or if the symbol isn't found.
+	void* GetSymbolAddress( const char* name ){ return m_library? GetProcAddress( m_library, name ) : NULL; };
+};
+
+
+// Use DynamicCrcHack function from a dll which can be modified while GSdx/PCSX2 is running.
+// return value is true if the call succeeded or false otherwise (If the hack could not be invoked: no dll/function/etc).
+// result contains the result of the hack call.
+
+typedef uint32 (__cdecl* DynaHackType)(uint32, uint32, uint32, uint32, uint32, uint32, uint32, int32*, uint32, int32);
+
+bool IsInvokedDynamicCrcHack( GSFrameInfo &fi, int& skip, int region, bool &result )
+{
+	static AutoReloadLibrary dll( DYNA_DLL_PATH );
+	static DynaHackType dllFunc = NULL;
+
+	if( dll.isChanged() )
+	{
+		dllFunc = (DynaHackType)dll.GetSymbolAddress( "DynamicCrcHack" );
+		printf( "GSdx: Dynamic CRC-hacks: %s\n", dllFunc?
+			"Loaded OK    (-> overriding internal hacks)" : "Not available    (-> using internal hacks)");
+	}
+	
+	if( !dllFunc )
+		return false;
+	
+	int32	skip32 = skip;
+	bool	hasSharedBits = GSUtil::HasSharedBits(fi.FBP, fi.FPSM, fi.TBP0, fi.TPSM);
+	result	= dllFunc( fi.FBP, fi.FPSM, fi.FBMSK, fi.TBP0, fi.TPSM, fi.TZTST, (uint32)fi.TME, &skip32, (uint32)region, (uint32)(hasSharedBits?1:0) )?true:false;
+	skip	= skip32;
+
+	return true;
+}
+
+#endif
+
 bool GSState::IsBadFrame(int& skip, int UserHacks_SkipDraw)
 {
 	GSFrameInfo fi;
@@ -2902,8 +3400,8 @@ bool GSState::IsBadFrame(int& skip, int UserHacks_SkipDraw)
 		map[CRC::RadiataStories] = GSC_RadiataStories;
 		map[CRC::HauntingGround] = GSC_HauntingGround;
 		map[CRC::SuikodenTactics] = GSC_SuikodenTactics;
-		map[CRC::TenchuWoH] = GSC_TenchuWoH;
-		map[CRC::TenchuFS] = GSC_TenchuFS;
+		map[CRC::TenchuWoH] = GSC_Tenchu;
+		map[CRC::TenchuFS] = GSC_Tenchu;
 		map[CRC::Sly3] = GSC_Sly3;
 		map[CRC::Sly2] = GSC_Sly2;
 		map[CRC::DemonStone] = GSC_DemonStone;
@@ -2911,18 +3409,42 @@ bool GSState::IsBadFrame(int& skip, int UserHacks_SkipDraw)
 		map[CRC::TimeSplitters2] = GSC_TimeSplitters2;
 		map[CRC::ReZ] = GSC_ReZ;
 		map[CRC::LordOfTheRingsTwoTowers] = GSC_LordOfTheRingsTwoTowers;
+		map[CRC::LordOfTheRingsThirdAge] = GSC_LordOfTheRingsThirdAge;
 		map[CRC::RedDeadRevolver] = GSC_RedDeadRevolver;
 		map[CRC::HeavyMetalThunder] = GSC_HeavyMetalThunder;
 		map[CRC::BleachBladeBattlers] = GSC_BleachBladeBattlers;
 		map[CRC::CastlevaniaCoD] = GSC_Castlevania;
 		map[CRC::CastlevaniaLoI] = GSC_Castlevania;
 		map[CRC::Black] = GSC_Black;
+		map[CRC::FFVIIDoC] = GSC_FFVIIDoC;
+		map[CRC::StarWarsForceUnleashed] = GSC_StarWarsForceUnleashed;
+		map[CRC::StarWarsBattlefront] = GSC_StarWarsBattlefront;
+		map[CRC::StarWarsBattlefront2] = GSC_StarWarsBattlefront2;
+		map[CRC::BlackHawkDown] = GSC_BlackHawkDown;
+		map[CRC::DevilMayCry3] = GSC_DevilMayCry3;
+		map[CRC::BurnoutTakedown] = GSC_Burnout;
+		map[CRC::BurnoutRevenge] = GSC_Burnout;
+		map[CRC::BurnoutDominator] = GSC_Burnout;
+		map[CRC::MidnightClub3] = GSC_MidnightClub3;
+		map[CRC::SpyroNewBeginning] = GSC_SpyroNewBeginning;
+		map[CRC::SpyroEternalNight] = GSC_SpyroEternalNight;
+		map[CRC::TalesOfLegendia] = GSC_TalesOfLegendia;
+		map[CRC::NanoBreaker] = GSC_NanoBreaker;
+		map[CRC::Kunoichi] = GSC_Kunoichi;
+		map[CRC::Yakuza] = GSC_Yakuza;
+		map[CRC::Yakuza2] = GSC_Yakuza2;
+		map[CRC::SkyGunner] = GSC_SkyGunner;
+		map[CRC::JamesBondEverythingOrNothing] = GSC_JamesBondEverythingOrNothing;
 	}
 
 	// TODO: just set gsc in SetGameCRC once
 
 	GetSkipCount gsc = map[m_game.title];
+	g_crc_region = m_game.region;
 
+#ifdef USE_DYNAMIC_CRC_HACK
+	bool res=false; if(IsInvokedDynamicCrcHack(fi, skip, g_crc_region, res)){ if( !res ) return false;	} else
+#endif
 	if(gsc && !gsc(fi, skip))
 	{
 		return false;

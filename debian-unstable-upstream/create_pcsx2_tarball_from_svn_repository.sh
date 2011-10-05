@@ -1,5 +1,5 @@
 #!/bin/sh
-# copyright (c) 2010 Gregory Hainaut
+# copyright (c) 2011 Gregory Hainaut
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
@@ -18,19 +18,42 @@
 ######################################################################
 # Global Parameters
 ######################################################################
-# Svn parameter
-if [ -n "$1" ] ; then
-    SVN_CO_VERSION=$1;
-else
-    echo "Please provide the subversion revision number as the first parameter"
-    exit 1;
+help()
+{
+    cat <<EOF
+    Help:
+    -rev <rev>     : revision number
+    -branch <name> : branch name, take trunk otherwise
+    -local         : download the svn repository into $HOME/.cache (not deleted by the script)
+EOF
+
+    exit 0
+}
+
+# Default value
+SVN_CO_VERSION=0;
+BRANCH="trunk"
+LOCAL=0
+while [ -n "$1" ]; do
+case $1 in
+    -help|-h) help;shift 1;;
+    -rev|-r) SVN_CO_VERSION=$2; shift 2;;
+    -branch|-b) BRANCH=$2; shift 2;;
+    -local|-l) LOCAL=1;shift 1;;
+    --) shift;break;;
+    -*) echo "ERROR: $1 option does not exists. Use -h for help";exit 1;;
+    *)  break;;
+esac
+done
+
+if [ "$SVN_CO_VERSION" = "0" ] ; then
+    help
 fi
-if [ -n "$2" ] ; then
-    # Use branch argument
-    SVN_TRUNK="http://pcsx2.googlecode.com/svn/branches/$2"
-else
-    # by default take the trunk
+
+if [ "$BRANCH" = "trunk" ] ; then
     SVN_TRUNK="http://pcsx2.googlecode.com/svn/trunk"
+else
+    SVN_TRUNK="http://pcsx2.googlecode.com/svn/branches/$BRANCH"
 fi
 
 # Debian name of package and tarball
@@ -39,7 +62,11 @@ TAR_NAME="pcsx2.snapshot_${SVN_CO_VERSION}.orig.tar"
 
 # Directory
 TMP_DIR=/tmp
-ROOT_DIR=${TMP_DIR}/subversion_pcsx2_${SVN_CO_VERSION}
+if [ "$LOCAL" = 1 ] ; then
+    ROOT_DIR=${HOME}/.cache/svn_pcsx2__${BRANCH}
+else
+    ROOT_DIR=${TMP_DIR}/subversion_pcsx2_${SVN_CO_VERSION}
+fi
 NEW_DIR=${TMP_DIR}/$PKG_NAME
 
 
@@ -63,11 +90,9 @@ get_svn_dir()
 get_svn_file()
 {
     for file in $* ; do
-        if [ ! -e `basename ${file}` ] ; then
-            # Versioning information is not supported for a single file
-            # therefore you can't use svn co
-            svn export --quiet ${SVN_TRUNK}/${file} -r $SVN_CO_VERSION;
-        fi
+        # Versioning information is not supported for a single file
+        # therefore you can't use svn co
+        svn export --quiet ${SVN_TRUNK}/${file} -r $SVN_CO_VERSION;
     done
 }
 
@@ -80,29 +105,39 @@ echo "Downloading pcsx2 source revision ${SVN_CO_VERSION}"
 mkdir -p $ROOT_DIR;
 (cd $ROOT_DIR; 
     get_svn_file CMakeLists.txt;
-    get_svn_dir bin common cmake locales pcsx2 tools;
-    get_svn_dir debian-unstable-upstream;
+    get_svn_dir common cmake locales pcsx2 tools;
+    get_svn_dir debian-unstable-upstream linux_various;
 echo "Done")
+
+# separate bin to avoid downloading the .mo file
+mkdir -p $ROOT_DIR/bin;
+(cd $ROOT_DIR/bin;
+    get_svn_file bin/GameIndex.dbf;
+    get_svn_dir  bin/docs;)
 
 echo "Downloading Linux compatible plugins for revision ${SVN_CO_VERSION}"
 # Note: Other plugins exist but they are not 100% copyright free.
 mkdir -p $ROOT_DIR/plugins
 (cd $ROOT_DIR/plugins; 
     get_svn_file plugins/CMakeLists.txt;
-    # DVD
     get_svn_dir plugins/CDVDnull;
-    # Copyright issue
+    # Potential copyright issue. Optional anyway
     # get_svn_dir plugins/CDVDnull plugins/CDVDiso;
-    # PAD
     get_svn_dir plugins/PadNull plugins/onepad;
-    # AUDIO
-    get_svn_dir plugins/SPU2null plugins/spu2-x plugins/zerospu2;
-    # Graphics
-    get_svn_dir plugins/GSnull plugins/zzogl-pg;
-    # Misc
+    get_svn_dir plugins/SPU2null plugins/spu2-x;
+    get_svn_dir plugins/GSnull plugins/zzogl-pg plugins/GSdx;
     get_svn_dir plugins/dev9null plugins/FWnull plugins/USBnull;
 echo "Note: some plugins are more or less deprecated CDVDisoEFP, CDVDlinuz, Zerogs, Zeropad ...";
 echo "Done")
+
+## Download the internal sdl 1.3 for gsdx
+echo "Downloading 3rdpary SDL 1.3 (need by gsdx) revision ${SVN_CO_VERSION}"
+mkdir -p $ROOT_DIR/3rdparty
+(cd $ROOT_DIR/3rdparty/;
+    get_svn_file 3rdparty/CMakeLists.txt;
+    get_svn_dir 3rdparty/SDL-1.3.0-5387;)
+echo "Done"
+    
 
 ## Installation
 echo "Copy the subversion repository to a temporary directory"
@@ -120,17 +155,18 @@ find $NEW_DIR -name "missing" -exec rm -f {} \;
 find $NEW_DIR -name "aclocal.m4" -exec rm -f {} \;
 find $NEW_DIR -name "configure.ac" -exec rm -f {} \;
 find $NEW_DIR -name "Makefile.am" -exec rm -f {} \;
-echo "Remove 3rd party directories"
-find $NEW_DIR -name "3rdparty" -exec rm -fr {} \; 2> /dev/null
-echo "Remove windows file (useless & copyright issue)"
+echo "Remove windows files (useless & copyright issues)"
 find $NEW_DIR -iname "windows" -type d -exec rm -fr {} \; 2> /dev/null
 find $NEW_DIR -name "Win32" -type d -exec rm -fr {} \; 2> /dev/null
 rm -fr "${NEW_DIR}/plugins/zzogl-pg/opengl/Win32"
 rm -fr "${NEW_DIR}/tools/GSDumpGUI"
 rm -fr "${NEW_DIR}/common/vsprops"
 echo "Remove useless files (copyright issues)"
+rm -fr "${NEW_DIR}/pcsx2/3rdparty" # useless link which annoy me
 rm -fr "${NEW_DIR}/plugins/zzogl-pg/opengl/ZeroGSShaders"
 rm -fr "${NEW_DIR}/common/src/Utilities/x86/MemcpyFast.cpp"
+rm -fr "${NEW_DIR}/plugins/GSdx/baseclasses"
+rm -fr "${NEW_DIR}/plugins/GSdx/vtune"
 
 ## BUILD
 echo "Build the tar.gz file"
@@ -138,4 +174,6 @@ tar -C $TMP_DIR -czf ${TAR_NAME}.gz $PKG_NAME
 
 ## Clean
 rm -fr $NEW_DIR
-rm -fr $ROOT_DIR
+if [ "$LOCAL" = 0 ] ; then
+    rm -fr $ROOT_DIR
+fi

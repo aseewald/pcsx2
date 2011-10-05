@@ -268,11 +268,16 @@ __forceinline bool LoadShadersFromDat()
 
 		if (fres == NULL)
 		{
-			// try an absolute location for linux distribution (ease package)
-#ifdef __LINUX__
-			fres = fopen("/usr/share/games/pcsx2/shaders/ps2hw.dat", "rb");
+			// Each linux distributions have his rules for path so we give them the possibility to
+			// change it with compilation flags. -- Gregory
+#ifdef PLUGIN_DIR_COMPILATION
+#define xPLUGIN_DIR_str(s) PLUGIN_DIR_str(s)
+#define PLUGIN_DIR_str(s) #s
+			const std::string shader_file = string(xPLUGIN_DIR_str(PLUGIN_DIR_COMPILATION)) + "/ps2hw.dat";
+			fres = fopen(shader_file.c_str(), "rb");
 #endif
-			if (fres == NULL) {
+			if (fres == NULL)
+			{
 				ZZLog::Error_Log("Cannot find ps2hw.dat in working directory. Exiting.");
 				return false;
 			}
@@ -354,10 +359,10 @@ inline bool CreateFillExtensionsMap()
 
 	PFNGLGETSTRINGIPROC glGetStringi = 0;
 	glGetStringi = (PFNGLGETSTRINGIPROC)wglGetProcAddress("glGetStringi");
+	glGetIntegerv(GL_NUM_EXTENSIONS, &max_ext);
 
-    if (glGetStringi) {
+    if (glGetStringi && max_ext) {
         // Get opengl extension (opengl3)
-        glGetIntegerv(GL_NUM_EXTENSIONS, &max_ext);
         for (GLint i = 0; i < max_ext; i++)
         {
             string extension((const char*)glGetStringi(GL_EXTENSIONS, i));
@@ -367,13 +372,13 @@ inline bool CreateFillExtensionsMap()
             if (i != (max_ext - 1)) all_ext += ", ";
         }
     } else {
-        // fallback to old method (pre opengl3, intel gma ...)
+        // fallback to old method (pre opengl3, intel gma, geforce 7 ...)
         ZZLog::Error_Log("glGetStringi opengl 3 interface not supported, fallback to opengl 2");
 
         const char* ptoken = (const char*)glGetString(GL_EXTENSIONS);
-        all_ext = string(ptoken); // save the string to print a nice debug message
-
         if (ptoken == NULL) return false;
+
+        all_ext = string(ptoken); // save the string to print a nice debug message
 
         const char* pend = NULL;
         while (ptoken != NULL)

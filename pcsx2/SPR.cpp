@@ -18,6 +18,7 @@
 
 #include "SPR.h"
 #include "VUmicro.h"
+#include "MTVU.h"
 
 extern void mfifoGIFtransfer(int);
 
@@ -31,19 +32,23 @@ void sprInit()
 {
 }
 
-static void TestClearVUs(u32 madr, u32 size)
+static void TestClearVUs(u32 madr, u32 qwc)
 {
 	if (madr >= 0x11000000)
 	{
 		if (madr < 0x11004000)
 		{
 			DbgCon.Warning("scratch pad clearing vu0");
-			CpuVU0->Clear(madr&0xfff, size);
+			CpuVU0->Clear(madr&0xfff, qwc * 16);
 		}
 		else if (madr >= 0x11008000 && madr < 0x1100c000)
 		{
 			DbgCon.Warning("scratch pad clearing vu1");
-			CpuVU1->Clear(madr&0x3fff, size);
+			if (THREAD_VU1) {
+				DevCon.Error("MTVU Warning: SPR Accessing VU1 Memory!!!");
+				vu1Thread.WaitVU();
+			}
+			CpuVU1->Clear(madr&0x3fff, qwc * 16);
 		}
 	}
 }
@@ -56,10 +61,8 @@ int  _SPR0chain()
 	pMem = SPRdmaGetAddr(spr0ch.madr, true);
 	if (pMem == NULL) return -1;
 
-	switch (dmacRegs.ctrl.MFD)
+	if(spr0ch.madr >= dmacRegs.rbor.ADDR && spr0ch.madr < (dmacRegs.rbor.ADDR + dmacRegs.rbsr.RMSK + 16))
 	{
-		case MFD_VIF1:
-		case MFD_GIF:
 			partialqwc = spr0ch.qwc;
 
 			if ((spr0ch.madr & ~dmacRegs.rbsr.RMSK) != dmacRegs.rbor.ADDR)
@@ -72,10 +75,11 @@ int  _SPR0chain()
 			spr0ch.madr = dmacRegs.rbor.ADDR + (spr0ch.madr & dmacRegs.rbsr.RMSK);
 			spr0ch.sadr += partialqwc << 4;
 			spr0ch.qwc -= partialqwc;
-			break;
-
-		case NO_MFD:
-		case MFD_RESERVED:
+			
+			spr0finished = true;
+	}
+	else
+	{
 			
 			//Taking an arbitary small value for games which like to check the QWC/MADR instead of STR, so get most of
 			//the cycle delay out of the way before the end.
@@ -83,13 +87,12 @@ int  _SPR0chain()
 			memcpy_qwc(pMem, &psSu128(spr0ch.sadr), partialqwc);
 
 			// clear VU mem also!
-			TestClearVUs(spr0ch.madr, partialqwc << 2); // Wtf is going on here? AFAIK, only VIF should affect VU micromem (cottonvibes)
+			TestClearVUs(spr0ch.madr, partialqwc);
 
 			spr0ch.madr += partialqwc << 4;
 			spr0ch.sadr += partialqwc << 4;
 			spr0ch.qwc -= partialqwc;
 
-			break;
 	}
 
 	
@@ -135,7 +138,7 @@ void _SPR0interleave()
 			case NO_MFD:
 			case MFD_RESERVED:
 				// clear VU mem also!
-				TestClearVUs(spr0ch.madr, spr0ch.qwc << 2);
+				TestClearVUs(spr0ch.madr, spr0ch.qwc);
 				memcpy_qwc(pMem, &psSu128(spr0ch.sadr), spr0ch.qwc);
 				break;
  		}

@@ -281,7 +281,12 @@ static int _GSopen(void** dsp, char* title, int renderer, int threads = -1)
 	{
 		s_gs->SetMultithreaded(true);
 
+#ifdef __LINUX__
+		// Get the Xwindow from dsp.
+		s_gs->m_wnd.Attach((void*)((uint32*)(dsp)+1), false);
+#else
 		s_gs->m_wnd.Attach(*dsp, false);
+#endif
 	}
 
 	if(!s_gs->CreateDevice(dev))
@@ -297,8 +302,6 @@ static int _GSopen(void** dsp, char* title, int renderer, int threads = -1)
 
 	return 0;
 }
-
-#ifdef _WINDOWS
 
 EXPORT_C_(int) GSopen2(void** dsp, uint32 flags)
 {
@@ -319,8 +322,6 @@ EXPORT_C_(int) GSopen2(void** dsp, uint32 flags)
 
 	return retval;
 }
-
-#endif
 
 EXPORT_C_(int) GSopen(void** dsp, char* title, int mt)
 {
@@ -552,17 +553,29 @@ EXPORT_C GSirqCallback(void (*irq)())
 	}
 }
 
+void pt(char* str){
+	struct tm *current;
+	time_t now;
+	
+	time(&now);
+	current = localtime(&now);
+
+	printf("%02i:%02i:%02i%s", current->tm_hour, current->tm_min, current->tm_sec, str);
+}
+
 EXPORT_C_(int) GSsetupRecording(int start, void* data)
 {
 	if(s_gs == NULL) return 0;
 
 	if(start & 1)
 	{
-		s_gs->BeginCapture();
+		if( s_gs->BeginCapture() )
+			pt(" - Capture started\n");
 	}
 	else
 	{
 		s_gs->EndCapture();
+		pt(" - Capture ended\n");
 	}
 
 	return 1;
