@@ -22,7 +22,7 @@
 #include "x86.h"
 
 #if defined(ZEROGS_SSE2)
-#include <emmintrin.h>
+#include <immintrin.h>
 #endif
 
 

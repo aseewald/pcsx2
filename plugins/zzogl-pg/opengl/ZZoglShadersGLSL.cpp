@@ -231,15 +231,20 @@ bool ZZshStartUsingShaders() {
 
 // open shader file according to build target 
 bool ZZshCreateOpenShadersFile() {
-	const char ShaderFileName[30] = "plugins/ps2glsl.fx";
-	int ShaderFD = open(ShaderFileName, O_RDONLY);
+	std::string ShaderFileName("plugins/ps2hw.glsl");
+	int ShaderFD = open(ShaderFileName.c_str(), O_RDONLY);
 	struct stat sb;
 	if ((ShaderFD == -1) || (fstat(ShaderFD, &sb) == -1)) {	
-		// Try an absolute location for linux distribution (ease package)
-		const char NewShaderFileName[200] = "/usr/share/games/pcsx2/shaders/ps2glsl.fx";
-		ShaderFD = open(NewShaderFileName, O_RDONLY);
+		// Each linux distributions have his rules for path so we give them the possibility to
+		// change it with compilation flags. -- Gregory
+#ifdef PLUGIN_DIR_COMPILATION
+#define xPLUGIN_DIR_str(s) PLUGIN_DIR_str(s)
+#define PLUGIN_DIR_str(s) #s
+		ShaderFileName = string(xPLUGIN_DIR_str(PLUGIN_DIR_COMPILATION)) + "/ps2hw.glsl";
+		ShaderFD = open(ShaderFileName.c_str(), O_RDONLY);
+#endif
 		if ((ShaderFD == -1) || (fstat(ShaderFD, &sb) == -1)) {	
-			ZZLog::Error_Log("No source for %s: \n", NewShaderFileName); 
+			ZZLog::Error_Log("No source for %s: \n", ShaderFileName.c_str()); 
 			return false;
 		}
 	}

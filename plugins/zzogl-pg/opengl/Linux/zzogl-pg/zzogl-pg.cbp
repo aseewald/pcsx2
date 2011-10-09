@@ -162,7 +162,7 @@
 		</Linker>
 		<ExtraCommands>
 			<Add after="cp $(PROJECT_DIR)/../../ps2hw.dat $(TARGET_OUTPUT_DIR)/" />
-			<Add after="cp $(PROJECT_DIR)/../../ps2glsl.fx $(TARGET_OUTPUT_DIR)/" />
+			<Add after="cp $(PROJECT_DIR)/../../ps2hw.glsl $(TARGET_OUTPUT_DIR)/" />
 			<Mode after="always" />
 		</ExtraCommands>
 		<Unit filename="../../CRC.h" />

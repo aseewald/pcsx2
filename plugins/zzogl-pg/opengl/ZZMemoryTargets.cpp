@@ -26,7 +26,7 @@
 #include "ZZClut.h"
 
 #ifdef ZEROGS_SSE2
-#include <emmintrin.h>
+#include <immintrin.h>
 #endif
 
 extern int g_TransferredToGPU;
