@@ -24,48 +24,29 @@ msgstr ""
 "X-Poedit-SearchPath-0: pcsx2\n"
 "X-Poedit-SearchPath-1: common\n"
 
-#: pcsx2/gui/AppMain.cpp:621
-msgid "!Notice Error:Thread Deadlock Actions"
+#: common/src/Utilities/Exceptions.cpp:254
+msgid "!Notice:VirtualMemoryMap"
 msgstr ""
-"\"Ignorar\" para continuar esperando pela resposta da thread.\n"
-"\"Cancelar\" para tentar cancelar a thread.\n"
-"\"Terminar\" para finalizar PCSX2 imediatamente."
+"Não há memória virtual disponível suficiente, ou mapeamentos de memória "
+"virtual necessários já foram reservados para outros processos, serviços ou "
+"DLLs."
 
-#: pcsx2/gui/Panels/BiosSelectorPanel.cpp:138
-msgid "!Notice:BIOS:InvalidSelection"
+#: pcsx2/CDVD/CDVD.cpp:385
+msgid "!Notice:PsxDisc"
 msgstr ""
-"Favor selecionar uma BIOS válida. Se você não consegue fazer uma seleção "
-"válida, então pressione cancelar para fechar o painel de Configuração"
+"Discos de jogos de Playstation não têm suporte no PCSX2. Se você quiser "
+"emular jogos de PSX, então você terá que fazer download de um emulador "
+"especificamente para PSX, como ePSXe ou PCSX."
 
-#: pcsx2/gui/AppMain.cpp:538
-msgid "!Notice:BiosDumpRequired"
+#: pcsx2/System.cpp:114
+msgid "!Notice:Recompiler:VirtualMemoryAlloc"
 msgstr ""
-"PCSX2 requer uma BIOS de PS2 para poder funcionar. Por razões legais, você "
-"*deve* obter uma BIOS de uma unidade PS2 que você possua (pegar emprestado "
-"não conta). Favor consultar os FAQs e os Guias para mais instruções."
-
-#: pcsx2/gui/IsoDropTarget.cpp:28
-msgid "!Notice:ConfirmSysReset"
-msgstr ""
-"Essa ação vai redefinir o estado da máquina virtual existente de PS2; todo "
-"progresso atual será perdido. Você tem certeza?"
-
-#: pcsx2/gui/MainMenuClicks.cpp:106
-msgid "!Notice:DeleteSettings"
-msgstr ""
-"Esse comando apaga as configurações de %s e permite que você rode novamente "
-"o Assistente de Primeiras Configurações. Você precisará reiniciar %s "
-"manualmente após essa operação.\n"
-"\n"
-"AVISO!! Clique OK para excluir *TODAS* configurações do %s e forçar "
-"finalização do aplicativo, perdendo todo progresso em emulação. Você tem "
-"certeza absoluta?\n"
-"\n"
-"(nota: configurações dos plug-ins não serão afetadas)"
-
-#: pcsx2/gui/Panels/DirPickerPanel.cpp:69
-msgid "!Notice:DirPicker:CreatePath"
-msgstr "O caminho/diretório especificado não existe. Você gostaria de criá-lo?"
+"Esse recompilador não conseguiu reservar memória contígua necessária para os "
+"caches internos. Esse erro pode ter sido causado por baixo recurso de "
+"memória virtual, como um arquivo swap pequeno ou desabilitado, ou por outro "
+"programa que está ocupando muita memória. Você pode também tentar reduzir os "
+"tamanhos padrões de cache para todos recompiladores do PCSX2, encontrado nas "
+"Configurações do Host."
 
 #: pcsx2/System.cpp:348
 msgid "!Notice:EmuCore::MemoryForVM"
@@ -74,66 +55,40 @@ msgstr ""
 "Finalize algumas tarefas que estejam utilizando muita memória e tente "
 "novamente."
 
-#: pcsx2/vtlb.cpp:702
-msgid "!Notice:HostVmReserve"
+#: pcsx2/gui/AppInit.cpp:43
+msgid "!Notice:Startup:NoSSE2"
 msgstr ""
-"Seu sistema está com poucos recursos virtuais para rodar PCSX2. Isso pode "
-"estar sendo causado por ter um arquivo swap pequeno ou desabilitado, ou por "
-"haver outros programas utilizando muito dos recursos."
+"Aviso: Seu computador não suporta SSE2, o qual é requerido por muitos plug-"
+"ins e recompiladores do PCSX2. Suas opções serão limitadas e a emulação será "
+"*bem* lenta."
 
-#: pcsx2/gui/Dialogs/ImportSettingsDialog.cpp:31
-msgid "!Notice:ImportExistingSettings"
+#: pcsx2/gui/AppInit.cpp:162
+msgid "!Notice:RecompilerInit:Header"
 msgstr ""
-"Foram encontradas configurações existentes de %s no diretório de "
-"configurações definido. Você gostaria de importar essas configurações ou "
-"sobrescrevê-las com os valores padrões do %s?\n"
-"\n"
-"(ou pressione Cancelar para selecionar um diretório de configurações "
-"diferente)"
+"Aviso: Alguns recompiladores de PS2 configurados falharam em inicializar e "
+"foram desativados:"
 
-#: pcsx2/gui/Panels/MemoryCardListPanel.cpp:755
-msgid "!Notice:Mcd:CantDuplicate"
+#: pcsx2/gui/AppInit.cpp:211
+msgid "!Notice:RecompilerInit:Footer"
 msgstr ""
-"Falhou: Duplicação só é permitida para uma Porta-PS2 vazia ou para o sistema "
-"de arquivos."
+"Nota: Recompiladores não são necessários para que o PCSX2 rode, porém eles "
+"normalmente melhoram substancialmente a velocidade de emulação. Talvez você "
+"tenha que ativar novamente os recompiladores listados acima, se você "
+"resolver os erros."
 
 #: pcsx2/gui/AppMain.cpp:546
 msgid "!Notice:BiosDumpRequired"
 msgstr ""
-"Erro! Não foi possível copiar o cartão de memória para o conector %u. O "
-"arquivo destinatário está em uso."
+"PCSX2 requer uma BIOS de PS2 para poder funcionar. Por razões legais, você "
+"*deve* obter uma BIOS de uma unidade PS2 que você possua (pegar emprestado "
+"não conta). Favor consultar os FAQs e os Guias para mais instruções."
 
 #: pcsx2/gui/AppMain.cpp:629
 msgid "!Notice Error:Thread Deadlock Actions"
 msgstr ""
-"Você está para excluir o cartão de memória formatado no conector %u. Todos "
-"dados nesse cartão serão perdidos! Você tem absoluta e bem positiva certeza?"
-
-#: pcsx2/gui/MemoryCardFile.cpp:78
-msgid "!Notice:Mcd:HasBeenDisabled"
-msgstr ""
-"O cartão de memória no slot %d foi desabilitado automaticamente. Você pode "
-"consertar o problema\n"
-"e ativar novamente o cartão de memória a qualquer momento usando Config:"
-"Memory Cards no menu principal."
-
-#: pcsx2/gui/Panels/PluginSelectorPanel.cpp:457
-msgid "!Notice:PluginSelector:ApplyFailed"
-msgstr ""
-"Todos plug-ins devem ter seleção válida para %s rodar. Se você não conseguir "
-"uma seleção válida por causa de plug-ins faltando ou uma instalação "
-"incompleta de %s, então pressione Cancelar para fechar o painel de "
-"Configurações."
-
-#: pcsx2/gui/Panels/PluginSelectorPanel.cpp:242
-msgid "!Notice:PluginSelector:ConfirmShutdown"
-msgstr ""
-"Aviso! Alteração nos plug-ins requer completa finalização e reinício da "
-"máquina virtual de PS2. PCSX2 vai tentar salvar e restaurar o estado, mas se "
-"os plug-ins agora selecionados forem incompatíveis, a recuperação pode "
-"falhar e o progresso atual será perdido.\n"
-"\n"
-"Você tem certeza que deseja aplicar as alterações agora?"
+"\"Ignorar\" para continuar esperando pela resposta da thread.\n"
+"\"Cancelar\" para tentar cancelar a thread.\n"
+"\"Terminar\" para finalizar PCSX2 imediatamente."
 
 #: pcsx2/gui/AppUserMode.cpp:57
 msgid "!Notice:PortableModeRights"
@@ -161,55 +116,53 @@ msgstr ""
 #: pcsx2/gui/Dialogs/FirstTimeWizard.cpp:54
 msgid "!Panel:Folders:Settings"
 msgstr ""
-"Discos de jogos de Playstation não têm suporte no PCSX2. Se você quiser "
-"emular jogos de PSX, então você terá que fazer download de um emulador "
-"especificamente para PSX, como ePSXe ou PCSX."
+"Você pode opcionalmente especificar um local para suas configurações de "
+"PCSX2 aqui. Se o local contiver configurações existentes de PCSX2, será dado "
+"a você a opção de importar ou reescrevê-las."
 
-#: pcsx2/System.cpp:114
-msgid "!Notice:Recompiler:VirtualMemoryAlloc"
+#: pcsx2/gui/Dialogs/FirstTimeWizard.cpp:94
+msgid "!Wizard:Welcome"
 msgstr ""
-"Esse recompilador não conseguiu reservar memória contígua necessária para os "
-"caches internos. Esse erro pode ter sido causado por baixo recurso de "
-"memória virtual, como um arquivo swap pequeno ou desabilitado, ou por outro "
-"programa que está ocupando muita memória. Você pode também tentar reduzir os "
-"tamanhos padrões de cache para todos recompiladores do PCSX2, encontrado nas "
-"Configurações do Host."
+"Esse assistente vai guiá-lo nas configurações de plugins, cartões de "
+"memórias e BIOS. É recomendado se for a sua primeira instalando %s que veja "
+"o readme e o guia de configuração."
 
-#: pcsx2/gui/AppInit.cpp:211
-msgid "!Notice:RecompilerInit:Footer"
+#: pcsx2/gui/Dialogs/FirstTimeWizard.cpp:140
+msgid "!Wizard:Bios:Tutorial"
 msgstr ""
-"Nota: Recompiladores não são necessários para que o PCSX2 rode, porém eles "
-"normalmente melhoram substancialmente a velocidade de emulação. Talvez você "
-"tenha que ativar novamente os recompiladores listados acima, se você "
-"resolver os erros."
+"PCSX2 requer uma cópia *legal* da BIOS de PS2 para poder rodar jogos.\n"
+"Você não pode usar uma cópia obtida de um amigo ou da Internet.\n"
+"Você deve extrair a BIOS de seu *próprio* console de Playstation 2."
 
-#: pcsx2/gui/AppInit.cpp:162
-msgid "!Notice:RecompilerInit:Header"
+#: pcsx2/gui/Dialogs/ImportSettingsDialog.cpp:31
+msgid "!Notice:ImportExistingSettings"
 msgstr ""
-"Aviso: Alguns recompiladores de PS2 configurados falharam em inicializar e "
-"foram desativados:"
+"Foram encontradas configurações existentes de %s no diretório de "
+"configurações definido. Você gostaria de importar essas configurações ou "
+"sobrescrevê-las com os valores padrões do %s?\n"
+"\n"
+"(ou pressione Cancelar para selecionar um diretório de configurações "
+"diferente)"
 
-#: pcsx2/gui/AppInit.cpp:43
-msgid "!Notice:Startup:NoSSE2"
+#: pcsx2/gui/Dialogs/McdConfigDialog.cpp:30
+msgid "!Panel:Mcd:NtfsCompress"
 msgstr ""
-"Aviso: Seu computador não suporta SSE2, o qual é requerido por muitos plug-"
-"ins e recompiladores do PCSX2. Suas opções serão limitadas e a emulação será "
-"*bem* lenta."
+"Compressão NTFS é incorporada, rápida, e completamente confiável; e "
+"normalmente faz compressão de cartões de memória muito bem (essa opção é "
+"altamente recomendada)."
 
-#: common/src/Utilities/Exceptions.cpp:254
-msgid "!Notice:VirtualMemoryMap"
+#: pcsx2/gui/Dialogs/McdConfigDialog.cpp:41
+msgid "!Panel:Mcd:EnableEjection"
 msgstr ""
-"Não há memória virtual disponível suficiente, ou mapeamentos de memória "
-"virtual necessários já foram reservados para outros processos, serviços ou "
-"DLLs."
+"Evita corrupção de cartões de memória forçando jogos a reindexar o conteúdo "
+"dos cartões após carregados os savestates. Pode não ser compatível com todos "
+"jogos (ex: Guitar Hero)."
 
-#: pcsx2/x86/sVU_zerorec.cpp:362
-msgid "!Notice:superVU:VirtualMemoryAlloc"
+#: pcsx2/gui/Dialogs/StuckThreadDialog.cpp:33
+msgid "!Panel:StuckThread:Heading"
 msgstr ""
-"Sem memória (mais ou menos): o recompilador SuperVU não conseguiu reservar a "
-"faixa de memória requerida, e não estará disponível para ser usado. Esse "
-"erro não é crítico, uma vez que o recompilador sVU está obsoleto, e, ao "
-"invés dele, você deveria usar o microVU. :)"
+"A thread \"%s\" não está respondendo. Pode estar num deadlock, ou pode estar "
+"rodando *realmente* devagar."
 
 #: pcsx2/gui/Dialogs/SysConfigDialog.cpp:38
 msgid "!Panel:HasHacksOverrides"
@@ -290,18 +243,13 @@ msgstr ""
 msgid "!Panel:EE/IOP:Heading"
 msgstr "Nota: A maioria dos jogos ficarão bem com as opções padrão"
 
-#: pcsx2/gui/Dialogs/FirstTimeWizard.cpp:54
-msgid "!Panel:Folders:Settings"
-msgstr ""
-"Você pode opcionalmente especificar um local para suas configurações de "
-"PCSX2 aqui. Se o local contiver configurações existentes de PCSX2, será dado "
-"a você a opção de importar ou reescrevê-las."
+#: pcsx2/gui/Panels/CpuPanel.cpp:178
+msgid "!Panel:VUs:Heading"
+msgstr "Nota: A maioria dos jogos ficarão bem com as opções padrão"
 
-#: pcsx2/gui/Panels/VideoPanel.cpp:223
-msgid "!Panel:Frameskip:Heading"
-msgstr ""
-"Nota: Por causa do design do PS2, frame skipping preciso não é possível. "
-"Ativar essa opção pode causar sérios erros gráficos em alguns jogos."
+#: pcsx2/gui/Panels/DirPickerPanel.cpp:69
+msgid "!Notice:DirPicker:CreatePath"
+msgstr "O caminho/diretório especificado não existe. Você gostaria de criá-lo?"
 
 #: pcsx2/gui/Panels/DirPickerPanel.cpp:158
 msgid "!ContextTip:DirPicker:UseDefault"
@@ -398,29 +346,20 @@ msgstr ""
 #: pcsx2/gui/Panels/MemoryCardListPanel.cpp:720
 msgid "!Notice:Mcd:Delete"
 msgstr ""
-"Evita corrupção de cartões de memória forçando jogos a reindexar o conteúdo "
-"dos cartões após carregados os savestates. Pode não ser compatível com todos "
-"jogos (ex: Guitar Hero)."
+"Você está para excluir o cartão de memória formatado no conector %u. Todos "
+"dados nesse cartão serão perdidos! Você tem absoluta e bem positiva certeza?"
 
 #: pcsx2/gui/Panels/MemoryCardListPanel.cpp:758
 msgid "!Notice:Mcd:CantDuplicate"
 msgstr ""
-"Compressão NTFS é incorporada, rápida, e completamente confiável; e "
-"normalmente faz compressão de cartões de memória muito bem (essa opção é "
-"altamente recomendada)."
+"Falhou: Duplicação só é permitida para uma Porta-PS2 vazia ou para o sistema "
+"de arquivos."
 
 #: pcsx2/gui/Panels/MemoryCardListPanel.cpp:801
 msgid "!Notice:Mcd:Copy Failed"
 msgstr ""
-"Speedhacks normalmente melhora a velocidade de emulação, mas pode causar "
-"glitches, audio quebrado, e falsa leitura do FPS. Quando tiver problemas de "
-"emulação, desabilite esse painel primeiro."
-
-#: pcsx2/gui/Dialogs/StuckThreadDialog.cpp:33
-msgid "!Panel:StuckThread:Heading"
-msgstr ""
-"A thread \"%s\" não está respondendo. Pode estar num deadlock, ou pode estar "
-"rodando *realmente* devagar."
+"Erro! Não foi possível copiar o cartão de memória para o conector %u. O "
+"arquivo destinatário está em uso."
 
 #: pcsx2/gui/Panels/MiscPanelStuff.cpp:35
 msgid "!Panel:Usermode:Explained"
@@ -467,12 +406,13 @@ msgstr ""
 "\n"
 "Você tem certeza que deseja aplicar as alterações agora?"
 
-#: pcsx2/gui/Dialogs/FirstTimeWizard.cpp:140
-msgid "!Wizard:Bios:Tutorial"
+#: pcsx2/gui/Panels/PluginSelectorPanel.cpp:457
+msgid "!Notice:PluginSelector:ApplyFailed"
 msgstr ""
-"PCSX2 requer uma cópia *legal* da BIOS de PS2 para poder rodar jogos.\n"
-"Você não pode usar uma cópia obtida de um amigo ou da Internet.\n"
-"Você deve extrair a BIOS de seu *próprio* console de Playstation 2."
+"Todos plug-ins devem ter seleção válida para %s rodar. Se você não conseguir "
+"uma seleção válida por causa de plug-ins faltando ou uma instalação "
+"incompleta de %s, então pressione Cancelar para fechar o painel de "
+"Configurações."
 
 #: pcsx2/gui/Panels/SpeedhacksPanel.cpp:27
 msgid "!Panel:Speedhacks:EECycleX1"

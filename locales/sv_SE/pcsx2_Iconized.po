@@ -20,50 +20,30 @@ msgstr ""
 "X-Poedit-SearchPath-0: pcsx2\n"
 "X-Poedit-SearchPath-1: common\n"
 
-#: pcsx2/gui/AppMain.cpp:621
-msgid "!Notice Error:Thread Deadlock Actions"
+#: common/src/Utilities/Exceptions.cpp:254
+msgid "!Notice:VirtualMemoryMap"
 msgstr ""
 "Det finns inte tillräkligt med virtuellt minne tillgängligt, eller så har "
 "den nödvändiga \n"
 "virtuella minnestilldelningen redan blivit resarverat av andra processer, "
 "tjänster, eller DLL'er."
 
-#: pcsx2/gui/Panels/BiosSelectorPanel.cpp:138
-msgid "!Notice:BIOS:InvalidSelection"
+#: pcsx2/CDVD/CDVD.cpp:385
+msgid "!Notice:PsxDisc"
 msgstr ""
-"Välj ett giltligt BIOS. Om ni är oförmögen att göra ett giltligt val \n"
-"så tryck Avbryt för att stäng Konfigurationspanelen."
+"Playstation speldiskar stödjes inte av PCSX2. Om Ni vill emulera PSX spel \n"
+"så måste Ni ladda ner en PSX-specifik emulator, såsom ePSXe eller PCSX."
 
-#: pcsx2/gui/AppMain.cpp:538
-msgid "!Notice:BiosDumpRequired"
+#: pcsx2/System.cpp:114
+msgid "!Notice:Recompiler:VirtualMemoryAlloc"
 msgstr ""
-"PCSX2 kräver PS2-BIOS för att köras. Av juridiska skäl *måste* Ni skaffa \n"
-"ett BIOS från en faktisk PS2 enhet som Ni äger (tillåns räknas inte). \n"
-"Konsultera FAQ's och Guider för ytterligare information."
-
-#: pcsx2/gui/IsoDropTarget.cpp:28
-msgid "!Notice:ConfirmSysReset"
-msgstr ""
-"Detta kommer att återställa det befintliga PS2 VM tillståndet; \n"
-"alla nuvarande processer kommer at förloras. Är Ni säker?"
-
-#: pcsx2/gui/MainMenuClicks.cpp:106
-msgid "!Notice:DeleteSettings"
-msgstr ""
-"Detta kommando rensar %s inställningar och låter Er att återköra Första-"
-"Gången Trollkarlen. \n"
-"Ni måste manuelt återstarta %s efter detta. \n"
-"\n"
-"\n"
-"VARNING! Tryck OK för att radera *ALLA* inställningar för %s och tvångstänga "
-"tillämpningen, \n"
-"med följd att alla nuvarande emuleringsprocesser mistes.Är Ni helt säker? \n"
-"\n"
-"(bemärk: inställningar för insticksprogram påverkas ej)"
-
-#: pcsx2/gui/Panels/DirPickerPanel.cpp:69
-msgid "!Notice:DirPicker:CreatePath"
-msgstr "Den angivna sökvägen/katalogen finnes ej. Vill Ni skapa den?"
+"Denna omkompilerare var oförmögen att resarvera det angränsande minne som "
+"kräves för interna förråd. \n"
+"Detta fel kan ha orsakats av låga VM resurser, såsom en liten eller "
+"förhindrad bytfil, \n"
+"eller av ett annat program som tar för sig mycket minne. Ni kan annars pröva "
+"minska förvalsförrådsstorleken \n"
+"för alla av PCSX2s omkompilerare, vilket finnes under Värdinställningar."
 
 #: pcsx2/System.cpp:348
 msgid "!Notice:EmuCore::MemoryForVM"
@@ -71,28 +51,27 @@ msgstr ""
 "PCSX2 är oförmögen att tilldela det minne som kräves för PS2 VM. \n"
 "Stäng minneskrävande bakgrundsprogram och försök igen."
 
-#: pcsx2/vtlb.cpp:702
-msgid "!Notice:HostVmReserve"
+#: pcsx2/gui/AppInit.cpp:43
+msgid "!Notice:Startup:NoSSE2"
 msgstr ""
-"Ert system har för lite VM resurser för att PCSX2 ska kunna köras. \n"
-"Detta kan ha orsakats av att ha en liten eller förhindrad bytfil, \n"
-"eller av att andra program tar för sig av resurser."
+"Varning: Er dator stödjer inte SSE2, vilket kräves av många PCSX2 "
+"omkompilerare och insticksprogram. \n"
+"Era möjligheter kommer att vara begränsade och emuleringen att vara *mycket* "
+"långsam."
 
-#: pcsx2/gui/Dialogs/ImportSettingsDialog.cpp:31
-msgid "!Notice:ImportExistingSettings"
+#: pcsx2/gui/AppInit.cpp:162
+msgid "!Notice:RecompilerInit:Header"
 msgstr ""
-"Befintliga %s inställningar har hittats i "
-"konfigurationsinställningsmappen. \n"
-"Vill Ni importera dessa inställningar och överskriva %s förval med dem? \n"
-"\n"
-"\n"
-"(eller tryck Avbryt för att välja en annan mapp)"
+"Varning: Några av de konfigurerade PS2-omkompilerarna misslyckades att "
+"initialiseras och har blivit förhindrade:"
 
-#: pcsx2/gui/Panels/MemoryCardListPanel.cpp:755
-msgid "!Notice:Mcd:CantDuplicate"
+#: pcsx2/gui/AppInit.cpp:211
+msgid "!Notice:RecompilerInit:Footer"
 msgstr ""
-"Misslyckades: Dubblering är endast tillåtet till en tom PS2-Sockel, eller "
-"till ett filsystem."
+"Bemärk: Omkompilerare är inte nödvändiga för att PCSX2 ska kunna köras, men "
+"de förbättrar oftast emuleringshastigheten avsevärt. \n"
+"Ni kanske måste återmöjliggöra omkompileraren ovanför manuellt, om Ni löser "
+"felen."
 
 #: pcsx2/gui/AppMain.cpp:546
 msgid "!Notice:BiosDumpRequired"
@@ -105,38 +84,9 @@ msgstr ""
 #: pcsx2/gui/AppMain.cpp:629
 msgid "!Notice Error:Thread Deadlock Actions"
 msgstr ""
-"Ni är på väg att radera det formaterade minneskortet i sockel %u. \n"
-"All data på detta kort kommer att förloras! Är Ni helt säker?"
-
-#: pcsx2/gui/MemoryCardFile.cpp:78
-msgid "!Notice:Mcd:HasBeenDisabled"
-msgstr ""
-"Minneskortet i sockel %d har blivit automatiskt förhindrat. Ni kan åtgärda "
-"problemet \n"
-"och återmöjliggöra minneskortet när som helst genom Konfig:Minneskort i "
-"huvudmenyn."
-
-#: pcsx2/gui/Panels/PluginSelectorPanel.cpp:457
-msgid "!Notice:PluginSelector:ApplyFailed"
-msgstr ""
-"Alla insticksprogram måste ha giltliga val för att %s ska kunna köras. \n"
-"Om Ni är oförmögen att göra ett giltligt val till följd av saknade "
-"insticksprogram \n"
-"eller en ofullständig installaion av %s, så tryck Avbryt för att stänga "
-"Konfigurationspanelen."
-
-#: pcsx2/gui/Panels/PluginSelectorPanel.cpp:242
-msgid "!Notice:PluginSelector:ConfirmShutdown"
-msgstr ""
-"Varning! Att byta insticksprogram kräver en full nedstängning och "
-"återställning av PS2-VM. \n"
-"PCSX2 kommer att försöka att spara och återställa tillståndet, men om de "
-"nyligen valda insticksprogrammen \n"
-"är okompatibla kan detta misslyckas, och alla nuvarande framsteg kommer att "
-"förloras. \n"
-"\n"
-"\n"
-"Är Ni säker att Ni vill tillämpa inställningarna nu?"
+"Ignorera' för att fortsätta vänta på trådarna att svara. \n"
+"Avbryt' för att försöka avbryta tråden. \n"
+"Avsluta' för att avsluta PCSX2 omedelebart."
 
 #: pcsx2/gui/AppUserMode.cpp:57
 msgid "!Notice:PortableModeRights"
@@ -166,54 +116,57 @@ msgstr ""
 #: pcsx2/gui/Dialogs/FirstTimeWizard.cpp:54
 msgid "!Panel:Folders:Settings"
 msgstr ""
-"Playstation speldiskar stödjes inte av PCSX2. Om Ni vill emulera PSX spel \n"
-"så måste Ni ladda ner en PSX-specifik emulator, såsom ePSXe eller PCSX."
+"Ni kan förslagsvis ange en plasering för Era PCSX2-inställningar här. Om "
+"plaseringen \n"
+"innehåller befintliga PCSX2-inställningar, så kommer Ni erbjudas möjligheten "
+"att importera och överskriva."
 
-#: pcsx2/System.cpp:114
-msgid "!Notice:Recompiler:VirtualMemoryAlloc"
+#: pcsx2/gui/Dialogs/FirstTimeWizard.cpp:94
+msgid "!Wizard:Welcome"
 msgstr ""
 "Denna trollkarl kommer att vägleda Er igenom "
 "konfigurationsinsticksprogram, \n"
 "minneskort, och BIOS. Ifall detta är första gången Ni installerar %s, \n"
 "så rekommenderas Ni att kolla in Läsmig och konfigurationsvägledningen."
 
-#: pcsx2/gui/AppInit.cpp:211
-msgid "!Notice:RecompilerInit:Footer"
+#: pcsx2/gui/Dialogs/FirstTimeWizard.cpp:140
+msgid "!Wizard:Bios:Tutorial"
 msgstr ""
-"Bemärk: Omkompilerare är inte nödvändiga för att PCSX2 ska kunna köras, men "
-"de förbättrar oftast emuleringshastigheten avsevärt. \n"
-"Ni kanske måste återmöjliggöra omkompileraren ovanför manuellt, om Ni löser "
-"felen."
+"PCSX2 kräver *lagligt* PS2-BIOS för att köra spel. \n"
+"Ni kan inte använda en kopia anförskaffat från en vän eller genom "
+"Internet. \n"
+"Ni måste dumpa BIOS'et från Er *egna* Playstation 2 konsol."
 
-#: pcsx2/gui/AppInit.cpp:162
-msgid "!Notice:RecompilerInit:Header"
+#: pcsx2/gui/Dialogs/ImportSettingsDialog.cpp:31
+msgid "!Notice:ImportExistingSettings"
 msgstr ""
-"Varning: Några av de konfigurerade PS2-omkompilerarna misslyckades att "
-"initialiseras och har blivit förhindrade:"
+"Befintliga %s inställningar har hittats i "
+"konfigurationsinställningsmappen. \n"
+"Vill Ni importera dessa inställningar och överskriva %s förval med dem? \n"
+"\n"
+"\n"
+"(eller tryck Avbryt för att välja en annan mapp)"
 
-#: pcsx2/gui/AppInit.cpp:43
-msgid "!Notice:Startup:NoSSE2"
+#: pcsx2/gui/Dialogs/McdConfigDialog.cpp:30
+msgid "!Panel:Mcd:NtfsCompress"
 msgstr ""
 "NTFS komprimering är inbyggt, snabbt, och helt tillförlitligt; \n"
 "det komprimerar vanligtvis minneskort mycket bra (denna möjlighet "
 "rekommenderas)."
 
-#: common/src/Utilities/Exceptions.cpp:254
-msgid "!Notice:VirtualMemoryMap"
+#: pcsx2/gui/Dialogs/McdConfigDialog.cpp:41
+msgid "!Panel:Mcd:EnableEjection"
 msgstr ""
 "Undviker minneskortsförstörelse genom att tvinga spel att återindexera "
 "kortinnehåll \n"
 "efter att ha laddat från sparpunkt. Måhända inte förenligt med alla spel "
 "(Guitar Hero)."
 
-#: pcsx2/x86/sVU_zerorec.cpp:362
-msgid "!Notice:superVU:VirtualMemoryAlloc"
+#: pcsx2/gui/Dialogs/StuckThreadDialog.cpp:33
+msgid "!Panel:StuckThread:Heading"
 msgstr ""
-"Slut på Minne (typ): superVU-omkompileraren var oförmögen att resarvera den "
-"mängd specifika minne som krävs, \n"
-"och kommer inte vara tillgängligt för bruk. Detta är inte ett kritiskt fel, "
-"eftersom sVU är föråldrad, \n"
-"och följdaktligen borde Ni använda Er av microVU istället."
+"Tråden '%s' svarar inte. \n"
+"Den kan ha gått i baklås, eller kanske bara kör *väldigt* långsamt."
 
 #: pcsx2/gui/Dialogs/SysConfigDialog.cpp:38
 msgid "!Panel:HasHacksOverrides"
@@ -293,20 +246,13 @@ msgstr ""
 msgid "!Panel:EE/IOP:Heading"
 msgstr "Bemärk: De flesta spel har det fint med förvalsmöjligheterna."
 
-#: pcsx2/gui/Dialogs/FirstTimeWizard.cpp:54
-msgid "!Panel:Folders:Settings"
-msgstr ""
-"Ni kan förslagsvis ange en plasering för Era PCSX2-inställningar här. Om "
-"plaseringen \n"
-"innehåller befintliga PCSX2-inställningar, så kommer Ni erbjudas möjligheten "
-"att importera och överskriva."
+#: pcsx2/gui/Panels/CpuPanel.cpp:178
+msgid "!Panel:VUs:Heading"
+msgstr "Bemärk: De flesta spel har det fint med förvalsmöjligheterna."
 
-#: pcsx2/gui/Panels/VideoPanel.cpp:223
-msgid "!Panel:Frameskip:Heading"
-msgstr ""
-"Bemärk: Till följd av PS2 hårdvaruutformning så är precist bildöverhoppande "
-"omöjligt. \n"
-"Att möjliggöra det kan orsaka regäla grafikfel hos vissa spel."
+#: pcsx2/gui/Panels/DirPickerPanel.cpp:69
+msgid "!Notice:DirPicker:CreatePath"
+msgstr "Den angivna sökvägen/katalogen finnes ej. Vill Ni skapa den?"
 
 #: pcsx2/gui/Panels/DirPickerPanel.cpp:158
 msgid "!ContextTip:DirPicker:UseDefault"
@@ -403,31 +349,20 @@ msgstr ""
 #: pcsx2/gui/Panels/MemoryCardListPanel.cpp:720
 msgid "!Notice:Mcd:Delete"
 msgstr ""
-"Undviker minneskortsförstörelse genom att tvinga spel att återindexera "
-"kortinnehåll \n"
-"efter att ha laddat från sparpunkt. Måhända inte kompatibelt med alla spel "
-"(Guitar Hero)."
+"Ni är på väg att radera det formaterade minneskortet i sockel %u. \n"
+"All data på detta kort kommer att förloras! Är Ni helt säker?"
 
 #: pcsx2/gui/Panels/MemoryCardListPanel.cpp:758
 msgid "!Notice:Mcd:CantDuplicate"
 msgstr ""
-"NTFS komprimering är inbyggt, snabbt, och helt tillförlitligt; \n"
-"det komprimerar vanligtvis minneskort mycket bra (denna möjlighet "
-"rekomenderas)."
+"Misslyckades: Dubblering är endast tillåtet till en tom PS2-Sockel, eller "
+"till ett filsystem."
 
 #: pcsx2/gui/Panels/MemoryCardListPanel.cpp:801
 msgid "!Notice:Mcd:Copy Failed"
 msgstr ""
-"Snabbfixar förbättrar vanligtvis emuleringshastighet, men kan orsaka "
-"trassel, bruten audio, \n"
-"och falska FPS avläsningar. När Ni har emuleringsproblem, så förhindra denna "
-"panel först."
-
-#: pcsx2/gui/Dialogs/StuckThreadDialog.cpp:33
-msgid "!Panel:StuckThread:Heading"
-msgstr ""
-"Tråden '%s' svarar inte. \n"
-"Den kan ha gått i baklås, eller kanske bara kör *väldigt* långsamt."
+"Fel! Kunde inte kopiera innehållet till sockel %u. Målfilen används "
+"förnärvarande."
 
 #: pcsx2/gui/Panels/MiscPanelStuff.cpp:35
 msgid "!Panel:Usermode:Explained"
@@ -480,13 +415,14 @@ msgstr ""
 "\n"
 "Är Ni säker att Ni vill tillämpa inställningarna nu?"
 
-#: pcsx2/gui/Dialogs/FirstTimeWizard.cpp:140
-msgid "!Wizard:Bios:Tutorial"
+#: pcsx2/gui/Panels/PluginSelectorPanel.cpp:457
+msgid "!Notice:PluginSelector:ApplyFailed"
 msgstr ""
-"PCSX2 kräver *lagligt* PS2-BIOS för att köra spel. \n"
-"Ni kan inte använda en kopia anförskaffat från en vän eller genom "
-"Internet. \n"
-"Ni måste dumpa BIOS'et från Er *egna* Playstation 2 konsol."
+"Alla insticksprogram måste ha giltliga val för att %s ska kunna köras. \n"
+"Om Ni är oförmögen att göra ett giltligt val till följd av saknade "
+"insticksprogram \n"
+"eller en ofullständig installaion av %s, så tryck Avbryt för att stänga "
+"Konfigurationspanelen."
 
 #: pcsx2/gui/Panels/SpeedhacksPanel.cpp:27
 msgid "!Panel:Speedhacks:EECycleX1"
@@ -531,10 +467,10 @@ msgstr ""
 #: pcsx2/gui/Panels/SpeedhacksPanel.cpp:97
 msgid "!Panel:Speedhacks:Overview"
 msgstr ""
-"Denna trollkarl kommer att vägleda Er igenom "
-"konfigurationsinsticksprogram, \n"
-"minneskort, och BIOS. Ifall detta är första gången Ni installerar %s, \n"
-"så rekomenderas det att Ni kollar in Läsmig och konfigurationsvägledningen."
+"Snabbfixar förbättrar vanligtvis emuleringshastighet, men kan orsaka "
+"trassel, bruten audio, \n"
+"och falska FPS avläsningar. När Ni har emuleringsproblem, så förhindra denna "
+"panel först."
 
 #: pcsx2/gui/Panels/SpeedhacksPanel.cpp:129
 msgid "!ContextTip:Speedhacks:EECycleRate Slider"
@@ -661,34 +597,8 @@ msgstr ""
 #~ msgid "!Panel:"
 #~ msgstr "Förinställningar:"
 
-#~ msgid "!Panel:HasHacksOverrides"
+#~ msgid "!Notice:DocsFolderFileConflict"
 #~ msgstr ""
-#~ "Varning! Ni kör PCSX2 med instruktionsmöjligheter som upphäver Era "
-#~ "konfigurationsinställningar. Dessa instruktionsmöjligheter kommer inte "
-#~ "beaktas i Inställningar, och kommer att förhindras om Ni tillämpar några "
-#~ "förändringar här."
-
-#~ msgid "!Panel:HasPluginsOverrides"
-#~ msgstr ""
-#~ "Varning! Ni kör PCSX2 med instruktionsmöjligheter som upphäver Era "
-#~ "insticks- och/eller mappkonfigurationsinställningar. Dessa "
-#~ "instruktionsmöjligheter kommer inte beaktas i Inställningar, och kommer "
-#~ "att förhindras om Ni tillämpar några förändringar här."
-
-#~ msgid "!Panel:Presets:Name:1"
-#~ msgstr "Säkrast"
-
-#~ msgid "!Panel:Presets:Name:2"
-#~ msgstr "Säkert (snabbare)"
-
-#~ msgid "!Panel:Presets:Name:3"
-#~ msgstr "Balanserat"
-
-#~ msgid "!Panel:Presets:Name:4"
-#~ msgstr "Aggresivt"
-
-#~ msgid "!Panel:Presets:Name:5"
-#~ msgstr "Aggresivt plus"
-
-#~ msgid "!Panel:Presets:Name:6"
-#~ msgstr "Mest skadligt"
+#~ "PCSX2 kan inte skapa dokumentmappen i den begärda platsen. Sökvägens namn "
+#~ "överensstämmer med en befintlig fil. Radera filen eller ändra sökväg, och "
+#~ "försök igen."
