@@ -51,6 +51,7 @@ void setupMacroOp(int mode, const char* opName) {
 		microVU0.prog.IRinfo.info[0].sFlag.lastWrite	= 0;
 		microVU0.prog.IRinfo.info[0].mFlag.doFlag		= 1;
 		microVU0.prog.IRinfo.info[0].mFlag.write		= 0xff;
+		
 		xMOV(gprF0, ptr32[&vu0Regs.VI[REG_STATUS_FLAG].UL]);
 	}
 }
@@ -231,7 +232,8 @@ INTERPRETATE_COP2_FUNC(CALLMSR);
 void _setupBranchTest(u32*(jmpType)(u32), bool isLikely) {
 	printCOP2("COP2 Branch");
 	_eeFlushAllUnused();
-	TEST32ItoM((uptr)&VU0.VI[REG_VPU_STAT].UL, 0x100);
+	TEST32ItoM((uptr)&vif1Regs.stat._u32, 0x4);
+	//TEST32ItoM((uptr)&VU0.VI[REG_VPU_STAT].UL, 0x100);
 	recDoBranchImm(jmpType(0), isLikely);
 }
 
@@ -303,9 +305,9 @@ static void recCTC2() {
 			xMOV(ptr32[&vu0Regs.VI[REG_R].UL], eax);
 			break;
 		case REG_STATUS_FLAG:
-			if (_Rt_) { // Denormalizes flag into gprF1
+			if (_Rt_) { // Denormalizes flag into eax (gprT1)
 				mVUallocSFLAGd(&cpuRegs.GPR.r[_Rt_].UL[0], 0);
-				xMOV(ptr32[&vu0Regs.VI[_Rd_].UL], gprF1);
+				xMOV(ptr32[&vu0Regs.VI[_Rd_].UL], eax);
 			}
 			else xMOV(ptr32[&vu0Regs.VI[_Rd_].UL], 0);
 			break;
@@ -315,6 +317,7 @@ static void recCTC2() {
 			}
 			else xXOR(ecx, ecx);
 			xCALL(vu1ExecMicro);
+			xCALL(vif1VUFinish);
 			break;
 		case REG_FBRST:
 			if (!_Rt_) { 

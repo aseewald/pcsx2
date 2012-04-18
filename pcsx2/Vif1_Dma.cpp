@@ -21,30 +21,14 @@
 #include "VUmicro.h"
 #include "newVif.h"
 
+u32 g_vif1Cycles = 0;
 
 __fi void vif1FLUSH()
 {
-	if(g_packetsizeonvu > vif1.vifpacketsize && g_vu1Cycles > 0) 
+	if(vif1Regs.stat.VEW == true)
 	{
-		//DevCon.Warning("Adding on same packet");
-		if( ((g_packetsizeonvu - vif1.vifpacketsize) >> 1) > g_vu1Cycles)
-			g_vu1Cycles -= (g_packetsizeonvu - vif1.vifpacketsize) >> 1;
-		else g_vu1Cycles = 0;
-	}
-	if(g_vu1Cycles > 0)
-	{
-		//DevCon.Warning("Adding %x cycles to VIF1", g_vu1Cycles * BIAS);
-		g_vifCycles += g_vu1Cycles;
-		g_vu1Cycles = 0;
-		
-	} 
-	g_vu1Cycles = 0;//else DevCon.Warning("VIF1 Different Packet, how can i work this out :/");
-	if (VU0.VI[REG_VPU_STAT].UL & 0x100)
-	{
-		int _cycles = VU1.cycle;
-		vu1Finish();
-		//DevCon.Warning("VIF1 adding %x cycles", (VU1.cycle - _cycles) * BIAS);
-		g_vifCycles += (VU1.cycle - _cycles) * BIAS;
+		vif1.waitforvu = true;
+		vif1.vifstalled = true;
 	}
 }
 
@@ -95,7 +79,7 @@ void vif1TransferToMemory()
 		} while (++pMem < pMemEnd);
 	}
 
-	g_vifCycles += vif1ch.qwc * 2;
+	g_vif1Cycles += vif1ch.qwc * 2;
 	vif1ch.madr += vif1ch.qwc * 16; // mgs3 scene changes
 	if (vif1.GSLastDownloadSize >= vif1ch.qwc) {
 		vif1.GSLastDownloadSize -= vif1ch.qwc;
@@ -158,7 +142,7 @@ __fi void vif1SetupTransfer()
 			if (!(vif1ch.transfer("Vif1 Tag", ptag))) return;
 
 			vif1ch.madr = ptag[1]._u32;            //MADR = ADDR field + SPR
-			g_vifCycles += 1; // Add 1 g_vifCycles from the QW read for the tag
+			g_vif1Cycles += 1; // Add 1 g_vifCycles from the QW read for the tag
 
 			VIF_LOG("VIF1 Tag %8.8x_%8.8x size=%d, id=%d, madr=%lx, tadr=%lx",
 			        ptag[1]._u32, ptag[0]._u32, vif1ch.qwc, ptag->ID, vif1ch.madr, vif1ch.tadr);
@@ -229,11 +213,40 @@ __fi void vif1SetupTransfer()
 	}
 }
 
+__fi void vif1VUFinish()
+{
+	if (VU0.VI[REG_VPU_STAT].UL & 0x100)
+	{
+		int _cycles = VU1.cycle;
+		//DevCon.Warning("Finishing VU1");
+		vu1Finish();
+		CPU_INT(VIF_VU1_FINISH, (VU1.cycle - _cycles) * BIAS); 
+		return;
+	}
+
+	vif1Regs.stat.VEW = false;
+	if(vif1.waitforvu == true)
+	{
+		vif1.waitforvu = false;
+		ExecuteVU(1);
+		//Check if VIF is already scheduled to interrupt, if it's waiting, kick it :P
+		if((cpuRegs.interrupt & (1<<DMAC_VIF1 | 1 << DMAC_MFIFO_VIF)) == 0 && vif1ch.chcr.STR == true)
+		{
+			if(dmacRegs.ctrl.MFD == MFD_VIF1)
+				vifMFIFOInterrupt();
+			else
+				vif1Interrupt();
+		}
+	}
+	
+	//DevCon.Warning("VU1 state cleared");
+}
+
 __fi void vif1Interrupt()
 {
-	VIF_LOG("vif1Interrupt: %8.8x", cpuRegs.cycle);
+	VIF_LOG("vif1Interrupt: %8.8x chcr %x, done %x, qwc %x", cpuRegs.cycle, vif1ch.chcr._u32, vif1.done, vif1ch.qwc);
 
-	g_vifCycles = 0;
+	g_vif1Cycles = 0;
 
 	//Some games (Fahrenheit being one) start vif first, let it loop through blankness while it sets MFIFO mode, so we need to check it here.
 	if (dmacRegs.ctrl.MFD == MFD_VIF1) {
@@ -261,6 +274,12 @@ __fi void vif1Interrupt()
 		//Simulated GS transfer time done, clear the flags
 	}
 	
+	if(vif1.waitforvu == true)
+	{
+		//DevCon.Warning("Waiting on VU1");
+		//CPU_INT(DMAC_VIF1, 16);
+		return;
+	}
 	if (!vif1ch.chcr.STR) Console.WriteLn("Vif1 running when CHCR == %x", vif1ch.chcr._u32);
 
 	if (vif1.irq && vif1.tag.size == 0)
@@ -293,19 +312,7 @@ __fi void vif1Interrupt()
 	{
 		vif1Regs.stat.VPS = VPS_IDLE;
 	}
-
-	if (vif1.inprogress & 0x1)
-	{
-		_VIF1chain();
-		// VIF_NORMAL_FROM_MEM_MODE is a very slow operation.
-		// Timesplitters 2 depends on this beeing a bit higher than 128.
-		if (vif1ch.chcr.DIR) vif1Regs.stat.FQC = min(vif1ch.qwc, (u16)16);
-		// Refraction - Removing voodoo timings for now, completely messes a lot of Path3 masked games.
-		/*if (vif1.dmamode == VIF_NORMAL_FROM_MEM_MODE ) CPU_INT(DMAC_VIF1, 1024);
-		else */CPU_INT(DMAC_VIF1, g_vifCycles /*VifCycleVoodoo*/);
-		return;
-	}
-
+	
 	if (!vif1.done)
 	{
 
@@ -317,9 +324,28 @@ __fi void vif1Interrupt()
 
 		if ((vif1.inprogress & 0x1) == 0) vif1SetupTransfer();
 		if (vif1ch.chcr.DIR) vif1Regs.stat.FQC = min(vif1ch.qwc, (u16)16);
-		CPU_INT(DMAC_VIF1, g_vifCycles);
+		if(vif1.waitforvu == true)
+		{
+			//DevCon.Warning("Waiting on VU1");
+			return;
+		}
+	}
+	
+
+	if (vif1.inprogress & 0x1)
+	{
+		_VIF1chain();
+		// VIF_NORMAL_FROM_MEM_MODE is a very slow operation.
+		// Timesplitters 2 depends on this being a bit higher than 128.
+		if (vif1ch.chcr.DIR) vif1Regs.stat.FQC = min(vif1ch.qwc, (u16)16);
+	}
+
+	if(g_vif1Cycles > 0 || vif1ch.qwc)
+	{
+		CPU_INT(DMAC_VIF1, max((int)g_vif1Cycles, 8));
 		return;
 	}
+	else if(vif1Regs.stat.VPS == VPS_TRANSFERRING) DevCon.Warning("Cycles %x, cmd %x, qwc %x, waitonvu %x", g_vif1Cycles, vif1.cmd, vif1ch.qwc, vif1.waitforvu);
 
 	if (vif1.vifstalled && vif1.irq)
 	{
@@ -342,8 +368,7 @@ __fi void vif1Interrupt()
 
 	vif1ch.chcr.STR = false;
 	vif1.vifstalled = false;
-	g_vifCycles = 0;
-	g_vu1Cycles = 0;
+	g_vif1Cycles = 0;
 	DMA_LOG("VIF1 DMA End");
 	hwDmacIrq(DMAC_VIF1);
 
@@ -362,8 +387,7 @@ void dmaVIF1()
 	/*vif1.irqoffset = 0;
 	vif1.vifstalled = false;	
 	vif1.inprogress = 0;*/
-	g_vifCycles = 0;
-	g_vu1Cycles = 0;
+	g_vif1Cycles = 0;
 
 #ifdef PCSX2_DEVBUILD
 	if (dmacRegs.ctrl.STD == STD_VIF1)
@@ -409,7 +433,7 @@ void dmaVIF1()
 	{
 		vif1.dmamode = VIF_CHAIN_MODE;
 		vif1.done = false;
-		vif1.inprogress = 0;
+		vif1.inprogress &= ~0x1;
 	}
 
 	if (vif1ch.chcr.DIR) vif1Regs.stat.FQC = min((u16)0x10, vif1ch.qwc);

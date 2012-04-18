@@ -41,6 +41,7 @@ endif(CMAKE_BUILD_TYPE STREQUAL Release)
 set(GSnullSources
 	GifTransfer.cpp
 	GS.cpp
+	GSLog.cpp
 	Registers.cpp)
 
 # GSnull headers
@@ -92,6 +93,14 @@ add_library(${Output} SHARED
 			${GSnullnullHeaders}
 			${GSnullLinuxSources}
 			${GSnullLinuxHeaders})
+
+if(Linux)
+	# link target with gtk2
+	target_link_libraries(${Output} ${GTK2_LIBRARIES})
+endif(Linux)
+
+# link target with X11
+target_link_libraries(${Output} ${X11_LIBRARIES})
 
 # User flags options
 if(NOT USER_CMAKE_LD_FLAGS STREQUAL "")

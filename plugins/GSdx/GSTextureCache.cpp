@@ -25,11 +25,13 @@
 GSTextureCache::GSTextureCache(GSRenderer* r)
 	: m_renderer(r)
 {
+	m_spritehack = !!theApp.GetConfig("UserHacks", 0) ? theApp.GetConfig("UserHacks_SpriteHack", 0) : 0;
+	
+	UserHacks_HalfPixelOffset = !!theApp.GetConfig("UserHacks", 0) && !!theApp.GetConfig("UserHacks_HalfPixelOffset", 0);
+
 	m_paltex = !!theApp.GetConfig("paltex", 0);
 
 	m_temp = (uint8*)_aligned_malloc(1024 * 1024 * sizeof(uint32), 32);
-
-	UserHacks_HalfPixelOffset = !!theApp.GetConfig("UserHacks_HalfPixelOffset", 0);
 }
 
 GSTextureCache::~GSTextureCache()
@@ -88,7 +90,7 @@ GSTextureCache::Source* GSTextureCache::LookupSource(const GIFRegTEX0& TEX0, con
 
 	Target* dst = NULL;
 
-#ifdef HW_NO_TEXTURE_CACHE
+#ifdef DISABLE_HW_TEXTURE_CACHE
 	if( 0 )
 #else
 	if(src == NULL)
@@ -97,11 +99,14 @@ GSTextureCache::Source* GSTextureCache::LookupSource(const GIFRegTEX0& TEX0, con
 		uint32 bp = TEX0.TBP0;
 		uint32 psm = TEX0.PSM;
 
-		// This should get looked at if you feel like hackfixing the texture cache.
-		// Checking for type < 1 (so no only RenderTarget, not DepthStencil get checked), it fixes the fog in Arc the Lad.
-		// Simply not doing this code at all makes a lot of previsouly missing stuff show (but breaks pretty much everything
-		// else.
-		for(int type = 0; type < 2 && dst == NULL; type++)
+		// Arc the Lad finds the wrong surface here when looking for a depth stencil.
+		// Since we're currently not caching depth stencils (check ToDo in CreateSource) we should not look for it here.
+		
+		// (Simply not doing this code at all makes a lot of previsouly missing stuff show (but breaks pretty much everything
+		// else.)
+		
+		//for(int type = 0; type < 2 && dst == NULL; type++)
+		for(int type = 0; type < 1 && dst == NULL; type++) // Only look for render target, no depth stencil
 		{
 			for(list<Target*>::iterator i = m_dst[type].begin(); i != m_dst[type].end(); i++)
 			{
@@ -191,7 +196,7 @@ GSTextureCache::Target* GSTextureCache::LookupTarget(const GIFRegTEX0& TEX0, int
 		if(multiplier > 1) // it's limited to a maximum of 4 on reading the config
 		{
 
-#if 0 //#ifdef USE_UPSCALE_HACKS //not happy with this yet..
+#if 0 //#ifdef ENABLE_UPSCALE_HACKS //not happy with this yet..
 
 			float x = 1.0f;
 			float y = 1.0f;
@@ -263,7 +268,7 @@ GSTextureCache::Target* GSTextureCache::LookupTarget(const GIFRegTEX0& TEX0, int
 		{
 			// HACK: try to find something close to the base pointer
 
-			if(t->m_TEX0.TBP0 <= bp && bp < t->m_TEX0.TBP0 + 0x700 && (!dst || t->m_TEX0.TBP0 >= dst->m_TEX0.TBP0))
+			if(t->m_TEX0.TBP0 <= bp && bp < t->m_TEX0.TBP0 + 0xe00 && (!dst || t->m_TEX0.TBP0 >= dst->m_TEX0.TBP0))
 			{
 				dst = t;
 			}
@@ -278,6 +283,8 @@ GSTextureCache::Target* GSTextureCache::LookupTarget(const GIFRegTEX0& TEX0, int
 		{
 			return NULL;
 		}
+
+		m_renderer->m_dev->ClearRenderTarget(dst->m_texture, 0); // new frame buffers after reset should be cleared, don't display memory garbage
 	}
 	else
 	{
@@ -289,18 +296,13 @@ GSTextureCache::Target* GSTextureCache::LookupTarget(const GIFRegTEX0& TEX0, int
 	return dst;
 }
 
-void GSTextureCache::InvalidateVideoMem(const GSOffset* o, const GSVector4i& rect, bool target)
+void GSTextureCache::InvalidateVideoMem(GSOffset* o, const GSVector4i& rect, bool target)
 {
-	// Fixme. Crashes Dual Hearts, maybe others as well. Was fine before r1549.
-	if (!o) return;
+	if(!o) return; // Fixme. Crashes Dual Hearts, maybe others as well. Was fine before r1549.
 
 	uint32 bp = o->bp;
 	uint32 bw = o->bw;
 	uint32 psm = o->psm;
-
-	GSVector2i bs = (bp & 31) == 0 ? GSLocalMemory::m_psm[psm].pgs : GSLocalMemory::m_psm[psm].bs;
-
-	GSVector4i r = rect.ralign<Align_Outside>(bs);
 
 	if(!target)
 	{
@@ -319,59 +321,59 @@ void GSTextureCache::InvalidateVideoMem(const GSOffset* o, const GSVector4i& rec
 		}
 	}
 
+	GSVector4i r;
+
+	uint32* pages = (uint32*)m_temp;
+	
+	o->GetPages(rect, pages, &r);
+
 	bool found = false;
 
-	for(int y = r.top; y < r.bottom; y += bs.y)
+	for(const uint32* p = pages; *p != GSOffset::EOP; p++)
 	{
-		uint32 base = o->block.row[y >> 3];
+		uint32 page = *p;
 
-		for(int x = r.left; x < r.right; x += bs.x)
+		const list<Source*>& m = m_src.m_map[page];
+
+		for(list<Source*>::const_iterator i = m.begin(); i != m.end(); )
 		{
-			uint32 page = (base + o->block.col[x >> 3]) >> 5;
+			list<Source*>::const_iterator j = i++;
 
-			if(page < MAX_PAGES)
+			Source* s = *j;
+
+			if(GSUtil::HasSharedBits(psm, s->m_TEX0.PSM))
 			{
-				const list<Source*>& m = m_src.m_map[page];
+				uint32* RESTRICT valid = s->m_valid;
 
-				for(list<Source*>::const_iterator i = m.begin(); i != m.end(); )
+				bool b = bp == s->m_TEX0.TBP0;
+
+				if(!s->m_target)
 				{
-					list<Source*>::const_iterator j = i++;
-
-					Source* s = *j;
-
-					if(GSUtil::HasSharedBits(psm, s->m_TEX0.PSM))
+					if(s->m_repeating)
 					{
-						bool b = bp == s->m_TEX0.TBP0;
-
-						if(!s->m_target)
-						{
-							if(s->m_repeating)
-							{
-								list<GSVector2i>& l = s->m_p2t[page];
+						vector<GSVector2i>& l = s->m_p2t[page];
 						
-								for(list<GSVector2i>::iterator k = l.begin(); k != l.end(); k++)
-								{
-									s->m_valid[k->x] &= ~k->y;
-								}
-							}
-							else
-							{
-								s->m_valid[page] = 0;
-							}
-
-							s->m_complete = false;
-
-							found = b;
-						}
-						else
+						for(vector<GSVector2i>::iterator k = l.begin(); k != l.end(); k++)
 						{
-							// TODO
-
-							if(b)
-							{
-								m_src.RemoveAt(s);
-							}
+							valid[k->x] &= k->y;
 						}
+					}
+					else
+					{
+						valid[page] = 0;
+					}
+
+					s->m_complete = false;
+
+					found = b;
+				}
+				else
+				{
+					// TODO
+
+					if(b)
+					{
+						m_src.RemoveAt(s);
 					}
 				}
 			}
@@ -425,7 +427,7 @@ void GSTextureCache::InvalidateVideoMem(const GSOffset* o, const GSVector4i& rec
 	}
 }
 
-void GSTextureCache::InvalidateLocalMem(const GSOffset* o, const GSVector4i& r)
+void GSTextureCache::InvalidateLocalMem(GSOffset* o, const GSVector4i& r)
 {
 	uint32 bp = o->bp;
 	uint32 psm = o->psm;
@@ -584,6 +586,16 @@ GSTextureCache::Source* GSTextureCache::CreateSource(const GIFRegTEX0& TEX0, con
 
 	if(dst == NULL)
 	{
+		if(m_spritehack && (TEX0.PSM == PSM_PSMT8 || TEX0.PSM == PSM_PSMT8H)) 
+		{
+			src->m_spritehack_t = true;
+			
+			if(m_spritehack == 2 && TEX0.CPSM != PSM_PSMCT16) 
+				src->m_spritehack_t = false;		
+		}			
+		else
+			src->m_spritehack_t = false;
+		
 		if(m_paltex && GSLocalMemory::m_psm[TEX0.PSM].pal > 0)
 		{
 			src->m_fmt = FMT_8;

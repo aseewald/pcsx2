@@ -20,12 +20,6 @@
 #include "Vif_Dma.h"
 
 u16 vifqwc = 0;
-u32 g_vifCycles = 0;
-u32 g_vu0Cycles = 0;
-u32 g_vu1Cycles = 0;
-u32 g_packetsizeonvu = 0;
-
-extern u32 g_vifCycles;
 
 static u32 qwctag(u32 mask)
 {
@@ -155,7 +149,7 @@ void mfifoVIF1transfer(int qwc)
 {
 	tDMA_TAG *ptag;
 
-	g_vifCycles = 0;
+	g_vif1Cycles = 0;
 
 	if (qwc > 0)
 	{
@@ -211,7 +205,7 @@ void mfifoVIF1transfer(int qwc)
 				return;        //IRQ set by VIFTransfer
 				
 			} //else vif1.vifstalled = false;
-			g_vifCycles += 2;
+			g_vif1Cycles += 2;
 		}
 		
 		vif1.irqoffset = 0;
@@ -251,7 +245,7 @@ void mfifoVIF1transfer(int qwc)
 
 void vifMFIFOInterrupt()
 {
-	g_vifCycles = 0;
+	g_vif1Cycles = 0;
 	VIF_LOG("vif mfifo interrupt");
 
 	if (dmacRegs.ctrl.MFD != MFD_VIF1) {
@@ -268,6 +262,12 @@ void vifMFIFOInterrupt()
 			CPU_INT(DMAC_MFIFO_VIF, 128);
 			return;
 		}
+	}
+	if(vif1.waitforvu == true)
+	{
+	//	DevCon.Warning("Waiting on VU1 MFIFO");
+		//CPU_INT(DMAC_MFIFO_VIF, 16);
+		return;
 	}
 
 	// We need to check the direction, if it is downloading from the GS,
@@ -320,7 +320,7 @@ void vifMFIFOInterrupt()
 			case 1: //Transfer data
 				mfifo_VIF1chain();
 				//Sanity check! making sure we always have non-zero values
-				CPU_INT(DMAC_MFIFO_VIF, (g_vifCycles == 0 ? 4 : g_vifCycles) );	
+				CPU_INT(DMAC_MFIFO_VIF, (g_vif1Cycles == 0 ? 4 : g_vif1Cycles) );	
 				vif1Regs.stat.FQC = min((u16)0x10, vif1ch.qwc);
 				return;
 		}
@@ -329,7 +329,7 @@ void vifMFIFOInterrupt()
 
 	vif1.vifstalled = false;
 	vif1.done = 1;
-	g_vifCycles = 0;
+	g_vif1Cycles = 0;
 	vif1Regs.stat.FQC = min((u16)0x10, vif1ch.qwc);
 	vif1ch.chcr.STR = false;
 	hwDmacIrq(DMAC_VIF1);

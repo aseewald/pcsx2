@@ -170,10 +170,10 @@ typedef Fntype_mVUrecInst* Fnptr_mVUrecInst;
 #define _mVUt template<int vuIndex>
 
 // Define Passes
-#define pass1 if (recPass == 0)
-#define pass2 if (recPass == 1)
-#define pass3 if (recPass == 2)
-#define pass4 if (recPass == 3)
+#define pass1 if (recPass == 0) // Analyze
+#define pass2 if (recPass == 1) // Recompile
+#define pass3 if (recPass == 2) // Logging
+#define pass4 if (recPass == 3) // Flag stuff
 
 // Upper Opcode Cases
 #define opCase1 if (opCase == 1) // Normal Opcodes
@@ -358,13 +358,6 @@ static const bool doJumpAsSameProgram = 0; // Set to 1 to treat jumps as same pr
 #define CHECK_VU_FLAGHACK  (EmuConfig.Speedhacks.vuFlagHack)
 // This hack only updates the Status Flag on blocks that will read it.
 // Most blocks do not read status flags, so this is a big speedup.
-
-// Block Flag Instance No-Propagation Hack
-#define CHECK_VU_BLOCKHACK (EmuConfig.Speedhacks.vuBlockHack)
-// There are times when it is unknown if future blocks will need old
-// flag instance data (due to indirect jumps). This hack assumes
-// that they won't need old flag data. This effectively removes a lot
-// of end-of-block flag instance shuffling, causing nice speedups.
 
 // Min/Max Speed Hack
 #define CHECK_VU_MINMAXHACK	0 //(EmuConfig.Speedhacks.vuMinMax)

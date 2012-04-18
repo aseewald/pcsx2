@@ -76,6 +76,7 @@ public:
 				uint32 fst:1;
 				uint32 logz:1;
 				uint32 rtcopy:1;
+				uint32 wildhack:2;
 			};
 
 			uint32 key;
@@ -173,6 +174,7 @@ public:
 				uint32 ltf:1;
 				uint32 colclip:2;
 				uint32 date:2;
+				uint32 spritehack:1;
 			};
 
 			uint32 key;
@@ -266,7 +268,7 @@ public:
 	#pragma pack(pop)
 
 protected:
-	struct {D3D_FEATURE_LEVEL level; string model, vs, gs, ps;} m_shader;
+	struct {D3D_FEATURE_LEVEL level; string model, vs, gs, ps, cs;} m_shader;
 	uint32 m_msaa;
 	DXGI_SAMPLE_DESC m_msaa_desc;
 
@@ -277,8 +279,8 @@ public:
 	virtual ~GSDeviceDX();
 
 	bool SetFeatureLevel(D3D_FEATURE_LEVEL level, bool compat_mode);
+	void GetFeatureLevel(D3D_FEATURE_LEVEL& level) const {level = m_shader.level;}
 
-	virtual void SetupIA(const void* vertices, int count, int prim) = 0;
 	virtual void SetupVS(VSSelector sel, const VSConstantBuffer* cb) = 0;
 	virtual void SetupGS(GSSelector sel) = 0;
 	virtual void SetupPS(PSSelector sel, const PSConstantBuffer* cb, PSSamplerSelector ssel) = 0;

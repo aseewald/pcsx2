@@ -121,6 +121,14 @@ void RecentIsoManager::Repopulate()
 
 	m_Separator = m_Menu->AppendSeparator();
 	
+	// From arcum's comment on r5141
+	// What was happening is that when all the radio button menu items in a group are deleted, 
+	// wxwidgets deletes the group, but when you start adding radio menu items again, 
+	// it trys to add them to a group that doesn't exist. Since the group doesn't exist, 
+	// it starts a new group, but it also spews a couple warnings about it in Linux.
+#ifdef __LINUX__
+	m_Menu->Remove( m_Menu->Append( -1, wxEmptyString ) );
+#endif
 	//Note: the internal recent iso list (m_Items) has the most recent item last (also at the INI file)
 	//  but the menu is composed in reverse order such that the most recent item appears at the top.
 	for( int i=cnt-1; i>=0; --i )
@@ -176,7 +184,7 @@ void RecentIsoManager::InsertIntoMenu( int id )
 	if (this->m_firstIdForMenuItems_or_wxID_ANY != wxID_ANY)
 		wxid = this->m_firstIdForMenuItems_or_wxID_ANY + id;
 
-	curitem.ItemPtr = m_Menu->Append( wxid, Path::GetFilename(curitem.Filename), curitem.Filename, wxITEM_RADIO );
+	curitem.ItemPtr = m_Menu->AppendRadioItem( wxid, Path::GetFilename(curitem.Filename), curitem.Filename );
 	bool exists = wxFileExists( curitem.Filename );
 
 	if( m_cursel == id && exists )

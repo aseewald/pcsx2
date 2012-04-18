@@ -32,10 +32,12 @@ GSDevice::GSDevice()
 	, m_weavebob(NULL)
 	, m_blend(NULL)
 	, m_fxaa(NULL)
+	, m_shadeboost(NULL)
 	, m_1x1(NULL)
 	, m_frame(0)
 {
-	memset(&m_vertices, 0, sizeof(m_vertices));
+	memset(&m_vertex, 0, sizeof(m_vertex));
+	memset(&m_index, 0, sizeof(m_index));
 }
 
 GSDevice::~GSDevice()
@@ -47,6 +49,7 @@ GSDevice::~GSDevice()
 	delete m_weavebob;
 	delete m_blend;
 	delete m_fxaa;
+	delete m_shadeboost;
 	delete m_1x1;
 }
 
@@ -68,6 +71,7 @@ bool GSDevice::Reset(int w, int h)
 	delete m_weavebob;
 	delete m_blend;
 	delete m_fxaa;
+	delete m_shadeboost;
 	delete m_1x1;
 
 	m_backbuffer = NULL;
@@ -75,6 +79,7 @@ bool GSDevice::Reset(int w, int h)
 	m_weavebob = NULL;
 	m_blend = NULL;
 	m_fxaa = NULL;
+	m_shadeboost = NULL;
 	m_1x1 = NULL;
 
 	m_current = NULL; // current is special, points to other textures, no need to delete
@@ -135,8 +140,10 @@ GSTexture* GSDevice::FetchSurface(int type, int w, int h, bool msaa, int format)
 
 void GSDevice::EndScene()
 {
-	m_vertices.start += m_vertices.count;
-	m_vertices.count = 0;
+	m_vertex.start += m_vertex.count;
+	m_vertex.count = 0;
+	m_index.start += m_index.count;
+	m_index.count = 0;
 }
 
 void GSDevice::Recycle(GSTexture* t)
@@ -311,6 +318,26 @@ void GSDevice::FXAA()
 		StretchRect(m_current, sr, m_fxaa, dr, 7, false);
 
 		DoFXAA(m_fxaa, m_current);
+	}
+}
+
+void GSDevice::ShadeBoost()
+{
+	GSVector2i s = m_current->GetSize();
+
+	if(m_shadeboost == NULL || m_shadeboost->GetSize() != s)
+	{
+		delete m_shadeboost;
+		m_shadeboost = CreateRenderTarget(s.x, s.y, false);
+	}
+
+	if(m_shadeboost != NULL)
+	{
+		GSVector4 sr(0, 0, 1, 1);
+		GSVector4 dr(0, 0, s.x, s.y);
+
+		StretchRect(m_current, sr, m_shadeboost, dr, 0, false);
+		DoShadeBoost(m_shadeboost, m_current);
 	}
 }
 

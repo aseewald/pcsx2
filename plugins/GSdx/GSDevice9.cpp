@@ -137,9 +137,9 @@ uint32 GSDevice9::GetMaxDepth(uint32 msaa = 0)
 
 void GSDevice9::ForceValidMsaaConfig()
 {
-	if(0 == GetMaxDepth(theApp.GetConfig("msaa", 0)))
+	if(0 == GetMaxDepth(theApp.GetConfig("UserHacks_MSAA", 0)))
 	{
-		theApp.SetConfig("msaa", 0); // replace invalid msaa value in ini file with 0.
+		theApp.SetConfig("UserHacks_MSAA", 0); // replace invalid msaa value in ini file with 0.
 	}
 };
 
@@ -282,6 +282,28 @@ bool GSDevice9::Create(GSWnd* wnd)
 		CompileShader(IDR_INTERLACE_FX, format("ps_main%d", i), NULL, &m_interlace.ps[i]);
 	}
 
+	// Shade Boost	
+
+	int ShadeBoost_Contrast = theApp.GetConfig("ShadeBoost_Contrast", 50);
+	int ShadeBoost_Brightness = theApp.GetConfig("ShadeBoost_Brightness", 50);
+	int ShadeBoost_Saturation = theApp.GetConfig("ShadeBoost_Saturation", 50);
+		
+	string str[3];		
+		
+	str[0] = format("%d", ShadeBoost_Saturation);
+	str[1] = format("%d", ShadeBoost_Brightness);
+	str[2] = format("%d", ShadeBoost_Contrast);
+
+	D3DXMACRO macro[] =
+	{			
+		{"SB_SATURATION", str[0].c_str()},
+		{"SB_BRIGHTNESS", str[1].c_str()},
+		{"SB_CONTRAST", str[2].c_str()},
+		{NULL, NULL},
+	};
+
+	CompileShader(IDR_SHADEBOOST_FX, "ps_main", macro, &m_shadeboost.ps);	
+
 	// fxaa
 
 	CompileShader(IDR_FXAA_FX, "ps_main", NULL, &m_fxaa.ps);
@@ -352,8 +374,10 @@ bool GSDevice9::Reset(int w, int h)
 	m_vb = NULL;
 	m_vb_old = NULL;
 
-	m_vertices.start = 0;
-	m_vertices.count = 0;
+	m_vertex.start = 0;
+	m_vertex.count = 0;
+	m_index.start = 0;
+	m_index.count = 0;
 
 	if(m_state.vs_cb) _aligned_free(m_state.vs_cb);
 	if(m_state.ps_cb) _aligned_free(m_state.ps_cb);
@@ -510,25 +534,52 @@ void GSDevice9::DrawPrimitive()
 
 	switch(m_state.topology)
 	{
-    case D3DPT_TRIANGLELIST:
-		prims = m_vertices.count / 3;
+    case D3DPT_POINTLIST:
+		prims = m_vertex.count;
 		break;
     case D3DPT_LINELIST:
-		prims = m_vertices.count / 2;
+		prims = m_vertex.count / 2;
 		break;
-    case D3DPT_POINTLIST:
-		prims = m_vertices.count;
+    case D3DPT_LINESTRIP:
+		prims = m_vertex.count - 1;
+		break;
+    case D3DPT_TRIANGLELIST:
+		prims = m_vertex.count / 3;
 		break;
     case D3DPT_TRIANGLESTRIP:
     case D3DPT_TRIANGLEFAN:
-		prims = m_vertices.count - 2;
+		prims = m_vertex.count - 2;
 		break;
-    case D3DPT_LINESTRIP:
-		prims = m_vertices.count - 1;
-		break;
+	default:
+		__assume(0);
 	}
 
-	m_dev->DrawPrimitive(m_state.topology, m_vertices.start, prims);
+	m_dev->DrawPrimitive(m_state.topology, m_vertex.start, prims);
+}
+
+void GSDevice9::DrawIndexedPrimitive()
+{
+	int prims = 0;
+
+	switch(m_state.topology)
+	{
+    case D3DPT_POINTLIST:
+		prims = m_index.count;
+		break;
+    case D3DPT_LINELIST:
+    case D3DPT_LINESTRIP:
+		prims = m_index.count / 2;
+		break;
+    case D3DPT_TRIANGLELIST:
+    case D3DPT_TRIANGLESTRIP:
+    case D3DPT_TRIANGLEFAN:
+		prims = m_index.count / 3;
+		break;
+	default:
+		__assume(0);
+	}
+
+	m_dev->DrawIndexedPrimitive(m_state.topology, m_vertex.start, 0, m_index.count, m_index.start, prims);
 }
 
 void GSDevice9::EndScene()
@@ -831,6 +882,21 @@ void GSDevice9::DoFXAA(GSTexture* st, GSTexture* dt)
 	StretchRect(st, sr, dt, dr, m_fxaa.ps, (const float*)&cb, 2, true);
 }
 
+void GSDevice9::DoShadeBoost(GSTexture* st, GSTexture* dt)
+{
+	GSVector2i s = dt->GetSize();
+
+	GSVector4 sr(0, 0, 1, 1);
+	GSVector4 dr(0, 0, s.x, s.y);
+
+	ShadeBoostConstantBuffer cb;
+
+	cb.rcpFrame = GSVector4(1.0f / s.x, 1.0f / s.y, 0.0f, 0.0f);
+	cb.rcpFrameOpt = GSVector4::zero();
+
+	StretchRect(st, sr, dt, dr, m_shadeboost.ps, (const float*)&cb, 1, true);
+}
+
 void GSDevice9::SetupDATE(GSTexture* rt, GSTexture* ds, const GSVertexPT1* vertices, bool datm)
 {
 	const GSVector2i& size = rt->GetSize();
@@ -881,51 +947,66 @@ void GSDevice9::SetupDATE(GSTexture* rt, GSTexture* ds, const GSVertexPT1* verti
 	}
 }
 
-void GSDevice9::IASetVertexBuffer(const void* vertices, size_t stride, size_t count)
+void GSDevice9::IASetVertexBuffer(const void* vertex, size_t stride, size_t count)
 {
-	ASSERT(m_vertices.count == 0);
+	void* ptr = NULL;
 
-	if(count * stride > m_vertices.limit * m_vertices.stride)
+	if(IAMapVertexBuffer(&ptr, stride, count))
+	{
+		GSVector4i::storent(ptr, vertex, count * stride);
+
+		IAUnmapVertexBuffer();
+	}
+}
+
+bool GSDevice9::IAMapVertexBuffer(void** vertex, size_t stride, size_t count)
+{
+	ASSERT(m_vertex.count == 0);
+
+	if(count * stride > m_vertex.limit * m_vertex.stride)
 	{
 		m_vb_old = m_vb;
 		m_vb = NULL;
 
-		m_vertices.start = 0;
-		m_vertices.count = 0;
-		m_vertices.limit = std::max<int>(count * 3 / 2, 10000);
+		m_vertex.start = 0;
+		m_vertex.count = 0;
+		m_vertex.limit = std::max<int>(count * 3 / 2, 10000);
 	}
 
 	if(m_vb == NULL)
 	{
 		HRESULT hr;
 
-		hr = m_dev->CreateVertexBuffer(m_vertices.limit * stride, D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT, &m_vb, NULL);
+		hr = m_dev->CreateVertexBuffer(m_vertex.limit * stride, D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT, &m_vb, NULL);
 
-		if(FAILED(hr)) return;
+		if(FAILED(hr)) return false;
 	}
 
 	uint32 flags = D3DLOCK_NOOVERWRITE;
 
-	if(m_vertices.start + count > m_vertices.limit || stride != m_vertices.stride)
+	if(m_vertex.start + count > m_vertex.limit || stride != m_vertex.stride)
 	{
-		m_vertices.start = 0;
+		m_vertex.start = 0;
 
 		flags = D3DLOCK_DISCARD;
 	}
 
-	void* v = NULL;
-
-	if(SUCCEEDED(m_vb->Lock(m_vertices.start * stride, count * stride, &v, flags)))
+	if(FAILED(m_vb->Lock(m_vertex.start * stride, count * stride, vertex, flags)))
 	{
-		GSVector4i::storent(v, vertices, count * stride);
-
-		m_vb->Unlock();
+		return false;
 	}
 
-	m_vertices.count = count;
-	m_vertices.stride = stride;
+	m_vertex.count = count;
+	m_vertex.stride = stride;
 
-	IASetVertexBuffer(m_vb, stride);
+	return true;
+}
+
+void GSDevice9::IAUnmapVertexBuffer()
+{
+	m_vb->Unlock();
+
+	IASetVertexBuffer(m_vb, m_vertex.stride);
 }
 
 void GSDevice9::IASetVertexBuffer(IDirect3DVertexBuffer9* vb, size_t stride)
@@ -936,6 +1017,61 @@ void GSDevice9::IASetVertexBuffer(IDirect3DVertexBuffer9* vb, size_t stride)
 		m_state.vb_stride = stride;
 
 		m_dev->SetStreamSource(0, vb, 0, stride);
+	}
+}
+
+void GSDevice9::IASetIndexBuffer(const void* index, size_t count)
+{
+	ASSERT(m_index.count == 0);
+
+	if(count > m_index.limit)
+	{
+		m_ib_old = m_ib;
+		m_ib = NULL;
+
+		m_index.count = 0;
+		m_index.limit = std::max<int>(count * 3 / 2, 11000);
+	}
+
+	if(m_ib == NULL)
+	{
+		HRESULT hr;
+
+		hr = m_dev->CreateIndexBuffer(m_index.limit * sizeof(uint32), D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY, D3DFMT_INDEX32, D3DPOOL_DEFAULT, &m_ib, NULL);
+
+		if(FAILED(hr)) return;
+	}
+
+	uint32 flags = D3DLOCK_NOOVERWRITE;
+
+	if(m_index.start + count > m_index.limit)
+	{
+		m_index.start = 0;
+
+		flags = D3DLOCK_DISCARD;
+	}
+
+	void* ptr = NULL;
+
+	if(SUCCEEDED(m_ib->Lock(m_index.start * sizeof(uint32), count * sizeof(uint32), &ptr, flags)))
+	{
+		memcpy(ptr, index, count * sizeof(uint32));
+
+		m_ib->Unlock();
+	}
+
+	m_index.count = count;
+
+	IASetIndexBuffer(m_ib);
+}
+
+void GSDevice9::IASetIndexBuffer(IDirect3DIndexBuffer9* ib)
+{
+	if(m_state.ib != ib)
+	{
+		m_state.ib = ib;
+
+		m_dev->SetIndices(ib);
 	}
 }
 

@@ -47,7 +47,12 @@ static __fi void SetResultSize(u8 size)
 static void CDVDREAD_INT(int eCycle)
 {
 	// Give it an arbitary FAST value. Good for ~5000kb/s in ULE when copying a file from CDVD to HDD
-	if (EmuConfig.Speedhacks.fastCDVD) eCycle = 3000;
+	// Keep long seeks out though, as games may try to push dmas while seeking. (Tales of the Abyss)
+	if (EmuConfig.Speedhacks.fastCDVD) {
+		if(eCycle < Cdvd_FullSeek_Cycles)
+			eCycle = 3000;
+	}
+	
 	PSX_INT(IopEvt_CdvdRead, eCycle);
 }
 
@@ -65,7 +70,6 @@ static void cdvdSetIrq( uint id = (1<<Irq_CommandComplete) )
 {
 	cdvd.PwOff |= id;
 	iopIntcIrq( 2 );
-	hwIntcIrq(INTC_SBUS);
 	psxSetNextBranchDelta( 20 );
 }
 
@@ -647,6 +651,11 @@ int cdvdReadSector() {
 		return -1;
 	}
 
+	//if( (HW_DMA3_CHCR & 0x01000000) == 0 ) {
+	//	// DMA3 problem?
+	//	Console.Warning( "CDVD READ - DMA3 transfer off (try again)\n" );
+	//}
+
 	// DMAs use physical addresses (air)
 	u8* mdest = iopPhysMem( HW_DMA3_MADR );
 
@@ -756,7 +765,7 @@ __fi void cdvdActionInterrupt()
 
 		case cdvdAction_Break:
 			// Make sure the cdvd action state is pretty well cleared:
-			DevCon.Warning("CDVD Break Call");
+			DevCon.WriteLn("CDVD Break Call");
 			cdvd.Reading = 0;
 			cdvd.Readed = 0;
 			cdvd.Ready  = CDVD_READY2;		// should be CDVD_READY1 or something else?
@@ -769,7 +778,6 @@ __fi void cdvdActionInterrupt()
 
 	cdvd.PwOff |= 1<<Irq_CommandComplete;
 	psxHu32(0x1070)|= 0x4;
-	hwIntcIrq(INTC_SBUS);
 }
 
 // inlined due to being referenced in only one place.
@@ -790,7 +798,9 @@ __fi void cdvdReadInterrupt()
 		cdvd.RetryCntP = 0;
 		cdvd.Reading = 1;
 		cdvd.Readed = 1;
-		cdvd.Status = CDVD_STATUS_PAUSE; // check (rama)
+		//cdvd.Status = CDVD_STATUS_PAUSE; // check (rama)
+		cdvd.Status = CDVD_STATUS_READ | CDVD_STATUS_SPIN; // Time Crisis 2
+
 		cdvd.Sector = cdvd.SeekToSector;
 
 		CDVD_LOG( "Cdvd Seek Complete > Scheduling block read interrupt at iopcycle=%8.8x.",
@@ -856,12 +866,11 @@ __fi void cdvdReadInterrupt()
 	{
 		cdvd.PwOff |= 1<<Irq_CommandComplete;
 		psxHu32(0x1070)|= 0x4;
-		hwIntcIrq(INTC_SBUS);
 
 		HW_DMA3_CHCR &= ~0x01000000;
 		psxDmaInterrupt(3);
 		cdvd.Ready = CDVD_READY2;
-
+		cdvd.Status = CDVD_STATUS_PAUSE; // Needed here but could be smth else than Pause (rama)
 		// All done! :D
 		return;
 	}
@@ -885,7 +894,9 @@ static uint cdvdStartSeek( uint newsector, CDVD_MODE_TYPE mode )
 	cdvd.Ready = CDVD_NOTREADY;
 	cdvd.Reading = 0;
 	cdvd.Readed = 0;
-	cdvd.Status = CDVD_STATUS_STOP;
+	//cdvd.Status = CDVD_STATUS_STOP; // before r4961
+    //cdvd.Status = CDVD_STATUS_SEEK | CDVD_STATUS_SPIN; // Time Crisis 2 // but breaks ICO NTSC
+	cdvd.Status = CDVD_STATUS_PAUSE; // best so far in my tests (rama)
 
 	if( !cdvd.Spinning )
 	{
@@ -918,7 +929,8 @@ static uint cdvdStartSeek( uint newsector, CDVD_MODE_TYPE mode )
 
 		if( delta == 0 )
 		{
-			cdvd.Status = CDVD_STATUS_PAUSE;
+			//cdvd.Status = CDVD_STATUS_PAUSE;
+			cdvd.Status = CDVD_STATUS_READ | CDVD_STATUS_SPIN; // Time Crisis 2
 			cdvd.Readed = 1; // Note: 1, not 0, as implied by the next comment. Need to look into this. --arcum42
 			cdvd.RetryCntP = 0;
 
@@ -1147,7 +1159,8 @@ static void cdvdWrite04(u8 rt) { // NCOMMAND
 	CDVD_LOG("cdvdWrite04: NCMD %s (%x) (ParamP = %x)", nCmdName[rt], rt, cdvd.ParamP);
 
 	cdvd.nCommand = rt;
-	cdvd.Status = CDVD_STATUS_STOP; // check (rama)
+	// Why fiddle with Status and PwOff here at all? (rama)
+	cdvd.Status = cdvd.Spinning ? CDVD_STATUS_SPIN : CDVD_STATUS_STOP; // checkme
 	cdvd.PwOff = Irq_None;		// good or bad?
 
 	switch (rt) {

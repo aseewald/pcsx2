@@ -3,7 +3,7 @@
 #-------------------------------------------------------------------------------
 set(msg_dep_common_libs "check these libraries -> wxWidgets (>=2.8.10), sparsehash (>=1.5)")
 set(msg_dep_pcsx2       "check these libraries -> wxWidgets (>=2.8.10), gtk2 (>=2.16), zlib (>=1.2.4), pcsx2 common libs")
-set(msg_dep_cdvdiso     "check these libraries -> bzip2 (>=1.0.5)")
+set(msg_dep_cdvdiso     "check these libraries -> bzip2 (>=1.0.5), gtk2 (>=2.16)")
 set(msg_dep_zerogs      "check these libraries -> glew (>=1.5), opengl, X11, nvidia-cg-toolkit (>=2.1)")
 set(msg_dep_onepad      "check these libraries -> sdl (>=1.2)")
 set(msg_dep_zeropad     "check these libraries -> sdl (>=1.2)")
@@ -69,21 +69,24 @@ endif(Linux AND NOT GTK2_FOUND)
 #---------------------------------------
 #			CDVDnull
 #---------------------------------------
-set(CDVDnull TRUE)
+if(GTK2_FOUND)
+    set(CDVDnull TRUE)
+endif(GTK2_FOUND)
 #---------------------------------------
 
 #---------------------------------------
 #			CDVDiso
 #---------------------------------------
 # requires: -BZip2
+#           -gtk2 (linux)
 #---------------------------------------
-if(BZIP2_FOUND)
+if(BZIP2_FOUND AND GTK2_FOUND)
     set(CDVDiso TRUE)
-else(BZIP2_FOUND)
+else(BZIP2_FOUND AND GTK2_FOUND)
     set(CDVDiso FALSE)
     message(STATUS "Skip build of CDVDiso: miss some dependencies")
     message(STATUS "${msg_dep_cdvdiso}")
-endif(BZIP2_FOUND)
+endif(BZIP2_FOUND AND GTK2_FOUND)
 
 #---------------------------------------
 #			CDVDlinuz
@@ -93,19 +96,25 @@ set(CDVDlinuz TRUE)
 #---------------------------------------
 #			dev9null
 #---------------------------------------
-set(dev9null TRUE)
+if(GTK2_FOUND)
+    set(dev9null TRUE)
+endif(GTK2_FOUND)
 #---------------------------------------
 
 #---------------------------------------
 #			FWnull
 #---------------------------------------
-set(FWnull TRUE)
+if(GTK2_FOUND)
+    set(FWnull TRUE)
+endif(GTK2_FOUND)
 #---------------------------------------
 
 #---------------------------------------
 #			GSnull
 #---------------------------------------
-set(GSnull TRUE)
+if(GTK2_FOUND)
+    set(GSnull TRUE)
+endif(GTK2_FOUND)
 #---------------------------------------
 
 #---------------------------------------
@@ -163,7 +172,9 @@ endif((GLEW_FOUND AND OPENGL_FOUND AND X11_FOUND AND JPEG_FOUND AND common_libs)
 #---------------------------------------
 #			PadNull
 #---------------------------------------
-set(PadNull TRUE)
+if(GTK2_FOUND)
+    set(PadNull TRUE)
+endif(GTK2_FOUND)
 #---------------------------------------
 
 #---------------------------------------
@@ -181,23 +192,11 @@ endif(SDL_FOUND)
 #---------------------------------------
 
 #---------------------------------------
-#			zeropad
-#---------------------------------------
-# requires: -SDL
-#---------------------------------------
-if(SDL_FOUND)
-	set(zeropad TRUE)
-else(SDL_FOUND)
-	set(zeropad FALSE)
-    message(STATUS "Skip build of zeropad: miss some dependencies")
-    message(STATUS "${msg_dep_zeropad}")
-endif(SDL_FOUND)
-#---------------------------------------
-
-#---------------------------------------
 #			SPU2null
 #---------------------------------------
-set(SPU2null TRUE)
+if(GTK2_FOUND)
+    set(SPU2null TRUE)
+endif(GTK2_FOUND)
 #---------------------------------------
 
 #---------------------------------------
@@ -225,7 +224,10 @@ endif(ALSA_FOUND AND PORTAUDIO_FOUND AND SOUNDTOUCH_FOUND AND common_libs)
 #			-PortAudio
 #---------------------------------------
 if(SOUNDTOUCH_FOUND AND ALSA_FOUND)
-	set(zerospu2 TRUE)
+    set(zerospu2 TRUE)
+    # Comment the next line, if you want to compile zerospu2
+	set(zerospu2 FALSE)
+    message(STATUS "Don't build zerospu2. It is super-seeded by spu2x")
 else(SOUNDTOUCH_FOUND AND ALSA_FOUND)
 	set(zerospu2 FALSE)
     message(STATUS "Skip build of zerospu2: miss some dependencies")
@@ -236,7 +238,9 @@ endif(SOUNDTOUCH_FOUND AND ALSA_FOUND)
 #---------------------------------------
 #			USBnull
 #---------------------------------------
-set(USBnull TRUE)
+if(GTK2_FOUND)
+    set(USBnull TRUE)
+endif(GTK2_FOUND)
 #---------------------------------------
 
 #-------------------------------------------------------------------------------

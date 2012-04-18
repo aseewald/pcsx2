@@ -24,6 +24,57 @@
 #include "GSDialog.h"
 #include "GSSetting.h"
 
+class GSShadeBostDlg : public GSDialog
+{
+	int saturation;
+	int brightness;
+	int contrast;
+
+	void UpdateControls();
+
+protected:
+	void OnInit();
+	bool OnMessage(UINT message, WPARAM wParam, LPARAM lParam);	
+
+public:
+	GSShadeBostDlg();
+};
+
+class GSHacksDlg : public GSDialog
+{
+	unsigned short cb2msaa[17];
+	unsigned short msaa2cb[17];
+	
+	bool isdx9;
+
+    enum
+    {
+        HK_MSAA,
+        HK_SKIPDRAW,
+        HK_ALPHA,
+        HK_OFFSET,
+        HK_SPRITE,
+        HK_WILD,
+        HK_SIZE
+    };
+
+    struct
+    {
+        bool isHovered;
+        char description[1024];
+    } Hack[HK_SIZE];
+
+	void UpdateControls();
+    void SetNotHover(int i);
+
+protected:
+	void OnInit();
+	bool OnMessage(UINT message, WPARAM wParam, LPARAM lParam);
+
+public:
+	GSHacksDlg();
+};
+
 class GSSettingsDlg : public GSDialog
 {
 	list<D3DDISPLAYMODE> m_modes;
@@ -36,6 +87,10 @@ protected:
 	bool OnCommand(HWND hWnd, UINT id, UINT code);
 
 	uint32 m_lastValidMsaa; // used to revert to previous dialog value if the user changed to invalid one, or lesser one and canceled
+
+	// Shade Boost
+	GSShadeBostDlg ShadeBoostDlg;
+	GSHacksDlg HacksDlg;
 
 public:
 	GSSettingsDlg(bool isOpen2);

@@ -11,15 +11,13 @@ set(Output GSdx-0.1.16)
 
 set(CommonFlags
     -D_LINUX
-    -pthread
     -fno-operator-names
     -mpreferred-stack-boundary=2
     -mfpmath=sse
-    -Wstrict-aliasing # Allow to track strict aliasing issue.
-    -Wno-format
-    -Wno-unused-parameter
-    -Wno-unused-value
+    #-Wstrict-aliasing # Allow to track strict aliasing issue.
     -Wunused-variable
+    -std=c++0x
+    -fno-strict-aliasing
     )
 
 set(OptimizationFlags
@@ -98,10 +96,6 @@ set(GSdxSources
     GSUtil.cpp
     GSVector.cpp
     GSVertexTrace.cpp
-    GSVertexTrace.x64.avx.cpp
-    GSVertexTrace.x86.cpp
-    GSVertexTrace.x86.avx.cpp
-    GSVertexTrace.x64.cpp
     GSWnd.cpp
     GSdx.cpp
     stdafx.cpp
@@ -181,6 +175,11 @@ target_link_libraries(${Output} ${X11_LIBRARIES})
 
 # link target with SDL
 target_link_libraries(${Output} ${SDL_LIBRARY})
+
+if(Linux)
+	# link target with gtk2
+	target_link_libraries(${Output} ${GTK2_LIBRARIES})
+endif(Linux)
 
 # User flags options
 if(NOT USER_CMAKE_LD_FLAGS STREQUAL "")

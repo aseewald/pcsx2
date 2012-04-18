@@ -29,13 +29,19 @@
 
 class GSDrawScanline : public IDrawScanline
 {
+public:
+	class SharedData : public GSRasterizerData
+	{
+	public:
+		GSScanlineGlobalData global;
+	};
+
+protected:
 	GSScanlineGlobalData m_global;
 	GSScanlineLocalData m_local;
 
 	GSCodeGeneratorFunctionMap<GSSetupPrimCodeGenerator, uint64, SetupPrimPtr> m_sp_map;
 	GSCodeGeneratorFunctionMap<GSDrawScanlineCodeGenerator, uint64, DrawScanlinePtr> m_ds_map;
-
-	void DrawRect(const GSVector4i& r, const GSVertexSW& v);
 
 	template<class T, bool masked>
 	void DrawRectT(const int* RESTRICT row, const int* RESTRICT col, const GSVector4i& r, uint32 c, uint32 m);
@@ -52,7 +58,22 @@ public:
 
 	// IDrawScanline
 
-	void BeginDraw(const void* param);
-	void EndDraw(const GSRasterizerStats& stats, uint64 frame);
-	void PrintStats() {m_ds_map.PrintStats();}
+	void BeginDraw(const GSRasterizerData* data);
+	void EndDraw(uint64 frame, uint64 ticks, int pixels);
+
+	void DrawRect(const GSVector4i& r, const GSVertexSW& v);
+
+#ifndef ENABLE_JIT_RASTERIZER
+	
+	void SetupPrim(const GSVertexSW* vertex, const uint32* index, const GSVertexSW& dscan);
+	void DrawScanline(int pixels, int left, int top, const GSVertexSW& scan);
+	void DrawEdge(int pixels, int left, int top, const GSVertexSW& scan);
+
+	bool IsEdge() const {return m_global.sel.aa1;}
+	bool IsRect() const {return m_global.sel.IsSolidRect();}
+
+	bool TestAlpha(GSVector4i& test, GSVector4i& fm, GSVector4i& zm, const GSVector4i& ga);
+	void WritePixel(const GSVector4i& src, int addr, int i, uint32 psm);
+
+#endif
 };

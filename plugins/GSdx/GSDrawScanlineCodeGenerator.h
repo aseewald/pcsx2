@@ -30,9 +30,6 @@ class GSDrawScanlineCodeGenerator : public GSCodeGenerator
 {
 	void operator = (const GSDrawScanlineCodeGenerator&);
 
-	static const GSVector4i m_test[8];
-	static const GSVector4 m_log2_coef[4];
-
 	GSScanlineSelector m_sel;
 	GSScanlineLocalData& m_local;
 
@@ -74,6 +71,7 @@ class GSDrawScanlineCodeGenerator : public GSCodeGenerator
 
 	void modulate16(const Xmm& a, const Operand& f, int shift);
 	void lerp16(const Xmm& a, const Xmm& b, const Xmm& f, int shift);
+	void lerp16_4(const Xmm& a, const Xmm& b, const Xmm& f);
 	void mix16(const Xmm& a, const Xmm& b, const Xmm& temp);
 	void clamp16(const Xmm& a, const Xmm& temp);
 	void alltrue();
@@ -84,4 +82,7 @@ class GSDrawScanlineCodeGenerator : public GSCodeGenerator
 
 public:
 	GSDrawScanlineCodeGenerator(void* param, uint64 key, void* code, size_t maxsize);
+
+	static const GSVector4i m_test[8];
+	static const GSVector4 m_log2_coef[4];
 };

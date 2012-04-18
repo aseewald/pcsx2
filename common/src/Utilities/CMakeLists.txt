@@ -18,10 +18,11 @@ set(CommonFlags
 	-fno-strict-aliasing
 	-fno-tree-dse
 	-pipe
-	-Wno-format
-	-Wno-unused-parameter
-	-Wno-unused-value
 	-Wunused-variable)
+
+if (SPARSEHASH_NEW_FOUND)
+    set(CommonFlags "${CommonFlags} -DSPARSEHASH_NEW_INCLUDE_DIR ")
+endif (SPARSEHASH_NEW_FOUND)
 
 # set warning flags
 set(DebugFlags

@@ -221,6 +221,7 @@ GSLocalMemory::GSLocalMemory()
 		m_psm[i].pgs = GSVector2i(64, 32);
 		for(int j = 0; j < 8; j++) m_psm[i].rowOffset[j] = rowOffset32;
 		m_psm[i].blockOffset = blockOffset32;
+		m_psm[i].msk = 0xff;
 	}
 
 	m_psm[PSM_PSMCT16].pa = &GSLocalMemory::PixelAddress16;
@@ -342,55 +343,55 @@ GSLocalMemory::GSLocalMemory()
 
 	m_psm[PSM_PSMCT24].rtx = &GSLocalMemory::ReadTexture24;
 	m_psm[PSM_PSMCT16].rtx = &GSLocalMemory::ReadTexture16;
-	m_psm[PSM_PSMCT16S].rtx = &GSLocalMemory::ReadTexture16S;
+	m_psm[PSM_PSMCT16S].rtx = &GSLocalMemory::ReadTexture16;
 	m_psm[PSM_PSMT8].rtx = &GSLocalMemory::ReadTexture8;
 	m_psm[PSM_PSMT4].rtx = &GSLocalMemory::ReadTexture4;
 	m_psm[PSM_PSMT8H].rtx = &GSLocalMemory::ReadTexture8H;
 	m_psm[PSM_PSMT4HL].rtx = &GSLocalMemory::ReadTexture4HL;
 	m_psm[PSM_PSMT4HH].rtx = &GSLocalMemory::ReadTexture4HH;
-	m_psm[PSM_PSMZ32].rtx = &GSLocalMemory::ReadTexture32Z;
-	m_psm[PSM_PSMZ24].rtx = &GSLocalMemory::ReadTexture24Z;
-	m_psm[PSM_PSMZ16].rtx = &GSLocalMemory::ReadTexture16Z;
-	m_psm[PSM_PSMZ16S].rtx = &GSLocalMemory::ReadTexture16SZ;
+	m_psm[PSM_PSMZ32].rtx = &GSLocalMemory::ReadTexture32;
+	m_psm[PSM_PSMZ24].rtx = &GSLocalMemory::ReadTexture24;
+	m_psm[PSM_PSMZ16].rtx = &GSLocalMemory::ReadTexture16;
+	m_psm[PSM_PSMZ16S].rtx = &GSLocalMemory::ReadTexture16;
 
 	m_psm[PSM_PSMCT24].rtxP = &GSLocalMemory::ReadTexture24;
 	m_psm[PSM_PSMCT16].rtxP = &GSLocalMemory::ReadTexture16;
-	m_psm[PSM_PSMCT16S].rtxP = &GSLocalMemory::ReadTexture16S;
+	m_psm[PSM_PSMCT16S].rtxP = &GSLocalMemory::ReadTexture16;
 	m_psm[PSM_PSMT8].rtxP = &GSLocalMemory::ReadTexture8P;
 	m_psm[PSM_PSMT4].rtxP = &GSLocalMemory::ReadTexture4P;
 	m_psm[PSM_PSMT8H].rtxP = &GSLocalMemory::ReadTexture8HP;
 	m_psm[PSM_PSMT4HL].rtxP = &GSLocalMemory::ReadTexture4HLP;
 	m_psm[PSM_PSMT4HH].rtxP = &GSLocalMemory::ReadTexture4HHP;
-	m_psm[PSM_PSMZ32].rtxP = &GSLocalMemory::ReadTexture32Z;
-	m_psm[PSM_PSMZ24].rtxP = &GSLocalMemory::ReadTexture24Z;
-	m_psm[PSM_PSMZ16].rtxP = &GSLocalMemory::ReadTexture16Z;
-	m_psm[PSM_PSMZ16S].rtxP = &GSLocalMemory::ReadTexture16SZ;
+	m_psm[PSM_PSMZ32].rtxP = &GSLocalMemory::ReadTexture32;
+	m_psm[PSM_PSMZ24].rtxP = &GSLocalMemory::ReadTexture24;
+	m_psm[PSM_PSMZ16].rtxP = &GSLocalMemory::ReadTexture16;
+	m_psm[PSM_PSMZ16S].rtxP = &GSLocalMemory::ReadTexture16;
 
 	m_psm[PSM_PSMCT24].rtxb = &GSLocalMemory::ReadTextureBlock24;
 	m_psm[PSM_PSMCT16].rtxb = &GSLocalMemory::ReadTextureBlock16;
-	m_psm[PSM_PSMCT16S].rtxb = &GSLocalMemory::ReadTextureBlock16S;
+	m_psm[PSM_PSMCT16S].rtxb = &GSLocalMemory::ReadTextureBlock16;
 	m_psm[PSM_PSMT8].rtxb = &GSLocalMemory::ReadTextureBlock8;
 	m_psm[PSM_PSMT4].rtxb = &GSLocalMemory::ReadTextureBlock4;
 	m_psm[PSM_PSMT8H].rtxb = &GSLocalMemory::ReadTextureBlock8H;
 	m_psm[PSM_PSMT4HL].rtxb = &GSLocalMemory::ReadTextureBlock4HL;
 	m_psm[PSM_PSMT4HH].rtxb = &GSLocalMemory::ReadTextureBlock4HH;
-	m_psm[PSM_PSMZ32].rtxb = &GSLocalMemory::ReadTextureBlock32Z;
-	m_psm[PSM_PSMZ24].rtxb = &GSLocalMemory::ReadTextureBlock24Z;
-	m_psm[PSM_PSMZ16].rtxb = &GSLocalMemory::ReadTextureBlock16Z;
-	m_psm[PSM_PSMZ16S].rtxb = &GSLocalMemory::ReadTextureBlock16SZ;
+	m_psm[PSM_PSMZ32].rtxb = &GSLocalMemory::ReadTextureBlock32;
+	m_psm[PSM_PSMZ24].rtxb = &GSLocalMemory::ReadTextureBlock24;
+	m_psm[PSM_PSMZ16].rtxb = &GSLocalMemory::ReadTextureBlock16;
+	m_psm[PSM_PSMZ16S].rtxb = &GSLocalMemory::ReadTextureBlock16;
 
 	m_psm[PSM_PSMCT24].rtxbP = &GSLocalMemory::ReadTextureBlock24;
 	m_psm[PSM_PSMCT16].rtxbP = &GSLocalMemory::ReadTextureBlock16;
-	m_psm[PSM_PSMCT16S].rtxbP = &GSLocalMemory::ReadTextureBlock16S;
+	m_psm[PSM_PSMCT16S].rtxbP = &GSLocalMemory::ReadTextureBlock16;
 	m_psm[PSM_PSMT8].rtxbP = &GSLocalMemory::ReadTextureBlock8P;
 	m_psm[PSM_PSMT4].rtxbP = &GSLocalMemory::ReadTextureBlock4P;
 	m_psm[PSM_PSMT8H].rtxbP = &GSLocalMemory::ReadTextureBlock8HP;
 	m_psm[PSM_PSMT4HL].rtxbP = &GSLocalMemory::ReadTextureBlock4HLP;
 	m_psm[PSM_PSMT4HH].rtxbP = &GSLocalMemory::ReadTextureBlock4HHP;
-	m_psm[PSM_PSMZ32].rtxbP = &GSLocalMemory::ReadTextureBlock32Z;
-	m_psm[PSM_PSMZ24].rtxbP = &GSLocalMemory::ReadTextureBlock24Z;
-	m_psm[PSM_PSMZ16].rtxbP = &GSLocalMemory::ReadTextureBlock16Z;
-	m_psm[PSM_PSMZ16S].rtxbP = &GSLocalMemory::ReadTextureBlock16SZ;
+	m_psm[PSM_PSMZ32].rtxbP = &GSLocalMemory::ReadTextureBlock32;
+	m_psm[PSM_PSMZ24].rtxbP = &GSLocalMemory::ReadTextureBlock24;
+	m_psm[PSM_PSMZ16].rtxbP = &GSLocalMemory::ReadTextureBlock16;
+	m_psm[PSM_PSMZ16S].rtxbP = &GSLocalMemory::ReadTextureBlock16;
 
 	m_psm[PSM_PSMCT16].bpp = m_psm[PSM_PSMCT16S].bpp = 16;
 	m_psm[PSM_PSMT8].bpp = 8;
@@ -440,6 +441,12 @@ GSLocalMemory::GSLocalMemory()
 	m_psm[PSM_PSMZ24].blockOffset = blockOffset32Z;
 	m_psm[PSM_PSMZ16].blockOffset = blockOffset16Z;
 	m_psm[PSM_PSMZ16S].blockOffset = blockOffset16SZ;
+
+	m_psm[PSM_PSMCT24].msk = 0x3f;
+	m_psm[PSM_PSMZ24].msk = 0x3f;
+	m_psm[PSM_PSMT8H].msk = 0xc0;
+	m_psm[PSM_PSMT4HL].msk = 0x40;
+	m_psm[PSM_PSMT4HH].msk = 0x80;
 }
 
 GSLocalMemory::~GSLocalMemory()
@@ -447,9 +454,10 @@ GSLocalMemory::~GSLocalMemory()
 	vmfree(m_vm8, m_vmsize * 2);
 
 	for_each(m_omap.begin(), m_omap.end(), aligned_free_second());
+	for_each(m_pomap.begin(), m_pomap.end(), aligned_free_second());
 	for_each(m_po4map.begin(), m_po4map.end(), aligned_free_second());
 
-	for(hash_map<uint32, list<GSVector2i>*>::iterator i = m_p2tmap.begin(); i != m_p2tmap.end(); i++)
+	for(hash_map<uint64, vector<GSVector2i>*>::iterator i = m_p2tmap.begin(); i != m_p2tmap.end(); i++)
 	{
 		delete [] i->second;
 	}
@@ -466,32 +474,65 @@ GSOffset* GSLocalMemory::GetOffset(uint32 bp, uint32 bw, uint32 psm)
 		return i->second;
 	}
 
-	GSOffset* o = (GSOffset*)_aligned_malloc(sizeof(GSOffset), 32);
-
-	o->hash = hash;
-
-	pixelAddress bn = m_psm[psm].bn;
-
-	for(int i = 0; i < 256; i++)
-	{
-		o->block.row[i] = (short)bn(0, i << 3, bp, bw);
-	}
-
-	o->block.col = m_psm[psm].blockOffset;
-
-	pixelAddress pa = m_psm[psm].pa;
-
-	for(int i = 0; i < 4096; i++)
-	{
-		o->pixel.row[i] = (int)pa(0, i & 0x7ff, bp, bw);
-	}
-
-	for(int i = 0; i < 8; i++)
-	{
-		o->pixel.col[i] = m_psm[psm].rowOffset[i];
-	}
+	GSOffset* o = new GSOffset(bp, bw, psm);
 
 	m_omap[hash] = o;
+
+	return o;
+}
+
+GSPixelOffset* GSLocalMemory::GetPixelOffset(const GIFRegFRAME& FRAME, const GIFRegZBUF& ZBUF)
+{
+	uint32 fbp = FRAME.Block();
+	uint32 zbp = ZBUF.Block();
+	uint32 fpsm = FRAME.PSM;
+	uint32 zpsm = ZBUF.PSM;
+	uint32 bw = FRAME.FBW;
+
+	ASSERT(m_psm[fpsm].trbpp > 8 || m_psm[zpsm].trbpp > 8);
+
+	// "(psm & 0x0f) ^ ((psm & 0xf0) >> 2)" creates 4 bit unique identifiers for render target formats (only)
+
+	uint32 fpsm_hash = (fpsm & 0x0f) ^ ((fpsm & 0x30) >> 2);
+	uint32 zpsm_hash = (zpsm & 0x0f) ^ ((zpsm & 0x30) >> 2);
+
+	uint32 hash = (FRAME.FBP << 0) | (ZBUF.ZBP << 9) | (bw << 18) | (fpsm_hash << 24) | (zpsm_hash << 28);
+
+	hash_map<uint32, GSPixelOffset*>::iterator i = m_pomap.find(hash);
+
+	if(i != m_pomap.end())
+	{
+		return i->second;
+	}
+
+	GSPixelOffset* o = (GSPixelOffset*)_aligned_malloc(sizeof(GSPixelOffset), 32);
+
+	o->hash = hash;
+	o->fbp = fbp;
+	o->zbp = zbp;
+	o->fpsm = fpsm;
+	o->zpsm = zpsm;
+	o->bw = bw;
+
+	pixelAddress fpa = m_psm[fpsm].pa;
+	pixelAddress zpa = m_psm[zpsm].pa;
+
+	int fs = m_psm[fpsm].bpp >> 5;
+	int zs = m_psm[zpsm].bpp >> 5;
+
+	for(int i = 0; i < 2048; i++)
+	{
+		o->row[i].x = (int)fpa(0, i, fbp, bw) << fs;
+		o->row[i].y = (int)zpa(0, i, zbp, bw) << zs;
+	}
+
+	for(int i = 0; i < 2048; i++)
+	{
+		o->col[i].x = m_psm[fpsm].rowOffset[0][i] << fs;
+		o->col[i].y = m_psm[zpsm].rowOffset[0][i] << zs;
+	}
+
+	m_pomap[hash] = o;
 
 	return o;
 }
@@ -523,6 +564,11 @@ GSPixelOffset4* GSLocalMemory::GetPixelOffset4(const GIFRegFRAME& FRAME, const G
 	GSPixelOffset4* o = (GSPixelOffset4*)_aligned_malloc(sizeof(GSPixelOffset4), 32);
 
 	o->hash = hash;
+	o->fbp = fbp;
+	o->zbp = zbp;
+	o->fpsm = fpsm;
+	o->zpsm = zpsm;
+	o->bw = bw;
 
 	pixelAddress fpa = m_psm[fpsm].pa;
 	pixelAddress zpa = m_psm[zpsm].pa;
@@ -547,11 +593,13 @@ GSPixelOffset4* GSLocalMemory::GetPixelOffset4(const GIFRegFRAME& FRAME, const G
 	return o;
 }
 
-list<GSVector2i>* GSLocalMemory::GetPage2TileMap(const GIFRegTEX0& TEX0)
-{
-	uint32 hash = TEX0.TBP0 | (TEX0.TBW << 14) | (TEX0.PSM << 20) | (TEX0.TW << 26);
+static bool cmp_vec2x(const GSVector2i& a, const GSVector2i& b) {return a.x < b.x;}
 
-	hash_map<uint32, list<GSVector2i>*>::iterator i = m_p2tmap.find(hash);
+vector<GSVector2i>* GSLocalMemory::GetPage2TileMap(const GIFRegTEX0& TEX0)
+{
+	uint64 hash = TEX0.u64 & 0x3ffffffffull; // TBP0 TBW PSM TW TH
+
+	hash_map<uint64, vector<GSVector2i>*>::iterator i = m_p2tmap.find(hash);
 
 	if(i != m_p2tmap.end())
 	{
@@ -561,13 +609,13 @@ list<GSVector2i>* GSLocalMemory::GetPage2TileMap(const GIFRegTEX0& TEX0)
 	GSVector2i bs = m_psm[TEX0.PSM].bs;
 
 	int tw = std::max<int>(1 << TEX0.TW, bs.x);
-	// int th = std::max<int>(1 << TEX0.TH, bs.y);
+	int th = std::max<int>(1 << TEX0.TH, bs.y);
 
 	const GSOffset* o = GetOffset(TEX0.TBP0, TEX0.TBW, TEX0.PSM);
 
 	hash_map<uint32, hash_set<uint32> > tmp; // key = page, value = y:x, 7 bits each, max 128x128 tiles for the worst case (1024x1024 32bpp 8x8 blocks)
 
-	for(int y = 0; y < 1024; y += bs.y) // the hash is a little short on bits for TEX0.TH, hard-coding it to 1024 lines
+	for(int y = 0; y < th; y += bs.y)
 	{
 		uint32 base = o->block.row[y >> 3];
 
@@ -584,7 +632,7 @@ list<GSVector2i>* GSLocalMemory::GetPage2TileMap(const GIFRegTEX0& TEX0)
 
 	// combine the lower 5 bits of the address into a 9:5 pointer:mask form, so the "valid bits" can be tested against an uint32 array
 
-	list<GSVector2i>* p2t = new list<GSVector2i>[MAX_PAGES];
+	vector<GSVector2i>* p2t = new vector<GSVector2i>[MAX_PAGES];
 
 	for(hash_map<uint32, hash_set<uint32> >::iterator i = tmp.begin(); i != tmp.end(); i++)
 	{
@@ -613,10 +661,14 @@ list<GSVector2i>* GSLocalMemory::GetPage2TileMap(const GIFRegTEX0& TEX0)
 			}
 		}
 
+		// sort by x and flip the mask (it will be used to erase a lot of bits in a loop, [x] &= ~y)
+
 		for(hash_map<uint32, uint32>::iterator j = m.begin(); j != m.end(); j++)
 		{
-			p2t[page].push_back(GSVector2i(j->first, j->second));
+			p2t[page].push_back(GSVector2i(j->first, ~j->second));
 		}
+
+		std::sort(p2t[page].begin(), p2t[page].end(), cmp_vec2x);
 	}
 
 	m_p2tmap[hash] = p2t;
@@ -1318,13 +1370,13 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, uint8* dst, int len, GIFRegBITB
 {
 	if(len <= 0) return;
 
-	uint8* pb = (uint8*)dst;
-	uint16* pw = (uint16*)dst;
-	uint32* pd = (uint32*)dst;
+	uint8* RESTRICT pb = (uint8*)dst;
+	uint16* RESTRICT pw = (uint16*)dst;
+	uint32* RESTRICT pd = (uint32*)dst;
 
 	uint32 bp = BITBLTBUF.SBP;
 	uint32 bw = BITBLTBUF.SBW;
-	psm_t* psm = &m_psm[BITBLTBUF.SPSM];
+	psm_t* RESTRICT psm = &m_psm[BITBLTBUF.SPSM];
 
 	int x = tx;
 	int y = ty;
@@ -1336,16 +1388,26 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, uint8* dst, int len, GIFRegBITB
 	case PSM_PSMCT32:
 	case PSM_PSMZ32:
 
+		// MGS1 intro, fade effect between two scenes (airplane outside-inside transition)
+
 		len /= 4;
 
 		while(len > 0)
 		{
-			uint32 addr = psm->pa(0, y, bp, bw);
-			int* offset = psm->rowOffset[y & 7];
+			int* RESTRICT offset = psm->rowOffset[y & 7];
+			uint32* RESTRICT ps = &m_vm32[psm->pa(0, y, bp, bw)];
+
+			for(int ex4 = ex - 4; len >= 4 && x <= ex4; len -= 4, x += 4, pd += 4)
+			{
+				pd[0] = ps[offset[x + 0]];
+				pd[1] = ps[offset[x + 1]];
+				pd[2] = ps[offset[x + 2]];
+				pd[3] = ps[offset[x + 3]];
+			}
 
 			for(; len > 0 && x < ex; len--, x++, pd++)
 			{
-				*pd = ReadPixel32(addr + offset[x]);
+				*pd = ps[offset[x]];
 			}
 
 			if(x == ex) {x = sx; y++;}
@@ -1360,16 +1422,16 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, uint8* dst, int len, GIFRegBITB
 
 		while(len > 0)
 		{
-			uint32 addr = psm->pa(0, y, bp, bw);
-			int* offset = psm->rowOffset[y & 7];
+			int* RESTRICT offset = psm->rowOffset[y & 7];
+			uint32* RESTRICT ps = &m_vm32[psm->pa(0, y, bp, bw)];
 
 			for(; len > 0 && x < ex; len--, x++, pb += 3)
 			{
-				uint32 c = ReadPixel32(addr + offset[x]);
+				uint32 c = ps[offset[x]];
 
-				pb[0] = ((uint8*)&c)[0];
-				pb[1] = ((uint8*)&c)[1];
-				pb[2] = ((uint8*)&c)[2];
+				pb[0] = (uint8)(c);
+				pb[1] = (uint8)(c >> 8);
+				pb[2] = (uint8)(c >> 16);
 			}
 
 			if(x == ex) {x = sx; y++;}
@@ -1386,12 +1448,20 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, uint8* dst, int len, GIFRegBITB
 
 		while(len > 0)
 		{
-			uint32 addr = psm->pa(0, y, bp, bw);
-			int* offset = psm->rowOffset[y & 7];
+			int* RESTRICT offset = psm->rowOffset[y & 7];
+			uint16* RESTRICT ps = &m_vm16[psm->pa(0, y, bp, bw)];
+
+			for(int ex4 = ex - 4; len >= 4 && x <= ex4; len -= 4, x += 4, pw += 4)
+			{
+				pw[0] = ps[offset[x + 0]];
+				pw[1] = ps[offset[x + 1]];
+				pw[2] = ps[offset[x + 2]];
+				pw[3] = ps[offset[x + 3]];
+			}
 
 			for(; len > 0 && x < ex; len--, x++, pw++)
 			{
-				*pw = ReadPixel16(addr + offset[x]);
+				*pw = ps[offset[x]];
 			}
 
 			if(x == ex) {x = sx; y++;}
@@ -1403,12 +1473,20 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, uint8* dst, int len, GIFRegBITB
 
 		while(len > 0)
 		{
-			uint32 addr = psm->pa(0, y, bp, bw);
-			int* offset = psm->rowOffset[y & 7];
+			int* RESTRICT offset = psm->rowOffset[y & 7];
+			uint8* RESTRICT ps = &m_vm8[psm->pa(0, y, bp, bw)];
+
+			for(int ex4 = ex - 4; len >= 4 && x <= ex4; len -= 4, x += 4, pb += 4)
+			{
+				pb[0] = ps[offset[x + 0]];
+				pb[1] = ps[offset[x + 1]];
+				pb[2] = ps[offset[x + 2]];
+				pb[3] = ps[offset[x + 3]];
+			}
 
 			for(; len > 0 && x < ex; len--, x++, pb++)
 			{
-				*pb = ReadPixel8(addr + offset[x]);
+				*pb = ps[offset[x]];
 			}
 
 			if(x == ex) {x = sx; y++;}
@@ -1421,7 +1499,7 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, uint8* dst, int len, GIFRegBITB
 		while(len > 0)
 		{
 			uint32 addr = psm->pa(0, y, bp, bw);
-			int* offset = psm->rowOffset[y & 7];
+			int* RESTRICT offset = psm->rowOffset[y & 7];
 
 			for(; len > 0 && x < ex; len--, x += 2, pb++)
 			{
@@ -1437,12 +1515,20 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, uint8* dst, int len, GIFRegBITB
 
 		while(len > 0)
 		{
-			uint32 addr = psm->pa(0, y, bp, bw);
-			int* offset = psm->rowOffset[y & 7];
+			int* RESTRICT offset = psm->rowOffset[y & 7];
+			uint32* RESTRICT ps = &m_vm32[psm->pa(0, y, bp, bw)];
+
+			for(int ex4 = ex - 4; len >= 4 && x <= ex4; len -= 4, x += 4, pb += 4)
+			{
+				pb[0] = (uint8)(ps[offset[x + 0]] >> 24);
+				pb[1] = (uint8)(ps[offset[x + 1]] >> 24);
+				pb[2] = (uint8)(ps[offset[x + 2]] >> 24);
+				pb[3] = (uint8)(ps[offset[x + 3]] >> 24);
+			}
 
 			for(; len > 0 && x < ex; len--, x++, pb++)
 			{
-				*pb = ReadPixel8H(addr + offset[x]);
+				*pb = (uint8)(ps[offset[x]] >> 24);
 			}
 
 			if(x == ex) {x = sx; y++;}
@@ -1454,12 +1540,15 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, uint8* dst, int len, GIFRegBITB
 
 		while(len > 0)
 		{
-			uint32 addr = psm->pa(0, y, bp, bw);
 			int* offset = psm->rowOffset[y & 7];
+			uint32* RESTRICT ps = &m_vm32[psm->pa(0, y, bp, bw)];
 
 			for(; len > 0 && x < ex; len--, x += 2, pb++)
 			{
-				*pb = ReadPixel4HL(addr + offset[x + 0]) | (ReadPixel4HL(addr + offset[x + 1]) << 4);
+				uint32 c0 = (ps[offset[x + 0]] >> 24) & 0x0f;
+				uint32 c1 = (ps[offset[x + 1]] >> 20) & 0xf0;
+
+				*pb = (uint8)(c0 | c1);
 			}
 
 			if(x == ex) {x = sx; y++;}
@@ -1471,12 +1560,15 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, uint8* dst, int len, GIFRegBITB
 
 		while(len > 0)
 		{
-			uint32 addr = psm->pa(0, y, bp, bw);
-			int* offset = psm->rowOffset[y & 7];
+			int* RESTRICT offset = psm->rowOffset[y & 7];
+			uint32* RESTRICT ps = &m_vm32[psm->pa(0, y, bp, bw)];
 
 			for(; len > 0 && x < ex; len--, x += 2, pb++)
 			{
-				*pb = ReadPixel4HH(addr + offset[x + 0]) | (ReadPixel4HH(addr + offset[x + 1]) << 4);
+				uint32 c0 = (ps[offset[x + 0]] >> 28) & 0x0f;
+				uint32 c1 = (ps[offset[x + 1]] >> 24) & 0xf0;
+
+				*pb = (uint8)(c0 | c1);
 			}
 
 			if(x == ex) {x = sx; y++;}
@@ -1522,28 +1614,22 @@ void GSLocalMemory::ReadTexture24(const GSOffset* RESTRICT o, const GSVector4i& 
 
 void GSLocalMemory::ReadTexture16(const GSOffset* RESTRICT o, const GSVector4i& r, uint8* dst, int dstpitch, const GIFRegTEXA& TEXA)
 {
-	__aligned(uint16, 32) block[16 * 8];
-
-	FOREACH_BLOCK_START(r, 16, 8, 32)
+	if(TEXA.AEM)
 	{
-		ReadBlock16<true>(src, (uint8*)block, sizeof(block) / 8);
-
-		ExpandBlock16(block, dst, dstpitch, TEXA);
+		FOREACH_BLOCK_START(r, 16, 8, 32)
+		{
+			ReadAndExpandBlock16<true>(src, dst, dstpitch, TEXA);
+		}
+		FOREACH_BLOCK_END
 	}
-	FOREACH_BLOCK_END
-}
-
-void GSLocalMemory::ReadTexture16S(const GSOffset* RESTRICT o, const GSVector4i& r, uint8* dst, int dstpitch, const GIFRegTEXA& TEXA)
-{
-	__aligned(uint16, 32) block[16 * 8];
-
-	FOREACH_BLOCK_START(r, 16, 8, 32)
+	else
 	{
-		ReadBlock16<true>(src, (uint8*)block, sizeof(block) / 8);
-
-		ExpandBlock16(block, dst, dstpitch, TEXA);
+		FOREACH_BLOCK_START(r, 16, 8, 32)
+		{
+			ReadAndExpandBlock16<false>(src, dst, dstpitch, TEXA);
+		}
+		FOREACH_BLOCK_END
 	}
-	FOREACH_BLOCK_END
 }
 
 void GSLocalMemory::ReadTexture8(const GSOffset* RESTRICT o, const GSVector4i& r, uint8* dst, int dstpitch, const GIFRegTEXA& TEXA)
@@ -1601,61 +1687,6 @@ void GSLocalMemory::ReadTexture4HH(const GSOffset* RESTRICT o, const GSVector4i&
 	FOREACH_BLOCK_END
 }
 
-void GSLocalMemory::ReadTexture32Z(const GSOffset* RESTRICT o, const GSVector4i& r, uint8* dst, int dstpitch, const GIFRegTEXA& TEXA)
-{
-	FOREACH_BLOCK_START(r, 8, 8, 32)
-	{
-		ReadBlock32<true>(src, dst, dstpitch);
-	}
-	FOREACH_BLOCK_END
-}
-
-void GSLocalMemory::ReadTexture24Z(const GSOffset* RESTRICT o, const GSVector4i& r, uint8* dst, int dstpitch, const GIFRegTEXA& TEXA)
-{
-	if(TEXA.AEM)
-	{
-		FOREACH_BLOCK_START(r, 8, 8, 32)
-		{
-			ReadAndExpandBlock24<true>(src, dst, dstpitch, TEXA);
-		}
-		FOREACH_BLOCK_END
-	}
-	else
-	{
-		FOREACH_BLOCK_START(r, 8, 8, 32)
-		{
-			ReadAndExpandBlock24<false>(src, dst, dstpitch, TEXA);
-		}
-		FOREACH_BLOCK_END
-	}
-}
-
-void GSLocalMemory::ReadTexture16Z(const GSOffset* RESTRICT o, const GSVector4i& r, uint8* dst, int dstpitch, const GIFRegTEXA& TEXA)
-{
-	__aligned(uint16, 32) block[16 * 8];
-
-	FOREACH_BLOCK_START(r, 16, 8, 32)
-	{
-		ReadBlock16<true>(src, (uint8*)block, sizeof(block) / 8);
-
-		ExpandBlock16(block, dst, dstpitch, TEXA);
-	}
-	FOREACH_BLOCK_END
-}
-
-void GSLocalMemory::ReadTexture16SZ(const GSOffset* RESTRICT o, const GSVector4i& r, uint8* dst, int dstpitch, const GIFRegTEXA& TEXA)
-{
-	__aligned(uint16, 32) block[16 * 8];
-
-	FOREACH_BLOCK_START(r, 16, 8, 32)
-	{
-		ReadBlock16<true>(src, (uint8*)block, sizeof(block) / 8);
-
-		ExpandBlock16(block, dst, dstpitch, TEXA);
-	}
-	FOREACH_BLOCK_END
-}
-
 ///////////////////
 
 void GSLocalMemory::ReadTextureBlock32(uint32 bp, uint8* dst, int dstpitch, const GIFRegTEXA& TEXA) const
@@ -1681,20 +1712,16 @@ void GSLocalMemory::ReadTextureBlock24(uint32 bp, uint8* dst, int dstpitch, cons
 
 void GSLocalMemory::ReadTextureBlock16(uint32 bp, uint8* dst, int dstpitch, const GIFRegTEXA& TEXA) const
 {
-	__aligned(uint16, 32) block[16 * 8];
+	ALIGN_STACK(32);
 
-	ReadBlock16<true>(BlockPtr(bp), (uint8*)block, sizeof(block) / 8);
-
-	ExpandBlock16(block, dst, dstpitch, TEXA);
-}
-
-void GSLocalMemory::ReadTextureBlock16S(uint32 bp, uint8* dst, int dstpitch, const GIFRegTEXA& TEXA) const
-{
-	__aligned(uint16, 32) block[16 * 8];
-
-	ReadBlock16<true>(BlockPtr(bp), (uint8*)block, sizeof(block) / 8);
-
-	ExpandBlock16(block, dst, dstpitch, TEXA);
+	if(TEXA.AEM)
+	{
+		ReadAndExpandBlock16<true>(BlockPtr(bp), dst, dstpitch, TEXA);
+	}
+	else
+	{
+		ReadAndExpandBlock16<false>(BlockPtr(bp), dst, dstpitch, TEXA);
+	}
 }
 
 void GSLocalMemory::ReadTextureBlock8(uint32 bp, uint8* dst, int dstpitch, const GIFRegTEXA& TEXA) const
@@ -1730,45 +1757,6 @@ void GSLocalMemory::ReadTextureBlock4HH(uint32 bp, uint8* dst, int dstpitch, con
 	ALIGN_STACK(32);
 
 	ReadAndExpandBlock4HH_32(BlockPtr(bp), dst, dstpitch, m_clut);
-}
-
-void GSLocalMemory::ReadTextureBlock32Z(uint32 bp, uint8* dst, int dstpitch, const GIFRegTEXA& TEXA) const
-{
-	ALIGN_STACK(32);
-
-	ReadBlock32<true>(BlockPtr(bp), dst, dstpitch);
-}
-
-void GSLocalMemory::ReadTextureBlock24Z(uint32 bp, uint8* dst, int dstpitch, const GIFRegTEXA& TEXA) const
-{
-	ALIGN_STACK(32);
-
-	if(TEXA.AEM)
-	{
-		ReadAndExpandBlock24<true>(BlockPtr(bp), dst, dstpitch, TEXA);
-	}
-	else
-	{
-		ReadAndExpandBlock24<false>(BlockPtr(bp), dst, dstpitch, TEXA);
-	}
-}
-
-void GSLocalMemory::ReadTextureBlock16Z(uint32 bp, uint8* dst, int dstpitch, const GIFRegTEXA& TEXA) const
-{
-	__aligned(uint16, 32) block[16 * 8];
-
-	ReadBlock16<true>(BlockPtr(bp), (uint8*)block, sizeof(block) / 8);
-
-	ExpandBlock16(block, dst, dstpitch, TEXA);
-}
-
-void GSLocalMemory::ReadTextureBlock16SZ(uint32 bp, uint8* dst, int dstpitch, const GIFRegTEXA& TEXA) const
-{
-	__aligned(uint16, 32) block[16 * 8];
-
-	ReadBlock16<true>(BlockPtr(bp), (uint8*)block, sizeof(block) / 8);
-
-	ExpandBlock16(block, dst, dstpitch, TEXA);
 }
 
 ///////////////////
@@ -1975,4 +1963,103 @@ void GSLocalMemory::SaveBMP(const string& fn, uint32 bp, uint32 bw, uint32 psm, 
 	}
 
 	_aligned_free(bits);
+}
+
+// GSOffset
+
+GSOffset::GSOffset(uint32 _bp, uint32 _bw, uint32 _psm)
+{
+	hash = _bp | (_bw << 14) | (_psm << 20);
+
+	GSLocalMemory::pixelAddress bn = GSLocalMemory::m_psm[_psm].bn;
+
+	for(int i = 0; i < 256; i++)
+	{
+		block.row[i] = (short)bn(0, i << 3, _bp, _bw);
+	}
+
+	block.col = GSLocalMemory::m_psm[_psm].blockOffset;
+
+	GSLocalMemory::pixelAddress pa = GSLocalMemory::m_psm[_psm].pa;
+
+	for(int i = 0; i < 4096; i++)
+	{
+		pixel.row[i] = (int)pa(0, i & 0x7ff, _bp, _bw);
+	}
+
+	for(int i = 0; i < 8; i++)
+	{
+		pixel.col[i] = GSLocalMemory::m_psm[_psm].rowOffset[i];
+	}
+}
+
+GSOffset::~GSOffset()
+{
+}
+
+uint32* GSOffset::GetPages(const GSVector4i& rect, uint32* pages, GSVector4i* bbox)
+{
+	GSVector2i bs = (bp & 31) == 0 ? GSLocalMemory::m_psm[psm].pgs : GSLocalMemory::m_psm[psm].bs;
+
+	GSVector4i r = rect.ralign<Align_Outside>(bs);
+
+	if(bbox != NULL) *bbox = r;
+
+	// worst case: 
+	// bp page-aligned: (w * h) / (64 * 32)
+	// bp block-aligned: (w * h) / (8 * 8)
+
+	int size = r.width() * r.height();
+	
+	int limit = MAX_PAGES + 1;
+
+	if(pages == NULL)
+	{
+		limit = std::min<int>((size >> ((bp & 31) != 0 ? 6 : 11)) + 2, MAX_PAGES) + 1;
+
+		pages = new uint32[limit];
+	}
+
+	__aligned(uint32, 16) tmp[16];
+
+	((GSVector4i*)tmp)[0] = GSVector4i::zero();
+	((GSVector4i*)tmp)[1] = GSVector4i::zero();
+	((GSVector4i*)tmp)[2] = GSVector4i::zero();
+	((GSVector4i*)tmp)[3] = GSVector4i::zero();
+
+	r = r.sra32(3);
+
+	bs.x >>= 3;
+	bs.y >>= 3;
+
+	uint32* RESTRICT p = pages;
+	
+	for(int y = r.top; y < r.bottom; y += bs.y)
+	{
+		uint32 base = block.row[y];
+
+		for(int x = r.left; x < r.right; x += bs.x)
+		{
+			uint32 n = (base + block.col[x]) >> 5;
+
+			if(n < MAX_PAGES)
+			{
+				uint32& row = tmp[n >> 5];
+				uint32 col = 1 << (n & 31);
+
+				if((row & col) == 0)
+				{
+					row |= col;
+
+					*p++ = n;
+				}
+			}
+		}
+	}
+
+	*p++ = EOP;
+
+	ASSERT(p - pages <= limit);
+
+	return pages;
 }

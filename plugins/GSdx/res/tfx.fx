@@ -36,15 +36,17 @@
 #define PS_LTF 1
 #define PS_COLCLIP 0
 #define PS_DATE 0
+#define PS_SPRITEHACK 0
 #endif
 
 struct VS_INPUT
 {
+	float2 st : TEXCOORD0;
+	float4 c : COLOR0;
+	float q : TEXCOORD1;
 	uint2 p : POSITION0;
 	uint z : POSITION1;
-	float2 t : TEXCOORD0;
-	float q : TEXCOORD1;
-	float4 c : COLOR0;
+	uint2 uv : TEXCOORD2;
 	float4 f : COLOR1;
 };
 
@@ -410,7 +412,7 @@ float4 sample(float2 st, float q)
 		}
 
 		if(PS_LTF)
-		{
+		{	
 			t = lerp(lerp(c[0], c[1], dd.x), lerp(c[2], c[3], dd.x), dd.y);
 		}
 		else
@@ -514,14 +516,19 @@ void atst(float4 c)
 	{
 		// nothing to do
 	}
-	else if(PS_ATST == 2 || PS_ATST == 3) // l, le
+	else if(PS_ATST == 2) // l
+	{
+		#if PS_SPRITEHACK == 0
+		clip(AREF - a);
+		#endif				
+	}
+	else if(PS_ATST == 3) // le
 	{
 		clip(AREF - a);
 	}
 	else if(PS_ATST == 4) // e
 	{
-		clip(0.5f - abs(a - AREF));
-	}
+		clip(0.5f - abs(a - AREF));	}
 	else if(PS_ATST == 5 || PS_ATST == 6) // ge, g
 	{
 		clip(a - AREF);
@@ -602,12 +609,12 @@ VS_OUTPUT vs_main(VS_INPUT input)
 	{
 		if(VS_FST)
 		{
-			output.t.xy = input.t * TextureScale;
+			output.t.xy = input.uv * TextureScale;
 			output.t.w = 1.0f;
 		}
 		else
 		{
-			output.t.xy = input.t;
+			output.t.xy = input.st;
 			output.t.w = input.q;
 		}
 	}
@@ -618,7 +625,7 @@ VS_OUTPUT vs_main(VS_INPUT input)
 	}
 
 	output.c = input.c;
-	output.t.z = input.f.a;
+	output.t.z = input.f.r;
 
 	return output;
 }
@@ -749,7 +756,7 @@ VS_OUTPUT vs_main(VS_INPUT input)
 	{
 		if(VS_FST)
 		{
-			output.t.xy = input.t * TextureScale;
+            output.t.xy = input.t * TextureScale;
 			output.t.w = 1.0f;
 		}
 		else
@@ -765,7 +772,7 @@ VS_OUTPUT vs_main(VS_INPUT input)
 	}
 
 	output.c = input.c;
-	output.t.z = input.f.a;
+	output.t.z = input.f.b;
 	
 	return output;
 }

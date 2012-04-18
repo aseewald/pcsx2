@@ -41,8 +41,8 @@ if(NOT FORCE_INTERNAL_SDL)
     find_package(SDL)
 endif(NOT FORCE_INTERNAL_SDL)
 find_package(Subversion)
-# The requierement of wxWidgets is checked in SelectPcsx2Plugins module
-# Does not requiere the module (allow to compile non-wx plugins)
+# The requirement of wxWidgets is checked in SelectPcsx2Plugins module
+# Does not require the module (allow to compile non-wx plugins)
 # Force the unicode build (the variable is only supported on cmake 2.8.3 and above)
 # Warning do not put any double-quote for the argument...
 # set(wxWidgets_CONFIG_OPTIONS --unicode=yes --debug=yes) # In case someone want to debug inside wx
@@ -63,6 +63,7 @@ if(NOT FORCE_INTERNAL_SOUNDTOUCH)
     include(FindSoundTouch)
 endif(NOT FORCE_INTERNAL_SOUNDTOUCH)
 include(FindSparseHash)
+include(FindSparseHash_NEW)
 
 # Note for include_directory: The order is important to avoid a mess between include file from your system and the one of pcsx2
 # If you include first 3rdparty, all 3rdpary include will have a higer priority...
@@ -168,6 +169,11 @@ endif(SOUNDTOUCH_FOUND AND NOT projectSoundTouch)
 if(SPARSEHASH_FOUND)
 	include_directories(${SPARSEHASH_INCLUDE_DIR})
 endif(SPARSEHASH_FOUND)
+if(SPARSEHASH_NEW_FOUND)
+    include_directories(${SPARSEHASH_NEW_INCLUDE_DIR})
+    # allow to build parts that depend on sparsehash
+    set(SPARSEHASH_FOUND TRUE)
+endif(SPARSEHASH_NEW_FOUND)
 
 # Wx
 if(wxWidgets_FOUND)
@@ -187,6 +193,8 @@ if(wxWidgets_FOUND)
             if (EXISTS "/usr/lib/wx")
                 STRING(REGEX REPLACE "/usr/lib64/wx" "/usr/lib/wx" wxWidgets_INCLUDE_DIRS "${wxWidgets_INCLUDE_DIRS}")
             endif (EXISTS "/usr/lib/wx")
+            # Multiarch ubuntu/debian
+            STRING(REGEX REPLACE "/usr/lib/x86_64-linux-gnu" "/usr/lib/i386-linux-gnu" wxWidgets_INCLUDE_DIRS "${wxWidgets_INCLUDE_DIRS}")
         endif(CMAKE_SIZEOF_VOID_P MATCHES "8")
     endif(Linux)
 

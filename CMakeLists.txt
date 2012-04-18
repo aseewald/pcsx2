@@ -12,13 +12,20 @@ set(TOP_CMAKE_WAS_SOURCED TRUE)
 # Note: disable the failure in package mode
 if(NOT PACKAGE_MODE)
     if(CMAKE_SIZEOF_VOID_P MATCHES "8")
+        if (EXISTS /etc/fedora-release)
+            # Fedora users can install all .i686
+            message(STATUS "
+            Please ensure that you have all 32bits dependency installed (.i686 packages).
+            See http://code.google.com/p/pcsx2/wiki/ChrootAnd64bStatusLinux for more details.")
+        else (EXISTS /etc/fedora-release)
         message(FATAL_ERROR "
-        PCSX2 does not support 64bits environment. Please install a 32bits chroot or a 32bits OS.
-        PCSX2 have neither no plan to support the 64bits architecture in the future.
-        It will need a complete rewrite of the core emulator and a lots of time
+        PCSX2 does not support a 64-bit environment. Please install a 32-bit chroot or a 32-bit OS.
+        PCSX2 has no plan to support a 64-bit architecture in the future.
+        It would need a complete rewrite of the core emulator and a lot of time.
 
-        However when linux distribution will support properly multi-arch package, it will
-        be at least possible to easily compile and install PCSX2 witout too much hassle (the chroot environment)")
+        However, when linux distribution properly supports multi-arch packages, it will
+        be at least possible to easily compile and install PCSX2 without too much hassle (the chroot environment).")
+        endif (EXISTS /etc/fedora-release)
     endif(CMAKE_SIZEOF_VOID_P MATCHES "8")
 endif(NOT PACKAGE_MODE)
 
@@ -50,7 +57,11 @@ include(SelectPcsx2Plugins)
 # add additional project-wide include directories
 include_directories(${PROJECT_SOURCE_DIR}/common/include
 					${PROJECT_SOURCE_DIR}/common/include/Utilities
-					${PROJECT_SOURCE_DIR}/common/include/x86emitter)
+					${PROJECT_SOURCE_DIR}/common/include/x86emitter
+                    # WORKAROUND Some issue with multiarch on Debian/Ubuntu
+                    /usr/include/i386-linux-gnu
+                    /usr/include/x86_64-linux-gnu
+                    )
 
 # make the translation
 if(EXISTS "${PROJECT_SOURCE_DIR}/locales")
@@ -67,9 +78,6 @@ if(common_libs)
     add_subdirectory(common/src/Utilities)
     add_subdirectory(common/src/x86emitter)
 endif(common_libs)
-
-# make tools
-add_subdirectory(tools)
 
 # make pcsx2
 if(EXISTS "${PROJECT_SOURCE_DIR}/pcsx2" AND pcsx2_core)

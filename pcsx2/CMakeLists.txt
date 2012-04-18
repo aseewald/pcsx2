@@ -20,11 +20,11 @@ set(CommonFlags
 	-fno-tree-dse
 	-fno-strict-aliasing
     -Wstrict-aliasing # Allow to track strict aliasing issue.
-	-pipe
-	-Wno-format
-	-Wno-unused-parameter
-	-Wno-unused-value
-	-Wno-unused-variable)
+	-pipe)
+
+if (SPARSEHASH_NEW_FOUND)
+    set(CommonFlags "${CommonFlags} -DSPARSEHASH_NEW_INCLUDE_DIR ")
+endif (SPARSEHASH_NEW_FOUND)
 
 # set warning flags
 set(DebugFlags
@@ -92,6 +92,10 @@ if(CMAKE_BUILD_TYPE STREQUAL Release)
 
 	add_definitions(${CommonFlags} ${OptimizationFlags} -DWX_PRECOMP -DNDEBUG)
 endif(CMAKE_BUILD_TYPE STREQUAL Release)
+
+if(XDG_STD)
+    add_definitions(-DXDG_STD)
+endif(XDG_STD)
 
 # In package mode always use pcsx2
 if(PACKAGE_MODE)
@@ -650,13 +654,13 @@ add_executable(${Output}
 ### Generate the resources files
 file(MAKE_DIRECTORY ${res_bin})
 
-add_custom_command(OUTPUT  "${res_bin}/Dualshock.h"  COMMAND   bin2cpp   "${res_src}/Dualshock.jpg" "${res_bin}/Dualshock" )
+add_custom_command(OUTPUT  "${res_bin}/Dualshock.h"  COMMAND perl ${PROJECT_SOURCE_DIR}/linux_various/hex2h.pl "${res_src}/Dualshock.jpg" "${res_bin}/Dualshock" )
 
 foreach(res_file IN ITEMS
         AppIcon16 AppIcon32 AppIcon64 BackgroundLogo ButtonIcon_Camera
         ConfigIcon_Appearance ConfigIcon_Cpu ConfigIcon_Gamefixes ConfigIcon_MemoryCard
         ConfigIcon_Paths ConfigIcon_Plugins ConfigIcon_Speedhacks ConfigIcon_Video)
-    add_custom_command(OUTPUT  "${res_bin}/${res_file}.h" COMMAND   bin2cpp   "${res_src}/${res_file}.png" "${res_bin}/${res_file}" )
+    add_custom_command(OUTPUT  "${res_bin}/${res_file}.h" COMMAND perl ${PROJECT_SOURCE_DIR}/linux_various/hex2h.pl "${res_src}/${res_file}.png" "${res_bin}/${res_file}" )
 endforeach(res_file IN ITEMS
         AppIcon16 AppIcon32 AppIcon64 BackgroundLogo ButtonIcon_Camera
         ConfigIcon_Appearance ConfigIcon_Cpu ConfigIcon_Gamefixes ConfigIcon_MemoryCard
