@@ -54,6 +54,7 @@ void SetAutoRepeat(bool autorep)
 #ifdef __LINUX__
 static bool s_grab_input = false;
 static bool s_Shift = false;
+static bool s_Ctrl = false;
 static unsigned int  s_previous_mouse_x = 0;
 static unsigned int  s_previous_mouse_y = 0;
 void AnalyzeKeyEvent(int pad, keyEvent &evt)
@@ -64,6 +65,8 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt)
 	switch (evt.evt)
 	{
 		case KeyPress:
+			// use control to "soft" press a key
+			if (key == XK_Control_R || key == XK_Control_L) s_Ctrl = true;
 			// Shift F12 is not yet use by pcsx2. So keep it to grab/ungrab input
 			// I found it very handy vs the automatic fullscreen detection
 			// 1/ Does not need to detect full-screen
@@ -100,8 +103,14 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt)
 						key_status->press(pad, index, MAX_ANALOG_VALUE);
 						break;
 				}
-			} else if (index != -1)
-				key_status->press(pad, index);
+			} else if (index != -1) {
+				if (s_Ctrl) {
+					// TODO: make this adjustable
+					key_status->press(pad, index, MAX_ANALOG_VALUE / 2048);
+				} else {
+					key_status->press(pad, index);
+				}
+			}
 
 			//PAD_LOG("Key pressed:%d\n", index);
 
@@ -110,6 +119,7 @@ void AnalyzeKeyEvent(int pad, keyEvent &evt)
 			break;
 
 		case KeyRelease:
+			if (key == XK_Control_R || key == XK_Control_L) s_Ctrl = false;
 			if (key == XK_Shift_R || key == XK_Shift_L) s_Shift = false;
 
 			if (index != -1)
